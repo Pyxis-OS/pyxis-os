@@ -1,8 +1,8 @@
 # Lua language server
 
-Plan and all three decisions accepted (chronium, 2026-10-25). Task 1, pinned
-runtime/platform closure, is assigned. No port is delivered yet; later task
-progress and qualification are recorded below.
+Plan and all three decisions accepted (chronium, 2026-10-25). Task 1 supplies
+the manual native runtime bundle. Public package/editor integration and full
+feature/native qualification remain tasks 2–3 below.
 
 Goal: install `lua-language-server` and enable `lua_ls` in Neovim, with real
 semantic highlighting of `vim.*`, typed API completion and diagnostics.
@@ -20,7 +20,7 @@ Its immutable inputs are:
 | Input | Pin | Licence / first profile |
 | --- | --- | --- |
 | LuaLS | `b144c872f081373a893b55979142fed651e4425a` | MIT; server scripts, bootstrap, built-in templates and locale |
-| bee.lua | `f55b6988e8d9564816a555118b0e76564ef9a283` | MIT; embedded Lua 5.5.0 with its Lua.org/PUC-Rio notice, bundled fmt MIT and retained third-party notices |
+| bee.lua | `f55b6988e8d9564816a555118b0e76564ef9a283` | MIT; embedded Lua 5.5.0 with its Lua.org/PUC-Rio notice, native serializer and retained third-party notices; fmt is not selected |
 | LPegLabel | `912b0b9e8641074408ffc2259e069b188e0c717b` | MIT, including inherited Lua/LPeg author notices; static native parser |
 | json.lua | `08095fd2cdfde8f49a5f5b54b35ec7b3d4906a36` | MIT; provenance of JSON Lua code already in the server scripts; no JSON test dependency |
 | luamake | `4c4bd16c9b0c1d773402fc15c76367f7899a1f91` | MIT; host generator alternative, excluded from the recommended direct Make build |
@@ -49,82 +49,52 @@ f30f8039b89a571bdf450d1b82727ddbb3905e58b205ddd0421fad50983b991f
 625fc92798e27d8c6597b59b1f8d014744496dc2e1c5117baa5e1a4d286c7b7e
 ```
 
-[make.lua](https://github.com/LuaLS/lua-language-server/blob/b144c872f081373a893b55979142fed651e4425a/make.lua#L1-L64)
-selects C11, C++17, embedded Lua 5.5 and static bee/parser registration.
-bee's `onelua.c`, its bootstrap and native modules must use one coherent Lua
-ABI. Do not substitute the installed Lua command or Neovim's Lua 5.1 runtime.
-bee's module hooks also call `dlopen(NULL)`/`dlsym` even with static module
-registration; replace those hooks with actual statically linked entry points,
-not a pretend dynamic loader.
-The upstream Linux source selection has 47 translation units before the
-optional formatter's 49; this is source inspection, not a Pyxis compile result.
+## Runtime/platform closure (task 1)
 
-**Recommend a small ports Makefile running on horse**, using the existing SDK
-compiler, runtime link group and explicit source list. Retain upstream code
-formatting and source dependencies, replace platform units deliberately and
-never select Linux to pass a platform check. Host luamake can express a cross
-compiler, but its platform/bootstrap/link selections still need adaptation and
-its own distinct bee closure. Direct Make avoids that extra build dependency.
-Neither Ninja nor luamake belongs on the target. No source finding requires a
-compiler-container rebuild; report a concrete compiler/SDK failure before
-requesting one. No build or link has been attempted in this investigation.
+The ports recipe builds LuaLS with a small host Makefile, coherent bee embedded
+Lua 5.5.0, static LPegLabel and native C++ bindings. The source runner downloads
+only checksum-pinned approved-cache archives. Host generators, target
+Ninja, optional formatter and bee's Linux backend are not used. Lua compiles in
+its supported C++ error-unwind mode with C API linkage, so binding owners are
+released across Lua errors. Reached standard functions use the existing SDK;
+no new libc/kernel operation or compiler-container rebuild is required.
 
-## Actual runtime requirements
+The manual runtime bundle keeps scripts, templates and locales under read-only
+`app://share/lua-language-server/`. It carries the complete selected licences,
+original port sources/patches, runtime-file hashes and actual SDK provenance.
+The public program package and editor configuration belong to task 2. The
+[task 1 record](../development/experiments/lua-language-server-runtime.md)
+separates actual link/QEMU evidence from remaining feature/native checks.
 
-The default stdio server is not an unthreaded Lua script. It recruits four
-shared-process workers: blocking stdin reader, timer work and analysis workers.
-Each worker owns a Lua state. Channel serialization and real concurrency stay;
-do not replace workers with synchronous success stubs. Bound framing headers,
-Content-Length bodies and queued bytes/items; reject malformed, truncated or
-oversized messages before unsafe growth. Reserve queue admission before taking
-ownership. Congestion may pause a producer only while consumers/cancellation
-can progress; failed admission ends the session visibly, never drops a message
-or reports completion. Set and record the port's capacities from public fixture
-measurements in task 1, not as ABI promises or guessed memory requirements.
-
-| Reached API / call site | Native work and honest limit |
+| Adapter | Behaviour and limit |
 | --- | --- |
-| `bee.filesystem`: bootstrap, `main.lua:1`, workspace, loading, metadata and caches | File/directory operations over native capabilities and libc; scheme-aware path joins, roots and classification. bee's default `std::filesystem` backend cannot simply be enabled: the SDK disables that library. Missing identity/time or unsupported operations remain unknown/errors. Standard functions actually needed belong in libc/C++ on native objects; no full filesystem implementation is presumed. |
-| `bee.sys`: bootstrap `sys.exe_path`, Windows-only fullpath branches | Use the admitted immutable app root and tracked working path, not `/proc/self/exe`, `readlink` guesses or fabricated host paths. |
-| `bee.thread` and `bee.channel`: `script/pub/pub.lua:1-93` | Real SDK threads, serialized queues and native wake pipes/conditions. Upstream channel wakeups use socketpair; replace that implementation, retaining queue ownership and readiness semantics. |
-| `bee.select` in pub; `bee.epoll` in `script/brave/brave.lua`; `bee.socket/select` in `service/net.lua` | Native readiness/wakeup integration, not new POSIX select/epoll/socketpair kernel interfaces. Stdio imports the network module unconditionally today; gate that import and socket construction. A reader must wait for stdin or shutdown and be joinable even if stdin remains open. No sleeping poll loop or uninterruptible shutdown. |
-| Lua `io` and service/proto input/output | Real FILE/pipe bytes and Content-Length framing; stdout contains LSP only, diagnostics use stderr/logs. Preserve partial reads/writes, EOF, broken peer and cancellation errors. |
-| `bee.time`, `bee.thread.sleep`, `os.clock` duration call sites | Check real wall/monotonic clock failures. Adapt elapsed measurements and scheduling to native monotonic time; do not implement `os.clock` or `CLOCK_THREAD_CPUTIME_ID` as fake CPU time. `bee.time.thread` has no server caller. Describe diagnostic rate/cost accounting as elapsed pacing after this adaptation. |
-| `bee.subprocess`: `files.lua:17`, `service/service.lua:251-264`, CLI check helpers | No ordinary stdio child process is needed. Remove PID-based cache naming and those unconditional imports; do not invent `get_id`. CLI spawning/check modes outside the profile must refuse explicitly. |
-| `bee.filewatch`: `script/filewatch.lua`, workspace watchers | Not present natively. Explicitly disable watcher construction and registration; retain initial scan and editor document events. No inert watcher object or claim of live external-file tracking. |
-| `bee.platform`, serialization, crash/debug helpers | Real `pyxis` platform branch, existing architecture and real serialization. Gate unsupported debugger/network/crash-handler paths; Pyxis native fault reporting remains authoritative. No Linux/PID/signal impersonation. |
-| `code_format` and dependent diagnostics/actions | Omit formatter code and its runtime advertisements. `pcall(require)` alone is insufficient: formatting capabilities and spell/name-style diagnostics/actions must be gated, so clients never see successful fake support. |
+| Filesystem and paths | Native libc FILE/directory operations; scheme-aware joins, classification and lexical normalization. Descriptive absolute paths are not identity proofs. Missing rights/metadata remain real errors/unknowns. No `std::filesystem`, procfs or fake executable path. |
+| URI | Neovim-compatible reversible `ROOT://rest` ↔ `file:///ROOT/rest`, percent encoding and exact root/component boundaries. Text does not confer authority. |
+| Workers/channels | Real SDK shared-process threads, separate Lua states and copied lua-seri messages. Typed channel readiness and condition waits replace socketpair/select/epoll. Reserve admission before serialization; allocation/error paths release ownership. |
+| Stdio | Native byte PIPE input/output through public descriptor try-I/O and `wait_many`; other bindings are refused. An owned stop pipe interrupts readiness even with stdin left open. stdout is LSP framing only. |
+| Time | Checked realtime/monotonic clocks and elapsed pacing. No fake PID, OS version, CPU-time accounting or CPU clock. |
+| Profile gates | No native watchers, TCP, subprocess, formatter/spelling/name-style features, executable configuration/plugins, downloads/migrations or server-side config writes. Omit their capabilities; excluded module entry points fail explicitly. |
 
-The reached filesystem binding set is `path`, join/string conversion,
-`parent_path`, `filename`, `is_relative`, `exists`, `is_directory`, `pairs`,
-entry `status:type()`, `absolute`, `symlink_status`, `create_directories` and
-`remove`. `copy_file` is conditional; `canonical`, `relative` and `current_path`
-are in excluded CLI paths, and no runtime `rename` call was found. Do not promise
-all upstream filesystem exports. Threads call `create`, `errlog` and `sleep`;
-module initialization also needs a real current thread identity. Channels call
-`create/query/push/pop` and obtain wake endpoints. Selectors call `event_add`
-and `wait`; workers create/add/wait/close their poller. These endpoint uses must
-be adapted together, without pretending native handles are POSIX descriptors.
-Platform initialization's unused `os_version`/uname query must be gated or
-report a real native value, not silently use a Linux version.
+Initial workspace scanning and editor document events remain. External changes
+require explicit workspace reload/restart. Real thread/channel concurrency is
+retained; timers use their actual next deadline rather than a polling worker.
 
-The source paths above are at the pinned
-[server tree](https://github.com/LuaLS/lua-language-server/tree/b144c872f081373a893b55979142fed651e4425a)
-and [bee tree](https://github.com/actboy168/bee.lua/tree/f55b6988e8d9564816a555118b0e76564ef9a283).
-The existing libc has native FILE/descriptors, working path, environment,
-directory creation, `mkdtemp`, clocks and threads. It has no getpid,
-socketpair/select/poll surface or CPU-clock implementation to assume here.
-The embedded Lua's reached standard-library imports need a real link audit;
-unavailable process, CPU-time and dynamic-module features are refused or
-explicitly removed from this program's profile, never made to succeed.
+Program-private provisional admission limits are recorded beside the binding in
+`ports/lua-language-server/pyxis/concurrency.md`: 8 workers, 32 channels,
+256 items and 64 MiB per channel, 4096 items and 256 MiB overall, 16 MiB encoded
+messages, 8 KiB LSP headers and 4 MiB bodies. Serialization reserves scratch and
+flattening space before copying. Pending Lua jobs/method queues are bounded too.
+These are implementation limits, not ABI contracts or measured memory needs.
+Oversized input fails visibly; congestion waits only while consumer/stop can
+progress. The first runtime fixture does not qualify large projects.
 
-Path adaptation is mandatory above libc too:
-[file-uri.lua](https://github.com/LuaLS/lua-language-server/blob/b144c872f081373a893b55979142fed651e4425a/script/file-uri.lua#L26-L59)
-misencodes `home://x`, `files.normalize` collapses `://`, and workspace code
-uses POSIX relative-path classification. Use Neovim's existing reversible
-`ROOT://rest` ↔ `file:///ROOT/rest` mapping, including encoding and root
-boundaries, with scheme-aware lexical operations. Descriptive paths do not
-prove identity or create authority.
+LSP `shutdown` acknowledges but keeps input live for the later `exit` notification.
+Exit signals cancellation, wakes blocked readers/producers, joins workers,
+closes Lua FILEs with native finalization rules and then removes instance state.
+Actual worker failures retain nonzero status. Cleanup retains the original
+state directory capabilities and checks live identity before name-based removal;
+the existing REMOVE API supplies no namespace-mutation lease against another
+holder of the same writable home. This is not a filesystem sandbox.
 
 ## Neovim, authority and package
 
@@ -161,35 +131,16 @@ the language being analysed is independent of the server's embedded Lua 5.5.
 Enable semantic tokens, existing real LSP completion and diagnostics. Do not
 mask missing API definitions with only `diagnostics.globals = { 'vim' }`.
 
-Upstream writes generated built-in metadata, logs and cache state. Merely
-setting LOGPATH/METAPATH is insufficient: `script/library.lua:187` writes
-`ROOT/log/middleScript.lua`; redirect or remove this diagnostic artifact.
-Use real exclusive per-instance state, not a fake PID. Validate that configured
-metadata paths cannot redirect generated writes outside that state subtree.
-Read-only templates and the Neovim `_meta` input are distinct from generated
-LuaLS metadata. Workspace Lua config, plugins and third-party config migration
-can execute code; explicit source gates are required for the proposed JSON-only
-profile, not just the absence of launcher authority. Exclude server-side
-configuration-write commands/actions too: `client.lua:375-444` currently writes
-JSON settings and can ignore save failures. Do not offer those actions or
-acknowledge them as applied; ordinary editor-owned edits remain available.
+Generated metadata and logs use the owned per-instance state below
+`home://.cache/lua-language-server/`; read-only templates and the Neovim `_meta`
+input are separate. Only JSON/JSONC settings are admitted. Workspace Lua code,
+plugins, third-party migrations and configuration-write actions are not exposed.
+A forced stop can leave its instance directory for manual cleanup; no persistent
+analysis cache or `--lazy` reuse is provided.
 
-LSP `shutdown` acknowledges the request but keeps input alive for the later
-`exit` notification. At orderly exit, wake/cancel the reader and workers, drain
-their ownership and join before normal process finalization. Do not join a
-worker still blocked on stdin, tear down early at `shutdown`, or assume libc
-exit runs C++ destructors while sibling threads are still live.
+## Delivery
 
-Measured source data: `script/`, English locale, built-in templates and bootstrap/
-main/licence files total **1,892,100 bytes**. This excludes the executable,
-additional notices and generated metadata. The upstream Linux-x64 release
-archive is 3,696,210 bytes; it is not a Pyxis binary or package-size prediction.
-Measure the actual P1F, bundle/package sizes, thread stacks and peak backing at
-implementation. There is no target size, performance or memory estimate here.
-
-## Proposed delivery
-
-1. [ ] **Pinned runtime/platform closure.** Ports recipe and coherent embedded
+1. [x] **Pinned runtime/platform closure.** Ports recipe and coherent embedded
    Lua/native modules; source/licence closure, native filesystem/URI, timing,
    threads/channels and stoppable stdio loop. Add reached standard libc/C++
    functions on real native objects if required. First checks: actual link,
@@ -229,7 +180,7 @@ Qualification must prove more than a coloured screenshot:
 
 ## Accepted decisions (chronium, 2026-10-25)
 
-1. **First feature profile and refresh.** native stdio with real,
+1. **First feature profile and refresh.** Native stdio with real,
    owned worker/channel concurrency, bounded framing/queues and cancellable
    input; join workers at orderly exit after the shutdown/exit exchange.
    Semantic tokens, typed completion, diagnostics
@@ -238,7 +189,7 @@ Qualification must prove more than a coloured screenshot:
    editor didOpen/didChange/didSave/didClose remain; external changes require
    explicit workspace reload/restart. Do not advertise unsupported capabilities.
    Elapsed budgets use real monotonic time, not fabricated CPU accounting.
-2. **Authority and configuration.** ordinary declared-grant bundle
+2. **Authority and configuration.** Ordinary declared-grant bundle
    launch with the same inherited filesystem authority as clangd, including
    possibly writable home/cwd; no new confinement claim or wrapper. Read-only
    app and held `nvim_runtime` library; no launcher/network/SDK grants. Accept
@@ -253,7 +204,6 @@ Qualification must prove more than a coloured screenshot:
    forced stop may leave that leaf for manual cleanup, never reuse/delete a
    possibly live instance. Random naming prevents collisions, not access.
 
-Evidence: source-only audits and cache/release receipts are under
-`/shared/present/lua-ls/` (`build-closure-audit.md`, `runtime-api-audit.md`,
-`neovim-native-audit.md`). No host/target compile, QEMU/native run, implementation,
-package upload, compiler-container change or private-project access was done.
+Source audits, cache receipts and task 1 build/runtime captures are under
+`/shared/present/lua-ls/`. No native run, public package upload, compiler-container
+change or private-project access is part of task 1.
