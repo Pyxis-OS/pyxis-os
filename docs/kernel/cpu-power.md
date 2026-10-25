@@ -71,8 +71,9 @@ firmware or package power/thermal limits; a request is not a measured clock.
 Private counter sampling, process tags and log-triggered collection used for
 qualification are never part of the production implementation. Native vela A/B
 qualification confirms applied state on all sixteen CPUs across three B boots
-and removes the large all-load BSP/AP P-core rate split. Original Git/game/UI
-reruns remain separate and pending; no battery or energy result is claimed.
+and removes the large all-load BSP/AP P-core rate split. The separate
+application follow-up records Git/game/UI results; no battery or energy result
+is claimed.
 
 Register definitions follow the [Intel SDM, volume 3B, section 17.4](https://cdrdv2-public.intel.com/874250/253669-090-sdm-vol-3b.pdf).
 The [Linux intel_pstate reference](https://www.kernel.org/doc/html/latest/admin-guide/pm/intel_pstate.html)

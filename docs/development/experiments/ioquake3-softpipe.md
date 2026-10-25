@@ -78,8 +78,9 @@ runs give Doom 1,363.6 FPS median (1,353.2–1,363.6) and Chocolate Quake 834.4
 (826.6–847.1). Initial references from the refused ICH9-audio configuration
 are kept raw but excluded from these matched-configuration ranges.
 These are nested-QEMU software-rendering results, not native performance or a
-claim that Ship of Harkinian is suitable for softpipe. Native qualification,
-retail data, llvmpipe and JIT remain unrun. Installed-package evidence follows below.
+claim that Ship of Harkinian is suitable for softpipe. Those checks do not
+qualify native performance; the later vela comparison follows below. Retail
+data, llvmpipe and JIT remain unrun. Installed-package evidence follows below.
 The host packer/checker accepts the private qualification package (91 files,
 438,641,664 archive bytes). That initial artifact was not installed or published publicly; a refreshed installed check follows below.
 Separate public corresponding-source downloads, not installed game contents,
@@ -129,3 +130,32 @@ Raw source evidence is retained in
 The final stack is rebased onto main `e2fa2694` and userland main `f3fa4b5a`.
 Those intervening Git changes do not change the measured renderer/libc paths;
 the timing and installed-game revisions above remain the actual tested heads.
+
+## Vela native HWP comparison (2026-10-25)
+
+Chronium's native OpenArena `demo088-test1` timedemo, opengl1/softpipe at
+320×240, using image `82ae3620` versus the same image plus only Intel HWP code
+`2d89ec15`. Luna's kernel hash prefixes are `66b79922` before / `c4c5e64a`
+after. No renderer or layout-scheduling change separates the pair.
+
+| Metric | Original, HWP disabled | CPU at full power (HWP autonomous, EPP 128, 16/16 applied) |
+|---|---:|---:|
+| FPS | 5.5 | 13.4 |
+| Minimum frame time, ms | 96.0 | 40.0 |
+| Mean frame time, ms | 182.4 | 74.7 |
+| Maximum frame time, ms | 786.0 | 130.0 |
+| Frame-time standard deviation, ms | 29.5 | 12.4 |
+
+These are the engine's minimum/mean/maximum/standard-deviation statistics,
+not the median/p95/p99 columns in the older nested-QEMU table. The orchestrator
+relayed the native figures from chronium; no repeated native timedemo sample
+range is supplied. Chronium also reports that game audio no longer glitches.
+This listening observation does not close the separate audio issue or qualify
+all codecs/output paths.
+
+The [CPU-clock record](cpu-clocks.md#vela-application-follow-up-2026-10-25)
+retains the image/policy comparison, other workloads and evidence location.
+The original numbers stay above; native and nested-QEMU measurements have
+different machines/configurations and are not combined. "CPU at full power"
+identifies autonomous HWP with EPP 128 and 16/16 CPUs applied, not a guaranteed
+frequency or a maximum-clamped policy. No SoH result follows from this demo.

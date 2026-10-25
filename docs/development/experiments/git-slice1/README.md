@@ -115,6 +115,33 @@ into the final-source statistics.
 
 Raw commands, source/module records and logs stay under `/shared/present/git/`:
 `horse-baseline/results-20261024T114004Z-pws3i73o/`, `final-clone-samples/`,
-`clone-samples/` and `runtime/`. No native/PXE run, fault injection, automatic
-stale-lock recovery or public package publication occurred. Persistent-device
+`clone-samples/` and `runtime/`. That qualification included no native/PXE run,
+fault injection, automatic stale-lock recovery or public package publication. Persistent-device
 performance and power-loss durability remain unqualified.
+
+## Vela native HWP comparison (2026-10-25)
+
+Orchestrator-measured fresh clones of Pyxis into RAM, using image `82ae3620`
+versus that image plus HWP-only code `2d89ec15`. The corresponding Luna kernel
+hash prefixes are `66b79922` / `c4c5e64a`; no Git implementation change separates
+the pair. All six checkouts succeed at
+`8dd01594d5bc1841e6e18c8fa0694f1280a1981e`. This is a separate native follow-up,
+not a replacement for the Linux/nested-QEMU comparison above.
+
+| Elapsed seconds | Original, HWP disabled | CPU at full power (HWP autonomous, EPP 128, 16/16 applied) |
+|---|---:|---:|
+| 1 | 25.239 | 20.434 |
+| 2 | 31.536 | 24.341 |
+| 3 | 29.742 | 24.337 |
+| Median | 29.742 | 24.337 |
+
+The median falls about 18%. These are end-to-end clones including network,
+server, launch and RAM checkout costs; the network-bound portion limits the
+speedup and the result does not isolate CPU, hashing or filesystem work.
+The three before samples precede the three after samples, rather than being
+interleaved. No persistent-device or power-loss claim follows.
+
+Raw `vgit-before.log` and `vgit-after.log` remain in
+`/shared/present/cpu-clocks/after-hwp/`. The [CPU-clock record](../cpu-clocks.md#vela-application-follow-up-2026-10-25)
+records the applied policy and the independent interleaved cpuclock evidence.
+"Full power" names that policy, not guaranteed maximum clocks or energy use.

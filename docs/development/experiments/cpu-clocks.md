@@ -177,12 +177,60 @@ rates include wall time and kernel work, not C0-only frequency or worker-index
 assignments; timer tick cadences differ across CPUs. No temperature, energy,
 limit-reason or battery-lifetime claim follows from these captures.
 
-The HWP enable/request and matched-clock gates are met. Original
-Git/OpenArena/ImGui workloads still need separate uninstrumented reruns,
-retaining the old results and adding the required **CPU at full power** column
-with the actual policy and placement. No claim of every core sustaining its
-rated maximum follows. A later placement change compares separately against
-this HWP policy; it is not part of this delivery.
+The HWP enable/request and matched-clock gates are met. The application
+follow-up below retains the original results alongside the applied policy.
+No claim of every core sustaining its rated maximum follows. A later placement
+change compares separately against this HWP policy; it is not part of this
+delivery.
+
+## Vela application follow-up (2026-10-25)
+
+Measured by the orchestrator, with interactive observations from chronium.
+The application comparison uses the same image `82ae3620` before and after
+cherry-picking only HWP code `2d89ec15`. Luna's kernel files are `caelum.elf`
+(before, reported hash prefix `66b79922`) and `caelum-hwp.elf` (after,
+`c4c5e64a`). These are application runs, separate from the private probe A/B
+above; they do not contain a layout-policy change. Raw Git/Clang captures and
+the ImGui screenshot are in `/shared/present/cpu-clocks/after-hwp/`.
+OpenArena frame statistics and listening observations were relayed by the
+orchestrator from chronium, rather than reconstructed from those files.
+
+**CPU at full power** labels the applied policy: HWP autonomous, EPP 128,
+16/16 CPUs applied. It does not mean a maximum-clamped request, a promised
+frequency, or a power/energy measurement. The cpuclock row is the independently
+qualified interleaved probe A/B above; the application rows use the image pair
+just described. The application runs are not a new interleaved six-boot study.
+
+| Workload | Original result | CPU at full power (HWP autonomous, EPP 128, 16/16 applied) |
+|---|---|---|
+| cpuclock, one worker, cohort mean GHz | 1.70–1.79 | 4.34–4.38 |
+| [Git clone](git-slice1/README.md#vela-native-hwp-comparison-2026-10-25), fresh RAM destination, seconds | 25.2 / 31.5 / 29.7; median 29.7 | 20.4 / 24.3 / 24.3; median 24.3 |
+| clang-hosted, 268 MiB LAN fetch, seconds | 6.2 | About 6.0 |
+| clang-hosted archive verification, seconds | 5.4 | 3.7 |
+| clang-hosted extraction, seconds | 7.3 | 5.3 |
+| ImGui, 1920×1048, FPS | 11.8 | 25; 15 with upstream demo window open |
+| [OpenArena](ioquake3-softpipe.md#vela-native-hwp-comparison-2026-10-25), demo088-test1, 320×240, FPS | 5.5 | 13.4 |
+
+The Git logs retain exact elapsed values and all six successful checkouts at
+`8dd01594d5bc1841e6e18c8fa0694f1280a1981e`. The end-to-end clone includes the
+network path, server and RAM checkout: its network-bound portion limits the
+observed speedup; it is not an isolated CPU-cost measurement. The paired medians
+improve by about 18%, substantially less than the cpuclock uplift.
+
+Clang fetch is largely unchanged: the package progress line reports 5.9 seconds
+after HWP, while the host trace reaches the completed fetch at about 6.0 seconds.
+Verification at roughly 72 MiB/s raises an **open observation** about whether
+the SHA path uses SHA-NI; these timings do not establish instruction selection
+or authorize a fix. Both captures finish extraction, then report that the
+`pyxis-dev` dependency is unavailable and exit unsuccessfully. They qualify
+those phases, not a complete installation or compiler run.
+
+ImGui's extra demo window changes the content, so its 15 FPS reading is a
+separate interactive observation, not another sample of the 25 FPS workload.
+OpenArena's reported minimum/mean/maximum/standard-deviation frame times change
+from 96.0 / 182.4 / 786.0 / 29.5 ms to 40.0 / 74.7 / 130.0 / 12.4 ms.
+Chronium reports that game audio no longer glitches. That listening observation
+does not replace broader audio qualification, and no SoH performance was measured.
 
 ## Candidate functional checks
 

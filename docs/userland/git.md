@@ -7,7 +7,10 @@ accepted contracts (chronium, 2026-10-24).
 The [clone qualification](../development/experiments/git-slice1/README.md) and
 [local workflow qualification](../development/experiments/git-slice2/README.md)
 record measured checks and their limits. The [slice 3 record](../development/experiments/git-slice3/README.md)
-records disposable Forgejo transfer and pull checks.
+records disposable Forgejo transfer and pull checks. The
+[vela HWP comparison](../development/experiments/git-slice1/README.md#vela-native-hwp-comparison-2026-10-25)
+retains the original native clone times alongside the CPU-at-full-power result
+and its network/measurement limits.
 
 ## Build and install
 
