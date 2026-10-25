@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+members = ["runtime", "hello", "scene", "raster", "raster-host"]
+default-members = ["raster-host"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+
+[profile.dev]
+panic = "abort"
+lto = false
+
+[profile.release]
+panic = "abort"
+lto = false
+debug = 2

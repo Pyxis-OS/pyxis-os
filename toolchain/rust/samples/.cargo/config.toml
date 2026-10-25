@@ -1,0 +1,5 @@
+[source.crates-io]
+replace-with = "pyxis-cache"
+
+[source.pyxis-cache]
+registry = "sparse+https://repo.internal/repository/cargo-proxy/"
