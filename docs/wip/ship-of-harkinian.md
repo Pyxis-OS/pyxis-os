@@ -161,7 +161,7 @@ not merely hide settings.
 
 | Area | Concrete work before the first run |
 | --- | --- |
-| Build / language | Native Pyxis CMake branch and static SDK/SDL/Mesa targets. Clang 23 accepts C23/C++20; SDK TLS, exceptions/RTTI and real C++ synchronization exist. Audit the actual imports at target link. Preserve `-fno-fast-math -ffp-contract=off`; no Linux impersonation or arch assumptions outside the proper layer. A full SoH target link has not been attempted. |
+| Build / language | Native Pyxis CMake branch and static SDK/SDL/Mesa targets. Clang 23 accepts C23/C++20; SDK TLS, exceptions/RTTI and real C++ synchronization exist. Audit the actual imports at target link. Preserve `-fno-fast-math -ffp-contract=off`; no Linux impersonation or arch assumptions outside the proper layer. The private target links in task 5; see its [record](../development/experiments/soh-first-frame.md). |
 | Files / saves | Separate read-only package/assets from writable `home://` config, saves, mods and logs. Remove `/proc/self/exe`, getpwuid/HOME/XDG/APPIMAGE discovery; URI text grants no authority. Keep owned native roots and real filesystem errors. SaveManager already checks temp-file write/flush/fsync/close and rename; add/verify native parent-directory publication sync and propagate failed saves. |
 | Threads | Resource pool, save worker, game mixer, SDL callback and logging pools use real threads, futures, mutexes/conditions. SDK supports these; no POSIX cancellation/signals. Bound worker selection when hardware_concurrency is unavailable; measure live threads, eager stack/backing and shutdown before setting budgets. No thread-count/peak estimate is claimed. |
 | Audio / time | SDL queued S16 stereo output plus the game's mix thread; existing SDL converts to native 48 kHz and owns its callback thread. Grant audio/threads/precise clock and pipe wakeups explicitly; timers use SDL performance counters/delays. Qualify actual buffering/close/underrun behavior, not just link success. |
@@ -206,6 +206,8 @@ first target links and stop with a bounded proposal if the current ceilings fail
    target, link actual game code, load private archives, use the 320×240 internal 4:3 preset with MSAA off.
    First check: visible title/menu frame in QEMU with honest diagnostics and exit;
    record measured frame rate/backing without treating poor speed as a new gate.
+   [Private target qualification](../development/experiments/soh-first-frame.md)
+   is in progress; no native/gameplay claim.
    **After this task chronium can:** see Ocarina of Time running on Pyxis.
 6. [ ] **Keyboard play, audio and persistence.** Map controls, test focus/lift,
    play a short route, save/reload and refused/full save destinations; qualify
