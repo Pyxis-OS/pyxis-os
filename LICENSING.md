@@ -63,9 +63,12 @@ and conversion are recorded in [the asset note](assets/ui/power/README.md).
   `LICENCE.ibt_firmware`, WHENCE and provenance under
   `boot://share/licenses/intel-bluetooth/`. The firmware is not MPL-licensed
   kernel source and its binaries are not stored in this repository.
-- `tools/remote/vendor/sha256.c` and `tools/remote/sha256.h`: the imported
-  SHA-256 implementation/interface is public domain; see its retained notice
-  and [source provenance](tools/remote/vendor/UPSTREAM.md).
+- Host Remote and GDB tools compile the pinned userland `libsha256` sources
+  against the host runtime. The shared library's original code uses MPL-2.0,
+  its [TF-PSA scalar core](userspace/third_party/tf_psa_sha256/UPSTREAM.md)
+  uses Apache-2.0, and its [x86 SHA-NI backend](userspace/libsha256/arch/x86_64/UPSTREAM.md)
+  retains Go's BSD terms. Host builds copy their complete licenses and provenance
+  alongside the tools under `build/tools/licenses/libsha256/`.
 - `arch/x86_64/amd/renoir_registers.h` the firmware inventory and bounded flip backend adapt AMD DC
   MIT register/table definitions, mono flip ordering and completion/state decoding.
   `arch/x86_64/amd/renoir_cursor_inventory.c` also adapts read-only cursor/clock
