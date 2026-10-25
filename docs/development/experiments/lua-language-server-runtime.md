@@ -6,8 +6,8 @@ semantic-token/completion integration. No private project was opened.
 
 ## Inputs and build
 
-- LuaLS3.19.2 `b144c872f081373a893b55979142fed651e4425a`, bee
-  `f55b6988e8d9564816a555118b0e76564ef9a283` with embedded Lua5.5.0,
+- LuaLS 3.19.2 `b144c872f081373a893b55979142fed651e4425a`, bee
+  `f55b6988e8d9564816a555118b0e76564ef9a283` with embedded Lua 5.5.0,
   LPegLabel `912b0b9e8641074408ffc2259e069b188e0c717b`; remaining licence
   references, archive hashes and all patches are in the ports recipe.
 - SDK Pyxis `22fd00759f9dda1e4bc6117d2a712e80edf0fa8f`, userland
@@ -23,7 +23,7 @@ semantic-token/completion integration. No private project was opened.
   outputs pass; no missing standard operation required a libc/kernel change.
   The compiler/container pin is unchanged.
 
-The staged manual bundle has346 files, **3,819,991 logical bytes** including
+The staged manual bundle has 346 files, **3,819,991 logical bytes** including
 sources/notices. The current P1F is **818,426 bytes**, SHA-256
 `392e1f98338a9df2e162800a89800883da4304dfd80fe1f5e6151db346cc03d2`.
 Build paths appear in upstream diagnostics, so rebuilding in a different work
@@ -37,21 +37,21 @@ Reused public qualification image, Pyxis `b364a5894b35`, SHA-256
 q35, KVM, 4 CPUs, 2 GiB, OVMF, modern VirtIO network. Its public ABI sources
 match the task parent base `2446d3b8`. The guest kernel is the recorded reusable
 image, not a claim of a new exact-parent-head boot. The unchanged stock
-Neovim0.12.5 bundle supplies real native PIPE stdio via headless `jobstart`; a
+Neovim 0.12.5 bundle supplies real native PIPE stdio via headless `jobstart`; a
 temporary Lua client sends public LSP messages. No Neovim configuration changes.
 
-- `--version` reports3.19.2 and `--help` reports the bounded profile.
+- `--version` reports 3.19.2 and `--help` reports the bounded profile.
 - initialize returns real capabilities, including semantic-token legend and
   document-symbol support. All three formatting provider fields are absent;
   source inspection confirms no watched-file registration.
 - After initialized and a pause, didOpen of a tiny authored public Lua file
   followed by documentSymbol returns its real variable, function and parameter.
   This exercises workspace initialization, parser and worker serialization.
-- Console startup explicitly refuses the non-PIPE bindings with exit1 and
+- Console startup explicitly refuses the non-PIPE bindings with exit 1 and
   removes state. Ordinary temporary parent manifests separately withholding
   threads or randomness refuse child admission with EACCES and create no process.
 - shutdown acknowledges, then a later exit notification succeeds while the
-  client leaves stdin open. Child and client exit0, Remote drains cleanly.
+  client leaves stdin open. Child and client exit 0, Remote drains cleanly.
   Instance enumeration goes from one owned leaf to empty after exit.
 
 ## Limits
@@ -60,7 +60,7 @@ No native run, public package, API-aware completion, decoded semantic tokens or
 full typed-diagnostic qualification is claimed. No fault injection, allocation
 accounting proof, peak backing/thread-stack measurement or large-project
 capacity qualification. Program-private budgets remain provisional. Those
-feature/memory/native checks remain tasks2–3.
+feature/memory/native checks remain tasks 2–3.
 
 No existing shared I/O or launch path changed and there was no prior Pyxis
 LuaLS runtime for a matched A/B. Editor launch/edit baselines precede task2's
