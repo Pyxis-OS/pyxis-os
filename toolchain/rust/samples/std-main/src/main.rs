@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::hint::black_box;
-use std::io::{self, IsTerminal, Read, Write};
+use std::io::{self, IsTerminal, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf, absolute};
 use std::process::ExitCode;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -135,6 +135,25 @@ fn paths() -> io::Result<()> {
     Ok(())
 }
 
+fn readonly_file(path: &str) -> io::Result<()> {
+    let mut file = std::fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    assert!(metadata.is_file());
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    assert_eq!(bytes.len() as u64, metadata.len());
+    let mut alias = file.try_clone()?;
+    file.seek(SeekFrom::Start(0))?;
+    assert_eq!(alias.stream_position()?, 0);
+    let mut copy = Vec::new();
+    alias.read_to_end(&mut copy)?;
+    assert_eq!(copy, bytes);
+    assert_eq!(file.stream_position()?, metadata.len());
+    assert_eq!(std::fs::OpenOptions::new().write(true).open(path).unwrap_err().kind(),
+               io::ErrorKind::Unsupported);
+    writeln!(io::stdout(), "rust-std-main: readonly file {metadata:?}")
+}
+
 fn entropy() {
     let mut values = HashMap::new();
     values.insert(String::from("entropy"), 17);
@@ -212,8 +231,7 @@ fn run(arguments: &[OsString]) -> io::Result<()> {
     entropy();
     assert_eq!(std::backtrace::Backtrace::force_capture().status(),
                std::backtrace::BacktraceStatus::Unsupported);
-    assert_eq!(std::fs::File::open("boot://os-release").unwrap_err().kind(),
-               io::ErrorKind::Unsupported);
+    readonly_file("app://share/licenses/Pyxis-LICENSE")?;
     assert_eq!(std::process::Command::new("echo").status().unwrap_err().kind(),
                io::ErrorKind::Unsupported);
     assert_eq!(std::net::TcpStream::connect("127.0.0.1:9").unwrap_err().kind(),

@@ -557,6 +557,13 @@ caddy:
 	rm -rf build/ports/caddy
 	$(LUA) ports/build.lua caddy --sdk $(abspath build/sdk) --work $(abspath build/ports/caddy) --go "$(GO_PREFIX)"
 
+# Rust is an explicit external prefix; normal ports/image builds do not build it.
+.PHONY: hexyl
+hexyl:
+	@test -n "$(RUST_PREFIX)" || { echo 'Hexyl requires RUST_PREFIX=ABSOLUTE_DIR' >&2; exit 1; }
+	rm -rf build/ports/hexyl
+	$(LUA) ports/build.lua hexyl --sdk $(abspath build/sdk) --work $(abspath build/ports/hexyl) --rust "$(RUST_PREFIX)"
+
 $(HEXCURSE_OUTPUTS) &: $(HEXCURSE_INPUTS) $(SDK_INPUTS) $(NCURSESW_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/hexcurse
 	$(LUA) ports/build.lua hexcurse --sdk $(abspath build/sdk) --work $(abspath build/ports/hexcurse) \

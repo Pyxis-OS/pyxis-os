@@ -84,8 +84,13 @@ def export(source, prefix, prebuilt):
     metadata = prefix / "share/pyxis-rust"
     metadata.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(manifest, metadata / "fork-toolchain.json")
+    adapters = []
+    for name in ("pyxis-link.py", "link-flags.mk"):
+        destination = metadata / name
+        shutil.copy2(HERE / "rust" / name, destination)
+        adapters.append(destination)
     files = {}
-    for path in [prefix / "bin/rustc", prefix / "bin/cargo",
+    for path in [prefix / "bin/rustc", prefix / "bin/cargo", *adapters,
                  *list((prefix / "lib").rglob("*.rlib")), *list((prefix / "lib").rglob("*.so*"))]:
         if path.is_file():
             files[str(path.relative_to(prefix))] = digest(path)
