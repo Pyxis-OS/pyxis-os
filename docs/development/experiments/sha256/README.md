@@ -36,9 +36,11 @@ Package phase spans are host Remote arrival observations, including buffering,
 scheduling and RTT. In A1/B1/A2/B2 order: archive verify 12.76/11.80/10.93/10.72 s;
 extract 16.06/15.78/15.75/15.71 s; complete `pkg verify` envelopes
 3.02/2.25/2.92/2.32 s. Fetch was 16.67/10.25/10.18/10.00 s, so full-install
-speedup must not be attributed solely to hashing. Forwarded HTTP FILE reads
-remain bounded to 4088 bytes per RPC; memory-hash gains do not establish equal
-end-to-end package gains. Provider/queue/durability behavior was not changed.
+speedup must not be attributed solely to hashing. FILE reads remain bounded to 4088 data bytes. RAM-backed HTTP snapshots have
+a synchronous kernel read path that bypasses the userspace receiver; these
+measurements do not establish a userspace-provider round trip for each read.
+Memory-hash gains do not establish equal end-to-end package gains. Provider/
+queue/durability behavior was not changed.
 
 ## Correctness and fallback
 
@@ -55,13 +57,46 @@ not execution on an older physical processor. New host Remote + new xfer
 uploaded/downloaded 65,537 bytes with explicit confirmations and equal bytes.
 Host GDB exact-ELF digest checking and invalid/missing-ELF refusal also passed.
 
-## Native follow-up
+## Native vela A/B/A/B — passed
 
-Prepared only: `/shared/present/sha256/vela-check/` has the matched artifacts,
-notices, hashes and hands-free collector. The orchestrator schedules the existing
-HWP live PXE environment on vela; no native staging or execution occurred here.
-It repeats A/B/A/B with RAM packages/home/tmp, target memory/FILE timings and
-Remote-observed verify/extract phases. It refuses reused fixture identities or
-conflicting repository configuration; an unconfirmed command is never retried.
-Raw evidence remains under `/shared/present/sha256/qualification/` and
+Orchestrator-run, 2026-10-25: vela on the existing HWP live PXE image,
+`82ae36202798` archive plus `caelum-hwp.elf`, ABI 0.0.8, RAM packages/home/tmp.
+The same before/after artifacts above ran A1/B1/A2/B2 through reverse Remote.
+All four helper counts/digests, fresh 1242-file extractions, selected-set checks
+and the final verification passed. No NVMe backing or persistent write was used.
+
+Six target-timed samples per variant (three repetitions in each of two runs):
+
+| MiB/s, median (range) | Before PSA | Shared SHA-NI |
+| --- | --- | --- |
+| Memory hash, 4 KiB updates | 426.0 (424.1–431.7) | 3655.9 (3613.9–3680.3) |
+| Memory hash, 16 KiB updates | 424.0 (419.8–430.1) | 3661.8 (3612.2–3706.1) |
+| RAM FILE scan | 1697.5 (1670.0–1726.2) | 1706.7 (1684.4–1716.4) |
+| RAM FILE read + hash | 359.5 (357.2–362.3) | 1385.6 (1360.3–1397.4) |
+
+The 4 KiB memory median improves 8.6 times and read-plus-hash 3.9 times;
+FILE scanning is effectively unchanged. These are pooled sample medians;
+individual-run medians and rounded relay summaries differ slightly.
+
+For the identical 281,031,168-byte archive/1242-file fixture, phase spans below
+are **host Remote arrivals**, including transport/scheduling, not target-internal
+phase timers. VERIFY spans first progress through 100%; that final report occurs
+before digest finalization/comparison. EXTRACT spans its own progress lines.
+
+| Seconds | A1 old | B1 new | A2 old | B2 new |
+| --- | --- | --- | --- | --- |
+| Fetch | 5.65 | 5.66 | 5.94 | 5.66 |
+| Archive VERIFY | 3.23 | 2.67 | 3.20 | 2.63 |
+| EXTRACT | 4.72 | 4.15 | 4.73 | 4.15 |
+| Separate `pkg verify` command envelope | 1.76 | 1.21 | 1.78 | 1.22 |
+
+The archive phase is about 100 MiB/s after acceleration, below the helper's
+1386 MiB/s RAM read-and-hash. This is not the separate `pkg verify` command,
+which checks the installed files. The capture alone does not divide remaining
+cost among syscall/transport validation, copying and progress observation.
+No further optimization or removal of validation/durability barriers is implied.
+
+Packet, exact commands, artifact hashes and raw native evidence:
+`/shared/present/sha256/vela-check/`, especially `results-zsaf0xyn/results.json`.
+Nested evidence remains under `/shared/present/sha256/qualification/` and
 `vela-check/results-pbt657zo/`. No benchmark framework or instrumentation is merged.
