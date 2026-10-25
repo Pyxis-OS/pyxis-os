@@ -7,7 +7,6 @@ return {
   commands = { xfer = { path = "xfer.pxe" } },
   entries = {
     { build = "userspace-root/xfer.pxe", at = "xfer.pxe" },
-    { build = "ports/mbedtls/stage/share/licenses/mbedtls", at = "licenses/mbedtls" },
-    { build = "ports/mbedtls/stage/share/licenses/tf-psa-crypto", at = "licenses/tf-psa-crypto" },
+    { build = "sdk/share/licenses/libsha256", at = "licenses/libsha256" },
   },
 }
