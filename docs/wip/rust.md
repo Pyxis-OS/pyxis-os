@@ -3,7 +3,8 @@
 Stage 1 tasks 1–2 are implemented; the [toolchain reference](../development/rust-toolchain.md)
 and [qualification record](../development/experiments/rust-core-alloc.md) describe
 core+alloc, the allocating hello and unchanged tiny-skia checksum. This is not
-std, a hosted compiler or Horizon support. Stage 2 waits for its separate go.
+std, a hosted compiler or Horizon support. The separate
+[stage-2 std proposal](rust-std.md) awaits decisions before implementation.
 
 ## Accepted decisions (chronium, 2026-10-25)
 
@@ -41,49 +42,23 @@ The optional sample package stays outside core/rescue defaults. There is no
 kernel ABI change, userland dependency pin, fake libc-crate target or general
 Rust runtime API. The initial 1 MiB guarded stack remains unchanged.
 
-## Path to std — later fork, not stage 1
+## Path to std
 
 Fork direction accepted (chronium, 2026-10-25): the Forgejo source mirror is
-`mirrors/rust`. When stage 2 starts, chronium creates `PyxisOS/pyxis-rust`,
-with branch `pyxis` starting at the same full nightly
+`mirrors/rust`. Chronium has created `PyxisOS/pyxis-rust`; the proposed
+implementation branch `pyxis` starts at the same full nightly
 commit `48f4b05538b8eca412137042d9647a61e692c6b3`. Stage 2 adds the built-in
 `x86_64-unknown-pyxis` target by carrying over the qualified stage-1 JSON
 settings unchanged, plus the native Pyxis std sys module. That branch is the
 future tier-3 upstream proposal, rather than a different compiler identity.
 
-Build the forked toolchain on horse. Stage 2 will settle Rust's CI-LLVM through
-an approved cache versus a separate LLVM build; neither is selected or needed
-for stage 1. Keep the libc crate in a pinned fork and `[patch.crates-io]` overlay
-until its Pyxis entry is upstream. The prebuilt nightly/custom JSON/build-std
-core+alloc delivery remains unchanged; no fork build starts in stage 1.
-
-Use a dedicated Pyxis `std::sys` backend and bindings matching Pyxis headers.
-The existing [Go adapters](../development/go-toolchain.md) are design evidence,
-not a Rust implementation or a reason to imitate Linux syscalls.
-
-| Area | Available now | Rust work / missing contract |
-|---|---|---|
-| Allocation / startup / args | Synchronized libc heap, native startup, C main arguments | Reusable allocator/bindings; copy arguments, preserve real failures |
-| Threads / parking | Join/detach, guarded stacks, native address WAIT/WAKE with monotonic deadlines; libc mutex/condition/once/keys | Rust thread/parking adapters; map requested stacks into 1–8 MiB bounds and respect grant/capacity failures |
-| TLS / destructors | Local-exec TLS, libc FS owner, real language/key destructor drain | Rust TLS codegen and destructor registration; no dynamic TLS/modules or second FS owner |
-| Time / entropy | Precise monotonic, wall clock, sleep and random under explicit grants | Required startup authority and infallible-API failure policy; no invented times or weak random fallback |
-| Stdio | Real synchronized libc descriptors over supplied FILE/pipe/console grants | Rust locks/I/O error mapping; no ambient console; libc descriptor indices are not native capabilities |
-| Files / metadata | File/directory operations, held identity and per-field metadata validity | Native metadata representation; unsupported permissions/symlinks remain unsupported, no invented UID/GID or timestamps |
-| Paths / OsStr | Native scheme URIs, retained cwd, confined relative paths | Byte-preserving OsStr and native Path parsing; leading `/` is invalid, `..` cannot escape authority, provider URI spelling cannot be Unix-normalized |
-| Environment | Native TEXT entries and owned snapshots; capabilities are separate | Safe enumeration/mutation and exported/private TEXT policy; no assumed writable `environ` or text-to-authority conversion |
-| Networking | Native IPv4 TCP/UDP/readiness; Go DNS adapter over configured UDP scope, QEMU-qualified | Rust ownership/deadline adapters; libc has no socket API. No IPv6/Unix/raw sockets inferred |
-| Process | Explicit native jobs, selected cwd/streams/env/grants, completion/termination | Command lookup/delegation and child cleanup need their own contract; no fork/exec/signal/PID emulation |
-| Stack faults / unwind | Guarded eager stacks, process-fatal faults, C++ libunwind | Preserve inline probes; panic-abort first. Rust personality/EH/table retention and C boundaries require separate unwind qualification |
-| Parallelism | Online CPU count and native allowed CPU sets | available_parallelism must reflect caller-effective eligibility, not just total online CPUs |
-
-References: [libc limits](../userland/libc-portability.md),
-[threads/TLS](../interfaces/threads.md), [libc threads](../userland/threads.md),
-[paths](../userland/paths.md), [process state](../userland/process-state.md),
-[native jobs](../userland/native-jobs.md), [loading](../kernel/program-loading.md).
-These are runtime adaptation tasks, not missing reasons to add POSIX mechanisms
-to Caelum. A compiled std is not qualification of every standard operation;
-unsupported optional facilities must return honest errors. Missing-grant and
-infallible-API behavior must be reviewed before that profile ships.
+The [std milestone](rust-std.md) proposes the horse toolchain build, native
+platform surface, bindings fork, ordered delivery and hexyl qualification.
+It recommends cached Rust CI-LLVM rather than a second LLVM source build;
+this new choice and the first std profile await decisions. The existing
+prebuilt nightly/custom JSON/build-std core+alloc delivery remains unchanged.
+The [Go adapters](../development/go-toolchain.md) are design evidence, not a
+Rust implementation or a reason to imitate Linux syscalls.
 
 The later direction remains hexyl → tokei → ripgrep → bat → broot → xh →
 gitoxide → Helix, with tiny-skia usable earlier, then wgpu. Crates selecting
