@@ -1,7 +1,7 @@
 # Bounded bulk FILE reads through providers
 
-Proposal only, authorized by chronium (2026-10-25). The three defaults below
-await his decision; this document authorizes no implementation.
+Accepted by chronium (2026-10-25). Implementation is assigned; ABI-changing
+PRs remain drafts until the 0.0.9 tag is published.
 
 ## Problem and release boundary
 
@@ -14,7 +14,8 @@ make that file a native RAM FILE eligible for the existing export shortcut.
 
 Chronium's release constraint: **0.0.9 ships Monday with ABI 0.0.8 unchanged**.
 A bulk FILE operation and its transport/collection support add public ABI.
-Implement them **after 0.0.9**, on the next development ABI, with packages using
+Implementation may proceed on branches now; **merge only after 0.0.9 is tagged**,
+on the next development ABI, with packages using
 that interface declaring the new ABI. Keeping old operations intact can retain
 support for existing 0.0.8 packages; it does not make new consumers compatible
 with an unmodified 0.0.8 kernel. No renumbering, compatibility shim or silent
@@ -41,15 +42,9 @@ pipeline/counts, not percentages of CPU time. Progress does not sleep; member
 processing follows the archive VERIFY span. Detailed local attribution:
 `/shared/present/sha256/PKG-VERIFY-ATTRIBUTION.md`.
 
-## Options
+## Selected transport
 
-| Option | Benefit | Cost or missing contract |
-| --- | --- | --- |
-| Enlarge ordinary FILE/endpoint/completion replies | Familiar copied-message semantics; providers can return more bytes. | Growing both endpoint arrays to 64 KiB grows their sixteen-slot payload storage from 128 KiB to 2 MiB per endpoint, before metadata. Full local packets and ordinary job/completion arrays also grow. A reply-only change still affects every record and splits today's shared bound. |
-| Transfer a shared buffer or memory object | Bulk data travels separately from control messages. | Public MEMORY currently manages private mappings of the calling process. There is no transferable cross-process backing object. Sharing needs new mapping/write authority, sealing, revocation, pinning, exit and retirement rules. |
-| Use npfs's bulk path through the provider | Reuses existing logical-block lookup and bounded multi-block read machinery for RAM and disk. | The path needs at least 8192 requested bytes; a 4088-byte FILE call cannot reach it. It also needs a larger owned job/result buffer and a provider transport for returning the result. This is the backend part of a solution, not an existing client interface. |
-
-**Default:** combine the third option with **dedicated copied bulk replies**.
+Use npfs's existing bulk backend with **dedicated copied bulk replies**.
 Keep ordinary endpoint packets/control traffic small; allocate out-of-line data
 only for admitted bulk FILE reads. This is not general shared memory or a
 blanket enlargement of IPC. It preserves some copies in exchange for a simpler
@@ -61,7 +56,7 @@ npfs pairs. It supplies no caller-memory read interface. Nor is switching HTTP
 staging to plain RAM a drop-in workaround: its default 64 MiB aggregate storage
 cap refuses this 268 MiB GET.
 
-## Proposed contract
+## Accepted contract
 
 ### Authority and data flow
 
@@ -98,7 +93,8 @@ The borrowed output span must remain owned and reserved by the caller until
 return; concurrent release/remapping is not supported. Kernel validation is
 repeated at the final copy. No component can write it after return. The native
 and exported library helper returns an exact validated count/extent, with the
-same EOF/short-read rules as FILE_READ; offset/count arithmetic cannot wrap.
+same EOF/short-read rules as FILE_READ; the requested offset/capacity range
+must not wrap.
 No oversized automatic packet or hash buffer belongs on a stack. A bulk read
 does not give a mutable native FILE stronger snapshot/concurrent-write semantics
 than its backing already provides.
@@ -129,20 +125,20 @@ buffer once no copy/worker can use it. After that release, a stale receipt
 rejects late reply/collection without reallocating bulk storage or re-admitting
 I/O. No age-based reclamation is introduced.
 
-Bad/short **completion collection** output leaves its terminal result available
+Successful completion collection consumes its data authority. Bad/short
+**completion collection** output leaves its terminal result available
 on that receipt without rerunning I/O; close/acknowledge discards it. This does
 not create a new client-side retry ticket for synchronous FILE calls: invalid
 final client output fails/discards that result. Neither path silently replays
 an operation. Provider exit/cancellation must drain or cancel its outstanding
 backing work before releasing the borrowed data storage.
 
-## Decisions requested
+## Accepted decisions (chronium, 2026-10-25)
 
-1. **Transport — default:** dedicated copied bulk FILE READ/reply and native
+1. **Transport:** dedicated copied bulk FILE READ/reply and native
    completion collection as above. Keep ordinary 4096-byte messages unchanged;
-   no shared mapping or backing-handle escape. Alternatives are broader fixed
-   replies or a separately designed shared-memory capability.
-2. **Bounds and charging — default:** authored maximum **1 MiB per read** and
+   no shared mapping or backing-handle escape.
+2. **Bounds and charging:** authored maximum **1 MiB per read** and
    **16 MiB of kernel bulk-data storage per initiating process**, separate from
    existing completion metadata. Charge every live allocation at its own layer:
    endpoint reply data to its caller, backing-completion data to its submitter.
@@ -151,9 +147,9 @@ backing work before releasing the borrowed data storage.
    before delivery/I/O; budget exhaustion returns LIMIT, allocation failure
    NO_MEMORY, and full delivery slots QUEUE_FULL, without eviction or waiting
    for budget. Retain the charge through copy/worker drain and result release.
-   The ceiling is a proposed workload bound, not a guarantee of a full reply
+   The ceiling is an authored workload bound, not a guarantee of a full reply
    or a value inferred from FILE_TRANSFER's unrelated limit.
-3. **First delivery — default:** native RAM/initrd/npfs plus httpfs completed
+3. **First delivery:** native RAM/initrd/npfs plus httpfs completed
    FILE snapshots, and explicit SDK/libpyxis use in pkg's archive/member and
    installed-tree hash loops. This covers both live RAM-npfs and installed
    NVMe-npfs. Other providers may implement the typed operation; unsupported
@@ -163,16 +159,15 @@ backing work before releasing the borrowed data storage.
    publication and sync barrier. No kernel hashing, package format change or
    configuration/grant migration is part of this work.
 
-## Implementation sequence after acceptance and 0.0.9
+## Implementation sequence
 
-- Kernel/ABI/SDK foundation: functional typed bulk calls/replies and receipt
+- [ ] Kernel/ABI/SDK foundation (assigned): functional typed bulk calls/replies and receipt
   collection, charged ownership, native backends and bounded npfs buffers/runs.
-- Userland/libpyxis and httpfs: provider receive/reply and backing completion
+- [ ] Userland/libpyxis and httpfs: provider receive/reply and backing completion
   collection, including forwarded grants and joined cleanup. Dependency PRs
   precede parent pins; no placeholder interfaces or compatibility readers.
-- Pkg consumer and qualification, then fold implemented behavior into FILE,
-  endpoint/completion and provider references. Keep this document proposed until
-  decisions and implementation are separately authorized.
+- [ ] Pkg consumer and qualification, then fold implemented behavior into FILE,
+  endpoint/completion and provider references. No ABI-changing PR merges before the 0.0.9 tag.
 
 ## Qualification
 
