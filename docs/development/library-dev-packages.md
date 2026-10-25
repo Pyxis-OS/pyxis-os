@@ -38,6 +38,9 @@ not full upstream API qualification.
 | `prism-dev` `0.git.1de054450e7b` | libprism.a; prism | MIT; covered Pyxis source/MPL | `spdlog-dev` | SoH shared closure; independent consumer |
 | `libzip-dev` 1.12.1 | libzip.a; libzip | BSD-3-Clause; covered Pyxis source/MPL | `zlib-dev` | SoH shared closure; independent consumer |
 | `json-dev` 3.12.0 | header-only; `nlohmann_json` | MIT; MPL-2.0 availability patch/source | `libcxx-dev` | SoH shared closure; independent JSON consumer |
+| `libogg-dev` 1.3.6 | `libogg.a`; `ogg` | BSD-3-Clause; covered Pyxis source/MPL | — | Vorbis, Opusfile/SoH shared closure |
+| `libvorbis-dev` 1.3.7 | `libvorbis.a`, `libvorbisenc.a`, `libvorbisfile.a`; `vorbis`, `vorbisenc`, `vorbisfile` | BSD-3-Clause; covered Pyxis source/MPL | `libogg-dev` | SoH shared closure; callback/FILE consumer |
+| `opus-dev` 1.6.1 | `libopus.a`; `opus` | BSD-3-Clause and reached source/patent notices; covered Pyxis source/MPL | — | SoH shared closure; packet consumer |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
 | `libuv-dev` 1.52.1 | `libuv.a`; `libuv` | MIT, BSD-2-Clause/ISC extras, MPL-2.0 native adapter | — | Lua 5.1/luv, Neovim; uv-relay example |
 | `lua-dev` 5.5.1 | `liblua.a`; `lua` | MIT | — | Lua interpreter; boot-init, session, config, Wi-Fi profile reader, installer/publication code |
@@ -123,3 +126,9 @@ Monocypher includes its core and optional Ed25519/SHA-512 APIs. Test vectors est
 Prism retains C++20 streams/regex/exceptions and its spdlog dependency. Its invocation bridge is compiled as C11; it is an interpreted processor, with no runtime-code generation or launcher authority.
 
 libzip selects store/deflate only and rejects encryption and other compression methods. All opens need declared random and clock grants for upstream keyed hashing; no deterministic fallback is provided. Missing native timestamps/Unix attributes stay unknown, while a required write-time timestamp fails honestly without a clock. Native file access uses capabilities; POSIX permission copying is omitted, not emulated. ZIP close is not a claim of directory-sync durability.
+
+The Xiph family uses baseline x86-64/SSE2 code, with AVX/SSE4/host-native
+selection and optional Opus model features disabled. Vorbis encoding and
+callback/FILE decoding are included; Opus packet encode/decode is real. This
+adds no audio-device or network authority. Opusfile is a separate dependency
+whose optional reopen helper needs a native libc/profile decision.
