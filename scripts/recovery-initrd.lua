@@ -53,6 +53,8 @@ return function(inputs)
   -- wifi-supplicant's RSN code.
   entries[#entries + 1] = { tree = inputs.userspace .. "/share/licenses/wpa-rsn",
     at = "share/licenses/wpa-rsn" }
+  entries[#entries + 1] = { tree = inputs.userspace .. "/share/licenses/libsha256",
+    at = "share/licenses/libsha256" }
   -- Rescue starts the HTTP provider with this script to fetch packages.
   entries[#entries + 1] = { file = inputs.userspace .. "/share/installer/system/init-services",
     at = "share/installer/system/init-services" }
