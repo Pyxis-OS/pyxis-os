@@ -5,6 +5,7 @@ PREFIX SDK OUTPUT WORK must be absolute paths. OUTPUT must be fresh; WORK keeps
 Cargo's cache and content-keyed target directories. --fetch allows the closed
 internal Cargo source to seed missing inputs; normal builds are frozen/offline.
 --fork selects the separately installed fork and its built-in Pyxis target.
+--std requires --fork and packages only the ordinary-main std exercise.
 """
 import argparse
 import hashlib
@@ -27,7 +28,7 @@ def digest(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def verify_fork(prefix, receipt, environment):
+def verify_fork(prefix, receipt, environment, std=False):
     if not isinstance(receipt, dict):
         raise ValueError("Fork installation receipt must be an object")
     manifest = json.loads((RUST / "fork-toolchain.json").read_text())
@@ -39,7 +40,9 @@ def verify_fork(prefix, receipt, environment):
         raise ValueError("Fork installation receipt lacks file hashes")
     required = {"bin/rustc", "bin/cargo"}
     libraries = prefix / "lib/rustlib" / manifest["target"] / "lib"
-    for crate in ("core", "alloc", "compiler_builtins"):
+    crates = ("core", "alloc", "compiler_builtins", "std") if std else (
+        "core", "alloc", "compiler_builtins")
+    for crate in crates:
         matches = list(libraries.glob(f"lib{crate}-*.rlib"))
         if not matches:
             raise ValueError(f"Fork prefix lacks installed target {crate}")
@@ -79,6 +82,8 @@ def verify_fork(prefix, receipt, environment):
 
 
 def build(arguments):
+    if arguments.std and not arguments.fork:
+        raise ValueError("--std requires --fork and its installed Pyxis std")
     prefix, sdk, output, work = (getattr(arguments, key) for key in
                                  ("prefix", "sdk", "output", "work"))
     if any(not p.is_absolute() for p in (prefix, sdk, output, work)):
@@ -102,7 +107,7 @@ def build(arguments):
             environment.pop(key)
     environment["RUSTC"] = str(prefix / "bin/rustc")
     if arguments.fork:
-        fork, identity = verify_fork(prefix, receipt, environment)
+        fork, identity = verify_fork(prefix, receipt, environment, arguments.std)
     else:
         identity = subprocess.check_output([environment["RUSTC"], "-Vv"], text=True,
                                             env=environment)
@@ -137,6 +142,8 @@ def build(arguments):
     inputs = {str(p): digest(p) for p in paths}
     inputs["effective_sdk_link_settings"] = hashlib.sha256(
         json.dumps(link_settings).encode()).hexdigest()
+    if arguments.std:
+        inputs["qualification_profile"] = hashlib.sha256(b"std").hexdigest()
     key = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
     target = work / "targets" / key
     work.mkdir(parents=True, exist_ok=True)
@@ -151,20 +158,34 @@ def build(arguments):
     })
     cargo = str(prefix / "bin/cargo")
     mode = "--locked" if arguments.fetch else "--frozen"
-    command = [cargo, "build", mode, "--release", "-p", "rust-hello", "-p",
-               "rust-raster", "--target"]
+    samples = (("rust-std-main", "std-main"),) if arguments.std else (
+        ("rust-hello", "hello"), ("rust-raster", "raster"))
+    command = [cargo, "build", mode, "--release"]
+    for name, _ in samples:
+        command += ["-p", name]
+    command += ["--target"]
     if arguments.fork:
         command += [fork["target"]]
     else:
         command += [str(RUST / "x86_64-unknown-pyxis.json"),
                     "-Zbuild-std=core,alloc", "-Zjson-target-spec"]
     subprocess.run(command, cwd=SAMPLES, env=environment, check=True)
-    host = fork["host"] if arguments.fork else pin["host"]
-    subprocess.run([cargo, "build", mode, "--release", "-p", "rust-raster-host",
-                    "--target", host],
-                   cwd=SAMPLES, env=environment, check=True)
-    reference = subprocess.check_output([str(target / host / "release/rust-raster-host")],
-                                         text=True).strip()
+    reference = None
+    libc_source = None
+    if arguments.std:
+        metadata = json.loads(subprocess.check_output(
+            [cargo, "metadata", mode, "--format-version=1", "--filter-platform", fork["target"]],
+            cwd=SAMPLES, env=environment, text=True))
+        libc_package = next(package for package in metadata["packages"]
+                            if package["name"] == "libc")
+        libc_source = Path(libc_package["manifest_path"]).parent
+    else:
+        host = fork["host"] if arguments.fork else pin["host"]
+        subprocess.run([cargo, "build", mode, "--release", "-p", "rust-raster-host",
+                        "--target", host],
+                       cwd=SAMPLES, env=environment, check=True)
+        reference = subprocess.check_output([str(target / host / "release/rust-raster-host")],
+                                             text=True).strip()
     provenance = {
         "producer": "pyxis-rust-samples", "rustc": identity.strip(),
         "sdk_inputs_sha256": inputs,
@@ -175,8 +196,12 @@ def build(arguments):
                                                       cwd=ROOT, text=True)),
         "cargo_lock_sha256": digest(SAMPLES / "Cargo.lock"),
         "rust_library_lock_sha256": digest(prefix / "lib/rustlib/src/rust/library/Cargo.lock"),
-        "host_reference": reference, "lto": False,
+        "lto": False,
     }
+    if arguments.std:
+        provenance.update({"profile": "std", "libc_source": libc_package["source"]})
+    else:
+        provenance["host_reference"] = reference
     if arguments.fork:
         provenance.update({"fork_toolchain": fork, "fork_installation": receipt,
                            "target": fork["target"]})
@@ -187,7 +212,7 @@ def build(arguments):
     with tempfile.TemporaryDirectory(prefix="rust-samples-", dir=output.parent) as temporary:
         stage = Path(temporary) / "stage"
         stage.mkdir()
-        for name, source in (("rust-hello", "hello"), ("rust-raster", "raster")):
+        for name, source in samples:
             bundle = stage / (name + ".pxb")
             binary = bundle / "app/bin" / (name + ".pxe")
             binary.parent.mkdir(parents=True)
@@ -212,6 +237,13 @@ def build(arguments):
                 shutil.copyfile(SAMPLES / filename, notices / filename)
             sources = bundle / "app/share/source"
             shutil.copytree(SAMPLES, sources / "samples", ignore=shutil.ignore_patterns("target", ".git"))
+            if libc_source is not None:
+                shutil.copytree(libc_source, sources / "libc",
+                                ignore=shutil.ignore_patterns("target", ".git"))
+                libc_notices = notices / "libc"
+                libc_notices.mkdir()
+                for license_file in libc_source.glob("LICENSE*"):
+                    shutil.copyfile(license_file, libc_notices / license_file.name)
             source_files = ["pyxis-link.py", "link-flags.mk"]
             source_files += (["fork-toolchain.json"] if arguments.fork else
                              ["x86_64-unknown-pyxis.json", "host-toolchain.json"])
@@ -227,7 +259,8 @@ def build(arguments):
         shutil.copytree(target / "debug-elf", stage / "debug")
         (stage / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
         stage.rename(output)
-    print(reference)
+    if reference is not None:
+        print(reference)
     print(f"Rust qualification bundles: {output}")
 
 
@@ -237,6 +270,7 @@ def main():
         parser.add_argument(key, type=Path)
     parser.add_argument("--fetch", action="store_true")
     parser.add_argument("--fork", action="store_true")
+    parser.add_argument("--std", action="store_true")
     try:
         build(parser.parse_args())
     except (OSError, ValueError, subprocess.CalledProcessError) as error:

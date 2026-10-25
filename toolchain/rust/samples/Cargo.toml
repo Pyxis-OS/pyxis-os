@@ -1,7 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["runtime", "hello", "scene", "raster", "raster-host"]
+members = ["runtime", "hello", "scene", "raster", "raster-host", "std-main"]
 default-members = ["raster-host"]
+
+[patch.crates-io]
+libc = { git = "https://git.internal/PyxisOS/pyxis-libc.git", rev = "a6aac31c87316e4a351d8e7185ad8898e545d22a" }
 
 [workspace.package]
 version = "0.1.0"
