@@ -9,7 +9,7 @@ records profile, paths, ownership and licences.
 ## Build and configuration
 
 The unmodified `2446d3b8` image built before adaptation. The final integration
-is rebased on `41f1e4fc`, with the shared-SHA SDK/userland and ports changes kept.
+is rebased on `16cee762`, retaining the merged SHA-256 and LuaLS changes.
 Existing builder `pyxis-llvm23.1.3-3d69e83`, `make -j16 image DISTRIBUTION=full`; no compiler fork or
 container rebuild. A fresh mirror-only recipe build and a separate CMake project
 linking `LibUltraShip::LibUltraShip` qualify the staged headers/archive/closure.
@@ -26,6 +26,11 @@ functional qualification, not an FPS or native-performance measurement.
 - A deterministic deflate ZIP/O2R built from literal public JSON and the pinned
   public GL shaders decodes through LUS's real resource factory. Synchronous
   JSON load and an uncached bulk load on one actual resource worker complete.
+  An authored one-pixel binary texture also decodes and retains its resource
+  owner through RDP dispatch. Segment interpretation is checked explicitly;
+  known resource/segment pointers can be low heap addresses. The static-image
+  fallback is not a general pointer validator. This does not qualify a textured
+  game scene.
   A missing resource returns no resource; a missing archive prints its URI and
   exits 1. Removing the `home` capability reports state preparation failure and
   exits 1 instead of using a host/CWD fallback.
