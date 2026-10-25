@@ -31,6 +31,9 @@ Kernel and compiler-rt flags are outside this userspace policy change.
 Mesa requests Meson's release build, but its inherited `c_args`/`cpp_args`
 contain a later `-O2`; that wins over release `-O3`. The proposed port fix gives
 Meson one deliberate optimization setting instead of contradictory flags.
+The repeated nested comparison supports hosted C, but has not shown an O3
+advantage. The proposed default is therefore explicit O2, with O3 retained as a
+measured comparison rather than assumed to be faster.
 
 ## Red-zone evidence
 
@@ -57,8 +60,9 @@ Mesa O2/O3. No SDK or recipe default is edited for these comparisons. C++ object
 whose flags are unchanged are reused explicitly; Go Git and the published
 hosted Clang program are unchanged controls, not predicted C-mode speedups.
 
-QEMU results and variation will be folded into the experiment record before
-this proposal is presented. Install/extract checks must use never-installed
+The [experiment record](../development/experiments/hosted-build-flags.md)
+records QEMU configuration, results and limits. Install/extract checks use
+never-installed
 versions of identical public data; removing and reinstalling a retained version
 would measure reuse. SHA-NI and portable hashing need separate matched CPU
 feature configurations. No timed workload runs alongside compilation or another
@@ -72,14 +76,16 @@ profiles. No private game assets or configuration enter the public proposal.
 ## Proposed decisions
 
 1. **Hosted boundary — default:** hosted C for programs, ports and reusable SDK
-   libraries; retain freestanding C for the whole libc implementation closure,
+   libraries; `__STDC_HOSTED__` becomes 1 for those C consumers. Retain
+   freestanding C for the whole libc implementation closure,
    crt0 and pre-TLS startup helpers, plus existing explicit no-builtin/strict
    rounding controls. C++ remains hosted. Synchronize Make, CMake and duplicated
    application flags without changing header order or other options.
-2. **Mesa optimization — default:** make the selected release profile actually
-   use O3, stripping inherited optimization options from the cross-file args
-   rather than relying on their order. Retain upstream math policy and the
-   generic SDK's O2; do not raise every program to O3.
+2. **Mesa optimization — default:** explicitly select O2 for the release profile,
+   stripping inherited optimization options from the cross-file args rather
+   than relying on their order. The nested matrix shows no O3 advantage;
+   compare both natively before claiming otherwise. Retain upstream math policy
+   and the generic SDK's O2; do not raise every program to O3.
 3. **Red zone — default:** retain the current SDK/compiler/Rust no-red-zone
    convention in this delivery. Explicitly enabling it needs its own ABI promise
    and runtime qualification; the normal-entry audit makes that plausible,
@@ -89,7 +95,7 @@ profiles. No private game assets or configuration enter the public proposal.
 
 Userland SDK flag split first, ports' Mesa/Neovim adjustments second, then parent
 SDK export/pins/docs; signed dependency heads must contain their mains. Rebuild
-affected packages for 0.0.10. No compiler-container rebuild is needed for the
-proposed defaults. Repeat the selected comparisons after implementation and
+affected packages for 0.0.10; no runtime ABI change is proposed. No compiler
+container rebuild is needed for the proposed defaults. Repeat the selected comparisons after implementation and
 prepare the coordinated vela packet, including the existing SoH private-packet
 workflow, before any native staging.

@@ -72,6 +72,10 @@ outside this milestone.
 2026-10-21. Fresh source audit and proposal; fast startup is required. No
 implementation is assigned.
 
+[Hosted build flags](hosted-build-flags.md): chronium-assigned investigation
+(2026-10-25) for 0.0.10: hosted C boundaries, explicit Mesa optimization and the
+userspace red-zone convention. Measured prototype and decisions precede SDK defaults.
+
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5
 [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) has the owner-run Classic
