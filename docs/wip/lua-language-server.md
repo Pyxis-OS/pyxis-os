@@ -1,8 +1,8 @@
 # Lua language server
 
-Investigation and proposal (chronium assignment, 2026-10-25). **No port is
-implemented or authorised by this document.** The three decisions below are
-proposed defaults; stop for chronium before implementation.
+Plan and all three decisions accepted (chronium, 2026-10-25). Task 1, pinned
+runtime/platform closure, is assigned. No port is delivered yet; later task
+progress and qualification are recorded below.
 
 Goal: install `lua-language-server` and enable `lua_ls` in Neovim, with real
 semantic highlighting of `vim.*`, typed API completion and diagnostics.
@@ -227,9 +227,9 @@ Qualification must prove more than a coloured screenshot:
   input/output closure, shutdown+exit with stdin open, editor exit/forced stop,
   and repeated starts without orphan workers or spinning waits.
 
-## Decisions requested (defaults, not accepted)
+## Accepted decisions (chronium, 2026-10-25)
 
-1. **First feature profile and refresh.** Default: native stdio with real,
+1. **First feature profile and refresh.** native stdio with real,
    owned worker/channel concurrency, bounded framing/queues and cancellable
    input; join workers at orderly exit after the shutdown/exit exchange.
    Semantic tokens, typed completion, diagnostics
@@ -238,14 +238,14 @@ Qualification must prove more than a coloured screenshot:
    editor didOpen/didChange/didSave/didClose remain; external changes require
    explicit workspace reload/restart. Do not advertise unsupported capabilities.
    Elapsed budgets use real monotonic time, not fabricated CPU accounting.
-2. **Authority and configuration.** Default: ordinary declared-grant bundle
+2. **Authority and configuration.** ordinary declared-grant bundle
    launch with the same inherited filesystem authority as clangd, including
    possibly writable home/cwd; no new confinement claim or wrapper. Read-only
    app and held `nvim_runtime` library; no launcher/network/SDK grants. Accept
    JSON/JSONC settings, and explicitly reject executable Lua configuration,
    project plugins and third-party code/download/migration paths in this slice.
    Exclude server-side config-write commands/actions; never pretend they saved.
-3. **State lifetime.** Default: one real `mkdtemp` instance under
+3. **State lifetime.** one real `mkdtemp` instance under
    `home://.cache/lua-language-server/`, owning log/generated-meta subtrees.
    No persistent analysis-cache reuse or `--lazy` initially. Missing writable
    state/entropy/clock fails visibly, with no misleading successful LSP startup.
