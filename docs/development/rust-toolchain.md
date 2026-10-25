@@ -118,7 +118,7 @@ network/process adapters and Rust unwinding remain later std work.
 The [std milestone](../wip/rust-std.md) uses a separate Linux-host compiler
 with built-in `x86_64-unknown-pyxis`, installed Pyxis std/core/alloc and host
 std/proc_macro for build scripts. Gate 2's compiler revision is
-`340aef8f0d7`. The target keeps `target_os="pyxis"`
+`5e85f86de5f7dc45a485fa8a3eb376487923bc0b`. The target keeps `target_os="pyxis"`
 and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
 [first std main record](experiments/rust-std-main.md) separate their qualification
 and limits.
@@ -151,7 +151,7 @@ On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
 ```sh
 git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
 git -C /absolute/pyxis-rust fetch origin
-git -C /absolute/pyxis-rust checkout --detach 340aef8f0d7
+git -C /absolute/pyxis-rust checkout --detach 5e85f86de5f7dc45a485fa8a3eb376487923bc0b
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
