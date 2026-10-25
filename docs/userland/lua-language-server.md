@@ -13,7 +13,12 @@ install the editor and server for the running system:
 pkg install nvim lua-language-server
 ```
 
-Start a new editor after updating its package. Add this to
+Start a new editor after updating its package. Full development live images
+search archive commands before packages; if their archive editor predates this
+configuration, launch `pkg://nvim/nvim.pxb` explicitly. Installed systems search
+the package command view first ([command order](command-search.md#defaults-and-lookup)).
+
+Add this to
 `home://.config/nvim/init.lua`, or run it with `:lua` in an existing session
 whose runtime includes the configuration:
 
