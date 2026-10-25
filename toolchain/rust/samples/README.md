@@ -7,9 +7,11 @@ headers, without a libc crate, a replacement entry point or another FS owner.
 
 `rust-hello` checks Vec/String growth and drop, zeroed allocations and
 grow/shrink reallocation at 16 KiB alignment, and a C `fma` call with f64
-arguments and result. `rust-hello --panic` requests the negative qualification:
+arguments and result, plus an initialized local-exec TLS variable. `rust-hello --panic` requests the negative qualification:
 the runtime emits a fixed diagnostic and exits with status 101. Allocation
-failure emits a fixed diagnostic and exits with status 102. These handlers
+failure emits a fixed diagnostic and exits with status 102;
+`rust-hello --allocation-failure` exercises it with a real oversized request
+that libc refuses before backing allocation. These handlers
 abort Rust execution without unwinding. They use caller-supplied stderr.
 
 The raster programs share the same no_std scene crate and unchanged
@@ -25,7 +27,7 @@ rust-raster: fnv1a64=d0dfb9f8f80d6c59 width=96 height=64
 From this directory, use the pinned prefix prepared by the host installer:
 
 ```sh
-export PATH=/home/chronium/opt/pyxis-rust-nightly-2026-10-24/bin:$PATH
+export PATH=/absolute/pyxis-rust-nightly-2026-10-24/bin:$PATH
 export CARGO_HOME=/absolute/path/to/private/cargo-cache
 cargo fetch --locked
 cargo run --frozen --release -p rust-raster-host

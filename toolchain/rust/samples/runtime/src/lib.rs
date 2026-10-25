@@ -18,7 +18,7 @@ unsafe extern "C" {
     fn free(pointer: *mut c_void);
     fn fwrite(buffer: *const c_void, size: usize, count: usize, stream: *mut File) -> usize;
     fn fflush(stream: *mut File) -> c_int;
-    fn exit(status: c_int) -> !;
+    fn _Exit(status: c_int) -> !;
     pub fn fma(x: f64, y: f64, z: f64) -> f64;
     static mut stdout: *mut File;
     static mut stderr: *mut File;
@@ -98,7 +98,7 @@ fn fail(message: &[u8], status: c_int) -> ! {
     unsafe {
         fwrite(message.as_ptr().cast(), 1, message.len(), stderr);
         fflush(stderr);
-        exit(status)
+        _Exit(status)
     }
 }
 
