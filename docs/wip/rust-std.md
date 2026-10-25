@@ -15,7 +15,10 @@ Rust is `48f4b05538b8eca412137042d9647a61e692c6b3`, nightly-2026-10-24,
 with LLVM 23.1.4; the Pyxis linker is LLVM 23.1.3. The
 [qualified target JSON](../../toolchain/rust/x86_64-unknown-pyxis.json) and
 [SDK link adapter](../../toolchain/rust/pyxis-link.py) remain the settings and
-link-contract sources of truth. No stage-2 build or runtime result is claimed here.
+link-contract sources of truth. Gate 1 is qualified against main `4c5ed5f4`,
+userland `67aa6220` and ports `a05ca2c3`; see the
+[compiler qualification record](../development/experiments/rust-std-toolchain.md).
+Pyxis std remains unimplemented.
 
 Chronium has created [PyxisOS/pyxis-rust](https://git.internal/PyxisOS/pyxis-rust)
 from `mirrors/rust`; its `main` contains the pinned commit. Branch `pyxis`
@@ -45,8 +48,10 @@ heap bootstrap and final native process exit.
    build is the alternative if CI artifacts cannot be retained; do not silently
    switch to it or to the Pyxis LLVM tree. Fork the libc crate from std's
    `0.2.191` dependency line, using pinned `[patch.crates-io]` entries in both the
-   Rust library build and consumer workspaces. Chronium creates that repository
-   when needed; exact source/lock revisions and notices precede builds.
+   Rust library build and consumer workspaces. The repository now exists at
+   `PyxisOS/pyxis-libc`, branch `libc-0.2`, baseline
+   `ccc2ff4aaab962f7fde7b8edda7379c045b1ca12`; native bindings and overlays
+   remain gate 2 work. Exact source/lock revisions and notices precede builds.
 2. **First std profile:** alloc/startup/args, TEXT environment, real
    stdio, entropy/time, managed threads/TLS/synchronization, native byte paths
    and the filesystem subset below. Retain panic-abort. Fallible APIs preserve
@@ -85,10 +90,11 @@ history and record the actual URL, LLVM source revision, options and SHA-256
 before requesting a cache entry. The resolved upstream artifact and all three
 stage0 archive hashes are pinned in
 [fork-toolchain.json](../../toolchain/rust/fork-toolchain.json).
-The upstream CI artifact has been fetched and hashed; the requested `raw-rust-ci`
-cache route is not yet available (2026-10-25, HTTP 404). Stage0 archives verify
-through the existing cache. Missing artifacts stop the build; there is no
-direct-Internet build fallback.
+All four bootstrap artifacts and the pinned backtrace source archive verify
+through the internal caches. The Linux-host stage-2 compiler and Pyxis
+core+alloc build with networking disabled; the separate exported prefix repeats
+the existing samples without a JSON target or `build-std` flag. Missing inputs
+stop the build; there is no direct-Internet build fallback.
 
 CI LLVM avoids maintaining a second LLVM build when no Rust LLVM changes are
 needed. A source build provides independence from expiring CI artifacts, but
@@ -204,11 +210,12 @@ Do not expand this std milestone into a terminal font change.
 
 Implementation is authorized (chronium, 2026-10-25), in the order below.
 The first task is compiler/target plumbing, not an attempt at every std adapter.
-The initial built-in target candidate is
-[pyxis-rust #1](https://git.internal/PyxisOS/pyxis-rust/pulls/1), still draft and
-uncompiled; the cache/host prerequisites above block compiler qualification.
+Gate 1 is delivered by
+[pyxis-rust #1](https://git.internal/PyxisOS/pyxis-rust/pulls/1) and
+[Pyxis #1230](https://git.internal/PyxisOS/pyxis-os/pulls/1230). The built-in
+target retains `std=false`; compiler qualification does not imply std support.
 
-1. [ ] **Fork and built-in target.** Create pyxis at the pinned source, resolve
+1. [x] **Fork and built-in target.** Create pyxis at the pinned source, resolve
    bootstrap/CI-LLVM cache receipts, build the Linux-host compiler and target
    core+alloc, then repeat both stage-1 samples with unchanged settings/checksum.
    **After this task chronium can:** cross-build the existing Rust samples with

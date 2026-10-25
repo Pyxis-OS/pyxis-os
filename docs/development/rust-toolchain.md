@@ -111,33 +111,90 @@ needed grants. Standard-library crates cannot be made supported by setting
 `cfg(unix)` or adding a successful stub. Paths, environment, threads, native
 network/process adapters and Rust unwinding remain later std work.
 
-## Fork bootstrap inputs — stage 2 in progress
+## Fork-built compiler and built-in target
 
-The [std milestone](../wip/rust-std.md) is accepted; this section describes
-input preparation, not a delivered std compiler. The stage-1 commands above
-continue to use the existing prebuilt nightly prefix.
+Gate 1 of the [std milestone](../wip/rust-std.md) supplies a separate Linux-host
+compiler with built-in `x86_64-unknown-pyxis`, installed target core+alloc and
+host std/proc_macro for build scripts. It supplies no Pyxis std yet. The
+[qualification record](experiments/rust-std-toolchain.md) identifies the source,
+binaries and QEMU checks. The prebuilt stage-1 profile above remains available.
 
-[fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the fork
-baseline, Rust CI LLVM and the three stage0 beta archives selected by upstream
-`src/stage0`. It also records the libc crate source baseline. The CI LLVM
-archive is Apache-2.0 WITH LLVM-exception, with its bundled notices retained;
-Rust and libc retain their MIT OR Apache-2.0 notices. There is no container or
-normal image-build dependency on these inputs.
+[fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the base
+Rust revision, CI LLVM, the three upstream stage0 beta archives, backtrace source
+and later libc baseline. All fetches use its internal cache URLs and verify
+whole-file SHA-256 values. Preparation is offline by default and runs no downloaded
+code. It checks the source's stage0 metadata, backtrace gitlink and actual HEAD's
+upstream LLVM freshness selection before writing bootstrap's ordinary cache layout:
 
 ```sh
 toolchain/prepare-rust-fork.py /absolute/pyxis-rust /absolute/rust-bootstrap-cache --fetch
 toolchain/prepare-rust-fork.py /absolute/pyxis-rust /absolute/rust-bootstrap-cache
 ```
 
-The first command downloads only the manifest's internal cache URLs and checks
-whole-file hashes before publishing archive files. The second verifies offline.
-Both check the source baseline, stage0 metadata and LLVM freshness selection.
-The cache layout is upstream bootstrap's, including its CI LLVM revision and
-assertions setting. Preparation preserves archives and writes an input receipt;
-it neither installs nor runs downloaded executables. Upstream inspection bytes
-are not a replacement for a missing build-cache route.
+The source checkout needs sufficient upstream Git history. Materialize
+`library/backtrace` from the verified archive at its recorded cache path,
+stripping that archive's single root directory; retain its MIT/Apache notices.
+No automatic upstream submodule fetch is enabled. The CI LLVM archive retains
+its Apache-2.0 WITH LLVM-exception notices and Rust's bundled distribution notices.
+These tools add no dependency to ordinary image builds or the compiler container.
 
-As of 2026-10-25, the three stage0 archives verify through `raw-rust`; the new
-`raw-rust-ci` path returns HTTP 404 pending chronium's cache setup. The input
-preparer refuses there. The built-in target candidate remains uncompiled until
-horse access and the cache are available; no std/QEMU result is claimed.
+Copy [the bootstrap configuration](../../toolchain/rust/fork-bootstrap.example.toml)
+into the fork as `bootstrap.toml`, replacing the absolute cache and compiler paths.
+Use a private Cargo home with the closed proxy configuration already used by the
+sample workspace (`toolchain/rust/samples/.cargo/config.toml`). Before the offline
+build, seed its locked bootstrap, compiler and library graphs with the pinned
+stage-1 Cargo and rustc; each command runs from the fork checkout:
+
+```sh
+export CARGO_HOME=/absolute/fork-cargo-home
+export RUSTC=/absolute/prebuilt-prefix/bin/rustc
+/absolute/prebuilt-prefix/bin/cargo fetch --locked --manifest-path src/bootstrap/Cargo.toml
+/absolute/prebuilt-prefix/bin/cargo fetch --locked --manifest-path Cargo.toml
+/absolute/prebuilt-prefix/bin/cargo fetch --locked --manifest-path library/Cargo.toml
+unset RUSTC
+```
+
+Use the native host C/C++ compiler for rustc; use the existing Pyxis compiler for
+target native objects and final links. The configuration uses Rust's CI LLVM,
+`download-rustc=false`, full bootstrap, no LTO, and no embedded target bitcode.
+On Linux with unprivileged user/network namespaces, the qualified build commands
+below deny all network access rather than relying on a downloader's fallback:
+
+```sh
+export CARGO_NET_OFFLINE=true
+unshare --user --map-root-user --net python3 x.py build --stage 2 compiler/rustc
+unshare --user --map-root-user --net python3 x.py test --stage 2 \
+  compiler/rustc_target --test-args x86_64_unknown_pyxis
+unshare --user --map-root-user --net python3 x.py build --stage 2 \
+  --target x86_64-unknown-linux-gnu,x86_64-unknown-pyxis library
+```
+
+Unset inherited `RUSTC_BOOTSTRAP`, `RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS` before
+these commands. Upstream bootstrap manages its own stage flags; do not use a
+user `RUSTC_BOOTSTRAP` workaround. Build both library targets in the final command:
+bootstrap can recreate the compiler sysroot between invocations. `no-std=true`
+selects core+alloc only for Pyxis; Linux receives std and proc_macro for host tools.
+
+Export outside the source/input trees into a fresh prefix, then build the same
+samples with the built-in target:
+
+```sh
+toolchain/export-rust-fork.py /absolute/pyxis-rust /absolute/fork-prefix \
+  /absolute/prebuilt-prefix
+toolchain/build-rust-samples.py /absolute/fork-prefix /absolute/sdk \
+  /absolute/fork-samples /absolute/fork-work --fork --fetch
+```
+
+Omit `--fetch` after seeding the sample graph for a frozen build. Export verifies
+the clean source/compiler identity and required libraries, materializes the
+compiler libraries while excluding bootstrap's two recursive source links,
+copies library source once, and installs unchanged Cargo from its checked
+stage-1 archive. `share/pyxis-rust/fork-installation.json` records compiler/Cargo
+identities and file hashes; the sample builder verifies them and the SDK inputs.
+A prefix built against one SDK does not grant compatibility with another.
+
+Both profiles keep Pyxis Clang/LLD as the final linker. The built-in target
+matches the stage-1 JSON's ABI/code-generation settings; only tier metadata
+changes. `--fork` uses installed core+alloc, without a JSON-target or build-std
+flag. Standard operations, native libc bindings and hexyl remain later gates;
+build success is not a claim that those APIs work.
