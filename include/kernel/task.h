@@ -181,6 +181,11 @@ void kernel_task_yield_if_runnable(void);
  * yields only when another task is runnable, and masks them again. */
 void kernel_task_yield_masked(void);
 
+/* Current task in a syscall, or BSP kernel task; IF=0 and no held lock,
+ * mapping lease or scratch slot. Services interrupts and yields to runnable
+ * work between bounded copy steps. Resumes on the same CPU with IF=0. */
+void task_yield_masked(void);
+
 /* ACPI worker on the BSP, IF=0. Power-off hold of all user execution: each user
  * task parks at its next return to user mode, whether from a syscall, a timer
  * preemption or the ready queue. Tasks inside syscalls finish them first.
