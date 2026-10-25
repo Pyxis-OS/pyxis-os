@@ -106,6 +106,10 @@ fn environment() {
 }
 
 fn paths() -> io::Result<()> {
+    let cwd = env::current_dir()?;
+    assert!(cwd.is_absolute());
+    let relative = absolute("missing/../ordered")?;
+    assert!(relative.as_os_str().as_encoded_bytes().ends_with(b"missing/../ordered"));
     let spelling = "sample://one//./two/../three";
     let path = Path::new(spelling);
     assert!(path.is_absolute() && path.has_root());
@@ -198,6 +202,14 @@ fn run(arguments: &[OsString]) -> io::Result<()> {
     environment();
     paths()?;
     entropy();
+    assert_eq!(std::backtrace::Backtrace::force_capture().status(),
+               std::backtrace::BacktraceStatus::Unsupported);
+    assert_eq!(std::fs::File::open("boot://os-release").unwrap_err().kind(),
+               io::ErrorKind::Unsupported);
+    assert_eq!(std::process::Command::new("echo").status().unwrap_err().kind(),
+               io::ErrorKind::Unsupported);
+    assert_eq!(std::net::TcpStream::connect("127.0.0.1:9").unwrap_err().kind(),
+               io::ErrorKind::Unsupported);
     clocks()?;
     writeln!(io::stdout(), "rust-std-main: ok args={arguments:?}")
 }
