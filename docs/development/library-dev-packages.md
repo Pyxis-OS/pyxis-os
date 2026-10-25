@@ -29,6 +29,19 @@ not full upstream API qualification.
 | Package / version | Target archive(s); pkg-config module(s) | Licence carried | Additional dependencies | Current consumers |
 | --- | --- | --- | --- | --- |
 | `fmt-dev` 12.2.0 | `libfmt.a`; `fmt` | MIT | `libcxx-dev` | DevilutionX (personal build) |
+| `tinyxml2-dev` 10.0.0 | libtinyxml2.a; tinyxml2 | zlib; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
+| `thread-pool-dev` 4.1.0 | header-only; thread-pool | MIT; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
+| `dr-libs-dev` 0.git.da35f9d6c737 | header-only; dr_libs | MIT-0 or Unlicense; minimp3 dedication; covered Pyxis source/MPL | `pyxis-dev` | SoH shared closure; independent consumer |
+| `stb-dev` 2.29 | header-only; stb | MIT or Unlicense; covered Pyxis source/MPL | `pyxis-dev` | SoH shared closure; independent consumer |
+| `spdlog-dev` 1.16.0 | libspdlog.a; spdlog | MIT plus bundled fmt MIT; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
+| `monocypher-dev` 4.0.2 | libmonocypher.a; monocypher | BSD-2-Clause or CC0; covered Pyxis source/MPL | `pyxis-dev` | SoH shared closure; independent consumer |
+| `prism-dev` `0.git.1de054450e7b` | libprism.a; prism | MIT; covered Pyxis source/MPL | `spdlog-dev` | SoH shared closure; independent consumer |
+| `libzip-dev` 1.12.1 | libzip.a; libzip | BSD-3-Clause; covered Pyxis source/MPL | `zlib-dev` | SoH shared closure; independent consumer |
+| `json-dev` 3.12.0 | header-only; `nlohmann_json` | MIT; MPL-2.0 availability patch/source | `libcxx-dev` | SoH shared closure; independent JSON consumer |
+| `libogg-dev` 1.3.6 | `libogg.a`; `ogg` | BSD-3-Clause; covered Pyxis source/MPL | — | Vorbis, Opusfile/SoH shared closure |
+| `libvorbis-dev` 1.3.7 | `libvorbis.a`, `libvorbisenc.a`, `libvorbisfile.a`; `vorbis`, `vorbisenc`, `vorbisfile` | BSD-3-Clause; covered Pyxis source/MPL | `libogg-dev` | SoH shared closure; callback/FILE consumer |
+| `opus-dev` 1.6.1 | `libopus.a`; `opus` | BSD-3-Clause and reached source/patent notices; covered Pyxis source/MPL | — | SoH shared closure; packet consumer |
+| `opusfile-dev` 0.12 | `libopusfile.a`; `opusfile` | BSD-3-Clause; covered Pyxis source/MPL | `libogg-dev`, `opus-dev` | SoH shared closure; local FILE/memory/callback decoder |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
 | `libuv-dev` 1.52.1 | `libuv.a`; `libuv` | MIT, BSD-2-Clause/ISC extras, MPL-2.0 native adapter | — | Lua 5.1/luv, Neovim; uv-relay example |
 | `lua-dev` 5.5.1 | `liblua.a`; `lua` | MIT | — | Lua interpreter; boot-init, session, config, Wi-Fi profile reader, installer/publication code |
@@ -93,3 +106,36 @@ live view ownership, dependency/cancel/update/removal behavior and hosted
 compilation. Runtime checks are QEMU evidence, with no new native or performance
 claim. The sweep targets 0.0.9 and may ship in 0.0.8 if completed before its tag
 (chronium, 2026-10-23).
+
+The JSON headers respect libc++'s configured filesystem availability. Native
+`std::filesystem` conversions are unavailable; parsing, serialization, standard
+streams and binary representations remain upstream implementations. No additional
+ABI-changing JSON configuration is selected.
+
+Tinyxml2 retains upstream APIs. Its path-based SaveFile does not propagate every write/close failure; XML_SUCCESS alone does not prove a completed or durable save. FILE callers can check ferror/fflush/fclose; the selected LUS use parses memory.
+
+The thread-pool headers keep caller-selected priority/pause configuration; use consistent macros within a program. The pinned 4.1.0 worker completion predicate is patched to read shared state under its existing mutex (chronium, 2026-10-24). Remove that patch when the selected upstream contains the fix.
+
+dr_libs supplies WAV/MP3/FLAC headers, with consumer-owned implementation macros. It does not install another implementation archive. Standard FILE and callback decoding remain real upstream paths.
+
+stb-dev supplies the pinned stb_image header. Each program owns exactly one STB_IMAGE_IMPLEMENTATION translation unit; no duplicate static implementation is linked behind it.
+
+spdlog keeps its bundled fmt12.0 profile, real native threads and file sinks. Do not mix its fmt ABI with a separately linked fmt-dev profile without qualification. PID formatting %P is rejected explicitly; clock/calendar failures report errors through a timestamp-independent default error handler (chronium, 2026-10-24). Native URI roots remain intact.
+
+Monocypher includes its core and optional Ed25519/SHA-512 APIs. Test vectors establish selected functional checks, not a new independent cryptographic security audit.
+
+Prism retains C++20 streams/regex/exceptions and its spdlog dependency. Its invocation bridge is compiled as C11; it is an interpreted processor, with no runtime-code generation or launcher authority.
+
+libzip selects store/deflate only and rejects encryption and other compression methods. All opens need declared random and clock grants for upstream keyed hashing; no deterministic fallback is provided. Missing native timestamps/Unix attributes stay unknown, while a required write-time timestamp fails honestly without a clock. Native file access uses capabilities; POSIX permission copying is omitted, not emulated. ZIP close is not a claim of directory-sync durability.
+
+The Xiph family uses baseline x86-64/SSE2 code, with AVX/SSE4/host-native
+selection and optional Opus model features disabled. Vorbis encoding and
+callback/FILE decoding are included; Opus packet encode/decode is real. This
+adds no audio-device or network authority. Opusfile is a separate dependency
+whose optional reopen helper needs a native libc/profile decision.
+
+Opusfile keeps real local FILE, memory and callback decoding. `op_freopen` is
+compiled out and explicitly unavailable in the Pyxis header (chronium,
+2026-10-24); libc stream reassociation is not emulated. The package omits
+opusurl/HTTP/TLS and adds no network or audio-device authority. Libgfxd is not
+part of the first SoH profile (`GFX_DEBUG_DISASSEMBLER=OFF`).

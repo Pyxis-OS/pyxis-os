@@ -616,6 +616,18 @@ proposal and the owner's go.
   grammars are already static.
 - **LSP over TCP** needs listen and accept; stdio servers such as
   [clangd](../userland/clangd.md) work. Universal Ctags is parked (2026-10-10).
+- **lua-language-server port** (chronium, 2026-10-24; direction only, not authorized
+  work). Neovim on Pyxis has no Lua language server, so `vim.*` gets no semantic
+  highlighting: the pinned Neovim 0.12.5's Lua `highlights.scm` treats `vim` as a plain
+  `@variable`, and on Linux the colour comes from lua-language-server's `defaultLibrary`
+  semantic tokens. A port would also give completion and diagnostics for `init.lua` and
+  Pyxis Lua configs. Until then, a per-user workaround is an extending query in
+  `home://.config/nvim/queries/lua/highlights.scm`:
+
+  ```scheme
+  ;; extends
+  ((identifier) @module.builtin (#eq? @module.builtin "vim"))
+  ```
 - **Scalable terminal fonts** (far-future, 2026-10-10): TTF, OTF or WOFF chosen by
   implementation ease, for example an stb_truetype-style rasterizer with a glyph
   cache. The [userland font library](../userland/fonts.md) is planned separately;

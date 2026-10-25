@@ -14,6 +14,7 @@ DOOM_INPUTS := $(wildcard ports/doom/*.lua ports/doom/Makefile ports/doom/manife
                          ports/doom/patches/*.patch) ports/ports.lua ports/build.lua
 QUAKE_INPUTS := $(wildcard ports/quake/*.lua ports/quake/Makefile ports/quake/manifest.json ports/quake/*.c \
                           ports/quake/*.h ports/quake/patches/*.patch) ports/ports.lua ports/build.lua
+BLURGTEXT_INPUTS := $(wildcard ports/blurgtext/* ports/blurgtext/patches/* ports/blurgtext/notices/*) ports/ports.lua ports/build.lua
 IOQUAKE3_INPUTS := $(wildcard ports/ioquake3/*.lua ports/ioquake3/Makefile ports/ioquake3/manifest.json \
                               ports/ioquake3/PORT-NOTICE ports/ioquake3/*.h ports/ioquake3/cmake/* ports/ioquake3/pyxis/* ports/ioquake3/patches/*.patch \
                               ports/ioquake3/notices/*) \
@@ -86,6 +87,71 @@ LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile ports/libpn
                           ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \
                  ports/ports.lua ports/build.lua
 
+TINYXML2_INPUTS := $(wildcard ports/tinyxml2/*.lua ports/tinyxml2/Makefile ports/tinyxml2/*.pc ports/tinyxml2/*.h ports/tinyxml2/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+TINYXML2_INPUTS += $(wildcard ports/tinyxml2/README.md ports/tinyxml2/PORT-NOTICE \
+  ports/tinyxml2/manual/*.c ports/tinyxml2/manual/*.cpp ports/tinyxml2/manual/Makefile \
+  ports/tinyxml2/manual/CMakeLists.txt ports/tinyxml2/manual/README.md)
+THREAD_POOL_INPUTS := $(wildcard ports/thread-pool/*.lua ports/thread-pool/Makefile ports/thread-pool/*.pc ports/thread-pool/*.h ports/thread-pool/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+THREAD_POOL_INPUTS += $(wildcard ports/thread-pool/README.md ports/thread-pool/PORT-NOTICE \
+  ports/thread-pool/manual/*.c ports/thread-pool/manual/*.cpp ports/thread-pool/manual/Makefile \
+  ports/thread-pool/manual/CMakeLists.txt ports/thread-pool/manual/README.md)
+DR_LIBS_INPUTS := $(wildcard ports/dr_libs/*.lua ports/dr_libs/Makefile ports/dr_libs/*.pc ports/dr_libs/*.h ports/dr_libs/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+DR_LIBS_INPUTS += $(wildcard ports/dr_libs/README.md ports/dr_libs/PORT-NOTICE \
+  ports/dr_libs/manual/*.c ports/dr_libs/manual/*.cpp ports/dr_libs/manual/Makefile \
+  ports/dr_libs/manual/CMakeLists.txt ports/dr_libs/manual/README.md)
+STB_INPUTS := $(wildcard ports/stb/*.lua ports/stb/Makefile ports/stb/*.pc ports/stb/*.h ports/stb/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+STB_INPUTS += $(wildcard ports/stb/README.md ports/stb/PORT-NOTICE \
+  ports/stb/manual/*.c ports/stb/manual/*.cpp ports/stb/manual/Makefile \
+  ports/stb/manual/CMakeLists.txt ports/stb/manual/README.md)
+SPDLOG_INPUTS := $(wildcard ports/spdlog/*.lua ports/spdlog/Makefile ports/spdlog/*.pc ports/spdlog/*.h ports/spdlog/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+SPDLOG_INPUTS += $(wildcard ports/spdlog/README.md ports/spdlog/PORT-NOTICE \
+  ports/spdlog/manual/*.c ports/spdlog/manual/*.cpp ports/spdlog/manual/Makefile \
+  ports/spdlog/manual/CMakeLists.txt ports/spdlog/manual/README.md)
+MONOCYPHER_INPUTS := $(wildcard ports/monocypher/*.lua ports/monocypher/Makefile ports/monocypher/*.pc ports/monocypher/*.h ports/monocypher/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+MONOCYPHER_INPUTS += $(wildcard ports/monocypher/README.md ports/monocypher/PORT-NOTICE \
+  ports/monocypher/manual/*.c ports/monocypher/manual/*.cpp ports/monocypher/manual/Makefile \
+  ports/monocypher/manual/CMakeLists.txt ports/monocypher/manual/README.md)
+PRISM_INPUTS := $(wildcard ports/prism/*.lua ports/prism/Makefile ports/prism/*.pc ports/prism/*.h ports/prism/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+PRISM_INPUTS += $(wildcard ports/prism/README.md ports/prism/PORT-NOTICE \
+  ports/prism/manual/*.c ports/prism/manual/*.cpp ports/prism/manual/Makefile \
+  ports/prism/manual/CMakeLists.txt ports/prism/manual/README.md)
+LIBZIP_INPUTS := $(wildcard ports/libzip/*.lua ports/libzip/Makefile ports/libzip/*.pc ports/libzip/*.h ports/libzip/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+LIBZIP_INPUTS += $(wildcard ports/libzip/README.md ports/libzip/PORT-NOTICE \
+  ports/libzip/manual/*.c ports/libzip/manual/*.cpp ports/libzip/manual/Makefile \
+  ports/libzip/manual/CMakeLists.txt ports/libzip/manual/README.md)
+LIBOGG_INPUTS := $(wildcard ports/libogg/*.lua ports/libogg/Makefile ports/libogg/*.pc ports/libogg/*.h ports/libogg/*.py ports/libogg/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+LIBOGG_INPUTS += $(wildcard ports/libogg/README.md ports/libogg/PORT-NOTICE \
+  ports/libogg/manual/*.c ports/libogg/manual/*.cpp ports/libogg/manual/Makefile \
+  ports/libogg/manual/CMakeLists.txt ports/libogg/manual/README.md)
+LIBVORBIS_INPUTS := $(wildcard ports/libvorbis/*.lua ports/libvorbis/Makefile ports/libvorbis/*.pc ports/libvorbis/*.h ports/libvorbis/*.py ports/libvorbis/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+LIBVORBIS_INPUTS += $(wildcard ports/libvorbis/README.md ports/libvorbis/PORT-NOTICE \
+  ports/libvorbis/manual/*.c ports/libvorbis/manual/*.cpp ports/libvorbis/manual/Makefile \
+  ports/libvorbis/manual/CMakeLists.txt ports/libvorbis/manual/README.md)
+OPUS_INPUTS := $(wildcard ports/opus/*.lua ports/opus/Makefile ports/opus/*.pc ports/opus/*.h ports/opus/*.py ports/opus/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+OPUS_INPUTS += $(wildcard ports/opus/README.md ports/opus/PORT-NOTICE \
+  ports/opus/manual/*.c ports/opus/manual/*.cpp ports/opus/manual/Makefile \
+  ports/opus/manual/CMakeLists.txt ports/opus/manual/README.md)
+OPUSFILE_INPUTS := $(wildcard ports/opusfile/*.lua ports/opusfile/Makefile ports/opusfile/*.pc ports/opusfile/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+OPUSFILE_INPUTS += $(wildcard ports/opusfile/README.md ports/opusfile/PORT-NOTICE \
+  ports/opusfile/manual/*.c ports/opusfile/manual/*.cpp ports/opusfile/manual/Makefile \
+  ports/opusfile/manual/README.md)
+JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
+               ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+JSON_INPUTS += $(wildcard ports/json/README.md ports/json/PORT-NOTICE \
+  ports/json/manual/*.c ports/json/manual/*.cpp ports/json/manual/Makefile \
+  ports/json/manual/CMakeLists.txt ports/json/manual/README.md)
 FMT_INPUTS := $(wildcard ports/fmt/*.lua ports/fmt/Makefile ports/fmt/*.pc ports/fmt/*.cmake \
                         ports/fmt/patches/*.patch) ports/ports.lua ports/build.lua
 
@@ -175,8 +241,22 @@ UTF8PROC_OUTPUTS := $(call port_outputs,utf8proc)
 TREE_SITTER_OUTPUTS := $(call port_outputs,tree-sitter)
 NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
+TINYXML2_OUTPUTS := $(call port_outputs,tinyxml2)
+THREAD_POOL_OUTPUTS := $(call port_outputs,thread-pool)
+DR_LIBS_OUTPUTS := $(call port_outputs,dr_libs)
+STB_OUTPUTS := $(call port_outputs,stb)
+SPDLOG_OUTPUTS := $(call port_outputs,spdlog)
+MONOCYPHER_OUTPUTS := $(call port_outputs,monocypher)
+PRISM_OUTPUTS := $(call port_outputs,prism)
+LIBZIP_OUTPUTS := $(call port_outputs,libzip)
+LIBOGG_OUTPUTS := $(call port_outputs,libogg)
+LIBVORBIS_OUTPUTS := $(call port_outputs,libvorbis)
+OPUS_OUTPUTS := $(call port_outputs,opus)
+OPUSFILE_OUTPUTS := $(call port_outputs,opusfile)
+JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
+BLURGTEXT_OUTPUTS := $(call port_outputs,blurgtext)
 MESA_OUTPUTS := $(call port_outputs,mesa)
 RAYLIB_OUTPUTS := $(call port_outputs,raylib)
 MINESWEEPER_OUTPUTS := $(call port_outputs,minesweeper)
@@ -189,6 +269,19 @@ CHOCOLATE_QUAKE_OUTPUTS := $(call port_outputs,chocolate-quake)
 EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
+all: $(TINYXML2_OUTPUTS)
+all: $(THREAD_POOL_OUTPUTS)
+all: $(DR_LIBS_OUTPUTS)
+all: $(STB_OUTPUTS)
+all: $(SPDLOG_OUTPUTS)
+all: $(MONOCYPHER_OUTPUTS)
+all: $(PRISM_OUTPUTS)
+all: $(LIBZIP_OUTPUTS)
+all: $(LIBOGG_OUTPUTS)
+all: $(LIBVORBIS_OUTPUTS)
+all: $(OPUS_OUTPUTS)
+all: $(OPUSFILE_OUTPUTS)
+all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
@@ -321,6 +414,58 @@ $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/port
 	rm -rf build/ports/libpng
 	$(LUA) ports/build.lua libpng --sdk $(abspath build/sdk) --work $(abspath build/ports/libpng) --zlib $(abspath build/ports/zlib/stage/dev)
 
+$(TINYXML2_OUTPUTS) &: $(TINYXML2_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/tinyxml2
+	$(LUA) ports/build.lua tinyxml2 --sdk $(abspath build/sdk) --work $(abspath build/ports/tinyxml2)
+
+$(THREAD_POOL_OUTPUTS) &: $(THREAD_POOL_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/thread-pool
+	$(LUA) ports/build.lua thread-pool --sdk $(abspath build/sdk) --work $(abspath build/ports/thread-pool)
+
+$(DR_LIBS_OUTPUTS) &: $(DR_LIBS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/dr_libs
+	$(LUA) ports/build.lua dr_libs --sdk $(abspath build/sdk) --work $(abspath build/ports/dr_libs)
+
+$(STB_OUTPUTS) &: $(STB_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/stb
+	$(LUA) ports/build.lua stb --sdk $(abspath build/sdk) --work $(abspath build/ports/stb)
+
+$(SPDLOG_OUTPUTS) &: $(SPDLOG_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/spdlog
+	$(LUA) ports/build.lua spdlog --sdk $(abspath build/sdk) --work $(abspath build/ports/spdlog)
+
+$(MONOCYPHER_OUTPUTS) &: $(MONOCYPHER_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/monocypher
+	$(LUA) ports/build.lua monocypher --sdk $(abspath build/sdk) --work $(abspath build/ports/monocypher)
+
+$(PRISM_OUTPUTS) &: $(PRISM_INPUTS) $(SDK_INPUTS) $(SPDLOG_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/prism
+	$(LUA) ports/build.lua prism --sdk $(abspath build/sdk) --work $(abspath build/ports/prism) --spdlog $(abspath build/ports/spdlog/stage/dev)
+
+$(LIBZIP_OUTPUTS) &: $(LIBZIP_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/libzip
+	$(LUA) ports/build.lua libzip --sdk $(abspath build/sdk) --work $(abspath build/ports/libzip) --zlib $(abspath build/ports/zlib/stage/dev)
+
+$(LIBOGG_OUTPUTS) &: $(LIBOGG_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/libogg
+	$(LUA) ports/build.lua libogg --sdk $(abspath build/sdk) --work $(abspath build/ports/libogg)
+
+$(LIBVORBIS_OUTPUTS) &: $(LIBVORBIS_INPUTS) $(SDK_INPUTS) $(LIBOGG_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/libvorbis
+	$(LUA) ports/build.lua libvorbis --sdk $(abspath build/sdk) --work $(abspath build/ports/libvorbis) --ogg $(abspath build/ports/libogg/stage/dev)
+
+$(OPUS_OUTPUTS) &: $(OPUS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/opus
+	$(LUA) ports/build.lua opus --sdk $(abspath build/sdk) --work $(abspath build/ports/opus)
+
+$(OPUSFILE_OUTPUTS) &: $(OPUSFILE_INPUTS) $(SDK_INPUTS) $(LIBOGG_OUTPUTS) $(OPUS_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/opusfile
+	$(LUA) ports/build.lua opusfile --sdk $(abspath build/sdk) --work $(abspath build/ports/opusfile) --ogg $(abspath build/ports/libogg/stage/dev) --opus $(abspath build/ports/opus/stage/dev)
+
+$(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/json
+	$(LUA) ports/build.lua json --sdk $(abspath build/sdk) --work $(abspath build/ports/json)
+
 $(FMT_OUTPUTS) &: $(FMT_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/fmt
 	$(LUA) ports/build.lua fmt --sdk $(abspath build/sdk) --work $(abspath build/ports/fmt)
@@ -414,3 +559,11 @@ $(IOQUAKE3_OUTPUTS) &: $(IOQUAKE3_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(MESA_O
 $(OPENARENA_OUTPUTS) &: $(OPENARENA_INPUTS) scripts/ports.mk
 	rm -rf build/ports/openarena
 	$(LUA) ports/build.lua openarena --sdk $(abspath build/sdk) --work $(abspath build/ports/openarena)
+
+.PHONY: blurgtext
+blurgtext: $(BLURGTEXT_OUTPUTS)
+$(BLURGTEXT_OUTPUTS) &: $(BLURGTEXT_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(MESA_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/blurgtext
+	$(LUA) ports/build.lua blurgtext --sdk $(abspath build/sdk) --work $(abspath build/ports/blurgtext) \
+	  --sdl2 $(abspath build/ports/sdl2/stage/dev) --sdl2-osmesa $(abspath build/ports/sdl2/stage/gl-dev) \
+	  --mesa $(abspath build/ports/mesa/stage/dev)

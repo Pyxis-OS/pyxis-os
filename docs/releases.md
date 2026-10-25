@@ -152,21 +152,63 @@ There are no release branches: a release ships whatever is on main at its tag
 
 ## 0.0.9 direction
 
-Decided by chronium, 2026-10-23. 0.0.8 is the big release: all the features,
-improved. 0.0.9 then brings:
+Decided by chronium, 2026-10-24, replacing the 2026-10-23 list. 0.0.9 is a ports
+and userland release, shipped around Monday 2026-10-26. It lists what is merged on
+main, and what is not merged yet is marked "if merged": it ships only if it lands
+first.
 
-- **Kernel improvements:** removing BSP-owned allocation and VM mutation, the
-  [planned next kernel milestone](wip/boot-sdk-ports.md#planned-next-kernel-milestone).
+- **Git on go-git** (merged): `git` with clone, log, status, add, commit, diff,
+  push, pull and init ([Git](userland/git.md)).
+- **OpenArena and SDL2 OpenGL on Mesa softpipe** (merged): OpenArena on ioquake3
+  with Mesa softpipe, and SDL2 OpenGL through OSMesa
+  ([Quake 3 on Mesa llvmpipe](wip/quake3-llvmpipe.md)). OpenArena is a public
+  package; the Quake 3 Arena and Team Arena data stays private. llvmpipe is not in
+  0.0.9: see the next kernel push below.
+- **blurgtext and fonts** (merged): [blurgtext](userland/blurgtext.md) with the real
+  FreeType and HarfBuzz, and the expanded fonts package with CJK, emoji, Roboto and
+  the Plex italics ([fonts](userland/fonts.md)).
+- **Reusable ImGui and the SoH shared `-dev` libraries** (if merged): ImGui on
+  softpipe (#1198) and the shared libraries Ship of Harkinian needs as `-dev`
+  packages in the SDK view (#1199 to #1208, #1210 and #1214).
+- **Readable `boot.lua`** (if merged): the installed `boot.lua` and the live
+  `live.lua` expanded to one key per line, with no change in meaning (pyxis-userland
+  #376, pyxis-os #1212). Existing installs keep the file Install copied.
 - **Ports and userland tools:** the remaining curses work of the
   [terminal UI](wip/terminal-ui.md) track: the curses ports beyond ncursesw and
-  hexcurse, which landed in 0.0.8 with raw terminal mode.
+  hexcurse, which landed in 0.0.8 with raw terminal mode (decided 2026-10-23).
 - **Installer:** an interactive Wi-Fi join (choose a network, enter its key), as
   a step of the curses TUI installer. 0.0.8 has no Wi-Fi Install: use wired or
   dock Ethernet ([decision 70](wip/pkg-upgrade.md#decided)).
-- **Ports and userland tools:** Quake 3 Arena and OpenArena on ioquake3 with Mesa
-  ([Quake 3 on Mesa llvmpipe](wip/quake3-llvmpipe.md)): softpipe first, then
-  llvmpipe once the JIT grant lands after the BSP-ownership removal. OpenArena is
-  a public package; the Quake 3 Arena and Team Arena data stays private.
+- **Remote on installed systems** (if merged; chronium, 2026-10-24): ship the Remote startup
+  with the `remote-terminal` package. On 0.0.8 the core archive has no
+  `boot://init-remote` or `init-remote-services`, and the package carries only
+  `remote-terminal.pxe`, so an owner adding a Remote space hand-writes two init
+  scripts in `system://config`: `init-remote` (starts `textfs`, then
+  `session --start-remote-services`) and `init-remote-services` (starts the HTTP
+  providers, then `session --remote-server 2323`), and points the space at them.
+  The 0.0.9 goal is `pkg install remote-terminal` plus one space entry, with the
+  scripts shipped in the package and a documented recipe in the
+  [manual](manual/README.md). There is still no authentication, so the recipe keeps
+  the LAN-only caveat. Direction only: it authorizes no work.
+- **One `power` and one `multiplexer` setting** (proposed, chronium, 2026-10-24; not
+  decided): the local and remote space keys are confusing: `multiplexer` (the local
+  tab multiplexer) versus `remote_multiplexer` (offered to remote clients), and
+  `power` (local `poweroff` and `reboot`) versus `remote_power` (the same actions for
+  the remote root shell), as [init](userland/init.md) describes them. The proposal is
+  to consolidate: a single `power` and a single `multiplexer`, and to remove
+  `remote_power` and `remote_multiplexer`. A Remote space does not serve a normal
+  local shell, which stays as it is, so the meaning is unambiguous: on a Remote
+  space the two settings apply to its Remote clients only, and on an ordinary space
+  to its local shells. `config validate` rejects the old names with a hint naming
+  the new key, and there are no compatibility aliases. Direction only: it authorizes
+  no work.
+
+**Next kernel push.** Removing BSP-owned allocation and VM mutation, the
+[planned next kernel milestone](wip/boot-sdk-ports.md#planned-next-kernel-milestone),
+moves out of 0.0.9. It leads the next kernel push, which starts Tuesday 2026-10-27
+(chronium, 2026-10-24), followed by the JIT grant and Mesa llvmpipe. The order
+decided in [Quake 3 on Mesa llvmpipe](wip/quake3-llvmpipe.md#decided-by-chronium-round-1-2026-10-23)
+is unchanged: the JIT grant comes after the BSP removal.
 
 ## 0.0.7a (2026-10-20)
 

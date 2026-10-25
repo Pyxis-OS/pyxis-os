@@ -3,6 +3,7 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/debug.h>
+#include <arch/hwp.h>
 #include <arch/paging.h>
 #include <arch/smp.h>
 #include <arch/syscall.h>
@@ -205,6 +206,7 @@ void arch_smp_finish(void)
 {
   KASSERT(cpu_count == cpu_capacity);
   kinfo("SMP: %zu CPU(s) online; APs waiting for scheduler startup\n", cpu_count);
+  arch_hwp_report();
   arch_clock_select();
 }
 
@@ -243,6 +245,7 @@ bool arch_cpus_share_core(size_t first, size_t second)
   detect_topology(cpu);
   arch_user_init();
   arch_syscall_init();
+  arch_hwp_init();
   arch_clock_ap_prepare();
 
   atomic_store_explicit(&cpu->online, true, memory_order_release);

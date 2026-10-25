@@ -189,6 +189,9 @@ prerequisites and result are clear.
 [Application port candidates](application-ports.md), including SDL2/GrafX2,
 Peanut-GB, Chocolate Duke3D, DevilutionX and a wasm3 investigation.
 
+[Ship of Harkinian](ship-of-harkinian.md): investigation and proposed reusable
+ImGui/library closure, private host-extracted assets and first keyboard/softpipe run.
+
 [Bluetooth mouse](bluetooth-mouse.md): accepted kernel HCI and userspace stack
 direction with explicit Secure Connections enrollment and cold/native closure;
 tasks 1 to 3 are complete (#545, #552, #564).

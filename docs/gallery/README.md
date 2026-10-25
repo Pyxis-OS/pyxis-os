@@ -24,6 +24,16 @@ Rules for entries:
 
 ## Highlights
 
+![Upstream blurgtext demo on Pyxis](images/2026-10-24-blurgtext-upstream-qemu.png)
+
+**blurgtext, 2026-10-24.** Four-CPU QEMU/KVM, Pyxis `688bdd473e1f`, ports
+`3568a53`. The unchanged upstream demo runs with real bundled FreeType/HarfBuzz
+over SDL2/OSMesa, using its exact Roboto and SVG EmojiOne assets plus Noto CJK
+from the single fonts package. The 800×632 framebuffer contains an unscaled
+800×600 demo canvas under the native tab bar; bold, italic, emoji and Chinese
+fallback are visible. [Qualification and reference comparison](../development/experiments/blurgtext/README.md).
+
+
 ![Caddy on Pyxis serving a page to Firefox](images/2026-10-23-caddy-browser-qemu.png)
 
 **Caddy serves its first page, 2026-10-23.** Four-vCPU nested QEMU/KVM,

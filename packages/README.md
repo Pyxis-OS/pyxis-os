@@ -73,6 +73,21 @@ These packages are fetched through the configured network repository by the same
 or offline seed. A fresh live boot must configure a repository and install the
 wanted packages again. Run `pkg install fonts` before `font-min`.
 
+## blurgtext demo
+
+The opt-in `blurgtext` program package runs the unchanged upstream text-rendering
+demo over SDL2/OSMesa and depends on the single `fonts` package. It is outside the
+base set, boot archive and ordinary image build:
+
+```sh
+make blurgtext-package REPOSITORY=/path/to/public-repository
+```
+
+The target requires a clean checkout and builds the pinned blurgtext port with
+its bundled FreeType/HarfBuzz. The bundle retains the complete static dependency
+notices, patches and modified source; it loads fonts only through its declared
+`pkg://fonts` view. See [usage and qualification](../docs/userland/blurgtext.md).
+
 ## Owner-local game packages
 
 `DOOM_WAD`, `DOOM_DEMOS`, `QUAKE_DATA`, `DIABLO_DATA` and `DUKE3D_DATA` are no

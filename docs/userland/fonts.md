@@ -130,7 +130,7 @@ font_size_destroy(size);
 
 ## Installed collection
 
-The `fonts` data package supplies these unchanged static TrueType files.
+The `fonts` data package supplies these unchanged TrueType/OpenType files.
 Configure a network repository and run `pkg install fonts` on live or installed
 systems; live installations last until reboot. Each path is chosen explicitly by the
 caller; this is shared read-only data, not a discovery service or default-font
@@ -146,9 +146,12 @@ package refuses launch.
 | `caskaydia-cove/` | `CaskaydiaCoveNerdFont-BoldItalic.ttf` | Bold Italic |
 | `ibm-plex-sans/` | `IBMPlexSans-Regular.ttf` | Regular |
 | `ibm-plex-sans/` | `IBMPlexSans-Bold.ttf` | Bold |
+| `ibm-plex-sans/` | `IBMPlexSans-Italic.ttf` | Italic |
+| `ibm-plex-sans/` | `IBMPlexSans-BoldItalic.ttf` | Bold Italic |
 | `ibm-plex-serif/` | `IBMPlexSerif-Regular.ttf` | Regular |
 | `ibm-plex-serif/` | `IBMPlexSerif-Bold.ttf` | Bold |
 | `ibm-plex-serif/` | `IBMPlexSerif-Italic.ttf` | Italic |
+| `ibm-plex-serif/` | `IBMPlexSerif-BoldItalic.ttf` | Bold Italic |
 | `noto-sans/` | `NotoSans-Regular.ttf` | Regular |
 | `noto-sans/` | `NotoSans-Bold.ttf` | Bold |
 | `noto-sans/` | `NotoSans-Italic.ttf` | Italic |
@@ -159,6 +162,14 @@ package refuses launch.
 | `noto-serif/` | `NotoSerif-BoldItalic.ttf` | Bold Italic |
 | `noto-sans-mono/` | `NotoSansMono-Regular.ttf` | Regular |
 | `noto-sans-mono/` | `NotoSansMono-Bold.ttf` | Bold |
+| `roboto/` | `Roboto-Regular.ttf` | Regular |
+| `roboto/` | `Roboto-Bold.ttf` | Bold |
+| `roboto/` | `Roboto-Italic.ttf` | Italic |
+| `roboto/` | `Roboto-BoldItalic.ttf` | Bold Italic |
+| `roboto/` | `Roboto-ThinItalic.ttf` | Thin Italic |
+| `roboto/` | `Roboto-Black.ttf` | Black |
+| `noto-sans-cjk-sc/` | `NotoSansCJKsc-Regular.otf` | Upright Regular, CFF outlines |
+| `emojione-color/` | `EmojiOneColor.otf` | Colour SVG emoji |
 
 The `font-min` example draws only the first nine styles.
 
@@ -172,18 +183,27 @@ variant, not Mono/Propo; text is monospaced but some icons have wider advances.
 There is no subsetting, patching or renaming. Programming ligatures and other
 shaped substitutions remain separate characters under the nominal run API.
 
-Each family has its original OFL notice and a `source.txt` containing source
+Each family has its applicable original licence and a `source.txt` containing source
 release, styles, byte counts and hashes. CaskaydiaCove also retains the full
 mixed icon-source notices under `icons-notices/`; these include CC BY 4.0, MIT,
 Apache 2.0, OFL, Bitstream Vera and Unlicense, not a blanket OFL claim. Font Awesome
 Extension's MIT classification comes from pinned Nerd metadata; a separate
 original-author licence file was not independently verified.
 
-The collection is 52 files / 19,491,151 bytes: 19,371,156 font bytes, 108,027 bytes
-of original notices and 11,968 bytes of provenance. The 13 MiB planning allowance
-accepted by the owner covered the first nine fonts only. These bytes live in the
-package store, outside the boot archive.
+The collection has thirty fonts totaling 41,705,932 bytes, plus original notices
+and generated provenance. The former 13 MiB planning allowance covered only the
+first nine fonts; these bytes live in the package store, outside the boot archive.
 [Package preparation](../../packages/README.md) retains all notices and provenance.
+
+The additions accepted (chronium, 2026-10-24) remain in this single package:
+Roboto 2.137 is the six unchanged files from blurgtext's pinned demo, under
+Apache-2.0. Noto Sans CJK SC 2.004 is a single-face OpenType/CFF font under OFL-1.1;
+its Simplified Chinese regional glyphs provide CJK coverage. Adobe EmojiOne Color
+1.000 is the exact demo font, under MIT, with an OpenType SVG table; it requires
+a renderer with SVG font hooks. These are not libfont coverage claims: its stb
+profile does not render colour SVG. Plex's added italics come from the existing
+pinned releases. Noto Sans Mono has no upstream italic and stays upright; the
+selected CJK face is also upright. No face is renamed or synthetically slanted.
 
 Font files are runtime data and are not copied into a compiler sysroot.
 
