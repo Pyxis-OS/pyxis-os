@@ -1,12 +1,12 @@
 # Ship of Harkinian on Pyxis
 
 Investigation and task plan accepted; implementation authorised in order
-(chronium, 2026-10-24). Tasks 1–4 are qualified; later tasks continue automatically,
+(chronium, 2026-10-24). Tasks 1–5 are qualified; later tasks continue automatically,
 with a stop for new material behaviour, authority or lifetime decisions.
 Goal: Ocarina of Time through SoH, first on Mesa softpipe with keyboard input.
 A slow first frame is acceptable; neither llvmpipe/JIT nor gamepad drivers are
 prerequisites. Private host extraction and the public native LUS slice are qualified; the
-private game port remains unfinished.
+private game reaches its title/menu; gameplay, audio and persistence remain unqualified.
 
 ## Sources and distribution boundary
 
@@ -202,12 +202,13 @@ first target links and stop with a bounded proposal if the current ceilings fail
    QEMU; missing/read-only roots fail visibly. [Record](../development/experiments/lus-native-resources.md).
    No game data or target game run is included.
    **After this task chronium can:** run the native engine/resource substrate.
-5. [ ] **Private SoH build and first frame.** Gate host extraction out of the
-   target, link actual game code, load private archives, use the 320×240 internal 4:3 preset with MSAA off.
-   First check: visible title/menu frame in QEMU with honest diagnostics and exit;
-   record measured frame rate/backing without treating poor speed as a new gate.
-   [Private target qualification](../development/experiments/soh-first-frame.md)
-   is in progress; no native/gameplay claim.
+5. [x] **Private SoH build and first frame.** Actual game code links without
+   target extraction and reads the frozen private archives. Nested QEMU renders
+   the title/menu with the 320×240 internal 4:3 preset, MSAA off; normal quit and
+   missing/invalid-archive failure are qualified. Real audio-worker failure is
+   reported and cleaned up. [Record](../development/experiments/soh-first-frame.md)
+   gives static size, observed backing and scene-dependent FPS, without a peak,
+   native-audio or gameplay claim. No capacity was raised.
    **After this task chronium can:** see Ocarina of Time running on Pyxis.
 6. [ ] **Keyboard play, audio and persistence.** Map controls, test focus/lift,
    play a short route, save/reload and refused/full save destinations; qualify

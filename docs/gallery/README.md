@@ -24,6 +24,17 @@ Rules for entries:
 
 ## Highlights
 
+![Ocarina of Time title screen through SoH on Pyxis](images/2026-10-25-soh-title-qemu.png)
+
+**SoH's first OoT title, 2026-10-25.** Private SoH 9.3.1
+`f0599f96`, LUS `da6daf1a`, parent #1234 on `4c5ed5f4`, userland #382 and
+ports #179. Nested Q35/KVM, four CPUs, 4 GiB, VirtIO GPU at 1280×800;
+Mesa softpipe GL3.3 compatibility, N64-style 320×240 internal rendering at 4:3,
+MSAA off. Actual QEMU framebuffer. This longer UI/debugger run explicitly uses
+the existing Null audio backend, separately from default-SDL startup checks;
+no audibility or native/gameplay claim. Private game assets and bundle are not
+published. [Qualification](../development/experiments/soh-first-frame.md).
+
 ![Dear ImGui on Pyxis with native SDL2 input and software OpenGL](images/2026-10-24-imgui-softpipe-qemu.png)
 
 **Dear ImGui's first window, 2026-10-24.** ImGui 1.91.9b-docking on Mesa

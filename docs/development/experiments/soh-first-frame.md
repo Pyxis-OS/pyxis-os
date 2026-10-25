@@ -50,12 +50,18 @@ and game-heap allocation failure report startup failure. A worker audio exceptio
 is transferred to the owner, which closes the loop, cleans up and returns 1;
 there is no silent switch to Null or exception unwind through the C game loop.
 
-## Qualification status
+## Qualification
 
-The first successful private run rendered the LUS startup logo, animated OoT
+The final private build renders the LUS/Nintendo startup logos, animated OoT
 title sequence and the settings menu, opened with Escape. The original game's
-version is recognized. No native-hardware or gameplay qualification is claimed.
-Final-head quit, capacity observations and failure cases are being completed.
+version is recognized. Ordinary pointer input opens and confirms the built-in
+Quit dialog; the shell returns without an error. GDB stops at save shutdown
+observe the mixer stopped, processing clear and its thread joined before save
+and resource teardown. Missing and invalid archives print a specific startup
+reason and return status 1. The normal public LUS first-check application also
+renders its post-initialization font, passes its resource/FBO checks and exits
+through its joined-worker path. No native-hardware or gameplay qualification
+is claimed.
 
 A subsequent real nested HDA observation failure stopped the engine; the game
 printed the stopped/disconnected audio reason, destroyed the resource manager
@@ -63,6 +69,31 @@ and returned status 1 to the shell without a user fault. This is a containment
 check, not audio audibility or sustained-audio qualification. Any explicit Null
 backend diagnostic is recorded separately from the default SDL run.
 
-Raw sources, recipe, build/run logs and private images stay in
-`/shared/oot/soh-9.3.1-task5/`. No capacities were raised. True peak memory,
-stack high-water, native speed/audio and gameplay remain unclaimed.
+## Capacity and frame-rate observations
+
+| Observation | Result |
+| --- | --- |
+| P1F file | 46,466,146 bytes (44.3 MiB), below the existing 128 MiB captured-image ceiling |
+| Page-rounded static span, including BSS | 151,818,240 bytes (144.8 MiB) |
+| Main stack / ordinary sibling stack policy | 8 MiB / existing 1 MiB eager guarded default |
+| GDB sample, explicit Null backend | Five live tasks, 210,924 backed pages (823.9 MiB) |
+
+The backing sample sums the process VM's owned backed ranges, including its
+static image, heaps and stack/TLS. It excludes kernel staging, kernel-owned
+shared display mappings, page tables and metadata. It is an instantaneous observation, not peak backing or
+stack high-water. No capacity was raised or final native budget settled.
+
+A separate unpaused diagnostic with the existing Null backend and built-in Stats
+window showed 11.3 FPS at the Nintendo logo, 5.3 during the opening camera, and
+4.6 at the title. These are three displayed rolling values at changing scenes,
+not repeated samples of a fixed workload or a before/after benchmark. The GUI
+was at 1280×768; game internal rendering stayed 320×240, 4:3. Native performance
+and real-SDL sustained performance remain unmeasured. No minimum-FPS gate was
+introduced.
+
+Raw sources, recipe, receipts, build/run logs and private images stay in
+`/shared/oot/soh-9.3.1-task5/`. The [gallery](../../gallery/README.md) contains an
+allowed title screenshot, not game assets or a distributable game bundle.
+Keyboard gameplay, audibility/pacing, save/reload and refused/full save targets
+remain task 6; native qualification and peak/stack measurements remain later.
+The existing nested HDA observation/commit limits were not changed.
