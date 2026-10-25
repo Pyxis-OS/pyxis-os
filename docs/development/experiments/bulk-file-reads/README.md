@@ -80,7 +80,13 @@ retry, single-use collection, budget refusal, exports/forwarders/CUT and late
 reply/no writes after return. A separate lifetime probe, repeated with the final kernel implementation,
 passed 80 checks for
 slot saturation, cleanup, receiver closure, cancellation, retained canceled
-receipts and wrong-reply refusal. A separate read-only GDB inspection observed
+receipts and wrong-reply refusal. A separate 22-check process probe confirmed
+provider normal exit, forced caller retirement with a retained receipt, and
+exit with 16 unACKed native bulk completions; subsequent backing/budget use
+remained available. An intentionally wrong repository archive hash refused
+installation, left the
+selected set unchanged, and its final verification passed. A separate read-only
+GDB inspection observed
 a 1,048,576-byte native request returning an owned buffer of that capacity,
 with exactly 1,048,576 bytes charged to its process gate. Probe sources, raw logs, artifact hashes,
 collector output and results remain in
