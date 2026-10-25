@@ -142,6 +142,11 @@ OPUS_INPUTS := $(wildcard ports/opus/*.lua ports/opus/Makefile ports/opus/*.pc p
 OPUS_INPUTS += $(wildcard ports/opus/README.md ports/opus/PORT-NOTICE \
   ports/opus/manual/*.c ports/opus/manual/*.cpp ports/opus/manual/Makefile \
   ports/opus/manual/CMakeLists.txt ports/opus/manual/README.md)
+OPUSFILE_INPUTS := $(wildcard ports/opusfile/*.lua ports/opusfile/Makefile ports/opusfile/*.pc ports/opusfile/patches/*.patch) \
+                   ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+OPUSFILE_INPUTS += $(wildcard ports/opusfile/README.md ports/opusfile/PORT-NOTICE \
+  ports/opusfile/manual/*.c ports/opusfile/manual/*.cpp ports/opusfile/manual/Makefile \
+  ports/opusfile/manual/README.md)
 JSON_INPUTS := $(wildcard ports/json/*.lua ports/json/Makefile ports/json/*.pc ports/json/patches/*.patch) \
                ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 JSON_INPUTS += $(wildcard ports/json/README.md ports/json/PORT-NOTICE \
@@ -247,6 +252,7 @@ LIBZIP_OUTPUTS := $(call port_outputs,libzip)
 LIBOGG_OUTPUTS := $(call port_outputs,libogg)
 LIBVORBIS_OUTPUTS := $(call port_outputs,libvorbis)
 OPUS_OUTPUTS := $(call port_outputs,opus)
+OPUSFILE_OUTPUTS := $(call port_outputs,opusfile)
 JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
@@ -274,6 +280,7 @@ all: $(LIBZIP_OUTPUTS)
 all: $(LIBOGG_OUTPUTS)
 all: $(LIBVORBIS_OUTPUTS)
 all: $(OPUS_OUTPUTS)
+all: $(OPUSFILE_OUTPUTS)
 all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
      $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
@@ -450,6 +457,10 @@ $(LIBVORBIS_OUTPUTS) &: $(LIBVORBIS_INPUTS) $(SDK_INPUTS) $(LIBOGG_OUTPUTS) scri
 $(OPUS_OUTPUTS) &: $(OPUS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/opus
 	$(LUA) ports/build.lua opus --sdk $(abspath build/sdk) --work $(abspath build/ports/opus)
+
+$(OPUSFILE_OUTPUTS) &: $(OPUSFILE_INPUTS) $(SDK_INPUTS) $(LIBOGG_OUTPUTS) $(OPUS_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/opusfile
+	$(LUA) ports/build.lua opusfile --sdk $(abspath build/sdk) --work $(abspath build/ports/opusfile) --ogg $(abspath build/ports/libogg/stage/dev) --opus $(abspath build/ports/opus/stage/dev)
 
 $(JSON_OUTPUTS) &: $(JSON_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/json

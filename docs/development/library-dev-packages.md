@@ -41,6 +41,7 @@ not full upstream API qualification.
 | `libogg-dev` 1.3.6 | `libogg.a`; `ogg` | BSD-3-Clause; covered Pyxis source/MPL | — | Vorbis, Opusfile/SoH shared closure |
 | `libvorbis-dev` 1.3.7 | `libvorbis.a`, `libvorbisenc.a`, `libvorbisfile.a`; `vorbis`, `vorbisenc`, `vorbisfile` | BSD-3-Clause; covered Pyxis source/MPL | `libogg-dev` | SoH shared closure; callback/FILE consumer |
 | `opus-dev` 1.6.1 | `libopus.a`; `opus` | BSD-3-Clause and reached source/patent notices; covered Pyxis source/MPL | — | SoH shared closure; packet consumer |
+| `opusfile-dev` 0.12 | `libopusfile.a`; `opusfile` | BSD-3-Clause; covered Pyxis source/MPL | `libogg-dev`, `opus-dev` | SoH shared closure; local FILE/memory/callback decoder |
 | `libpng-dev` 1.6.59 | `libpng.a`; `libpng` | libpng-2.0 | `zlib-dev` | screenshot, screenshot-saver; DevilutionX |
 | `libuv-dev` 1.52.1 | `libuv.a`; `libuv` | MIT, BSD-2-Clause/ISC extras, MPL-2.0 native adapter | — | Lua 5.1/luv, Neovim; uv-relay example |
 | `lua-dev` 5.5.1 | `liblua.a`; `lua` | MIT | — | Lua interpreter; boot-init, session, config, Wi-Fi profile reader, installer/publication code |
@@ -132,3 +133,9 @@ selection and optional Opus model features disabled. Vorbis encoding and
 callback/FILE decoding are included; Opus packet encode/decode is real. This
 adds no audio-device or network authority. Opusfile is a separate dependency
 whose optional reopen helper needs a native libc/profile decision.
+
+Opusfile keeps real local FILE, memory and callback decoding. `op_freopen` is
+compiled out and explicitly unavailable in the Pyxis header (chronium,
+2026-10-24); libc stream reassociation is not emulated. The package omits
+opusurl/HTTP/TLS and adds no network or audio-device authority. Libgfxd is not
+part of the first SoH profile (`GFX_DEBUG_DISASSEMBLER=OFF`).
