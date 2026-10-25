@@ -146,6 +146,9 @@ static struct audio_request *take_request(void)
 static void fail_engine(const char *reason)
 {
   audio_require_worker();
+  kerror("audio: terminal observation LPIB=%x/%x ring-bytes=%u SDnCTL/STS=%x errors=%x\n",
+      controller.start_lpib[0], controller.start_lpib[1], HDA_BUFFER_BYTES,
+      controller.start_ctl, (unsigned)controller.irq.errors);
   available = false;
   stop_phase = AUDIO_STOP_NONE;
   audio_volume_available(false);
@@ -327,7 +330,7 @@ static bool observe_progress(const struct hda_stream_position *position,
   }
   uint32_t step = (position->bytes + HDA_BUFFER_BYTES - observed_position) % HDA_BUFFER_BYTES;
   uint32_t to_boundary = HDA_PERIOD_BYTES - observed_position % HDA_PERIOD_BYTES;
-  if (step % HDA_FRAME_BYTES) {
+  if (controller.model == HDA_MODEL_QEMU && step % HDA_FRAME_BYTES) {
     refill_fault = "output position is not frame aligned";
     return false;
   }
