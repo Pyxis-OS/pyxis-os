@@ -87,6 +87,9 @@ UTF8PROC_INPUTS := $(wildcard ports/utf8proc/*.lua ports/utf8proc/Makefile ports
 TREE_SITTER_INPUTS := $(wildcard ports/tree-sitter/*.lua ports/tree-sitter/Makefile ports/tree-sitter/*.pc \
                                ports/tree-sitter/PORT-NOTICE ports/tree-sitter/patches/*.patch) \
                      ports/ports.lua ports/build.lua
+LUA_LANGUAGE_SERVER_INPUTS := $(shell find ports/lua-language-server -type f) \
+                             ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+
 NEOVIM_INPUTS := $(wildcard ports/neovim/*.lua ports/neovim/*.json ports/neovim/*.md \
                            ports/neovim/host/*.lua ports/neovim/runtime/*.vim \
                            ports/neovim/runtime/colors/*.vim ports/neovim/patches/*.patch) \
@@ -250,6 +253,7 @@ LUA51_OUTPUTS := $(call port_outputs,lua51)
 UTF8PROC_OUTPUTS := $(call port_outputs,utf8proc)
 TREE_SITTER_OUTPUTS := $(call port_outputs,tree-sitter)
 NEOVIM_OUTPUTS := $(call port_outputs,neovim)
+LUA_LANGUAGE_SERVER_OUTPUTS := $(call port_outputs,lua-language-server)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
 TINYXML2_OUTPUTS := $(call port_outputs,tinyxml2)
 THREAD_POOL_OUTPUTS := $(call port_outputs,thread-pool)
@@ -299,6 +303,7 @@ all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTP
 all: $(IMGUI_OUTPUTS) $(LIBULTRASHIP_OUTPUTS)
 all: $(NCURSESW_OUTPUTS) $(HEXCURSE_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
+all: $(LUA_LANGUAGE_SERVER_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -420,6 +425,10 @@ $(NEOVIM_OUTPUTS) &: $(NEOVIM_INPUTS) $(SDK_INPUTS) $(LUA51_OUTPUTS) $(LIBUV_OUT
 	$(LUA) ports/build.lua neovim --sdk $(abspath build/sdk) --work $(abspath build/ports/neovim) \
 	  --lua51 $(abspath build/ports/lua51/stage/dev) --libuv $(abspath build/ports/libuv/stage/dev) \
 	  --utf8proc $(abspath build/ports/utf8proc/stage/dev) --tree-sitter $(abspath build/ports/tree-sitter/stage/dev)
+
+$(LUA_LANGUAGE_SERVER_OUTPUTS) &: $(LUA_LANGUAGE_SERVER_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/lua-language-server
+	$(LUA) ports/build.lua lua-language-server --sdk $(abspath build/sdk) --work $(abspath build/ports/lua-language-server)
 
 $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/libpng

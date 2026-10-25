@@ -1,8 +1,9 @@
 # Lua language server
 
 Plan and all three decisions accepted (chronium, 2026-10-25). Task 1 supplies
-the manual native runtime bundle. Public package/editor integration and full
-feature/native qualification remain tasks 2–3 below.
+the native runtime. Task 2 supplies the public program package and opt-in
+Neovim integration; full feature/native qualification and measured capacity
+sizing remain task 3 below.
 
 Goal: install `lua-language-server` and enable `lua_ls` in Neovim, with real
 semantic highlighting of `vim.*`, typed API completion and diagnostics.
@@ -98,11 +99,15 @@ holder of the same writable home. This is not a filesystem sandbox.
 
 ## Neovim, authority and package
 
-Recommend one opt-in public program package, `pkg install lua-language-server`,
-exporting `lua-language-server` as an ordinary bundle command. No shell wrapper,
-host compiler, host Ninja or automatic download. Embed the required Lua/bee/
-LPegLabel runtime and ship licences, provenance and covered port sources.
-Keep scripts/templates/locales in its read-only app resources.
+[Setup and JSON settings](../userland/lua-language-server.md) and the
+[task 2 build/QEMU record](../development/experiments/lua-language-server-editor.md)
+describe the implemented package/editor slice and its remaining limits.
+
+The opt-in public program package, `pkg install lua-language-server`,
+exports `lua-language-server` as an ordinary bundle command. It embeds the
+Lua/bee/LPegLabel runtime, licences, provenance and covered port sources, with
+scripts/templates/locales in read-only app resources. No shell wrapper, target
+compiler/Ninja or automatic download is involved.
 
 The manifest declares memory/manage, threads/manage, clock/read+precise+sleep,
 pipe/create for internal wakeups, and random/read for real exclusive state
@@ -115,21 +120,21 @@ Stricter root attenuation would be a separate generic launch task, not a
 call-site authority wrapper.
 
 The editor already exports `nvim_runtime://` for its actual admitted runtime.
-Set LuaLS `workspace.library` to `nvim_runtime://lua`, including its `vim/_meta`
-definitions, not a later package selection. No package lookup grant is needed.
+The native config sets `workspace.library` to `nvim_runtime://lua`, including
+its `vim/_meta` definitions from that selection. No package lookup grant is needed.
 The existing editor URI bridge opens definitions through Neovim's own held
 read-only runtime root; server-root views are for roots only the server holds.
 The current `_meta/api.gen.lua` gives
 real callable signatures, not merely an allowed global named `vim`.
 
-Add a native `lua_ls` configuration and opt-in
+The native `lua_ls` configuration is opt-in through
 `vim.lsp.enable('lua_ls')`, with `.luarc.json`, `.luarc.jsonc`, `.git` root
 markers and an honest single-file fallback. Neovim config uses **Lua 5.1**:
 this Neovim embeds PUC Lua 5.1, not LuaJIT. Pyxis Lua scripts/config projects
 select their actual Lua version through per-project JSON configuration;
 the language being analysed is independent of the server's embedded Lua 5.5.
-Enable semantic tokens, existing real LSP completion and diagnostics. Do not
-mask missing API definitions with only `diagnostics.globals = { 'vim' }`.
+Neovim's existing LSP client handles semantic tokens, completion and diagnostics.
+API types come from actual annotations, not an allowed-global substitute.
 
 Generated metadata and logs use the owned per-instance state below
 `home://.cache/lua-language-server/`; read-only templates and the Neovim `_meta`
@@ -146,16 +151,21 @@ analysis cache or `--lazy` reuse is provided.
    functions on real native objects if required. First checks: actual link,
    initialize/shutdown and refused missing authority, with all workers drained.
    **After this task chronium can:** run a real stdio LuaLS process on public fixtures.
-2. [ ] **Program package and editor integration.** Public program package,
+2. [x] **Program package and editor integration.** Public program package,
    native `lua_ls`, matching read-only Neovim annotations, JSON configuration,
    state lifecycle and truthful capabilities. Ports/userland first if changed,
    parent pinned to published heads; dependency PRs fast-forward-only.
    **After this task chronium can:** install and use API-aware Lua editing in QEMU.
 3. [ ] **Qualification and record.** QEMU first, then an orchestrated vela
    session with chronium. Record artifacts, grants, startup and edit-to-result
-   samples, peak backing/thread counts and cleanup. Measure the existing public
-   fixture/editor launch baseline before changing those paths; repeat matched
-   runs and keep host/nested/native evidence separate.
+   samples, peak backing/thread counts and cleanup. Size the provisional
+   message/framing/queue limits from real workload measurements with explicit
+   headroom (chronium, 2026-10-25); do not retain 16 MiB messages, 4 MiB LSP
+   bodies, 256 items/channel or other provisional values merely because they
+   passed small fixtures. Record the observed maxima, corpus and chosen
+   headroom. Measure the existing public fixture/editor launch baseline before
+   changing those paths; repeat matched runs and keep host/nested/native
+   evidence separate.
    **After this task chronium can:** use the qualified Lua LSP natively.
 
 Qualification must prove more than a coloured screenshot:
