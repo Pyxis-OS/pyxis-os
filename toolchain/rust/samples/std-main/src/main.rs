@@ -190,6 +190,14 @@ fn run(arguments: &[OsString]) -> io::Result<()> {
             return writeln!(io::stdout(), "rust-std-main: entropy ok");
         }
         Some("--io") => return streams(),
+        Some("--sleep-overflow") => {
+            std::thread::sleep(Duration::from_secs(u64::MAX));
+            return Err(io::Error::other("unrepresentable sleep returned"));
+        }
+        Some("--sleep-deadline-overflow") => {
+            std::thread::sleep(Duration::from_nanos(u64::MAX));
+            return Err(io::Error::other("overflowing sleep deadline returned"));
+        }
         Some("--panic") => panic!("rust-std-main: requested panic"),
         Some(option) if option.starts_with("--") => {
             return Err(io::Error::other(format!("unknown option: {option}")));
