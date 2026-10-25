@@ -1,8 +1,9 @@
 # Rust std main: baseline
 
 2026-10-25, gate 2 of the [std milestone](../../wip/rust-std.md).
-No std adapters are implemented in this checkpoint. A path-component API
-choice is pending; the following controls precede adapter/runtime edits.
+The following controls precede adapter/runtime edits. The lexical component
+contract was accepted afterward (chronium, 2026-10-25); implementation is in
+progress and no after result is claimed.
 
 Source main `eff8dbb2bf38d8e5ce03b18add5fdcd1a3c4b012`, userland `88872fe3`,
 ports `e6c51d9d`, fs `f3f22b6e`, lwIP `d52ebd20`. Ordinary kernel/SDK and native

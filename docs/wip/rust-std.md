@@ -126,7 +126,7 @@ and patches in `pyxis-ports`, SDK/package assembly in Pyxis; see
 | Time and entropy | Real monotonic `Instant`, wall `SystemTime`, sleep and entropy for randomized collections under declared grants. No weak random fallback or invented clock. Fallible helpers report errors; infallible `now`, sleep or hash-seed acquisition follows decision 2's failure rule. |
 | Threads and sync | Managed libc create/join/detach, mutex/condition/once and native parking support Rust threads, channels and park/unpark. Preserve wake-before-park and absolute timeout semantics. `available_parallelism` reports effective eligibility or an honest error, never merely online CPU count. |
 | TLS and exit | Executable local-exec TLS; libc remains FS owner. Register language destructors with libc, and order Rust per-thread `rt::thread_cleanup` after its language/key drainage. Panic in any thread aborts the process; join does not recover it and catch_unwind supplies no recovery. Join workers before orderly main return; existing forced-stop/live-worker exit limitations remain. |
-| OsStr and Path | Byte-preserving OsStr and native scheme-aware paths. `scheme://` is a root, not a Windows drive or a Unix relative component. Leading `/` has no native root; `..` cannot escape delegated authority. Path joining/components/absolute operations preserve scheme delimiters and opaque provider spelling; filesystem calls resolve the original path in order. |
+| OsStr and Path | Byte-preserving OsStr and native scheme-aware paths. `scheme://` is a root, not a Windows drive or a Unix relative component. Leading `/` has no native root; `..` cannot escape delegated authority. Byte preservation applies to OsStr, Path storage and filesystem I/O, not component round-trips. Components are conventional lexical components plus a Pyxis scheme root; repeated separators and interior `.` normalize on iteration/collection. Equality/hash compare components. Filesystem calls pass original bytes and resolve them in order without normalization. |
 | Files | Real open/read/write/seek/clone, resize and sync; file type/size and valid backend metadata; ordinary directory enumeration and existing create/remove/rename operations where granted. Missing timestamps return Unsupported. Permission-mode mutation, unreported permission facts, symlinks and file locking remain unsupported. No synthetic Unix identities, modes or timestamps. |
 | Net and processes | Socket creation, DNS, Command spawn/output and Unix process extensions remain unsupported. Real process exit/abort is required by std startup and is not deferred with child creation. No fake PID or signals. |
 
@@ -169,39 +169,20 @@ do not disguise it as an existing Windows Prefix. The selected first profile
 supports native schemes rather than shipping a std where direct File::open works
 but its Path operations silently change the spelling.
 
-### Gate 2 path components — decision pending
+### Gate 2 path components — accepted (chronium, 2026-10-25)
 
-Gate 2 is assigned (chronium, 2026-10-25). Baseline builds and launch/session
-controls are captured before adapter edits; see the
-[record](../development/experiments/rust-std-main.md). Source inspection found
-one externally visible detail beyond the accepted high-level path contract.
-No adapter implementation depends on an assumed answer.
+Keep conventional lexical components plus one Pyxis-only
+`Component::SchemeRoot(&OsStr)` for the complete `scheme://`. No Windows prefix
+is reused; leading `/` is not a native root. Repeated separators and interior
+`.` normalize on iteration/collection as on Unix. `Path` equality/hash compare
+components as on other platforms. Original `Path`/`OsStr` bytes remain unchanged
+in storage and are passed unchanged to providers for every filesystem call;
+there is no normalization on I/O. Byte preservation therefore does not promise
+component round-trips. There is no separate separator component or raw-component
+API. Parent/file-name inspection remains lexical, not provider discovery.
 
-**Proposed default: lossless native components and byte equality.** Add
-Pyxis-only `Component::SchemeRoot(&OsStr)` for the complete `scheme://` and
-`Component::Separator(&OsStr)` for each complete slash run. Keep `.` and `..`
-as explicit components; no implicit normalization. For example,
-`http://host//./a/` yields scheme root, `host`, `//`, `.`, `/`, `a`, `/`.
-Joining those components recreates the original bytes. `Path` equality/hash
-compare native byte spelling, so `home://a/b`, `home://a//b` and
-`home://a/./b` differ; only backend identity can establish whether they name the
-same object. Byte `OsStr` already exists and needs no new representation.
-
-This adds target-specific public component variants and differs from Rust's
-usual normalization; crates with exhaustive component matches need a Pyxis
-case. A lossless `strip_prefix("boot://a")` on
-`boot://a//b` retains `//b`: it rejoins exactly, but that suffix is not an
-independently resolvable native relative path. Parent/file-name inspection is
-lexical; it cannot infer a provider's hierarchy before resolving authority.
-`absolute` and filesystem calls preserve original spelling and resolution order.
-Leading `/` is never a native root, and no Windows prefix is reused.
-
-The alternative keeps ordinary lexical components (apart from a native scheme
-root), normalizing repeated separators and interior `.` on iteration/collection.
-Original `Path` bytes could still be passed unchanged to providers, but component
-round-trips would no longer preserve opaque spelling; that needs an explicit
-amendment to the accepted contract above. A second raw-components API is not
-proposed. Chronium must settle this one choice before path implementation.
+Gate 2's baseline precedes adapter edits; see the
+[record](../development/experiments/rust-std-main.md).
 
 The current libc DIR abstraction retains enumeration authority without a public
 held-directory lookup helper. First-profile `DirEntry::metadata` is Unsupported
