@@ -13,6 +13,7 @@ struct endpoint_delivery_record;
 struct process;
 struct completion_gate;
 struct process_control;
+struct bulk_buffer;
 
 struct native_completion {
   struct kernel_object storage;
@@ -21,9 +22,11 @@ struct native_completion {
   struct forwarder_operation lineage;
   struct endpoint_delivery_record *delivery;
   struct completion_gate *gate;
+  struct bulk_buffer *bulk; /* Owned; endpoint lock protects terminal collection. */
   struct execution_group *cleanup_group;
   uint64_t protocol, operation, deadline_ns, correlation_id;
   size_t input_size, output_size, charged_bytes, network_bytes;
+  size_t bulk_count; /* Initialized bytes, immutable after terminal publication. */
   uint64_t progress;
   bool progress_known;
   uint8_t input[COMPLETION_PAYLOAD_MAX], output[COMPLETION_PAYLOAD_MAX];

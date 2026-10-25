@@ -15,7 +15,13 @@
 
 /* Invoke SUBMIT on the native target. The bytes are copied before acceptance;
  * no output buffer is needed. All receivers share the process completion
- * metadata budget; exhaustion refuses with CALL_LIMIT before acceptance. */
+ * metadata budget; exhaustion refuses with CALL_LIMIT before acceptance.
+ * FILE_READ_BULK separately reserves its requested bulk-data capacity before
+ * acceptance. Its nonzero FILE deadline can only shorten the submit deadline.
+ * Its terminal payload is only a file_read_reply count; collect the bytes
+ * through the received receipt's ENDPOINT_COLLECT_BULK operation.
+ * Failed or short collection leaves the result available for another attempt;
+ * receipt close/ACK discards it. */
 struct completion_submit_message {
   struct message_header header;
   handle_t receiver;
