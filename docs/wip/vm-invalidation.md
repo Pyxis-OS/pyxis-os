@@ -1,8 +1,11 @@
 # BSP removal task 3: invalidation and shared kernel VM
 
 Decisions 5–7 accepted (chronium, 2026-10-26). Implementation is assigned to
-Codex alpha, with a single-run baseline before code. No kernel, ABI,
-IPI, permission or failure-policy implementation is included. This follows
+Codex alpha, with a single-run baseline before code. Root epochs and the
+concurrent acknowledgement engine are merged in #1269; its delayed-ACK check
+is recorded in #1271. Short shared query/publication guards are implemented
+separately. Structural-owner and caller integration remain pending, including
+the two concrete lifetime/firmware questions below. This follows
 [caller-CPU MEMORY](../development/experiments/memory-caller-cpu/README.md) and
 [bounded frame batches](../development/experiments/frame-batches/README.md),
 now merged as tasks 1–2 of [BSP removal](bsp-removal.md).
@@ -23,8 +26,9 @@ or optimize scratch zeroing. Those retain their existing decisions.
 
 ## Source inventory
 
-Inspected current main `1c71d1bb` (including #1254 and #1263); source facts, not a
-new performance or native measurement.
+Historical inspection at main `1c71d1bb` (including #1254 and #1263); source
+facts at that revision, not a new performance or native measurement. #1269
+supersedes the root/residency and singleton-engine gaps in this table.
 
 | Code | Current proof and the remaining gap |
 | --- | --- |
@@ -228,6 +232,86 @@ not qualify the remaining shared-owner integration or authorize other fault
 scenarios/native fault tests. Raise those scopes separately when reached.
 Native work goes through the orchestrator after ordinary QEMU qualification.
 The task 1/2 A/B/C native packet has no task 3 implementation or instrumentation.
+
+## Caller integration: two decisions reached during implementation
+
+**Proposed, not implemented.** The source audit at main `d69b24c6` found two
+cases the general admission/timeout rule does not settle. Ordinary fallible
+preparation already has the accepted answer: preserve BUSY through internal
+image/VM results to the native caller, instead of converting it to an invalid
+image or NO_MEMORY. No new public operation or grant is needed. Actor identity
+must distinguish a retained task from its CPU's permanent scheduler context;
+being on the same CPU never grants recursive ownership to a different actor.
+
+### 8. Final cleanup that cannot return BUSY
+
+`free_task` destroys request/profile/CPU state before its VM free, so scheduler
+admission must precede detaching `completed_head`, process-member removal and
+pin/result publication. The existing task/object retirement queues can retain
+their entries unchanged on contention, as decision 6 already requires.
+
+Other final-release paths have no queue or refusal result: display-frame final
+references ([display.c](../../kernel/object/display.c)), selected-image capture
+([image_capture.c](../../kernel/user/image_capture.c)), later prepared-task/
+batch discard, and temporary/cache/pool frees in
+[npfs_store.c](../../kernel/fs/npfs_store.c). Returning early then clearing their
+descriptor would lose the only owner. Letting the ordinary one-second admission
+budget turn these void operations into apparent completion is also incorrect.
+
+**Default:** extend retained try/defer cleanup to these concrete items. Transfer
+the whole cleanup record, its backing and cleanup attribution to its existing
+BSP retirement owner; use the existing process-reaper task for items needing
+bounded, sleeping/interruptible work, not a new worker or a generic callback
+framework. A busy owner leaves the item pending beyond the ordinary one-second
+fallible-admission budget. Do not detach pins, release capture ownership or
+signal joined process/group cleanup until actual reclamation finishes. The
+presenter can continue after transferring its final frame reference, without
+waiting on shared-VM admission. Optional cache eviction may instead leave its
+entry intact and try later. Never claim a range was freed just because cleanup
+was queued. This is owner contention, not permission to retry an unconfirmed
+ACK retirement or reclaim quarantined storage on a late ACK.
+
+Consequence: cleanup/result observation and RAM retention can last longer than
+one second while another structural owner is busy. Alternative: keep each
+requesting actor parked with the whole record until admitted; that can stall
+presentation/other non-sleepable callers and still needs retained storage.
+Do not silently choose either lifetime.
+
+### 9. Runtime firmware windows must not fail from unrelated owner contention
+
+[ACPI map](../../kernel/acpi/map.c) can run inside uACPI's IF=0/locked callbacks;
+its map API can return only a pointer or NULL. Treating owner contention as NULL
+becomes `UACPI_MAP_FAILED`, potentially aborting a real AML operation. Admission
+around a whole ACPI turn is not a simple fix either: power handling waits for
+NPFS flushes, whose worker can itself need shared VM, creating an owner cycle.
+GPIO and late LPSS assignment also fill boot-reserved native windows after AP
+startup. Their fixed device owners and existing pin-on-failure policies stay.
+
+**Default:** make the ACPI/GPIO boot-reserved, never-reused windows explicit
+permanent mapping domains. Prepare their page-table ancestors before AP startup;
+seal the reservation against generic release/reuse. The current fixed firmware/
+native owner may fill fresh slots and publish their leaves under the short
+mapping guard, without acquiring the long-lived general range-registry owner.
+It may undo only unpublished partial fills, consuming those slots permanently;
+there is no remap/protect/recycle operation. Existing aliases keep working,
+and runtime callbacks need no allocation, sleeping admission or new firmware
+failure from another range's owner. ACPI's 64 MiB VA allowance stays unchanged;
+the necessary ancestor tables become boot-lifetime storage even if unused.
+Device physical-range/claim checks remain separate and unchanged. LPSS can wait
+at its descriptor worker's safe outer boundary: it still acquires the general
+owner before its overlap check, attempted-assignment record, physical claim,
+mapping and BAR publication. A missed admission leaves that kernel preparation
+pending rather than pretending the hardware is unsupported; no partial hardware
+operation is retried. The permanent-window exception does not bypass that full
+assignment scope or authorize arbitrary BAR writes.
+
+This is a narrow permanent-owner exception, like the separately owned,
+never-reused heap arena; it does not let general shared VM mutate concurrently
+without its owner. Alternative: pre-admit each safe AML/native work segment and
+defer it unchanged on contention, carefully releasing the owner before external
+worker waits. That couples firmware scheduling and power sequencing to the
+shared owner. Returning a new mapping failure on ordinary contention is not
+selected. No implementation of this exception before chronium decides.
 
 ## What chronium can do after task 3
 
