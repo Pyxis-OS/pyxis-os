@@ -1,6 +1,7 @@
 # 0.0.10 package upgrades
 
-Status: **tasks 1–3 merged; owned Coexist publication in review (2026-10-26).**
+Status: **tasks 1–3 and owned Coexist publication merged; signing floor open
+(2026-10-26).**
 This milestone changes the delivered [updater](pkg-upgrade.md). The signing-floor
 choice below remains open; this plan does not claim a completed release.
 
@@ -162,11 +163,49 @@ was inspected in code but was not exercised in QEMU.
 
 ## Open decisions for later rounds
 
-- **Signing-floor snapshot authority:** choose the trusted build-time source
-  and schema of the shipped signed-index floor. A network response observed
-  at build time is not itself a trusted floor.
+- **Signing-floor snapshot authority and schema — proposal, not accepted:**
+  1. **Source (default):** chronium freezes the latest *published* `current`
+     from each stock signed repository using his controlled signing tree. The
+     release preparation tool compares that tree's `current` and exact index
+     bytes with the published endpoint, verifies the index signature and signer
+     under the pinned Software Signing CA, then records the snapshot in a
+     reviewed source file before the release tag. A network response alone
+     cannot supply or advance the floor; a missing or disagreeing tree, server
+     or signature stops the release build. The owner-signed release tag and
+     signed ISO bind the reviewed snapshot to the delivered core archive. This
+     needs no new private signing key in CI. The resulting floor proves the
+     owner-reviewed publish state at freeze time, not that no later publish
+     exists.
+  2. **Runtime schema (default):** ship a bounded version-1 repository-floor
+     table in `boot://share/pyxis/trust/`, separate from `os-release`. Each
+     entry has the configured repository name, canonical URL and signed policy,
+     plus the published serial, signed UTC time and SHA-256 of the exact
+     verified `index/N.lua`. Refuse duplicate names or identities, malformed
+     values and missing floors for the stock signed `public` and `releases`
+     roots. After normal CA/signature verification, apply both the embedded
+     floor and the durable per-volume accepted index: lower serial or time
+     refuses, and equal serial requires the floor's exact hash. A renamed or
+     reconfigured root gets no authority from another root's floor.
+  3. **Development images (default):** carry the last checked-in frozen
+     snapshot, without fetching a new floor during an ordinary build. If it is
+     absent, first contact with a stock signed root refuses; explicitly
+     configured unsigned local development repositories remain available.
+     User-added signed roots absent from the stock snapshot retain the current
+     explicit-add and commit-time first-contact rule, plus the durable accepted
+     index, until a separate reviewed-floor import is designed. Such a rule
+     does not prove that a newly added repository's index is its newest publish.
 - **Reboot initiation:** keep a separate design open; this task gives `pkg` no
   power grant and no mediated restart action.
+
+## Follow-ups after 0.0.10
+
+- Extend the typed `uefi` grant with bounded, structured operations to list
+  boot entries, read and update `BootOrder`, and set `BootNext`. Add a small
+  boot-entry tool so an authorized Remote session can request a one-time boot
+  of an existing entry, such as Fedora on vela. Scope, readback and failure
+  behavior need their own authority decision; this milestone does not implement
+  the operations or grant them to ordinary programs. *(chronium idea,
+  2026-10-26)*
 
 ## You should know
 
