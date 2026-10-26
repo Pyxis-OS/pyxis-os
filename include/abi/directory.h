@@ -67,6 +67,20 @@ struct directory_child_request {
   uint64_t rights;
 };
 
+#define DIRECTORY_CREATE_REQUIRE_APPEND (UINT64_C(1) << 0)
+#define DIRECTORY_CREATE_REQUIREMENTS DIRECTORY_CREATE_REQUIRE_APPEND
+
+/* Exclusive CREATE checks requirements before any namespace mutation. APPEND
+ * requires FILE kind and WRITE rights, and refuses unsupported backing stores
+ * with BAD_OPERATION. Zero requirements retains ordinary creation semantics. */
+struct directory_create_request {
+  uint64_t name;
+  uint64_t name_length;
+  uint64_t kind;
+  uint64_t rights;
+  uint64_t requirements;
+};
+
 /* Resolve once and return the actual FILE or DIRECTORY. Both masks must use
  * their protocol's known bits; only the selected kind's mask is checked against
  * parent authority. Symlinks and special files retain ordinary lookup refusals. */
@@ -138,6 +152,7 @@ union directory_payload {
   struct directory_child_request lookup;
   struct directory_typed_lookup_request lookup_typed;
   struct directory_child_request create;
+  struct directory_create_request create_required;
   struct directory_enumerate_request enumerate;
   struct directory_remove_request remove;
   struct directory_rename_request rename;
@@ -229,6 +244,7 @@ _Static_assert(offsetof(struct directory_message, body) == 16, "directory payloa
 _Static_assert(sizeof(struct directory_message) == 72, "directory message layout");
 _Static_assert(sizeof(struct directory_link_request) == 40, "directory link layout");
 _Static_assert(sizeof(struct directory_child_reply) == 8, "directory child reply layout");
+_Static_assert(sizeof(struct directory_create_request) == 40, "directory create request layout");
 _Static_assert(sizeof(struct directory_typed_lookup_request) == 32, "typed directory lookup request layout");
 _Static_assert(sizeof(struct directory_typed_lookup_reply) == 16, "typed directory lookup reply layout");
 _Static_assert(sizeof(struct directory_enumerate_reply) == 40, "directory enumeration reply layout");

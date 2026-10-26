@@ -450,7 +450,7 @@ static struct syscall_result handoff(struct output_pair *pair,
 
 static struct syscall_result producer_call(struct output_pair *pair, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, bool *append_probe)
 {
   if (operation == FILE_HANDOFF) {
     return handoff(pair, request_address, request_size);
@@ -470,13 +470,14 @@ static struct syscall_result producer_call(struct output_pair *pair, uint64_t ri
     }
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
-  if (operation != FILE_WRITE && operation != FILE_RESIZE && operation != FILE_SIZE &&
+  if (operation != FILE_WRITE && operation != FILE_APPEND && operation != FILE_RESIZE && operation != FILE_SIZE &&
       operation != FILE_INFO && operation != FILE_SYNC) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   bool output = false;
   bool zero_write = false;
   struct file_write_request request = {0};
+  struct file_append_request append = {0};
   struct file_resize_request resize = {0};
   uint8_t data[FILE_WRITE_MAX_BYTES];
   if (operation == FILE_WRITE) {
@@ -500,6 +501,24 @@ static struct syscall_result producer_call(struct output_pair *pair, uint64_t ri
     }
     output = request.size != 0;
     zero_write = !output;
+  } else if (operation == FILE_APPEND) {
+    if (request_size < sizeof(append) || request_size > FILE_PAYLOAD_MAX) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&append, request_address, sizeof(append))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (append.reserved || append.size != request_size - sizeof(append) ||
+        reply_capacity < sizeof(struct file_append_reply)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!user_buffer_check(reply_address, sizeof(struct file_append_reply), USER_BUFFER_WRITE) ||
+        !copy_from_user(data, request_address + sizeof(append), append.size)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    output = append.size != 0;
+    zero_write = !output;
+    *append_probe = zero_write;
   } else if (operation == FILE_RESIZE) {
     if (request_size != sizeof(resize)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -531,7 +550,7 @@ static struct syscall_result producer_call(struct output_pair *pair, uint64_t ri
       pair->failed = true;
       detach_output(pair, &discard);
       status = CALL_IO;
-    } else if (!zero_write) {
+    } else if (!zero_write || operation == FILE_APPEND) {
       status = CALL_WRONG_TYPE;
     }
   } else if (!object_retain(&pair->bytes->object)) {
@@ -549,15 +568,18 @@ static struct syscall_result producer_call(struct output_pair *pair, uint64_t ri
     return (struct syscall_result){status, 0};
   }
   if (!backing) {
-    struct file_write_reply reply = {0};
-    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    struct file_append_reply reply = {0};
+    size_t size = operation == FILE_APPEND ? sizeof(reply) : sizeof(reply.written);
+    if (!copy_to_user(reply_address, &reply, size)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
+    return (struct syscall_result){CALL_OK, size};
   }
   struct syscall_result result;
   if (operation == FILE_WRITE) {
     result = file_output_write(backing, &request, data, reply_address, reply_capacity);
+  } else if (operation == FILE_APPEND) {
+    result = file_output_append(backing, &append, data, reply_address, reply_capacity);
   } else if (operation == FILE_RESIZE) {
     result = file_output_resize(backing, resize.size);
   } else {
@@ -567,8 +589,8 @@ static struct syscall_result producer_call(struct output_pair *pair, uint64_t ri
   spin_lock(&pair->lock);
   KASSERT(pair->active);
   --pair->active;
-  bool mutation_failed = result.status != CALL_OK &&
-      (operation == FILE_WRITE || operation == FILE_RESIZE);
+  bool mutation_failed = result.status != CALL_OK && !*append_probe &&
+      (operation == FILE_WRITE || operation == FILE_APPEND || operation == FILE_RESIZE);
   /* Budget exhaustion already replaced the private prefix with a failed FILE.
    * Keep that typed value collectible; other admitted errors fail transport. */
   bool retained_failure = result.status == CALL_FILE_TOO_LARGE &&
@@ -595,9 +617,11 @@ struct syscall_result output_producer_call(struct output_end *end, uint64_t righ
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct output_pair *pair = end->pair;
+  bool append_probe = false;
   struct syscall_result result = producer_call(pair, rights, operation,
-      request_address, request_size, reply_address, reply_capacity);
-  if (result.status != CALL_OK && (operation == FILE_WRITE || operation == FILE_RESIZE)) {
+      request_address, request_size, reply_address, reply_capacity, &append_probe);
+  if (result.status != CALL_OK && !append_probe &&
+      (operation == FILE_WRITE || operation == FILE_APPEND || operation == FILE_RESIZE)) {
     struct output_discard discard = {0};
     spin_lock(&pair->lock);
     bool retained_failure = result.status == CALL_FILE_TOO_LARGE && pair->bytes &&

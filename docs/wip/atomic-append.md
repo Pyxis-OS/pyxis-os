@@ -1,9 +1,9 @@
 # Native atomic append
 
 Status: assigned to codex-beta (chronium, 2026-10-26). The first-round contract
-is accepted. Implementation follows the baseline; the plain-output cursor
-decision below remains open. This document describes planned work, not delivered
-behaviour.
+is accepted. Native APPEND/SDK implementation is qualified in QEMU; libc, shell
+and language migrations remain. The plain-output cursor decision below remains
+open; this milestone is not complete.
 
 ## Accepted contract (chronium, 2026-10-26)
 
@@ -30,8 +30,8 @@ Support RAM, npfs (including RAM-backed npfs), writable FAT32 and native capture
 byte producers. Serialize aliases/hard links through their canonical backing
 owner, not a lock on one FILE wrapper. Preserve capture mixed-output/failure
 latches, retention accounting, FAT32 owned-ESP gates and ordinary CUT/lineage
-rules. Extend the existing native completion path without changing its
-one-outstanding-operation-per-process limit.
+rules. Extend the existing native completion path without changing its current
+[shared metadata allowance](../interfaces/native-completion.md#authority-and-admission).
 
 HOST refuses APPEND with BAD_OPERATION/ENOTSUP until its host-side contract can
 prove atomicity against external writers. HTTP/text providers continue refusing
@@ -113,7 +113,7 @@ Do not silently adopt that change or an independent-cursor overwrite policy.
 - [x] Capture before-code QEMU costs with existing tools, single runs unless a
   close result drives a decision; record matched revisions/configuration and
   commands below. No attended repeated sampling.
-- [ ] Native APPEND, canonical RAM/npfs/FAT/capture serialization, required-support
+- [x] Native APPEND, canonical RAM/npfs/FAT/capture serialization, required-support
   CREATE, SDK helper, completion/export integration and interface docs.
   After this task chronium can append concurrently through native capabilities.
 - [ ] libc, inheritance, shell and dependent ports in linked PRs; restore tee
@@ -175,6 +175,58 @@ public archive. Raw commands/output, source/configuration and image provenance
 are in `/shared/present/atomic-append/baseline/`. After runs must use the same
 profile, scratch layout and workloads. Native validation later is one quick
 hands-free run; no native append result is claimed here.
+
+### Native operation / SDK slice
+
+QEMU 4-CPU checks passed on RAM, RAM-npfs and disk npfs: zero support probes,
+positioned overwrite and resize followed by append, four independent opens
+appending 128 tagged 32-byte records each, complete content/uniqueness checks,
+npfs hard-link aliases, READ-only refusal, CUT, native APPEND completion and
+explicit SYNC. A separate 1-CPU guest passed the same FAT32 checks on a disposable
+64 MiB volume. FAT write authority came from a boot-declared selected source and
+an explicit bundle declaration, not a writable ambient root or test API.
+
+The 1-CPU guest also passed capture APPEND, zero probe followed by value handoff,
+and HOST refusal before create/truncate. Host-side checks proved the absent names
+stayed absent and the existing target retained its contents; old plain `>`
+compatibility still passed. This does not implement the new plain-output policy
+or migrate libc's append writes. No hardware run, injected short-write/I/O failure
+or post-exit heap-leak proof is claimed.
+The final capture check also passed a zero probe after value handoff: WRONG_TYPE
+with the handed-out value preserved, rather than an invented zero EOF.
+
+Existing iobench now has opt-in `write --append` using native APPEND and verifying
+the returned placement. It rejects `--prepared` with append before effects.
+Ordinary WRITE controls and native APPEND were measured in separate fresh 4-CPU
+boots, with the same scratch pool, output names/order, flags and one timed sample
+after iobench's built-in warmup:
+
+| 1 MiB workload | RAM-npfs WRITE / APPEND | Disk npfs WRITE / APPEND |
+| --- | ---: | ---: |
+| 4,080-byte calls (258) | 2.397 / 5.554 ms | 1.902 / 1.924 ms |
+| 64-byte calls (16,384) | 300.653 / 299.741 ms | 303.135 / 305.059 ms |
+
+Small-call native APPEND cost is approximately the ordinary WRITE cost in these
+samples. The short RAM 4,080-byte sample is inconclusive: an earlier expanded
+cohort measured WRITE/APPEND at 5.542/3.253 ms, reversing the direction. Do not
+infer a speedup/regression from these single short intervals. The expanded
+cohort also retained four rather than two 1 MiB output files per backing, reaching
+npfs's 4 MiB payload-cache bound; it is not the matched performance result above.
+There is no additional worker round trip or per-call SIZE in native APPEND.
+
+The earlier stdio log-style baseline remains the before value for the libc slice:
+stdio still uses SIZE/WRITE in this delivery, so its later improvement is not
+claimed here. Raw records/scripts stay under
+`/shared/present/atomic-append/task1/`, including the excluded expanded cohort.
+The source rebase onto `b4b54f6d`/userland `3b3dfb0` changes none of these I/O
+implementation paths. No new compiler container is needed. Native CREATE's
+requirements occupy existing zero-initialized payload padding; the 56-byte
+payload and 72-byte message extents are unchanged. The pinned Go `child()` raw
+caller already zeros this tail. APPEND callers need the new kernel/SDK, and
+language append adapters remain in their pending task.
+
+HOST's accepted refusal and revisit point are tracked in
+[debt #1506](https://git.internal/PyxisOS/pyxis-os/issues/1506).
 
 ## You should know
 

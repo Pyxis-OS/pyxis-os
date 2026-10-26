@@ -74,15 +74,17 @@ acceptance; workers never resolve a caller-local handle.
 | FILE READ_BULK | `file_bulk_read_request`; fixed count metadata, separately collected copied bytes |
 | FILE TRANSFER | `file_transfer_request`, captured source READ plus destination WRITE; confirmed count in `file_transfer_reply` |
 | FILE READ / WRITE / RESIZE / SIZE | Existing address-free native request/reply layouts, including READ's count prefix |
+| FILE APPEND | Bounded `file_append_request` and copied bytes; selected EOF and confirmed count in `file_append_reply` |
 | DIRECTORY CREATE | `completion_create_request` plus one name component; exclusive FILE READ/WRITE creation, attached FILE_RIGHTS grant |
 | DIRECTORY REMOVE | `completion_remove_request` plus one name component; native result |
 
 Ordinary FILE/DIRECTORY backends are RAM, archive reads and mounted npfs. The
 bounded [FILE_TRANSFER](file-providers.md#file-dispatch-and-lifetime) path additionally supports RAM/initrd-to-FAT32 and FAT32-to-RAM, at most 1 MiB.
-Other FAT32 operations, HOST, exported providers, lookup, enumeration, rename and
+FILE_APPEND also supports writable FAT32, retaining its submitting actor through
+worker admission and retirement. Other FAT32 operations, HOST, exported providers, lookup, enumeration, rename and
 sync are unsupported here. Existing
 rights, immutable-backend refusals and native bounds apply: READ 4,088 bytes,
-WRITE 4,080, UDP 1,472; names must fit the copied request and backend limits.
+WRITE/APPEND 4,080, UDP 1,472; names must fit the copied request and backend limits.
 No global RAM-name limit is introduced. CONNECT/UDP RECEIVE/FILE/DIRECTORY deadlines
 are at most 30 seconds ahead, UDP SEND at most five seconds. Expired submission
 returns `CALL_TIMED_OUT`; oversized waits return `CALL_BAD_REQUEST`. Queue time

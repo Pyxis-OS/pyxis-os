@@ -290,6 +290,30 @@ static enum call_status check_typed_lookup(uint64_t file_rights, uint64_t direct
       USER_BUFFER_WRITE) ? CALL_OK : CALL_BAD_BUFFER;
 }
 
+static enum call_status check_create_request(struct directory_object *directory, uint64_t rights,
+    const struct directory_create_request *request, uintptr_t reply_address,
+    size_t reply_capacity)
+{
+  if ((request->requirements & ~DIRECTORY_CREATE_REQUIREMENTS) ||
+      ((request->requirements & DIRECTORY_CREATE_REQUIRE_APPEND) &&
+      (request->kind != DIRECTORY_KIND_FILE || !(request->rights & FILE_RIGHT_WRITE)))) {
+    return CALL_BAD_REQUEST;
+  }
+  struct directory_child_request child = {
+    request->name, request->name_length, request->kind, request->rights,
+  };
+  enum call_status status = check_child_request(directory, rights, &child,
+      reply_address, reply_capacity);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if ((request->requirements & DIRECTORY_CREATE_REQUIRE_APPEND) &&
+      directory->backing == DIRECTORY_HOST) {
+    return CALL_BAD_OPERATION;
+  }
+  return CALL_OK;
+}
+
 static uint64_t allowed_file_rights(uint64_t rights)
 {
   return ((rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
@@ -690,10 +714,10 @@ static bool name_exists(struct directory_object *directory, const struct directo
 }
 
 static struct syscall_result create_child(struct directory_object *directory, uint64_t rights,
-    const struct directory_child_request *request, uintptr_t reply_address,
+    const struct directory_create_request *request, uintptr_t reply_address,
     size_t reply_capacity)
 {
-  enum call_status status = check_child_request(directory, rights, request,
+  enum call_status status = check_create_request(directory, rights, request,
       reply_address, reply_capacity);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
@@ -1740,7 +1764,7 @@ static struct syscall_result directory_operation(struct directory_object *direct
         reply_address, reply_capacity);
   }
   if (operation == DIRECTORY_CREATE) {
-    return create_child(directory, rights, &request.create, reply_address, reply_capacity);
+    return create_child(directory, rights, &request.create_required, reply_address, reply_capacity);
   }
   if (operation == DIRECTORY_REMOVE) {
     return remove_child(directory, rights, &request.remove);
@@ -1866,8 +1890,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     return acpi_table_query(&request, reply_address, reply_capacity);
   }
   size_t name_length = operation == DIRECTORY_LOOKUP_TYPED ? request.lookup_typed.name_length :
-      operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE ?
-      request.lookup.name_length : operation == DIRECTORY_REMOVE ? request.remove.name_length : 0;
+      operation == DIRECTORY_LOOKUP ? request.lookup.name_length :
+      operation == DIRECTORY_CREATE ? request.create_required.name_length :
+      operation == DIRECTORY_REMOVE ? request.remove.name_length : 0;
   if (((directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) &&
       name_length > NPFS_NAME_MAX) ||
       (directory->backing == DIRECTORY_HOST && name_length > VIRTIO_FS_NAME_MAX)) {
@@ -1875,8 +1900,13 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   char *source = NULL;
   enum call_status status = CALL_OK;
-  if (operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE) {
+  if (operation == DIRECTORY_LOOKUP) {
     status = check_child_request(directory, rights, &request.lookup, reply_address, reply_capacity);
+    if (status != CALL_OK) {
+      return (struct syscall_result){status, 0};
+    }
+  } else if (operation == DIRECTORY_CREATE) {
+    status = check_create_request(directory, rights, &request.create_required, reply_address, reply_capacity);
     if (status != CALL_OK) {
       return (struct syscall_result){status, 0};
     }
@@ -1890,9 +1920,12 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   /* Only private name fields are rewritten. Enumeration's destination remains
    * a user address; all named operations consume one immutable kernel capture. */
-  if (operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE) {
+  if (operation == DIRECTORY_LOOKUP) {
     status = capture_name(request.lookup.name, request.lookup.name_length, &source);
     request.lookup.name = (uintptr_t)source;
+  } else if (operation == DIRECTORY_CREATE) {
+    status = capture_name(request.create_required.name, request.create_required.name_length, &source);
+    request.create_required.name = (uintptr_t)source;
   } else if (operation == DIRECTORY_LOOKUP_TYPED) {
     status = capture_name(request.lookup_typed.name, request.lookup_typed.name_length, &source);
     request.lookup_typed.name = (uintptr_t)source;
@@ -1905,10 +1938,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (status == CALL_OK && directory->repository_parent && source) {
     if (!repository_name_allowed((uintptr_t)source, name_length)) {
       status = CALL_DENIED;
-    } else if (operation == DIRECTORY_LOOKUP || operation == DIRECTORY_CREATE) {
-      if (request.lookup.kind != DIRECTORY_KIND_FILE) {
-        status = CALL_DENIED;
-      }
+    } else if ((operation == DIRECTORY_LOOKUP && request.lookup.kind != DIRECTORY_KIND_FILE) ||
+        (operation == DIRECTORY_CREATE && request.create_required.kind != DIRECTORY_KIND_FILE)) {
+      status = CALL_DENIED;
     } else if (operation == DIRECTORY_REMOVE) {
       if (request.remove.kind == DIRECTORY_KIND_DIRECTORY) {
         status = CALL_DENIED;

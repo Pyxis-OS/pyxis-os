@@ -1451,12 +1451,14 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
 {
   struct fat32_node *node = job->fat_node;
   bool directory = node->kind == OBJECT_DIRECTORY;
+  bool write = job->operation == NPFS_WRITE || job->operation == NPFS_APPEND;
   uint64_t required;
   switch (job->operation) {
   case NPFS_CREATE: required = DIRECTORY_RIGHT_CREATE; break;
   case NPFS_REMOVE:
   case NPFS_RENAME: required = DIRECTORY_RIGHT_REMOVE; break;
   case NPFS_WRITE:
+  case NPFS_APPEND:
   case NPFS_RESIZE: required = FILE_RIGHT_WRITE; break;
   case NPFS_SYNC: required = directory ? DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_REMOVE :
       FILE_RIGHT_WRITE; break;
@@ -1465,14 +1467,14 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
   if (!(job->rights & required)) {
     return CALL_DENIED;
   }
-  if (((job->operation == NPFS_WRITE || job->operation == NPFS_RESIZE) && directory) ||
+  if (((write || job->operation == NPFS_RESIZE) && directory) ||
       ((job->operation == NPFS_CREATE || job->operation == NPFS_REMOVE ||
         job->operation == NPFS_RENAME) && !directory)) {
     return CALL_WRONG_TYPE;
   }
   if (mount->owned_esp) {
     /* FILE_TRANSFER writes arrive as NPFS_WRITE through this same gate. */
-    if ((job->operation == NPFS_WRITE || job->operation == NPFS_RESIZE) &&
+    if ((write || job->operation == NPFS_RESIZE) &&
         node->scope != FAT_SCOPE_OWNED) {
       return CALL_DENIED;
     }
@@ -1493,14 +1495,24 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
   }
   uint64_t cluster_bytes = (uint64_t)mount->writer.volume.sectors_per_cluster *
       mount->writer.volume.source.sector_bytes;
-  if (job->operation == NPFS_WRITE || job->operation == NPFS_RESIZE) {
-    if (job->operation == NPFS_WRITE && (job->count > FILE_TRANSFER_MAX_BYTES ||
+  if (write || job->operation == NPFS_RESIZE) {
+    if (job->operation == NPFS_APPEND &&
+        (job->count > FILE_APPEND_MAX_BYTES || job->transfer_data)) {
+      return CALL_BAD_REQUEST;
+    }
+    if (write && (job->count > FILE_TRANSFER_MAX_BYTES ||
         (job->transfer_data ? job->count > job->transfer_capacity :
          job->count > FILE_WRITE_MAX_BYTES))) {
       return CALL_BAD_REQUEST;
     }
+    if (job->operation == NPFS_APPEND) {
+      job->offset = node->record.entry.file_bytes;
+      if (!job->count) {
+        return CALL_OK;
+      }
+    }
     uint64_t target = job->offset;
-    if (job->operation == NPFS_WRITE) {
+    if (write) {
       if (job->count && (target > UINT32_MAX || job->count > UINT32_MAX - target)) {
         return CALL_FILE_TOO_LARGE;
       }
@@ -1524,11 +1536,16 @@ static enum call_status mutation_operation(struct npfs_job *job, struct fat32_mo
     if (status != CALL_OK) {
       return status;
     }
-    return format_status(mount, job->operation == NPFS_WRITE ?
+    status = format_status(mount, write ?
         fat32_mounted_write(&node->record, job->offset,
             job->transfer_data ? job->transfer_data : job->data, job->count,
             &mount->workspace) : fat32_mounted_resize(&node->record, job->offset,
             &mount->workspace));
+    if (job->operation == NPFS_APPEND) {
+      job->progress = status == CALL_OK ? job->count : 0;
+      job->count = job->progress;
+    }
+    return status;
   }
   uint64_t allocated = job->operation == NPFS_CREATE ? 3 :
       job->operation == NPFS_RENAME ? 2 : 0;
@@ -1678,6 +1695,7 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
   case NPFS_REMOVE:
   case NPFS_RENAME:
   case NPFS_WRITE:
+  case NPFS_APPEND:
   case NPFS_RESIZE:
   case NPFS_SYNC:
     return mutation_operation(job, mount);
@@ -1987,6 +2005,11 @@ enum call_status fat32_perform(struct npfs_store_context *context, struct npfs_j
   update_intervals(mount);
   if (mount->writable) {
     switch (job->operation) {
+    case NPFS_APPEND:
+      if (!job->count) {
+        break;
+      }
+      [[fallthrough]];
     case NPFS_WRITE:
       /* The engine alone consumes a committed append proof. */
       fat32_mounted_invalidate_reads(&mount->writer);

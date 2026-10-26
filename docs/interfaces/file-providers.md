@@ -47,7 +47,11 @@ empty-tail held STREAM, TRANSACTION, native PIPE and CONSOLE opens also retain
 only the rights required by the consumer. TRANSACTION needs STAGE/COMMIT for a
 writable libc stream and preserves separately held ABORT authority.
 A held FILE requires an empty remainder; CREATE without a name is unsupported,
-TRUNCATE needs WRITE, and APPEND remains consumer intent over positioned I/O.
+TRUNCATE needs WRITE. APPEND requires working `FILE_APPEND`, checked with a zero
+probe before truncation; there is no SIZE/WRITE fallback. Native creation with
+APPEND carries `DIRECTORY_CREATE_REQUIRE_APPEND`, which rejects unsupported
+backings before creating the name. Providers must honour OPEN_APPEND before
+effects or refuse it; HTTP and textfs continue refusing.
 A directory walk cannot cross the held root, follows no symlinks and resolves the
 final component once through [typed native lookup](directories.md). Native lookup,
 creation and resize retain their synchronous native wait contract; exported
@@ -103,6 +107,32 @@ at most 4,088 read bytes or 4,080 write bytes per helper call. Providers check t
 kernel-authenticated invoking rights for each operation. Clients validate counts,
 reply extents and application status; unexpected attachments are closed.
 
+### Native atomic append
+
+`file_append` invokes `FILE_APPEND` with FILE WRITE and, for exports, CALL
+transport. Its 16-byte request is a count plus a zero reserved field, followed
+by at most 4,080 bytes. The 16-byte reply gives selected EOF and confirmed count.
+EOF selection and that prefix write share the backing object's mutation owner,
+including independent opens and npfs hard links. RAM, npfs, writable FAT32 and
+capture byte producers support it. HOST refuses BAD_OPERATION; sealed/read-only
+files retain their ordinary mutation refusals. Append does not create an
+append-only grant: WRITE still permits positioned writes, resize and sync.
+
+Nonempty success confirms a contiguous `1..requested` prefix. The caller may
+submit only the known remaining suffix as a new append, which can interleave
+with other operations. A larger application write or formatted line is not one
+atomic record. Errors give no usable count; OUTCOME_UNKNOWN must not be replayed.
+Zero size validates support/authority and returns EOF without growing/touching
+the file or selecting capture byte mode. It reserves no future success.
+Capture failure/accounting and mixed byte/value failure rules remain intact.
+After a value handoff the producer has no byte EOF: a valid zero APPEND probe
+returns WRONG_TYPE without poisoning the captured value.
+
+The SDK clips a larger helper request to this bound, validates the returned
+extent/count and detects offset overflow. Successful append does not imply SYNC
+or directory persistence. Libc/shell/language adoption is tracked separately in
+the [milestone](../wip/atomic-append.md).
+
 The explicit `file_read_bulk` helper uses `FILE_READ_BULK`: offset, capacity and
 one absolute deadline, with at most 1 MiB returned as raw syscall bytes. Native
 RAM, archive and npfs FILEs support it; other native backings refuse. Exported
@@ -124,7 +154,7 @@ A receiver owner can attach a native RAM read backing to a complete, successful,
 re-readable, READ-only FILE export through `ENDPOINT_DESCRIBE_PUBLISH`. The source
 must be a raw native RAM FILE with READ|WRITE and no forwarding wrapper or
 transport. Publication validates the declared length, retains the source and
-seals it against WRITE/RESIZE atomically; a failed publication preserves the
+seals it against WRITE/APPEND/RESIZE atomically; a failed publication preserves the
 previous description and leaves the source unsealed. This is a local copy
 optimization, not a new grant to the client. Other backings keep provider READ.
 

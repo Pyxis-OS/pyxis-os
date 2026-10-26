@@ -749,6 +749,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   case NPFS_SIZE: required = FILE_RIGHTS; break;
   case NPFS_INFO: required = directory ? 0 : FILE_RIGHTS; break;
   case NPFS_WRITE:
+  case NPFS_APPEND:
   case NPFS_RESIZE: required = FILE_RIGHT_WRITE; break;
   case NPFS_SYNC: required = directory ? DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_REMOVE :
       FILE_RIGHT_WRITE; break;
@@ -807,15 +808,20 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     npfs_store_file_info(node->inode, &job->file_info);
     return CALL_OK;
   case NPFS_CAPTURE: return capture_file(context, job);
-  case NPFS_WRITE: {
-    if (job->count > FILE_WRITE_MAX_BYTES) {
+  case NPFS_WRITE:
+  case NPFS_APPEND: {
+    if (job->count > (job->operation == NPFS_APPEND ? FILE_APPEND_MAX_BYTES :
+        FILE_WRITE_MAX_BYTES)) {
       return CALL_BAD_REQUEST;
+    }
+    if (job->operation == NPFS_APPEND) {
+      job->offset = npfs_store_size(node->inode);
     }
     size_t count = 0;
     enum call_status status = npfs_store_write(context, node->inode, job->offset,
         job->data, job->count, &count);
     job->progress = count;
-    if (status == CALL_OK || job->completion) {
+    if (status == CALL_OK || job->completion || job->operation == NPFS_APPEND) {
       job->count = count;
     }
     return status;
@@ -965,6 +971,14 @@ static void complete_job(struct npfs_job *job)
         memcpy(output, &reply, sizeof(reply));
         size = sizeof(reply);
       }
+    } else if (job->operation == NPFS_APPEND) {
+      completion->progress = job->progress;
+      completion->progress_known = status != CALL_OUTCOME_UNKNOWN;
+      if (status == CALL_OK) {
+        struct file_append_reply reply = {.offset = job->offset, .written = job->progress};
+        memcpy(output, &reply, sizeof(reply));
+        size = sizeof(reply);
+      }
     } else if (job->operation == NPFS_SIZE && status == CALL_OK) {
       struct file_size_reply reply = {.size = job->offset};
       memcpy(output, &reply, sizeof(reply));
@@ -1111,6 +1125,7 @@ static void npfs_worker(void *argument)
       if (!start) {
         job->status = job->completion ? native_completion_cancel_reason(job->completion) : CALL_DENIED;
         if (job->operation == NPFS_READ || job->operation == NPFS_WRITE ||
+            job->operation == NPFS_APPEND ||
             job->operation == NPFS_READ_BULK || job->operation == NPFS_MEMORY_READ_BULK) {
           job->count = 0;
         }
@@ -1122,6 +1137,9 @@ static void npfs_worker(void *argument)
         }
       }
       if (job->status != CALL_OK) {
+        if (job->operation == NPFS_APPEND) {
+          job->count = 0;
+        }
         fat32_note_job_failure(job);
       }
       job->format_status = context.format_error;
