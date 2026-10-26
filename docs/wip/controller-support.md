@@ -6,6 +6,11 @@ The release direction is 0.0.10 or 0.0.11. Controller input can be qualified
 before llvmpipe; a working viewer or short game scene does not establish
 start-to-end game usability.
 
+Tasks 0–3 are complete; [ports #189](https://git.internal/PyxisOS/pyxis-ports/pulls/189)
+and [#1270](https://git.internal/PyxisOS/pyxis-os/pulls/1270) are merged
+(chronium, 2026-10-26). Task 4 is deferred. Native SoH play remains deferred
+until llvmpipe; the current roughly 5 fps scene does not qualify native play.
+
 ## Accepted decisions (chronium, 2026-10-26)
 
 1. Use a dedicated **DualSense Edge USB** report decoder, admitted only after
