@@ -407,9 +407,12 @@ void process_vm_memory_call(struct memory_request *memory)
   process->vm.mutation_cpu = arch_cpu_index();
   process->vm.pending = request;
   request->state = BSP_REQUEST_FORWARDED;
-  uint64_t now = arch_monotonic_ns();
-  process->vm.deadline = now > UINT64_MAX - VM_QUIESCENCE_NS ?
-    UINT64_MAX : now + VM_QUIESCENCE_NS;
+  process->vm.deadline = 0;
+  if (process->vm.roots || process->vm.borrowers) {
+    uint64_t now = arch_monotonic_ns();
+    process->vm.deadline = now > UINT64_MAX - VM_QUIESCENCE_NS ?
+      UINT64_MAX : now + VM_QUIESCENCE_NS;
+  }
   bool expired;
   for (;;) {
     bool drained = !process->vm.roots && !process->vm.borrowers;

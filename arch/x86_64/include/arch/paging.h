@@ -37,12 +37,13 @@ enum mm_result arch_space_activate(struct arch_address_space *space);
 bool arch_space_release_step(struct arch_address_space *space, size_t *budget);
 
 /* Kernel mutations are limited to its shared allocation area and the heap
- * arena; other spaces permit lower-half mutations. Calls are BSP-only, IF=0,
- * with two exceptions on any CPU: heap growth maps and unmaps unpublished arena
- * pages, and a task's private memory operations change its own active space.
- * Walks use the calling CPU's own scratch slots. Kernel ranges in use by
- * another CPU must not be unmapped, remapped or protected. There are no remote
- * TLB shootdowns; task ownership transfers flush CR3 locally.
+ * arena; other spaces permit lower-half mutations. IF=0. General kernel ranges
+ * remain BSP-owned; any-CPU heap growth owns unpublished arena pages. A private
+ * space may be mutated on its recorded exclusive owner CPU after process root
+ * and borrower drainage, with kernel CR3 active. Walks use local scratch slots.
+ * Kernel ranges still used by another CPU must not be unmapped or protected;
+ * the separate quiescent kernel-flush protocol does not permit live mutation.
+ * Private root departure/reentry flushes CR3 locally, without a shootdown.
  * Callers manage virtual reservations; supplied data frames remain caller-owned.
  * Empty tables are retained for reuse until their space is destroyed;
  * failure may retain zeroed tables but never installs a partial data mapping. */

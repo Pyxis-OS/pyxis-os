@@ -9,6 +9,7 @@ struct process;
 struct task;
 struct bsp_request;
 struct memory_request;
+struct task_wait;
 
 enum process_vm_phase {
   PROCESS_VM_OPEN,

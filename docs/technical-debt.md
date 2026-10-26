@@ -388,17 +388,20 @@ preserve mapping-incarnation withdrawal and BSP VM ownership. See [private memor
 
 ## BSP-only allocation and VM mutation
 
-Private memory and DISPLAY mapping mutations run on BSP under process VM
-admission; pending drainage uses a worker without blocking the common executor.
-Other serial services and shared kernel range reuse still need their own handoff
-and invalidation contracts. The owner accepts the remaining BSP MEMORY round
-trip (native A/B averages about 1.6–4.2 microseconds added per mutation);
-see [task 4 qualification](development/experiments/threads-task4/README.md).
-Keep the generic zero-root/borrower fast path; no task-count bypass. BSP
-ownership itself is being removed (chronium, 2026-10-22): a kernel milestone
-after the work in flight replaces it with per-address-space mutation, per-CPU
-frame allocation and IPI shootdown, keeping acknowledged root departure and
-guaranteed cleanup storage. See the [milestone index](wip/boot-sdk-ports.md#planned-next-kernel-milestone).
+Private MEMORY now executes on the calling CPU under process VM ownership;
+DISPLAY/thread-context clients, launch preparation, general kernel VM and final
+reclamation still require the BSP. Sibling roots/borrowers still drain for every
+mutation, and large eager/guarded RELEASE remains one interrupts-off step on
+its caller CPU. Removing the dispatcher does not prove PMM contention or solve
+shared range reuse. Task 2's first step is to measure the shared PMM path and
+bring chronium a decision whether to use per-CPU caches or another frame path;
+no cache budgets, remote-free policy or free-memory accounting change is assumed.
+Later milestone tasks own invalidation, preparation, cleanup and remaining VM
+clients before JIT starts. See the [milestone index](wip/boot-sdk-ports.md#planned-next-kernel-milestone)
+and [private memory](kernel/memory.md#execution). The old native BSP round-trip
+comparison (about 1.6–4.2 µs added) is historical, not a gain measured for this
+change; [task 4 qualification](development/experiments/threads-task4/README.md).
+Keep the zero-root/borrower proof; no task-count bypass.
 
 The accepted IPC cost disproportionately affects short messages. Native
 [#704 qualification](development/experiments/ipc-copy-leases/README.md#owner-native-ab)

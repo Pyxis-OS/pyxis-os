@@ -82,10 +82,12 @@ Native thread stack and FS contexts use guarded identities. A context pin
 exclusively retains the whole usable suffix until native retirement; a pinned
 reservation cannot be released and returns BUSY. Stack and FS identities must
 be distinct. These pins hold no short mapping/activity lease and do not block
-unrelated VM mutation. BSP acquires pins under the drained mutation token and
-releases them after the task has left its root/stack and its continuations have
+unrelated VM mutation. BSP thread-context clients acquire pins under the common drained mutation token
+and release them after the task has left its root/stack and its continuations have
 been reclaimed, before publishing native completion. Final process teardown
-requires every context pin to have been released.
+requires every context pin to have been released. Pin release is an atomic final
+record access: after it, an AP mutation may free that record. Reservation and
+address-wait identities use synchronized, non-reused global counters.
 
 There is no resize, fixed-address request, permission change,
 shared memory or per-region capability object. The later userspace allocator can
@@ -106,34 +108,38 @@ backing burns assigned identities rather than reusing them. Current metadata cos
 one 64-bit entry per privately backed page, including zero entries on read-only
 pages (8 bytes/4096 bytes, about 0.2%, plus the allocation header). A derived
 registration count skips bucket scans when no waits exist; it does not pin mappings.
-BSP mutation drains active roots and short borrowers, so registration holds neither
+The exclusive mutation drains active roots and short borrowers, so registration holds neither
 through sleep. A successful unmap returns BAD_BUFFER to the detached waiters;
 a failed mutation leaves registrations intact. See [address parking](../interfaces/threads.md#address-parking).
 
 ## Execution
 
-All MEMORY operations capture their request, then park outside the private root
-and kernel entry stack. BSP executes them under the process VM mutation
-transaction shared with DISPLAY mapping changes. Dispatch reserves root activity
-before CR3 activation; departure acknowledges it after loading the kernel root.
-New admission closes during mutation, while previously admitted continuations
-can finish bounded copies. Only active roots and mapping borrowers must drain;
-a blocked staged I/O call holds no mapping lease.
+All MEMORY operations capture their request in retained per-task storage, then
+switch to a kernel-root continuation in that same task on its calling CPU.
+The permanent scheduler stack loads kernel CR3 and acknowledges departure before
+running the continuation. Its kernel stack remains owned and mapped; no new
+worker, per-call request allocation or BSP queue publication is involved.
+Dispatch distinguishes this mode from an admitted syscall that still uses its
+private root, and preserves FP/TLS state on every switch in either mode.
 
-An already quiescent process is serviced in the BSP executor. Otherwise a
-separate VM worker scans pending processes without blocking that executor.
-An ALLOCATE larger than one step (256 pages, tuning) always goes to the VM
-worker, so the executor keeps forwarding other requests, including PCM
-writes, while it runs. Sparse commit/decommit and sparse identity release also
-use that worker, yielding between bounded page/extent steps with the transaction
-retained. Eager guarded identity release stays inline when already quiescent.
-RESERVE itself stays independent of the unused virtual span.
+The common process VM transaction still serializes MEMORY with BSP DISPLAY and
+thread-context changes. New root admission closes, previously admitted syscall
+continuations may finish bounded copies, and roots/borrowers must drain before
+effects. A blocked staged I/O call holds no mapping lease. The mutator parks on
+its own joined waiter while drainage is pending; departures notify it directly.
+Independent processes may mutate on different CPUs. Siblings still quiesce;
+this slice adds no live-root mutation or targeted TLB shootdown.
+
+Large eager backing and sparse commit/decommit/release yield between bounded
+page/extent steps while retaining exclusive ownership. They execute on the
+caller CPU, not the BSP VM worker. That worker remains for DISPLAY and native
+thread-context clients. RESERVE stays independent of the unused virtual span.
 The current one-second quiescence budget is an implementation choice, not an ABI
 operation deadline. Failure returns BUSY before effects and preserves mappings
 and backing. Competing mutation also returns BUSY. Final retirement requires
 closed admission and zero root/borrow/request activity before reclamation.
 
-BSP revalidates allocation/reservation output before effects, then admits only
+The exclusive owner revalidates allocation/reservation output before effects, then admits only
 the mutator's root until its final reply copy and cleanup finish. Allocation adds a disjoint
 region; release touches no user memory after unmapping its captured request.
 Stop/group termination still takes effect after the synchronous call unwinds,
@@ -141,8 +147,8 @@ including a stepped allocation, which first completes or unwinds.
 Context pins protect registered backing independently of root/copy drainage.
 
 The heap, physical allocator and per-CPU scratch mappings retain their
-[SMP contracts](smp.md#memory-and-output-boundaries). BSP zeroes frames using its
-scratch slots; failed allocation unwinds partial backing before NO_MEMORY.
+[SMP contracts](smp.md#memory-and-output-boundaries). The caller CPU zeroes frames
+using its local scratch slots; failed allocation unwinds partial backing before NO_MEMORY.
 The VM owns one full guarded reservation and one eager backed suffix. Whole
 release and destruction free only that suffix; failure unmaps/frees only the
 provisional backed prefix, leaving the full reservation bare for unwind.
@@ -151,16 +157,16 @@ installs a run per visit; checking that a reservation is bare skips absent
 tables and reads each present leaf table once.
 
 ALLOCATE larger than 256 pages backs its region in steps of at most 256 pages
-with interrupts off: allocate, zero and map. Between steps the VM worker
-enables interrupts and yields to runnable work. A smaller ALLOCATE, and its
-unwind after a failure, completes in one interrupts-off step and never yields,
-so the executor can run it inline. The process VM transaction stays
-exclusive throughout: admission is closed, the mutator is parked and sibling
-threads are held, so no RELEASE, DISPLAY change or teardown of the same process
+with interrupts off: allocate, zero and map. Between steps its kernel-root
+continuation services interrupts and yields to runnable work on that CPU. A
+smaller ALLOCATE and its unwind complete in one interrupts-off step. The process
+VM transaction stays exclusive throughout: admission is closed, the mutator
+runs outside the private root and sibling threads are held, so no RELEASE, DISPLAY change or teardown of the same process
 can interleave. The result stays all-or-nothing. On failure, the mapped prefix
 is unmapped and freed from its end in the same bounded steps before NO_MEMORY
 is returned, leaving the reservation bare for release. RELEASE still frees its
-whole region in one step.
+whole region in one interrupts-off step on the calling CPU; large eager and
+guarded releases remain a latency tail. This task does not claim to bound them.
 
 Final destruction of a retired space releases backing, range records and page
 tables in bounded steps on the [BSP reaper](smp.md#scheduling-and-ownership).

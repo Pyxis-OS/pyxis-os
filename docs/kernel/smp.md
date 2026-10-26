@@ -4,7 +4,8 @@
 `CPUS` is the total logical CPU count and defaults to one. `THREADS` defaults
 to one and must divide `CPUS`; `make run CPUS=8 THREADS=2` creates four cores
 with two threads each. Both settings also apply to debug and USB launches. With multiple CPUs,
-CPU 0 (the BSP) services allocation and cleanup. Boot init creates the configured
+CPU 0 (the BSP) services launch/context preparation and final cleanup; private
+MEMORY operations execute on their calling CPUs. Boot init creates the configured
 [spaces](../userland/init.md) independently of the CPU count. User tasks run on
 any CPU their space allows, including the BSP, which also runs the kernel
 workers. A single-CPU boot runs everything on the BSP. Placement and balancing
@@ -566,9 +567,11 @@ caller.
 
 ## Memory and output boundaries
 
-VM metadata and process page-table mutation are BSP-owned with IF=0. MEMORY and
-DISPLAY mapping changes use [process quiescence](memory.md#execution); the caller
-leaves its root before the transaction begins. The general kernel VM area still
+Private VM metadata and page-table mutation have one process owner, with IF=0
+per step. MEMORY runs in a kernel-root continuation on its caller CPU; DISPLAY
+and thread-context changes remain BSP clients of the same gate. All use
+[process quiescence](memory.md#execution): the caller leaves its root before the
+transaction begins. The general kernel VM area still
 requires separate quiescence and acknowledged invalidation for reused ranges.
 A BSP kernel task must disable interrupts around mutation; pinning alone does
 not prevent reentry. RAM-file backing and the layers below remain usable on the
@@ -629,10 +632,11 @@ user copying or a context switch.
 
 No caller of `kmalloc()` or `pmm_alloc()` may hold the queue or pressure lock.
 
-User-buffer checks are a narrow exception to BSP-only queries: the executing
-CPU can inspect its active private root through recursive mappings, with IF=0
+Active-root user-buffer checks remain separate: the executing CPU can inspect its active private root through recursive mappings, with IF=0
 and stable user mappings. They use no scratch slots or VM metadata.
-General `vm_query()` and page-table mutation remain BSP-only.
+General queries and private mutation require a stable exclusive owner; MEMORY
+uses its drained process token on the calling CPU. Unpublished preparation,
+retirement, DISPLAY/thread clients and general kernel VM remain BSP-owned.
 
 Private spaces are built before publication. Dispatch reserves root activity
 under the process VM guard before CR3 activation. Scheduler departure reloads the
@@ -640,8 +644,11 @@ kernel root on its permanent stack before acknowledging the reservation. Short
 copy leases cannot cross a wait/departure. MEMORY and DISPLAY mapping mutations
 close admission, permit old syscall continuations to drain, and require zero
 roots/borrowers before effects. Mutator-only reply reentry remains closed to
-ordinary dispatch until its final copy/cleanup. Pending drainage is serviced
-without blocking the BSP executor; retirement reclaims only drained activity.
+ordinary dispatch until its final copy/cleanup. MEMORY drainage notifies its
+caller directly; BSP clients retain the pending-list worker. Neither blocks the
+BSP executor. Retirement reclaims only drained activity. Kernel-root user
+continuations retain their task, CPU and FP/TLS ownership; they reserve no
+private-root activity while executing or parked in that mode.
 Native siblings share the process address space under these rules; an ordinary
 launch still has one task. The kernel TLB-flush IPI is a separate contract.
 

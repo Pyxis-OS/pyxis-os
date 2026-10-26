@@ -25,11 +25,12 @@ struct vm_space *vm_kernel_space(void);
 bool vm_kernel_flush_remote(void);
 /* Requires an initialized heap. New spaces share kernel mappings and start
  * with an empty user area. Failure sets *result to NULL. Allocation, queries
- * and mutation are BSP-only, IF=0, and asserted for the kernel space, whose
- * reused ranges have no remote invalidation; no VM operations from fault
- * handlers. Published process mapping changes require its BSP mutation token
- * after acknowledged root departure and borrower drainage. Unpublished loading
- * and drained retirement remain exclusively owned; resumption reloads CR3. */
+ * and mutation require IF=0 and exclusive ownership; no VM operations from
+ * fault handlers. The kernel space still asserts BSP ownership for its reused
+ * ranges. Published private changes require the process mutation token after
+ * acknowledged root departure and borrower drainage, on its recorded owner CPU.
+ * Unpublished loading and drained retirement remain BSP-owned in this slice;
+ * resumption reloads CR3. No generic remote/live-root mutation is authorized. */
 enum mm_result vm_space_create(struct vm_space **result);
 /* Private activation requires a process root reservation. Always flushes that
  * CPU's TLB, including shared kernel translations; acknowledge departure only
@@ -96,7 +97,7 @@ enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes);
 /* Private sparse reservations own only committed extents. Begin validates a
  * whole reservation base and a nonzero page-aligned contained subrange; RELEASE
  * requires offset zero and the full span. Begin clears its output on failure.
- * BSP, IF=0: the caller retains exclusive drained ownership until step completes;
+ * IF=0 on the private-space owner CPU: retain drained ownership until completion;
  * finish then returns status and frees the operation. Each step
  * handles at most budget backing pages or extent records, with <=256-page
  * token bookkeeping per extent. Withdrawal retains its existing global waiter

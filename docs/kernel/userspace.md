@@ -378,7 +378,9 @@ them on kernel entry, so syscall execution is not preempted on its own CPU and
 a long syscall delays scheduling there. Endpoint CALL and RECEIVE explicitly
 park the task while waiting; the scheduler resumes its private kernel stack and
 address space before the handler accesses user memory again. Memory and display
-calls capture inputs and leave their private root before BSP mapping changes.
+calls capture inputs and leave their private root before mapping changes.
+MEMORY executes on its calling CPU in a kernel-root continuation; DISPLAY stays
+a BSP client of the common ownership gate.
 The process transaction drains sibling roots and short copy leases, keeping
 admission closed through the mutator's final reply. Separate BSP
 kernel tasks run with interrupts enabled and can be preempted. Other CPUs
@@ -386,9 +388,9 @@ continue running. SYSCALL needs an explicit kernel-stack switch; unlike an inter
 does not load the stack from the TSS. Kernel GS identifies the current CPU,
 with SWAPGS separating it from the user GS base on entry and return.
 
-Task switches preserve general registers, x87/SSE state, segment selectors and
-FS/GS bases. AVX and user FS/GS-base instructions are disabled; userspace must
-stay within that supported feature set. Kernel code must not use FP/SIMD.
+Task switches preserve general registers, the selected [FP/XSAVE state](xsave-avx.md),
+segment selectors and FS/GS bases, including during kernel-root MEMORY work.
+User FS/GS-base instructions remain disabled. Kernel code must not use FP/SIMD.
 
 Exit and ordinary fatal user exceptions abandon the task's entry stack and
 resume its scheduler. Only after switching to the permanent stack and kernel
