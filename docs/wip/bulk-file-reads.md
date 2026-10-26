@@ -1,7 +1,8 @@
 # Bounded bulk FILE reads through providers
 
-Accepted by chronium (2026-10-25). Implementation is assigned; ABI-changing
-PRs remain drafts until the 0.0.9 tag is published.
+Accepted by chronium (2026-10-25). The merge gate was lifted after the
+0.0.9 release (`c02a2bfa`, 2026-10-26). New consumers require a kernel
+providing the bulk operations; released small-read interfaces stay intact.
 
 ## Problem and release boundary
 
@@ -12,16 +13,11 @@ image puts `http-work` on **RAM-backed npfs**. Each small archive read crosses
 httpfs, native completion admission and the npfs worker; physical RAM does not
 make that file a native RAM FILE eligible for the existing export shortcut.
 
-Chronium's release constraint: **0.0.9 ships Monday with ABI 0.0.8 unchanged**.
-A bulk FILE operation and its transport/collection support add public ABI.
-Implementation may proceed on branches now; **merge only after 0.0.9 is tagged**,
-on the next development ABI, with packages using
-that interface declaring the new ABI. Keeping old operations intact can retain
-support for existing 0.0.8 packages; it does not make new consumers compatible
-with an unmodified 0.0.8 kernel. No renumbering, compatibility shim or silent
-small-read fallback is proposed. Internal chunk alignment could change without
-ABI work, but would retain the small-request pipeline and is not this proposal.
-See the [decided ABI model](pkg-upgrade.md#decided).
+The public operations are additive development changes after the 0.0.9 release.
+They preserve the released ordinary operations, but a new consumer cannot run
+on an unmodified 0.0.8 or 0.0.9 kernel. Development builds use exact revision
+provenance under the [decided ABI model](pkg-upgrade.md#decided); there is no
+development ABI number, compatibility shim or silent small-read fallback.
 
 ## Where the cap comes from
 
@@ -161,13 +157,13 @@ backing work before releasing the borrowed data storage.
 
 ## Implementation sequence
 
-- [x] Kernel/ABI/SDK foundation (draft; merge gated): functional typed bulk calls/replies and receipt
+- [x] Kernel/ABI/SDK foundation: functional typed bulk calls/replies and receipt
   collection, charged ownership, native backends and bounded npfs buffers/runs.
 - [ ] Userland/libpyxis and httpfs: provider receive/reply and backing completion
   collection, including forwarded grants and joined cleanup. Dependency PRs
   precede parent pins; no placeholder interfaces or compatibility readers.
 - [ ] Pkg consumer and qualification, then fold implemented behavior into FILE,
-  endpoint/completion and provider references. No ABI-changing PR merges before the 0.0.9 tag.
+  endpoint/completion and provider references.
 
 ## Qualification
 
@@ -214,6 +210,5 @@ qualification. Private sources and logs remain under
 
 Kernel and focused SDK/runtime builds use the existing Clang 23.1.3 builder
 `pyxis-llvm23.1.3-3d69e83`. The ABI textual check preserves every released 0.0.8
-header line. This additive interface still cannot merge before the 0.0.9 tag;
-new consumers require a kernel providing bulk reads. No compiler rebuild,
+header line. New consumers require a kernel providing bulk reads. No compiler rebuild,
 new CI workflow or default-boot diagnostic is added.

@@ -23,7 +23,6 @@
 #define FILE_OUTPUT_STATUS UINT64_C(8)
 #define FILE_TRANSFER UINT64_C(9)
 #define FILE_TRANSFER_MAX_BYTES (1024u * 1024u)
-/* Draft next-development ABI; not part of the 0.0.8 release interface. */
 #define FILE_READ_BULK UINT64_C(10)
 #define FILE_READ_BULK_MAX_BYTES (1024u * 1024u)
 

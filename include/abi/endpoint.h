@@ -13,7 +13,6 @@
 #define ENDPOINT_RIGHT_COLLECT (UINT64_C(1) << 1)
 #define ENDPOINT_CALL UINT64_C(1)
 #define ENDPOINT_SEND UINT64_C(2)
-/* Draft next-development ABI; not part of the 0.0.8 release interface. */
 #define ENDPOINT_CALL_BULK UINT64_C(3)
 #define ENDPOINT_RECEIVE UINT64_C(1)
 #define ENDPOINT_RETIRE_ACK UINT64_C(3)
