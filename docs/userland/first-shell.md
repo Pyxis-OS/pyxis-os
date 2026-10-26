@@ -93,7 +93,7 @@ applications, without general reader/output ownership arbitration. Saved history
 Up/Down recall and Ctrl+R search are implemented ([shell](shell.md)); only
 long-line viewports remain deferred. On a single CPU, Caelum logs share the TTY
 and can disrupt editing. Runtime tradeoffs, including non-atomic stdio append,
-are tracked in [technical debt](../technical-debt.md).
+are tracked in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4).
 
 Shell exit leaves its space, tab, terminal contents and shared roots alive;
 there is no automatic restart. Persistent storage uses

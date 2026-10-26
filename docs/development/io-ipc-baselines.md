@@ -377,13 +377,13 @@ records receipt reuse, RAM/HOST profiling and the HOST publication correction.
 Additional resolution work and the final combined matrix were deferred; the
 correction-specific reruns do not replace that matrix.
 The attribution/coverage gaps and revisit points are retained in
-[technical debt](../technical-debt.md#io-baseline-attribution-and-coverage):
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1304):
 
 - **Endpoint receipt reclamation — completed:** logical slot reuse is now
   separate from backing destruction, preserving BSP ownership and receipt,
   attachment and delivery lifetimes. The agreed 256-message IPC and 1 MiB HTTP
   reruns passed. The remaining live-work limit is in
-  [technical debt](../technical-debt.md#endpoint-cancellation-and-capacity).
+  [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1445).
 - **RAM growth attribution — superseded:** growing RAM writes no longer use BSP
   requests; see [RAM FILE profiling](io-reliability-attribution.md#ram-file-profiling).
 - **Host FILE attribution — instrumented limits:** HOST profiling separates guest
@@ -396,8 +396,8 @@ The attribution/coverage gaps and revisit points are retained in
   These are needed before making fine-grained performance or capacity claims.
 
 Benchmark-wide timeouts also depend on existing
-[startup/wait limitations](../technical-debt.md#service-startup-failure-before-publication)
-and [synchronous FILE helper limits](../technical-debt.md#provider-calls-through-synchronous-file-helpers).
+[startup/wait limitations](https://git.internal/PyxisOS/pyxis-os/issues/1446)
+and [synchronous FILE helper limits](https://git.internal/PyxisOS/pyxis-os/issues/1447).
 IPC CALL deadlines do not bound RECEIVE, pipe or process waits. The HTTP fetch's
 thirty-second bound does not bound ordinary OPEN/FILE queueing. Capability
 attachment cost, cross-space contention, mixed-workload fairness, CPU accounting

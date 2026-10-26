@@ -210,12 +210,12 @@ attempt a refusal test without an asserted line. Private results:
 final packet. The key does not assert the AX200 hardware-rfkill line in these
 Pyxis runs; a software/EC hotkey is a possible explanation, not an identified
 implementation. No physical radio switch is known. Owner disposition: hardware
-rfkill is not testable here; keep the [qualification debt](../../technical-debt.md#ax200-hardware-rfkill-qualification).
+rfkill is not testable here; keep the [qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1282).
 Live assertion, scan refusal and release/recovery remain source-inspected,
 not natively qualified. BIOS device absence or Linux software rfkill is not a
 substitute. Overflow, malformed firmware events and allocation failure are also
 source-inspected, not qualified by injected faults. Native idle/worker utilization
-remains [technical debt](../../technical-debt.md#wi-fi-idleworker-cost-baseline).
+remains [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1288).
 
 The final image remains staged at the owner's request. Its packet retains the
 byte-for-byte backup of the prior f68 selection; root payloads, EFI and other

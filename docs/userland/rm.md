@@ -68,4 +68,4 @@ handle, and a name replaced after its directory was emptied is removed in its
 place if it is empty. See [directory removal](../interfaces/directories.md#removal)
 for the per-name contract and [filesystem mutations](../interfaces/filesystem-mutations.md)
 for durability. The accepted limits are in
-[technical debt](../technical-debt.md#recursive-rm-limits).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1474).

@@ -129,7 +129,7 @@ About 82 MiB/s HTTP is close to the current ThinkPad native TCP receive referenc
 of 85 MiB/s (send 70.5 MiB/s, 2026-10-09). Those references are not contracts or
 a simultaneous TCP comparison. Track the HTTP/TCP gap on relevant changes and
 HTTP-heavy workloads, including larger bodies and POST; one 1 MiB GET does not
-qualify those workloads. Keep the [throughput revisit](../../technical-debt.md#http-provider-throughput).
+qualify those workloads. Keep the [throughput revisit](https://git.internal/PyxisOS/pyxis-os/issues/1451).
 
 ## Functional checks
 

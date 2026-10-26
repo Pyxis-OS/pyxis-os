@@ -102,7 +102,7 @@ and type `update`. Restore the target fixture before each measured run.
 The owner accepted quiet progress and WRITE-only Caelum-console delegation to
 the trusted installer. This follow-up changes reporting/Review, not disk I/O,
 consent, verification or installed configuration activation. The general
-userspace log-writer alternative is [technical debt](../../../technical-debt.md#userspace-kernel-log-writer).
+userspace log-writer alternative is [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1487).
 
 Functional baseline: parent `c71f62e8`, userland `e3ba6e3`, successful main CI
 image (Actions API run 2525). The first Limine entry was changed to the existing

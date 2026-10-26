@@ -153,7 +153,7 @@ the last completed scan, not each raw write. External mutation remains
 unsupported, and trusted kernel raw clients must preserve metadata or use the
 same exclusion/rescan ordering. GUIDs, attributes and names grant no capabilities
 or filesystem policy. See the
-[accepted discovery limits](../technical-debt.md#gpt-snapshot-and-profile-limits).
+[accepted discovery limits](https://git.internal/PyxisOS/pyxis-os/issues/1414).
 
 ## Validation
 

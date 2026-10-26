@@ -41,7 +41,7 @@ needed, see [application ports](application-ports.md)), explicit
 [file transfer through the remote terminal](../userland/remote-terminal.md#explicit-file-transfer)
 (drag-and-drop upload included),
 and the [Lua build runtime](../userland/lua.md) for the owner's build scripts
-(its limits are in [technical debt](../technical-debt.md#lua-build-runtime-limits)).
+(its limits are in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1471)).
 The build tool is the owner's own code in the JVM project; Pyxis supplies only
 the runtime.
 

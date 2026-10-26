@@ -35,4 +35,4 @@ was comfortable at 70–80% on headphones and 70% on the speaker (80% was loud).
 
 This supports the staged stop fix without proving the analog cause. Rapid
 restart overlapping either settle was not separately reported; retain it in the
-[next native regression](../../../technical-debt.md#hd-audio-volume-native-regression).
+[next native regression](https://git.internal/PyxisOS/pyxis-os/issues/1389).

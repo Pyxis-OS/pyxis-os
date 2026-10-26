@@ -127,4 +127,4 @@ On the ThinkPad with a PXE build of this branch, from a Development tab:
 - QEMU only; no native run yet.
 - The checks are interactive runs with scratch scripts, not a test suite.
 - Lua 5.1's remaining standard-library gaps and luv's unsupported families are
-  listed in [technical debt](../../../technical-debt.md#lua-51-and-luv-limits).
+  listed in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1484).

@@ -171,7 +171,7 @@ bytes in flight and gaps. It reads Ethernet and Linux cooked captures.
 
 ## Limits
 
-[TCP throughput limits](../technical-debt.md#tcp-throughput-limits) records the
+[TCP throughput limits](https://git.internal/PyxisOS/pyxis-os/issues/1437) records the
 remaining per-segment and per-call send cost, the retransmission-timeout stall,
 the consumer-bound RAM-file receive and the clock reads per packet. Path-MTU
 discovery, window scaling, SACK and IPv6 were out of scope.

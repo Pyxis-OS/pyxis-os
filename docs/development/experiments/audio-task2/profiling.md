@@ -216,7 +216,7 @@ rest on the capture and frozen state, not on a matching live line.
 
 **Sustained eight-session playback remains unqualified in nested QEMU.** The owner
 accepted task 2 delivery with this limitation on 2026-10-09; see
-[technical debt](../../../technical-debt.md#hd-audio-sustained-eight-session-playback).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1391).
 Batching stays deferred. Native closure was subsequently recorded in the
 [engine reference](../../../devices/hda.md#qualification-and-remaining-scope).
 The likely trigger was a transient nested-host scheduling/VM-exit delay rather than

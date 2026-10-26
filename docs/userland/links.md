@@ -78,7 +78,7 @@ Userland libc gained the functions Links calls:
   [identity/time](../interfaces/file-metadata.md), which this port has not adopted;
 - `lseek`, `fsync`, `unlink` and `strcspn`.
 
-The [libc metadata limits](../technical-debt.md#narrow-libc-file-metadata)
+The [libc metadata limits](https://git.internal/PyxisOS/pyxis-os/issues/1376)
 record what those functions cannot report.
 
 ## Limits
@@ -124,7 +124,7 @@ record what those functions cannot report.
 - **Screen size:** fixed, with no resize notification.
 - **Programs:** Links starts no other programs.
 
-See [technical debt](../technical-debt.md#links-port-limits) for revisit points.
+See [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1410) for revisit points.
 
 ## Decisions
 

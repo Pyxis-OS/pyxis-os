@@ -289,7 +289,7 @@ bytes. Saving retains the existing checked write/sync path.
 
 Swap, backup/writebackup and patchmode are unavailable; defaults disable them.
 Persistent undo (`:wundo`, `'undofile'`) works: undo files are created with
-libc's [0666 creation mode](../technical-debt.md#public-open-creation-mode)
+libc's [0666 creation mode](https://git.internal/PyxisOS/pyxis-os/issues/1369)
 rather than the edited file's permission bits. Names
 longer than 255 bytes fail with "name too long" on `home://` installed volumes
 and `host://`, and a `host://` symbolic link is never followed

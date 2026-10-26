@@ -341,4 +341,4 @@ qualification from the unrun native and complete-profile work.
 
 The port retains general upstream I/O behavior: persistent read errors can loop,
 and include-mode final buffer-drop errors can be unreported. See the
-[recorded limits](../technical-debt.md#hexyl-upstream-io-errors).
+[recorded limits](https://git.internal/PyxisOS/pyxis-os/issues/1405).

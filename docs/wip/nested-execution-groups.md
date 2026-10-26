@@ -39,7 +39,7 @@ required route for ordinary descendant execution. The
 could later shrink once mux creates contained pane subgroups itself. Surviving
 private `job_work` cleanup belongs with [Continuum](spaces.md#asterism)
 (owner, 2026-10-12), revisiting the
-[caller-failure RAM retention limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+[caller-failure RAM retention limit](https://git.internal/PyxisOS/pyxis-os/issues/1329).
 
 ## Consumers waiting on it
 

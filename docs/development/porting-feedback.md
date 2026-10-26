@@ -23,7 +23,7 @@ do not change [AGENTS.md](../../AGENTS.md) or authorize implementation.
 - The line-input cost measured in uniq was addressed in libc by
   [input read-ahead](../userland/stdio.md#input-read-ahead), with an explicit
   descriptor/stream contract rather than changes to each line-oriented port.
-  [Console line input](../technical-debt.md#console-line-input) remains per byte.
+  [Console line input](https://git.internal/PyxisOS/pyxis-os/issues/1371) remains per byte.
 - Sticky-error handling in fgets, deliberately outside the uniq task, was fixed
   in the same libc milestone.
 - Port output lists could drift when a recipe gained another executable; the Make

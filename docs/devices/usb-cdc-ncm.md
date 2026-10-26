@@ -82,7 +82,7 @@ counted per stall and per transport; the transport's first stall and resume
 log at info, later ones at trace, since overload can repeat them many times a
 second. A stalled network worker therefore costs
 received frames, not the adapter's FIFO. States in which Caelum stops servicing
-the USB controller altogether remain [technical debt](../technical-debt.md#usb-ncm-undrained-data-path).
+the USB controller altogether remain [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1290).
 See the [attribution record](../development/experiments/usb-cdc-ncm/rx-backpressure.md).
 
 A logical NIC keeps its MAC, ID and binding. Recovery reuses that NIC; a bound
@@ -154,7 +154,7 @@ notification bytes and DHCP wire records are absent from the submitted driver.
 ## Limits and qualification
 
 Normal UDP log, Remote and xfer use the ordinary stack. Fatal USB UDP and
-stopped-kernel network GDB are unavailable; see [emergency transport debt](../technical-debt.md#usb-network-emergency-transport).
+stopped-kernel network GDB are unavailable; see [emergency transport debt](https://git.internal/PyxisOS/pyxis-os/issues/1281).
 Configuration policy and budgets are not ABI. No raw USB networking authority is
 exposed to userspace. The [experiment record](../development/experiments/usb-cdc-ncm/README.md)
 distinguishes the before-code baseline, isolated root-gadget checks and the

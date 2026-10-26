@@ -96,7 +96,7 @@ core archive kept their programs in `bin/REVISION` on a `bin` volume; once
 Update has published a new revision it removes every such directory except the
 previous revision's, which that boot entry still binds, or none when the
 previous revision is unknown. The emptied `bin` volume stays
-([technical debt](../technical-debt.md#empty-bin-volume)).
+([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1426)).
 
 ## Limits
 
@@ -104,9 +104,9 @@ previous revision is unknown. The emptied `bin` volume stays
   user's `home://` relates to it is for the
   [users work](../wip/users-and-authority.md).
 - RAM volumes are carved from one private directory boot init receives; no ABI
-  creates them ([technical debt](../technical-debt.md#ram-volumes)).
+  creates them ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1424)).
 - Installations from before boot init, such as 0.0.2, are rebuilt on Update
-  ([technical debt](../technical-debt.md#updates-from-before-boot-init)).
+  ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1423)).
 
 ## Qualification
 

@@ -127,7 +127,7 @@ has only been qualified in QEMU. There is no explicit USB 2 connect debounce
 before reset or startup link-settling wait when no port-power write occurred,
 including on controllers without port power control. A physical USB 3 link can
 still be initializing after controller reset and miss reservation for this boot.
-See [qualification limits](../technical-debt.md#xhci-hardware-profile-and-runtime-retention).
+See [qualification limits](https://git.internal/PyxisOS/pyxis-os/issues/1464).
 
 USB 2 root reset completion is followed by at least 10 ms of recovery before
 addressing. Address Device completion is followed by at least 2 ms before the

@@ -62,7 +62,7 @@ Recorded owner direction, without authorizing implementation:
 Startup describes the immutable initial granted set. Later picker/optional
 delivery requires an explicit broker result a program can inspect. Signing,
 identity authentication, consent UI and runtime revocation remain undesigned. The
-interim delivery policy is [technical debt](../technical-debt.md#temporary-bundle-grant-policy).
+interim delivery policy is [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1480).
 
 ## ZIP profile
 

@@ -1,7 +1,7 @@
 # Completed milestones
 
 Completed milestones keep no WIP document: their behavior lives in the linked
-references, and open native checks live in [technical debt](../technical-debt.md).
+references, and open native checks live in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4).
 Entries are one short paragraph each, in alphabetical order. Add an entry only
 when a milestone completes, as the [milestone index](boot-sdk-ports.md) says.
 
@@ -38,7 +38,7 @@ qualified on vela.
 [Clipboard](../interfaces/clipboard.md), 2026-10-09: per-space and shared stores with
 terminal and multiplexer Copy and Paste (#619) and the SDL2 text adapter (#644),
 with the [first-delivery qualification](../development/clipboard-first-delivery-qualification.md)
-and [limits](../technical-debt.md#initial-clipboard-delivery-limits). Typed objects
+and [limits](https://git.internal/PyxisOS/pyxis-os/issues/1395). Typed objects
 and converters stay in [later directions](later-os-directions.md#clipboard-typed-objects-and-converters).
 
 [Clock reads](../interfaces/clocks.md), 2026-10-22: interrupt-cached observation
@@ -51,7 +51,7 @@ command capabilities, live package-command views and common shell/Lua/libuv/edit
 lookup with retained selections. Native build chains remain separately gated.
 
 [Deadline sleep wakeups](../kernel/timekeeping.md), 2026-10-08: per-CPU one-shot
-LAPIC deadlines, [checked natively](../technical-debt.md#sleep-wake-granularity).
+LAPIC deadlines, [checked natively](https://git.internal/PyxisOS/pyxis-os/issues/1379).
 
 [Display drivers and resizing](../kernel/display.md), 2026-10-07.
 
@@ -65,11 +65,11 @@ passed extraction, staging, verification and cleanup on the 32 GB SanDisk.
 [FAT32 volumes](../devices/fat32-volumes.md), 2026-10-13: shared inspection/raw-write
 engine, native RO/RW mounts and declared trusted workflow (#740, #747, #755, #764,
 #775). [Experiment records](../devices/fat32-volumes.md#qualification-and-remaining-limits)
-remain; [hardware qualification](../technical-debt.md#fat32-geometry-and-hardware-qualification),
+remain; [hardware qualification](https://git.internal/PyxisOS/pyxis-os/issues/1418),
 including the owner-present RO ESP check, is pending.
 
 [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
-Super+Up/Down, [checked natively](../technical-debt.md#space-layer-qualification).
+Super+Up/Down, [checked natively](https://git.internal/PyxisOS/pyxis-os/issues/1336).
 
 [GRUB → Limine chainloading](../userland/grub-limine-chainload.md), 2026-10-21:
 disposable Fedora/BLS rehearsal and native ThinkPad manual Coexist Install/Update,
@@ -90,19 +90,19 @@ QEMU probes that identified the ALC257 and led to the playback milestone below.
 [raylib graphics and audio](../development/raylib.md), 2026-10-23: static
 SDL2/rlsw drawing, declared playback authority, separate SDK-view development
 packages and the shapes example. Drawing has QEMU/ThinkPad/vela evidence;
-[native audio and wider qualification](../technical-debt.md#raylib-native-audio-and-backend-follow-up)
+[native audio and wider qualification](https://git.internal/PyxisOS/pyxis-os/issues/1346)
 remain recorded limits. [Minesweeper](../userland/minesweeper.md) is the first
 public game package on it.
 
 [up to eight PCM sessions](../interfaces/audio.md), one per space. Open debt:
-[live jack switching](../technical-debt.md#hd-audio-jack-routing-at-playback-start)
-and the [nested-QEMU limit](../technical-debt.md#hd-audio-sustained-eight-session-playback).
+[live jack switching](https://git.internal/PyxisOS/pyxis-os/issues/1477)
+and the [nested-QEMU limit](https://git.internal/PyxisOS/pyxis-os/issues/1391).
 
 [Hosted Clang and LLD](../development/hosted-tools.md), 2026-10-13: Clang and LLD
 compile, link and run a C program inside Pyxis from pool-volume bundles, and the
 driver runs LLD itself (`clang hello.c -o hello.pxe`), natively qualified on the
 ThinkPad (#708, #714, #718, #763, #772, #793). Optional native checks and image
-reuse remain [technical debt](../technical-debt.md#hosted-tool-launch-loading).
+reuse remain [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1384).
 
 [HTTP redirects](../userland/http-fetch.md#redirect-chains), 2026-10-09: bounded
 delegated-provider chains with the final URL adopted by Links;
@@ -117,7 +117,7 @@ General capability pipes remain in [milestone C](capability-model-implementation
 
 [Kernel random generator](../devices/random-generator.md), 2026-10-08: BSP-owned
 ChaCha20 with hardware reseeding; see the
-[trust and availability limits](../technical-debt.md#random-generator-trust-and-availability).
+[trust and availability limits](https://git.internal/PyxisOS/pyxis-os/issues/1469).
 
 [Libc port sweep](../development/experiments/libc-port-sweep/README.md),
 2026-10-10 (#683).
@@ -137,7 +137,7 @@ retained interfaces, scoped authority, independent DHCP and explicit route/DNS/
 management selections (#969, #973, #976, #987). Both wired ThinkPad roles pass
 [native qualification](../development/experiments/network-interfaces-native.md)
 with DNS supplements and an owner-present unplug observation; deeper lifecycle
-checks remain [technical debt](../technical-debt.md#multiple-interface-lifecycle-qualification).
+checks remain [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1279).
 
 [Name limits and links](../userland/libc-portability.md#name-limits-and-symbolic-links),
 2026-10-10 (#687): `NAME_MAX`, O_NOFOLLOW, ELOOP and ENAMETOOLONG from new kernel
@@ -169,7 +169,7 @@ control) is unassigned.
 
 [Network throughput](../development/network-throughput.md), 2026-10-09: on-link
 segments, larger windows and Nagle off, natively measured; see the
-[remaining limits](../technical-debt.md#tcp-throughput-limits).
+[remaining limits](https://git.internal/PyxisOS/pyxis-os/issues/1437).
 
 [npfs, installer and system updates](../devices/filesystem-readonly.md), qualified
 natively on the ThinkPad: the [kernel writer](../devices/filesystem-native-adapter.md),
@@ -193,7 +193,7 @@ is unassigned.
 
 [Print Screen key](../userland/screenshot.md#print-screen), 2026-10-18 (#954): a
 system binding saves the shown screen to `home://screenshots/`; the
-[native check](../technical-debt.md#print-screen-native-qualification) is open.
+[native check](https://git.internal/PyxisOS/pyxis-os/issues/1353) is open.
 
 [Program image and initial stack capacity](../kernel/program-loading.md),
 2026-10-09: 256 MiB image span and 1 MiB guarded stacks, with
@@ -218,7 +218,7 @@ Neovim edit/save/quit, TCC hello world and instant live resize on main `a59a4ef3
 [Renoir flip presentation](../kernel/renoir-flip.md), 2026-10-10: two-surface
 GOP page flips (#631, #632, #638, #647), natively qualified; default-on where
 qualified by owner decision 2026-10-14, with `display.flip=0` for rollback. See
-the [remaining qualification](../technical-debt.md#renoir-flip-backend-qualification)
+the [remaining qualification](https://git.internal/PyxisOS/pyxis-os/issues/1339)
 and [poll-cost qualification](../development/experiments/renoir-poll-cost/README.md).
 
 [Runtime SMP](../kernel/smp.md), 2026-10-06, with
@@ -231,11 +231,11 @@ PNG output, [checked natively](../development/screenshot-qualification.md#native
 
 [SDL game ports](../development/sdl-game-ports.md), 2026-10-09: Chocolate Doom,
 Chocolate Quake and the opt-in EDuke32 build, without sound (#623, #634, #646);
-see the [remaining native checks](../technical-debt.md#sdl-game-ports-native-qualification).
+see the [remaining native checks](https://git.internal/PyxisOS/pyxis-os/issues/1401).
 
 [SDL2 with a native backend](../development/sdl2.md), 2026-10-08: upstream SDL 2.32.10
 and [DevilutionX](../userland/devilutionx.md) as the first consumer;
-[checked natively](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
+[checked natively](https://git.internal/PyxisOS/pyxis-os/issues/1399).
 
 [Shell conditions, merged output and script runtime](../userland/shell.md),
 2026-10-18 (#949, #957): `&&`/`||`, `exit N`, ordered `2>&1` and runtime-only
@@ -250,7 +250,7 @@ boot init with a Lua configuration, and a persistent home.
 
 [System pointer](../interfaces/pointer.md), 2026-10-09: tasks 1–5 merged (#545,
 #550, #560, #562); see the [qualification report](../development/system-pointer-qualification.md)
-and the [open native checks](../technical-debt.md#native-system-pointer-qualification).
+and the [open native checks](https://git.internal/PyxisOS/pyxis-os/issues/1342).
 Clipboard and other input sources are separate milestones.
 
 [System power overlay](../kernel/power-overlay.md), 2026-10-10 (#659, #710): the
@@ -263,19 +263,19 @@ with colored scrollback.
 [ThinkPad bring-up](../targets/t14-gen1-amd/notes.md#native-status).
 
 [USB HID boot keyboards and mice](../devices/usb-hid.md), 2026-10-10 (#654): QEMU
-and ThinkPad input qualified, with [native coverage still open](../technical-debt.md#usb-hid-native-coverage).
+and ThinkPad input qualified, with [native coverage still open](https://git.internal/PyxisOS/pyxis-os/issues/1291).
 
 [USB storage read throughput](../devices/usb-storage.md#bulk-read-aggregation),
 2026-10-13 (#804): bounded npfs read aggregation took the native Clang compile from
 about 4.3 s to 1.1 s. The shared-worker responsiveness check is still
-[open](../technical-debt.md#usb-read-aggregation-responsiveness).
+[open](https://git.internal/PyxisOS/pyxis-os/issues/1385).
 
 [Userland fonts](../userland/fonts.md), 2026-10-21: `libfont` (stb_truetype), the
 `fonts` package with nineteen fonts and the `font-min` example (#959, #963, #964,
 ports #138); built with hosted Clang and `-lfont` and run on vela.
 
 [Volume controls](../userland/audio-volume.md), 2026-10-09: master and per-space
-gain; see the [remaining native regression](../technical-debt.md#hd-audio-volume-native-regression).
+gain; see the [remaining native regression](https://git.internal/PyxisOS/pyxis-os/issues/1389).
 
 [xfer pipelining](../development/experiments/xfer-pipelining/README.md),
 2026-10-10 (#600): native runs follow its measurements and native steps.

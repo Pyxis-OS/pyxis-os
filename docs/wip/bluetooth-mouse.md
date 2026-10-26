@@ -113,7 +113,7 @@ retired handle is discarded without erasing the disconnect notification or
 disabling storage. The connection/reconnect tasks must establish and qualify a
 safe reuse boundary before bonded reconnect is ready. This limit does not relax
 required durable reconnect or native closure. See the
-[revisit condition](../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary).
+[revisit condition](https://git.internal/PyxisOS/pyxis-os/issues/1475).
 
 New evidence that requires a policy change returns to the owner.
 
@@ -265,7 +265,7 @@ secure upload and real boot-event retirement (task 3). What remains:
   pin's WHENCE and complete license must be checked and distributed.
 - If startup ever requires USB re-enumeration, design its retirement/reattachment
   boundary first; today's active-removal quarantine is not a recovery path. The
-  accepted [cold-upload debt](../technical-debt.md#bluetooth-cold-firmware-upload-and-running-version-policy)
+  accepted [cold-upload debt](https://git.internal/PyxisOS/pyxis-os/issues/1501)
   stays open until cold initialization is measured.
 
 ## Pairing gates and proposed bond storage

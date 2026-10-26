@@ -193,7 +193,7 @@ paths and return failure if any operation failed. Output errors stop the utility
 Directory operations use libpyxis; libc supplies allocation and output. The small
 shared utility helper sizes path scratch storage and formats native errors without
 converting native statuses to errno. Libc now also has directory reading and a
-[narrow `stat`](../technical-debt.md#narrow-libc-file-metadata), which these
+[narrow `stat`](https://git.internal/PyxisOS/pyxis-os/issues/1376), which these
 utilities do not use.
 
 ## Foreground shell
@@ -361,7 +361,7 @@ the old allocation. Zero-sized allocations return NULL, and this libc defines
 `realloc(p, 0)` to free p and return NULL.
 
 `free` returns blocks to TLSF. Pools remain mapped until kernel process cleanup;
-see [the retention tradeoff](../technical-debt.md#retained-userspace-heap-pools).
+see [the retention tradeoff](https://git.internal/PyxisOS/pyxis-os/issues/1299).
 Allocator assertions remain enabled and terminate the affected process
 after allocation-free diagnostic logging.
 

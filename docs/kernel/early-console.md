@@ -128,7 +128,7 @@ claims either `ACTIVE` or `RETIRED` by compare-exchange; `PANIC` is terminal:
   the lock. If retirement loses to a panic, the presenter never draws.
 
 A failed remote-writer takeover or framebuffer fault remains serial-only. See
-[technical debt](../technical-debt.md#early-console-and-post-handoff-panics).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1333).
 
 With the network debugger enabled, `panic()` streams its formatted message
 through this direct renderer before terminal debugger entry, without the log

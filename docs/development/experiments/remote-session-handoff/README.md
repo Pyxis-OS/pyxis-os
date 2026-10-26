@@ -92,7 +92,7 @@ with allocation preflight; the owned environment snapshot is untouched. Waiting
 callers retain the returned process observer and never resume their input reader.
 Both script endings propagate successor status. Ordinary launches remove the
 marker. The daemon's disconnect path and local terminal-event authority remain
-unchanged. See [retained resources](../../../technical-debt.md#parked-remote-handoff-shells).
+unchanged. See [retained resources](https://git.internal/PyxisOS/pyxis-os/issues/1357).
 
 Do not merely remove group termination or seal on root exit: the former leaves
 ordinary background descendants alive, the latter prevents the successor from

@@ -354,7 +354,7 @@ into vi or queuing multiple commands, detection stays disabled for that connecti
 Reconnect to restore it. This avoids mistaking an earlier command's prompt for
 an idle shell while later queued input launches an application. Within a running
 program, a dropped path is ordinary pasted text, never an injected upload command.
-See [the tracking limit](../technical-debt.md#remote-drop-prompt-tracking).
+See [the tracking limit](https://git.internal/PyxisOS/pyxis-os/issues/1297).
 
 Mux mode consumes bracketed-paste delimiters and forwards the body as ordinary
 input, without prompt/drop tracking or upload injection. Machine mode neither
@@ -671,8 +671,8 @@ below that session count.
 SSH/Telnet compatibility, authentication/TLS, machine live resize,
 reattachment, remote graphics, a navigator, task migration and process
 threads remain separate work. Current costs and revisit points are recorded in
-[technical debt](../technical-debt.md#initial-independent-terminal-limits) and
-[execution-group shutdown](../technical-debt.md#execution-group-shutdown).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1367) and
+[execution-group shutdown](https://git.internal/PyxisOS/pyxis-os/issues/1460).
 
 ## Validation evidence
 

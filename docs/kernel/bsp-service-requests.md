@@ -290,7 +290,7 @@ mixed-workload evidence are needed before introducing service budgets or workers
 Eager request/profile allocation charges every user task even when it never uses
 HOST or enables profiling. Lazy provisioning must preserve guaranteed cleanup
 capacity and define BSP handoff and allocation-failure ownership. These costs and
-revisit points are recorded in [technical debt](../technical-debt.md).
+revisit points are recorded in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4).
 
 Public asynchronous I/O, cancellation and multiple outstanding service requests
 per task are not provided. Asynchronous submission would need independently

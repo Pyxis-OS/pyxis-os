@@ -223,7 +223,7 @@ DAC amplifier is that last step. Stop parks both outputs. No jack verbs or
 unsolicited-response handling run during playback. A session joining an active
 mix does not resample. Inserting headphones mid-playback keeps the speaker until
 the next start; unplugging retains headphones until then. See the
-[routing debt](../technical-debt.md#hd-audio-jack-routing-at-playback-start).
+[routing debt](https://git.internal/PyxisOS/pyxis-os/issues/1477).
 
 Discovery does not activate pins, EAPD or amplifiers. Activation checks D0,
 selected connections, advertised amplifier gain offsets, output pin controls,
@@ -520,7 +520,7 @@ validation-only live archive added spaces Audio 1–8, each running
 `starvation=2`, the ninth acquisition (Remote, 18 s after boot) returned
 `CALL_LIMIT`, and the log had no restarted, unavailable, failed or refused audio
 line. Other volume items stay
-[open](../technical-debt.md#hd-audio-volume-native-regression).
+[open](https://git.internal/PyxisOS/pyxis-os/issues/1389).
 
 For later native batches, **two minutes of eight simultaneous silent sessions**
 (`pcm 0 0 120` in eight spaces) is sufficient as a regression check. Let every
@@ -543,7 +543,7 @@ the most likely cause, not a proven trace. This is a QEMU limitation, not the
 native result. [Task 5's QEMU record](../development/experiments/audio-task5/README.md)
 contains matched presenter measurements and regression evidence.
 
-[Technical debt](../technical-debt.md#hd-audio-sustained-eight-session-playback)
+[Technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1391)
 retains the QEMU limit, deferred batching, reboot-only failure recovery, startup
 and jack-switching limits. Eight periods remain starting tuning. SDL2 and Quake
 adapters are separate consumer work: conversion/resampling stays in userspace;

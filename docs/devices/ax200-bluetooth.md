@@ -51,7 +51,7 @@ operational using the referenced protocol. The owner accepted skipping upload
 and verifying an unchanged version for this warm-host investigation. Fedora's
 earlier upload supports retained warm firmware; reset does not establish a cold
 bootloader state. Installed SFI/DDC names, aliases and hashes are host observations,
-not selected Pyxis assets. [Cold upload and running-version policy](../technical-debt.md#bluetooth-cold-firmware-upload-and-running-version-policy)
+not selected Pyxis assets. [Cold upload and running-version policy](https://git.internal/PyxisOS/pyxis-os/issues/1501)
 remain unimplemented; cold native readiness is required by the next milestone.
 
 ## Accepted interrupt-IN decisions

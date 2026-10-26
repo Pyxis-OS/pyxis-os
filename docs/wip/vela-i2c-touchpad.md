@@ -491,7 +491,7 @@ its qualification overlay stays unmerged. See the
 **Clickpad tuning — accepted as-is, 2026-10-18:** a two-finger press involving
 the primary button zone previously selected left. The implemented tuning below
 is accepted with its measured evidence and limits recorded in
-[clickpad tuning](../technical-debt.md#clickpad-tuning).
+[clickpad tuning](https://git.internal/PyxisOS/pyxis-os/issues/1493).
 
 - An unpressed zone contact moving more than 3 mm from touchdown becomes an
   ordinary pointer contact until lift, with a fresh motion baseline. A contact

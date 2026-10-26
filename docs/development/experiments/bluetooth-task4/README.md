@@ -75,7 +75,7 @@ for bootloader events on bulk IN as well as interrupt IN, secure-send bulk OUT a
 [Linux USB path](https://github.com/torvalds/linux/blob/v6.18/drivers/bluetooth/btusb.c) documents that transport). Pyxis's
 synchronous bulk-IN timeout quarantines the controller and so cannot serve as an idle channel poll, and a reset that
 re-enumerates USB meets the accepted removal/quarantine policy; the
-[cold-upload debt](../../../technical-debt.md#bluetooth-cold-firmware-upload-and-running-version-policy) records these
+[cold-upload debt](https://git.internal/PyxisOS/pyxis-os/issues/1501) records these
 consequences and the revisit point before native startup claims.
 
 ## Limits

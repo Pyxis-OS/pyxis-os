@@ -140,7 +140,7 @@ this established source/runtime mismatch.
 The absent backtrace is source-explained: `KASSERT` calls ordinary `panic()`,
 which prints the message and halts without a stack walk, on BSP or AP. It is
 not evidence of a presenter/AP-specific stack-printing failure. See
-[panic diagnostic debt](../../../technical-debt.md#assertion-panic-backtraces).
+[panic diagnostic debt](https://git.internal/PyxisOS/pyxis-os/issues/1294).
 
 ## Recheck after notification prerequisite
 

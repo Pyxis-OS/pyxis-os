@@ -327,4 +327,4 @@ There is no external cancellation API or automatic restart.
 A provider can retain all sixteen slots by leaving delivered receipts unfinished; deadlines release callers, not provider
 work. Calls without a deadline can still wait indefinitely, including self-calls
 and cycles between blocked single-task processes. External process termination
-and Ctrl-C remain [separate technical debt](../technical-debt.md#process-termination-and-ctrl-c).
+and Ctrl-C remain [separate technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1360).

@@ -182,5 +182,5 @@ backend/configuration comparison also includes main's small intervening port
 fixes; it does not isolate lookup, loading or individual filesystem operations.
 Source inspection establishes native synchronous file/directory access;
 no profile attributes the time to a particular operation. The cost remains
-[recorded debt](../../../technical-debt.md#installed-bundle-runtime-reads) for
+[recorded debt](https://git.internal/PyxisOS/pyxis-os/issues/1429) for
 separate read-cost/caching work. This task changes no filesystem caching policy.

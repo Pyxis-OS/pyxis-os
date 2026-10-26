@@ -136,4 +136,4 @@ pre-B7 ThinkPad reference: three interleaved pairs, TSC, B′ whole GET 13.650 m
 Current native HTTP reference: 73.26 MiB/s whole GET / 33.61 MiB/s whole POST;
 TCP: 85 MiB/s receive / 70.5 MiB/s send (ThinkPad, 2026-10-09). Measurements, not
 contracts or nested targets. Track the new route's gap with native evidence;
-retain the [throughput revisit point](../../technical-debt.md#http-provider-throughput).
+retain the [throughput revisit point](https://git.internal/PyxisOS/pyxis-os/issues/1451).

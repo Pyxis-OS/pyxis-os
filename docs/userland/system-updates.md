@@ -197,7 +197,7 @@ After verified activation and view retirement, `system` is reopened read-only.
 The installer removes `bin/REVISION` program copies left by installs from before
 the core archive, except the known previous revision's; unknown previous
 ownership skips cleanup. The emptied `bin` volume stays
-([technical debt](../technical-debt.md#empty-bin-volume)). Cleanup is best effort
+([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1426)). Cleanup is best effort
 and warns on failure. Only completed publication reports `updated` and
 [offers a restart](installer.md#restart). Remove the live medium before restarting.
 The retained pool requires another live-media boot before another Update. Opening
@@ -220,7 +220,7 @@ An interrupted Update can leave ESP FAT marked dirty. Pyxis then refuses writabl
 admission, leaving Update completion unavailable until external filesystem repair,
 even for a recognized pending record. Validating and clearing recoverable dirty
 state under the owned writer with proven recovery is a separate unimplemented
-follow-up; see the [dirty-FAT limit](../technical-debt.md#interrupted-update-dirty-fat-recovery).
+follow-up; see the [dirty-FAT limit](https://git.internal/PyxisOS/pyxis-os/issues/1420).
 A reviewed ESP rebuild failure can leave an incomplete ESP.
 Inspect the reported phase before booting live media and reviewing another Update.
 The GPT and pool remain the recovery anchor, and the same eligibility checks
@@ -238,7 +238,7 @@ checks are in the [C.3 USB-target
 record](../development/experiments/usb-installer-c3/README.md). The first
 [native USB installation](../devices/usb-installation.md#validation) on the
 ThinkPad passed one physical Update round trip, preserving a synced file. Power
-loss and uncertain I/O remain [deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
+loss and uncertain I/O remain [deferred](https://git.internal/PyxisOS/pyxis-os/issues/1416).
 Updates from inside a running installed system, image downloading and npfs
 format migration are outside this interface.
 

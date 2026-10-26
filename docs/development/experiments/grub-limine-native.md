@@ -81,7 +81,7 @@ power-off can leave that connection silent until its watchdog reports an unknown
 outcome. The final helper result was **not** a confirmed transport close or a
 successful automatic S5 verdict. Chronium's visual observation establishes the
 machine was off; the
-[observation limit](../../technical-debt.md#remote-power-request-observation)
+[observation limit](https://git.internal/PyxisOS/pyxis-os/issues/1322)
 remains. No second power request, Force off or automatic recovery is claimed.
 
 ## Evidence and scope

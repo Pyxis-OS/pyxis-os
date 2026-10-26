@@ -149,5 +149,5 @@ Keyboard, touchpad and TrackPoint worked, including key repeat in name entry.
 - **Not yet checked natively:** a standalone bundle with retail data on an
   installed system.
 
-[Technical debt](../technical-debt.md#devilutionx-port-limits) records these
-limits and the [native check](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
+[Technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1398) records these
+limits and the [native check](https://git.internal/PyxisOS/pyxis-os/issues/1399).

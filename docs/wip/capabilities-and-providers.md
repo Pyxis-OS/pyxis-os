@@ -543,7 +543,7 @@ Partial bodies never satisfy another open.
    including unmapping on revocation.
 3. **Provider policy:** caller isolation, credentials and cache reuse for any
    shared provider; asynchronous provider work and cancellation (see
-   [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness)).
+   [HTTP responsiveness debt](https://git.internal/PyxisOS/pyxis-os/issues/1453)).
 
 ## Migration from today's interim
 

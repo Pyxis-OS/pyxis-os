@@ -96,7 +96,7 @@ DMA commit exceeded clock limit", "output completion notification expired" or
   three of three valid boots. EDuke32's private memory (about 160 MiB, backed
   eagerly) is freed at exit; by code inspection, process destruction and the
   audio worker both run on the BSP. This is recorded in
-  [technical debt](../../../technical-debt.md#hd-audio-sustained-eight-session-playback)
+  [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1391)
   as a native check.
 - **Screen capture.** QMP screendumps of the running game tripped the 1 ms
   commit guard; one boot tripped only after five screendumps. Runs with sound

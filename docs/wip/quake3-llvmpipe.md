@@ -87,7 +87,7 @@ remain a proposal for the kernel design PR.
 - **Launch.** A bundle manifest names resources and rights
   ([manifest grants](../userland/program-bundles.md#app-views-grants-and-lifetime));
   under the temporary grant-all policy every requested grant the launcher can
-  delegate is delivered ([debt](../technical-debt.md#temporary-bundle-grant-policy)).
+  delegate is delivered ([debt](https://git.internal/PyxisOS/pyxis-os/issues/1480)).
   Spaces gate services with fields such as `launch = true` and `jobs = true`
   ([space configuration](../development/hosted-tools.md#pool-and-authority),
   [private job contexts](../userland/program-bundles.md#private-job-contexts)).
@@ -486,7 +486,7 @@ not the JIT path.
   (`code/sdl/sdl_snd.c`, `code/client/snd_dma.c`) through the SDL2 port's
   [audio](../development/sdl2.md#audio), which needs `audio` and
   `threads/manage`. Keyboard and relative mouse use the SDL backend; latency
-  limits are the existing [SDL audio latency](../technical-debt.md#sdl-audio-latency)
+  limits are the existing [SDL audio latency](https://git.internal/PyxisOS/pyxis-os/issues/1397)
   debt. `USE_HTTP`, `USE_VOIP`, `USE_MUMBLE` and `USE_CODEC_OPUS` off. Vorbis
   stays on for OpenArena's music, from ioquake3's bundled libogg and libvorbis.
   zlib and libjpeg come from the tree or from the existing zlib port, to settle

@@ -282,7 +282,7 @@ An interrupted Update can also leave FAT marked dirty, which refuses writable
 admission even when the pending record is recognized. Completion then remains
 unavailable until external filesystem repair. Pyxis does not validate and clear
 recoverable dirty state itself yet; that needs a separate owned-writer recovery
-follow-up. See the [dirty-FAT limit](../technical-debt.md#interrupted-update-dirty-fat-recovery).
+follow-up. See the [dirty-FAT limit](https://git.internal/PyxisOS/pyxis-os/issues/1420).
 
 Installed boot reads only the committed `config.record` from the ESP, to hash
 it with the loaded kernel and archive into the upgrade evidence. Its
@@ -407,7 +407,7 @@ sector sizes 512 and 4096, matching kernel GPT discovery/rescan. It adds no gene
 general firmware-variable updater. The owned Coexist workflow has a typed,
 boot-option-scoped UEFI grant. See the
 [validation record](../development/experiments/native-filesystem-task4.3/README.md)
-and [remaining limits](../technical-debt.md#installer-inspection-and-recovery-limits).
+and [remaining limits](https://git.internal/PyxisOS/pyxis-os/issues/1416).
 Merged-main [QEMU end-to-end qualification](../development/experiments/native-filesystem-task5/README.md)
 includes USB-backed live-media loading and CPU entropy. The separate
 [C.3 USB-target record](../development/experiments/usb-installer-c3/README.md)

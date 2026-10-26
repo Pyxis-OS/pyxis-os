@@ -69,7 +69,7 @@ of upstream's in-place write and truncate. The adapter writes a random
 `NAME.XXXXXX` beside it (`mkstemp`, native exclusive creation), syncs it and
 renames it over the target. A failed write, sync, close or rename removes the
 temporary file, leaves the old file untouched and reports the error. The
-[atomic-save limits](../technical-debt.md#atomic-save-limits) cover what a crash
+[atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407) cover what a crash
 can lose, and saving needs CREATE and REMOVE on the directory, not only WRITE on
 the file.
 
@@ -89,7 +89,7 @@ keep line anchors and advance after zero-length matches.
 - **Display:** ASCII only. Control characters display as `^X`, and bytes above
   127 display as `.`.
 - **Search:** BRE, with ASCII-only character classes/case folding and the
-  [pinned TRE back-reference limits](../technical-debt.md#regex-character-classes-and-back-references).
+  [pinned TRE back-reference limits](https://git.internal/PyxisOS/pyxis-os/issues/1296).
   Owner decision, 2026-10-07: regex matching stops at an embedded NUL within
   each copied search/substitution slice. The renderer remains ASCII even when
   the regex engine consumes a whole UTF-8 code point.
@@ -97,14 +97,14 @@ keep line anchors and advance after zero-length matches.
 - **Screen size:** a change takes effect at the next redraw, since there is no
   resize notification.
 - **Saves:** atomic replacement within the
-  [atomic-save limits](../technical-debt.md#atomic-save-limits). Directory
+  [atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407). Directory
   CREATE and REMOVE are required. A full or failing write was not exercised
   and is covered by source inspection only.
 - **Input EOF and failures:** input EOF ends vi as upstream does, losing unsaved
   edits; this comes from source inspection and was not exercised. Allocation or
   terminal output failure also exits and loses unsaved edits.
 
-See [technical debt](../technical-debt.md#vi-port-limits) for revisit points.
+See [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1406) for revisit points.
 
 ## Why BusyBox
 

@@ -101,4 +101,4 @@ timedemo. No audio, networking, mouse, configuration persistence or demo
 recording. Recording and alternate pixel-format/scaling options are
 rejected. See the ports recipe's README for source pin, patch scope and build
 details. Configuration remains in
-[technical debt](../technical-debt.md#doom-configuration-and-save-format-limits).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1381).

@@ -27,7 +27,7 @@ space currently shows, independently of that space's grants. The packaged Remote
 grant also exposes the whole shown local screen to anyone reaching the
 unauthenticated terminal on the development LAN. This authority breadth is
 accepted for bring-up; its revisit point is recorded under
-[LAN visibility](../technical-debt.md#kernel-log-retention-and-lan-visibility).
+[LAN visibility](https://git.internal/PyxisOS/pyxis-os/issues/1358).
 The packaged [screenshot command](../userland/screenshot.md) saves a PNG and
 uses the existing explicit file-download workflow. See the
 [qualification report](../development/screenshot-qualification.md) for measured
@@ -101,7 +101,7 @@ preserved non-directory `home://screenshots`, completion in the initiating space
 after a switch, busy rejection and the overlay refusal. Pre-selection cancellation,
 saver stalls or death, failed NEXT copyout, a missing clock, storage failures and
 collision exhaustion are source-reviewed only. The
-[native check](../technical-debt.md#print-screen-native-qualification) is open;
+[native check](https://git.internal/PyxisOS/pyxis-os/issues/1353) is open;
 raw evidence is in `/shared/present/print-screen/`.
 
 ## Request and owned result
@@ -200,7 +200,7 @@ panic or make progress with a stuck presenter/scheduler. Completed snapshots hav
 no separate retained-image quota, so callers can retain multiple files and exhaust
 memory despite the single in-flight slot. Backing costs `4 * width * height`
 bytes, in addition to existing display buffers. See
-[capture limits](../technical-debt.md#screen-capture-memory-and-consistency-limits).
+[capture limits](https://git.internal/PyxisOS/pyxis-os/issues/1354).
 
 QEMU 10.2.2's zero-length cursor used completion confirms buffer consumption,
 without independently acknowledging cursor application. Capture includes the

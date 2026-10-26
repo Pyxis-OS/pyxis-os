@@ -87,7 +87,7 @@ Boots from the owner's installed USB stick. Status as of 2026-10-20; the
    start.
 
 Each step was a hardware assumption that every earlier machine happened to
-share; see [unchecked hardware assumptions](../../technical-debt.md#unchecked-hardware-assumptions).
+share; see [unchecked hardware assumptions](https://git.internal/PyxisOS/pyxis-os/issues/1335).
 
 ## USB startup race, 2026-10-15
 

@@ -128,5 +128,5 @@ contexts, nondefault/asymmetric PSI, BIOS-owned handoff, nonzero alternate
 selection, control short packets, active abandonment, error recovery and ring
 wrap are implemented/reviewed paths without synthetic runtime coverage.
 All QEMU/debugger processes were closed after inspection.
-[Qualification and resource debt](../technical-debt.md#usb-descriptor-bounds-and-per-port-preparation)
+[Qualification and resource debt](https://git.internal/PyxisOS/pyxis-os/issues/1465)
 records the concrete consequence and revisit point.

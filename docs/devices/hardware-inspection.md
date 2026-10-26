@@ -41,8 +41,8 @@ unavailable or initializing observations exit 1.
 
 `CONFIG_XHCI=y` enables native USB inventory by default. Firmware can
 still boot the kernel/archive from USB. The
-[xHCI profile and retention limits](../technical-debt.md#xhci-hardware-profile-and-runtime-retention)
-and [descriptor budgets](../technical-debt.md#usb-descriptor-bounds-and-per-port-preparation)
+[xHCI profile and retention limits](https://git.internal/PyxisOS/pyxis-os/issues/1464)
+and [descriptor budgets](https://git.internal/PyxisOS/pyxis-os/issues/1465)
 remain explicit. [USB installation](usb-installation.md) describes storage
 selection, mounts and installation. The
 [everyday pipeline target](../development/io-reliability-attribution.md#everyday-pipeline-performance-target)

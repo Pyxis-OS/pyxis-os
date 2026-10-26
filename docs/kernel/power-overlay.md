@@ -159,7 +159,7 @@ The overlay is meant to work when something else has stopped working.
 
 In those cases a short press of the power button asks the ACPI worker directly,
 and holding it forces power-off without flushing. These limits are also in
-[technical debt](../technical-debt.md#power-overlay-limits).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1323).
 
 ## Debugger and panic
 

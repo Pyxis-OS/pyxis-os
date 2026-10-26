@@ -55,7 +55,7 @@ never trigger the switch. The ASUS dongle's motion/clicks/wheel are qualified;
 its unsupported side buttons are an owner-accepted limit. The G502/Lightspeed
 motion/buttons/free-spin/chord/replug regression is qualified. Remaining
 Keychron, horizontal and high-resolution hardware coverage lives in
-[technical debt](../technical-debt.md#usb-hid-native-coverage).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1291).
 
 ## Calibrated Synaptics activation
 
@@ -153,10 +153,10 @@ ordinary non-matching relative recovery, not actual Synaptics contact behavior.
 The [qualification record](../development/experiments/pointer-input-quality/README.md)
 keeps revisions, measurements, failures/corrections and native reproduction steps.
 
-[Terminal mouse reporting](../technical-debt.md#terminal-mouse-input-reporting) is separate: device support
+[Terminal mouse reporting](https://git.internal/PyxisOS/pyxis-os/issues/1345) is separate: device support
 does not qualify Links/Neovim application scrolling. Tapping, inertia/gestures,
 public contacts, SMBus/RMI4, HID-over-I2C hardware beyond vela's ELAN touchpad,
-Bluetooth and unsupported hardware qualification remain in [technical debt](../technical-debt.md#pointer-gestures-and-alternative-transports),
+Bluetooth and unsupported hardware qualification remain in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1344),
 not unfinished implementation placeholders in this milestone.
 
 ## Precision HID-over-I2C integration

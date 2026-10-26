@@ -56,7 +56,7 @@ a cooperative grace period.
 ## Limits
 
 Accepted limits are recorded in
-[technical debt](../technical-debt.md#process-termination-and-ctrl-c):
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1360):
 
 - Only the shell's direct children are terminated.
 - Background jobs cannot be interrupted, and there is no job control.

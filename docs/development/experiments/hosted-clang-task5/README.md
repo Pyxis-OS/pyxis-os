@@ -192,7 +192,7 @@ This deployment is markedly slower than the temporary virtio-fs baseline.
 The binaries/runtime are identical; storage backend and placement differ, so
 this is not an isolated producer/source performance A/B. Version alone is slow;
 launch/storage costs need native measurement before compiler-cost attribution.
-The existing [npfs cache/I/O limits](../../../technical-debt.md#native-mount-design-limits)
+The existing [npfs cache/I/O limits](https://git.internal/PyxisOS/pyxis-os/issues/1458)
 remain; these nested wall times do not benchmark storage throughput. No
 storage optimization is part of this task.
 Keep first/cold samples and variation. The two negative-input tables use
@@ -403,7 +403,7 @@ Version and compile wall times differ by about 36 ms; this supports the owner's
 observation that image loading dominates, without measuring internal compile
 CPU time. The roughly 20 MB/s effective USB image-loading rate and lack of
 selected-image reuse across launches are recorded in
-[technical debt](../../../technical-debt.md#hosted-tool-launch-loading).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1384).
 Throughput is inferred from image sizes/session times, not an isolated stick
 or driver benchmark. Neither finding expands task 5. Actual stack high-water,
 large C/C++/LTO inputs, started-tool malloc exhaustion and total attributable

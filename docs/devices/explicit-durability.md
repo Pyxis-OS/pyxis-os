@@ -76,4 +76,4 @@ sync fell from 11.6–12.1 s to 9.5–10.1 s. These are two samples per policy,
 not a general throughput guarantee. Earlier nested measurements and crash checks
 remain linked from that record. Near-full reservation precision, small USB
 writes and repeated FAT chain-validation reads remain
-[technical debt](../technical-debt.md#usb-stick-write-throughput).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1467).

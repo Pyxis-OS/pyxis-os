@@ -502,4 +502,4 @@ physical Ctrl+C still follows its normal line-cancel/interrupt path. Result fiel
 report inserted bytes, cancellation and native status, with a notice in nonquiet
 editors. Pending older input refuses Paste rather than being flushed or deferred.
 See the [receiver contract](../interfaces/clipboard.md#safe-receiver) and
-[delivery limits](../technical-debt.md#initial-clipboard-delivery-limits).
+[delivery limits](https://git.internal/PyxisOS/pyxis-os/issues/1395).

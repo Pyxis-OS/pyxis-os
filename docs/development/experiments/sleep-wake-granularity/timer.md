@@ -6,7 +6,7 @@ Measured on 2026-10-08 after the accepted
 [sleep wake decisions](../../../kernel/timekeeping.md). Compare the
 [original baseline](README.md) and the separately measured [expiry IPI step](ipi.md).
 The owner authorized implementation; the owner's native observation is in
-[technical debt](../../../technical-debt.md#sleep-wake-granularity).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1379).
 
 The measured source was `e253f22`, the locally integrated architecture/scheduler change
 after the IPI step. Its ordinary kernel and image builds passed with the same LLVM
@@ -85,7 +85,7 @@ make this about 1 ms instead of the old 8.33 ms tick, so an idle program waiting
 event wakes about 1000 times a second instead of about 120, raising its CPU wake cost.
 This is the expected polling rate, not a measured `SDL_WaitEvent` run. Revisit a blocking
 wait on the input and display handles when a consumer waits for events; see
-[SDL2 port limits](../../../technical-debt.md#sdl2-port-limits).
+[SDL2 port limits](https://git.internal/PyxisOS/pyxis-os/issues/1396).
 
 Sorted-list insertion/removal, all-due-prefix expiry, pre-parking notification, the
 startup periodic-to-one-shot transition, arithmetic bounds and nominal-only HPET

@@ -59,7 +59,7 @@ immediately; a replacement gets fresh software and DMA records. Unprovable
 retirement or controller corruption may quarantine the entire controller until
 reboot. Proven device/subtree removal leaves unrelated classes running, with
 fresh hub/HID admission through the shared topology owner. See
-[USB switch debt](../technical-debt.md#usb-switch-subtree-removal).
+[USB switch debt](https://git.internal/PyxisOS/pyxis-os/issues/1293).
 Attach/detach diagnostics are debug records.
 
 ## Reports and continuity
@@ -199,7 +199,7 @@ and [USB descriptors](https://raw.githubusercontent.com/qemu/qemu/v10.2.2/hw/usb
 Protocol constants and descriptor bytes identify those layouts; no upstream
 implementation code is copied. The [earlier boot-input qualification](../development/experiments/usb-hid/README.md)
 and [report-mouse qualification](../development/experiments/pointer-input-quality/README.md)
-keep their QEMU/native evidence distinct; [technical debt](../technical-debt.md#usb-hid-native-coverage)
+keep their QEMU/native evidence distinct; [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1291)
 records coverage still open.
 
 ## Wireless receiver interference

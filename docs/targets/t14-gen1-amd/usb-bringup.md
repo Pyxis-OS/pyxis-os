@@ -162,7 +162,7 @@ GPT: device 1 unsupported; primary=2 backup=2 partitions=0
 ```
 
 Write protection read clear, and the qualifying blocking SYNCHRONIZE CACHE (10)
-succeeded, so neither [C.1 compatibility watchpoint](../../technical-debt.md#usb-writable-media-qualification-limits)
+succeeded, so neither [C.1 compatibility watchpoint](https://git.internal/PyxisOS/pyxis-os/issues/1466)
 was observed. Both GPT copies were absent. The kernel's map classification is
 `unsupported` because the stick still carried its factory MBR with a data
 partition. The installer's own consent scan does not use that classification.
@@ -224,5 +224,5 @@ still matched, so the pool was preserved.
 
 - **Power loss during writes,** uncertain I/O and other sticks, ports or the
   dock path.
-- **The [configured-mount discovery latency measurement](../../technical-debt.md#configured-mount-discovery-latency),**
+- **The [configured-mount discovery latency measurement](https://git.internal/PyxisOS/pyxis-os/issues/1456),**
   which remains deferred.

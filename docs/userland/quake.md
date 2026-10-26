@@ -84,7 +84,7 @@ survive quitting but not reboot. An installed system keeps `home://` on the pool
 random `NAME.XXXXXX` file beside the target, which is synced, closed and renamed
 over it. A failed write or rename keeps the old file, removes the temporary file
 and prints `Couldn't write NAME: reason`; a failed save omits `done.`. Demos are
-recorded in place. The [atomic-save limits](../technical-debt.md#atomic-save-limits)
+recorded in place. The [atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407)
 cover what a crash can lose.
 
 ## Timedemo
@@ -112,4 +112,4 @@ prediction of native speed.
 This is single-player play, save/load, demos and timedemo. No audio, networking,
 CD audio, joystick, video-mode switching or mission packs. See the ports recipe's
 README for the source pin, patch scope and build details, and
-[technical debt](../technical-debt.md#quake-port-limits) for deferred work.
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1402) for deferred work.

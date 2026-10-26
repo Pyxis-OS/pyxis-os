@@ -216,7 +216,7 @@ among string capture, other accounting, occasional heap growth and client time.
 
 **Owner accepted:** retain the generic zero-activity fast path and accept the
 remaining BSP MEMORY round trip (about 1.6–4.2 microseconds per mutation) as a
-[latency follow-up](../../../technical-debt.md#bsp-only-allocation-and-vm-mutation),
+[latency follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1310),
 without a task-count bypass. Bounded string capture and the native rerun are
 complete. The IPC fixed cost is accepted for #700 merge, with a bounded
 investigation before task 5; this does not authorize its implementation.
@@ -276,7 +276,7 @@ medians are noisy, so the fixed per-message comparison uses fastest passes.
 
 Bounded capture removes most of the launch penalty; it does not change the IPC
 fixed cost. The owner accepts merge with the per-message IPC cost recorded as
-[technical debt](../../../technical-debt.md#bsp-only-allocation-and-vm-mutation).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1310).
 Its relative impact is largest for short messages. A bounded investigation of
 copy/activity leases follows before task 5 and does not block #700's merge.
 Causal phase attribution and any optimization remain unmeasured/unimplemented.

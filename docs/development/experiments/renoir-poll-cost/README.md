@@ -136,4 +136,4 @@ cost still falls substantially despite the higher mean per remaining full check.
 
 This completes the poll-cost follow-up. Timeout recovery, native panic and other
 unreported scenarios remain in the separate
-[backend qualification debt](../../../technical-debt.md#renoir-flip-backend-qualification).
+[backend qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1339).

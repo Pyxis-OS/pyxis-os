@@ -547,7 +547,7 @@ Keep the retry/reset recovery requirement before everyday use.
    than carrying the one-attempt bring-up limit into everyday connections.
    Until the credential manager exists, the network key may be stored
    unencrypted. That accepted limitation and its consequence are recorded in
-   [technical debt](../technical-debt.md#remembered-wi-fi-keys-before-the-credential-manager).
+   [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1287).
    This connection behavior/storage is a requirement for that stage, not an
    implementation delivered by the current scan work.
 

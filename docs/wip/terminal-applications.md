@@ -30,4 +30,4 @@ a copy, owns progress and handles cancellation/failure from concrete interaction
 These policies belong in a separate proposal, outside the multiplexer.
 
 Additional multiplexer windows, ratio adjustment and other accepted first-slice
-limits are recorded in [technical debt](../technical-debt.md#initial-terminal-multiplexer-limits).
+limits are recorded in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1365).

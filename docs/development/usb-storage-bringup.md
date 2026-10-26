@@ -698,7 +698,7 @@ line. Host hashes matched those captured in the guest:
 This qualifies the manual QEMU development loop and orderly synchronized
 persistence. It adds no atomic editor/compiler save, hotplug, raw USB installer
 access, physical write qualification or power-loss claim. The two merged C.1
-[hardware compatibility watchpoints](../technical-debt.md#usb-writable-media-qualification-limits)
+[hardware compatibility watchpoints](https://git.internal/PyxisOS/pyxis-os/issues/1466)
 are retained for evidence-guided physical follow-up. C.4 and ThinkPad testing
 remain deferred. All task-owned QEMU, remote client and debugger processes were
 closed, and the checked-in configuration remains unchanged.

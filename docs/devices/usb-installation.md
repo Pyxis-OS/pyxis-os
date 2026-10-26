@@ -133,24 +133,24 @@ power button covers only data synced before power was removed.
 ## Limits
 
 - Only xHCI and Bulk-Only storage are supported; see
-  [USB controller and transport coverage](../technical-debt.md#usb-controller-and-transport-coverage).
+  [USB controller and transport coverage](https://git.internal/PyxisOS/pyxis-os/issues/1468).
 - Devices are found once at boot. Hotplug, power management, the controller
   profile and startup settling are listed under
-  [xHCI hardware profile](../technical-debt.md#xhci-hardware-profile-and-runtime-retention).
+  [xHCI hardware profile](https://git.internal/PyxisOS/pyxis-os/issues/1464).
 - Topology bounds, multiple LUNs, composite devices and recovery paths that have
   not run on hardware are listed under
-  [descriptor bounds](../technical-debt.md#usb-descriptor-bounds-and-per-port-preparation).
+  [descriptor bounds](https://git.internal/PyxisOS/pyxis-os/issues/1465).
 - Write qualification watchpoints and flush deadlines are under
-  [writable-media qualification](../technical-debt.md#usb-writable-media-qualification-limits).
+  [writable-media qualification](https://git.internal/PyxisOS/pyxis-os/issues/1466).
 - Power loss during writes, uncertain I/O, other sticks, ports, the dock path
   and the internal NVMe are not qualified; see
-  [installer inspection and recovery](../technical-debt.md#installer-inspection-and-recovery-limits).
-- The [discovery latency measurement](../technical-debt.md#configured-mount-discovery-latency)
-  and [GUID and boot-device identity](../technical-debt.md#configured-guid-and-boot-device-identity)
+  [installer inspection and recovery](https://git.internal/PyxisOS/pyxis-os/issues/1416).
+- The [discovery latency measurement](https://git.internal/PyxisOS/pyxis-os/issues/1456)
+  and [GUID and boot-device identity](https://git.internal/PyxisOS/pyxis-os/issues/1457)
   review remain deferred.
 - The raw image builder replaces its pool on each build and has an unexplained
   emulated firmware failure; see
-  [image updates and firmware](../technical-debt.md#usb-image-updates-and-firmware-qualification).
+  [image updates and firmware](https://git.internal/PyxisOS/pyxis-os/issues/1430).
 
 A replaceable stick limits the cost of a failure. It proves no endurance or
 durability guarantee.

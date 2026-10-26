@@ -160,7 +160,7 @@ The shell's second Ctrl+C and native TERMINATE/group stop remain forceful.
 Resource/transport failure of the void subscription API is an explicit fatal
 runtime operation/status; normal registration is supported, and the upstream
 nil-channel argument panic remains. Owned script/capture scopes still force
-stop on the first press, as recorded in [debt](../technical-debt.md#process-termination-and-ctrl-c).
+stop on the first press, as recorded in [debt](https://git.internal/PyxisOS/pyxis-os/issues/1360).
 
 `runtime/debug.SetCrashOutput` owns a native copy independent of caller close.
 Replacement/disable joins actual runtime writes before release. FILE output
@@ -209,7 +209,7 @@ Datagrams also need `udp/open`; default hostname resolution needs the supplied
 `dns_udp/open` and `DNS_SERVER` pair. The service constructor is an explicitly
 requested private runtime role and is not implicitly forwarded. It creates
 endpoints/exports generally, not only completion receivers; see the
-[grant-all consequence](../technical-debt.md#declared-service-creation-under-grant-all).
+[grant-all consequence](https://git.internal/PyxisOS/pyxis-os/issues/1499).
 Imports alone create no receiver. A missing required grant refuses launch;
 a deliberately omitted constructor produces an operation error, not an init panic.
 

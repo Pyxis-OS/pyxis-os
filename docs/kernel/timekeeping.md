@@ -109,7 +109,7 @@ brackets remain precise, as does the default `task_deadline_expired`. Nonblockin
 TCP admission and an empty connection-maintenance pass take no unused reading.
 The [task 1 record](../development/experiments/clock-cache.md) covers this change;
 [earlier measurements](../development/experiments/timer-clock-reads/README.md)
-and [clock-source debt](../technical-debt.md#wall-clock-time-and-clock-source-performance)
+and [clock-source debt](https://git.internal/PyxisOS/pyxis-os/issues/1380)
 cover the remaining reads.
 
 ## TSC selection
@@ -338,6 +338,6 @@ above additionally excludes full-wrap gaps during which the counter advances.
 Suspend and resume and VM migration are not qualified with either source.
 There is no clock-setting operation, cancellation, HPET alarm, or userspace
 direct counter mapping. Native deadline-timer qualification remains in
-[sleep wake debt](../technical-debt.md#sleep-wake-granularity).
+[sleep wake debt](https://git.internal/PyxisOS/pyxis-os/issues/1379).
 Wall-clock precision and clock-source limits
-are tracked in [technical debt](../technical-debt.md#wall-clock-time-and-clock-source-performance).
+are tracked in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1380).

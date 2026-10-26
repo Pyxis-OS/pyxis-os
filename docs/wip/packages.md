@@ -62,7 +62,7 @@ installed layout.
 | HTTP | Responses are completed, re-readable snapshots. RAM backing defaults to 64 MiB per provider; large bodies need private npfs backing. One 30 s deadline by default, explicit longer values allowed; no resume; one exchange at a time. | [HTTP transactions](../interfaces/http-transactions.md) |
 | Download cache | `repo.internal` proxies release downloads for host builds; nothing on Pyxis uses it. | [ports](../development/ports.md) |
 | Toolchain delivery | Task 4 replaces manual payload publication with the `clang-hosted` package and its declared command exports. | [hosted tools](../development/hosted-tools.md#pool-and-authority) |
-| Executables | P1F is fixed-address with no symbols, loaded by the kernel image loader. The only written P2F idea is an undecided P1F superset with an optional symbol table, for backtraces. Nothing defines exported symbols, P1D or P2D. New formats go through the launcher and loader path. | [P1F](../../include/pxe/p1f.h), [backtraces](../technical-debt.md#backtraces-and-symbols), [subsystems](subsystems-per-space.md) |
+| Executables | P1F is fixed-address with no symbols, loaded by the kernel image loader. The only written P2F idea is an undecided P1F superset with an optional symbol table, for backtraces. Nothing defines exported symbols, P1D or P2D. New formats go through the launcher and loader path. | [P1F](../../include/pxe/p1f.h), [backtraces](https://git.internal/PyxisOS/pyxis-os/issues/1337), [subsystems](subsystems-per-space.md) |
 
 ## Owner direction (2026-10-18)
 

@@ -111,7 +111,7 @@ so using an omitted helper fails at link time. The library adds no file,
 network or display authority. The [screenshot consumer](../userland/screenshot.md)
 qualifies deflate-to-PNG output through host decoding; archive compilation alone
 is not runtime qualification. Other compression/decompression profiles remain
-[unqualified](../technical-debt.md#zlib-core-profile-and-qualification).
+[unqualified](https://git.internal/PyxisOS/pyxis-os/issues/1373).
 
 ## libpng development library
 
@@ -275,7 +275,7 @@ with an aggregate nonzero exit status. Detected output errors also fail.
 Results require EOF. Use a finite file redirect or pipeline for stdin; the
 framebuffer console has no EOF operation. Independent terminal attachments can
 explicitly end input after queued bytes drain.
-See the [accepted terminal limit](../technical-debt.md#console-input-completion).
+See the [accepted terminal limit](https://git.internal/PyxisOS/pyxis-os/issues/1362).
 
 ## Copying streams with sbase tee
 
@@ -314,7 +314,7 @@ Uniq collapses runs of adjacent identical lines with upstream `-c`, `-d`, `-u`,
 `-f N` and `-s N`, and `[input [output]]` operands where `-` selects stdin or
 stdout. File and pipe input is fetched in blocks by
 [stdio read-ahead](../userland/stdio.md#input-read-ahead); console stdin remains
-[one native read per byte](../technical-debt.md#console-line-input). See the
+[one native read per byte](https://git.internal/PyxisOS/pyxis-os/issues/1371). See the
 [uniq reference](../userland/uniq.md) for behavior, limits and validation, and the
 [recipe notes](../../ports/sbase/README.md) for the port adaptation.
 

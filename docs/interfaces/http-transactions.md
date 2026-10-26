@@ -74,7 +74,7 @@ exact length/EOF and validate fields; reject partial/oversized input. No literal
 header/token switches. Caller fields form a private credential block erased on
 release and stripped on cross-origin redirects; nonsecret JSON defaults remain.
 Describe exposes no header bytes. Trust is the captured root's frozen instance
-profile. This is [interim credential storage](../technical-debt.md#http-preparation-credentials-and-trust),
+profile. This is [interim credential storage](https://git.internal/PyxisOS/pyxis-os/issues/1452),
 accepted by the owner on 2026-10-15, not the final credential design.
 
 `--timeout SECONDS` is a nonzero integer duration, default 30 s. Each READ/REMOVE

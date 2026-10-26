@@ -76,7 +76,7 @@ relative to output is unchanged.
 - A line is matched only as far as the regex engine reads valid UTF-8 and up to
   its first NUL, so text after an invalid byte or a NUL is not seen; `-F` uses
   `strstr` and is unaffected. See
-  [regex limits](../technical-debt.md#regex-character-classes-and-back-references).
+  [regex limits](https://git.internal/PyxisOS/pyxis-os/issues/1296).
   Grep prints the matching line anyway and never reports "binary file matches".
 - Case folding and classes are ASCII-only; there is no locale.
 - A pattern error prints `invalid regex:` with libc's text, not GNU's.

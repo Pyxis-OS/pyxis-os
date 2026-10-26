@@ -139,7 +139,7 @@ attachment remain unqualified. The ThinkPad's SuperSpeed dock and 10 Gb/s links 
 unqualified, alongside the existing firmware/controller profile limits.
 Hotplug, idle downstream removal monitoring, endpoint-local recovery and USB
 storage remain deferred. See [implemented hub behavior](../devices/usb-hubs.md)
-and [retained costs](../technical-debt.md#usb-descriptor-bounds-and-per-port-preparation).
+and [retained costs](https://git.internal/PyxisOS/pyxis-os/issues/1465).
 
 ## USB 3 traversal integration regression
 
