@@ -108,8 +108,8 @@
 
 ## Implementation style and ownership
 
-- Use freestanding GNU C23, snake_case, two spaces, K&R control braces and function
-  braces on their own line. Preserve upstream vendor formatting. Use logical
+- Use GNU C23 (hosted userspace; freestanding kernel, libc and startup),
+  snake_case, two spaces, K&R control braces and function braces on their own line. Preserve upstream vendor formatting. Use logical
   blank lines; compactness and fewer lines are not goals.
 - Name hardware constants, flags, masks and selectors. Prefer straightforward
   code and small focused helpers over opaque encodings, generic builders, callback

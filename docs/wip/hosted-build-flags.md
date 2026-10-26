@@ -106,7 +106,7 @@ container rebuild is needed for the accepted defaults. Repeat the selected compa
 prepare the coordinated vela packet, including the existing SoH private-packet
 workflow, before any native staging.
 
-- [ ] Userland: hosted SDK C flags and explicit libc/startup exceptions.
-- [ ] Ports: Mesa optimization authority and duplicated target C flags.
-- [ ] Parent integration: CMake, dependency pins, build references and QEMU checks.
+- [x] Userland: hosted SDK C flags and explicit libc/startup exceptions.
+- [x] Ports: Mesa optimization authority and duplicated target C flags.
+- [x] Parent integration: CMake, dependency pins, build references and QEMU checks.
 - [ ] Coordinated native matched comparison with the same private save/settings.
