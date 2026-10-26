@@ -235,11 +235,11 @@ stage immutable payloads and print its manual entry, without publishing a boot
 record or changing the menu. Full Coexist Install/Update/completion QEMU
 qualification and a separate activation record are required before enabling it.
 
-Review shows the proposed boot attempt, the retained previous attempt, recovery
+Review shows the proposed boot attempt, recovery
 and capacity. The ESP holds no configuration: Install writes the initial
 `system://config/` files once, and boot reads them there. The installer keeps
-one file in `EFI/pyxis/config/`, `config.record`, which records the current and
-previous boot attempts with their payload hashes and the owned menu's recovery
+one file in `EFI/pyxis/config/`, `config.record`, which records the current boot
+attempt with its payload hashes and the owned menu's recovery
 copy. A record still marked prepared is an interrupted Update, below. A
 malformed record, or one written before task 2b of
 [package upgrades](../wip/pkg-upgrade.md), is refused, and that machine
@@ -248,8 +248,8 @@ reinstalls (decision 28).
 Staging and program verification precede the final bounded publication
 interval: CHECK immediately after BEGIN, frozen-input and payload revalidation,
 the prepared then committed boot record, then the owned menu switch last:
-normal and rescue boot the new attempt and `Pyxis OS (previous)` the retained
-previous one. Ambiguous ownership leaves the menu unchanged and reports
+normal and rescue boot the new attempt. Ambiguous ownership leaves the menu
+unchanged and reports
 **staged, boot activation pending**. Explicit completion is reached through
 **Update**: select the target marked pending, review the recorded operation,
 select completion, then type the exact word `complete`. Only exact recognized
@@ -289,9 +289,11 @@ configuration, spaces and session/network bytes come from the pool's
 RAM FILE snapshots. Ordinary children receive no live ESP handles or
 administrative writer authority.
 
-Publication retains current and one known previous boot attempt plus the
-independent static rescue pair. Older attempts require confirmed activation and
-exact owned-manifest/hash evidence before cleanup; unknown ownership skips it.
+Publication retains the committed current attempt and the independent static
+rescue pair. After confirmed activation, it removes unreferenced attempts only
+when canonical names, ownership manifests, directory contents and remaining
+payload hashes prove ownership. Ambiguous nonempty attempts refuse cleanup;
+empty unmarked directories are left alone.
 The pinned recovery pair and fallback are reverified and never replaced by
 normal publication. Capacity includes retained recovery and fresh staging,
 without credit for cleanup. Update preserves the boot manager and firmware

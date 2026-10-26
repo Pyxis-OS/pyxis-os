@@ -174,22 +174,22 @@ After staging, BEGIN followed immediately by CHECK starts the non-extending
 and menu and fresh payload identity/content. The prepared then committed boot
 record follows. Only then may confirmed Pyxis-owned
 menu spans switch, with synchronization and readback: normal and rescue to the
-new attempt, and the owned `Pyxis OS (previous)` entry to the outgoing attempt,
-which the record keeps as `previous_boot`. A menu written before the previous
-entry existed gains it after the normal entry. A committed record alone does not report `updated`: menu activation,
+new attempt. A legacy `Pyxis OS (previous)` entry is removed only when its
+binding or the complete prior menu proves ownership. A committed record alone does not report `updated`: menu activation,
 verification and explicit view retirement must also succeed. This is completion
 detection, without cross-file atomicity or power-loss durability guarantees.
 
-Installed startup reads no configuration from the ESP: every entry, including
-the previous one, reads the pool's [`system://config/`](init.md#installed-configuration),
-which Update never changes. Booting the previous entry runs the retained
-attempt's kernel, archive and programs with that configuration. Boot init only
+Installed startup reads no configuration from the ESP: the normal entry reads
+the pool's [`system://config/`](init.md#installed-configuration), which Update
+never changes. Boot init only
 hashes the committed record with the loaded kernel and archive into the upgrade
 evidence.
 
-Current and one known previous boot attempt remain, in addition to pinned rescue.
-Older attempts are cleaned only after verified activation and matching immutable
-ownership/hash evidence. Unknown ownership skips cleanup. Capacity accounts for
+Only the committed current boot attempt remains, in addition to pinned rescue.
+After verified activation, unreferenced attempts are cleaned only with canonical
+names, ownership manifests, complete directory checks and matching payload hashes.
+Ambiguous nonempty attempts refuse cleanup; empty unmarked directories remain.
+Capacity accounts for
 fresh staging, retained payloads, configuration recovery and allocation overhead
 before writes; old attempts give no capacity credit.
 
