@@ -114,6 +114,9 @@ enum virtio_fs_result virtio_fs_session_init(struct virtio_fs_session *session);
 enum virtio_fs_result virtio_fs_root(struct virtio_fs_session *session, struct virtio_fs_node *node);
 enum virtio_fs_result virtio_fs_lookup(struct virtio_fs_node *parent,
     const char *name, size_t length, struct virtio_fs_node *node);
+/* Observe a name without opening/following it or retaining its lookup. */
+enum virtio_fs_result virtio_fs_child_kind(struct virtio_fs_node *parent,
+    const char *name, size_t length, enum virtio_fs_kind *kind);
 enum virtio_fs_result virtio_fs_getattr(struct virtio_fs_node *node,
     struct virtio_fs_attributes *attributes);
 enum virtio_fs_result virtio_fs_node_get(struct virtio_fs_node *node);

@@ -136,7 +136,7 @@ and patches in `pyxis-ports`, SDK/package assembly in Pyxis; see
 | Threads and sync | Managed libc create/join/detach, mutex/condition/once and native parking support Rust threads, channels and park/unpark. Preserve wake-before-park and absolute timeout semantics. `available_parallelism` reports effective eligibility or an honest error, never merely online CPU count. |
 | TLS and exit | Executable local-exec TLS; libc remains FS owner. Register language destructors with libc, and order Rust per-thread `rt::thread_cleanup` after its language/key drainage. Panic in any thread aborts the process; join does not recover it and catch_unwind supplies no recovery. Join workers before orderly main return; existing forced-stop/live-worker exit limitations remain. |
 | OsStr and Path | Byte-preserving OsStr and native scheme-aware paths. `scheme://` is a root, not a Windows drive or a Unix relative component. Leading `/` has no native root; `..` cannot escape delegated authority. Byte preservation applies to OsStr, Path storage and filesystem I/O, not component round-trips. Components are conventional lexical components plus a Pyxis scheme root; repeated separators and interior `.` normalize on iteration/collection. Equality/hash compare components. Filesystem calls pass original bytes and resolve them in order without normalization. |
-| Files | Real open/read/write/seek/clone, resize and sync; file type/size and valid backend metadata; ordinary directory enumeration and existing create/remove/rename operations where granted. Missing timestamps return Unsupported. Permission-mode mutation, unreported permission facts, symlinks and file locking remain unsupported. No synthetic Unix identities, modes or timestamps. |
+| Files | Real open/read/write/seek/clone, resize and sync; file type/size and valid backend metadata; ordinary directory enumeration and existing create/remove/rename operations where granted. Missing timestamps return Unsupported. Permission-mode mutation, unreported permission facts, symlink creation/following and file locking remain unsupported; recursive removal can unlink HOST symlinks. No synthetic Unix identities, modes or timestamps. |
 | Net and processes | Socket creation, DNS, Command spawn/output and Unix process extensions remain unsupported. Real process exit/abort is required by std startup and is not deferred with child creation. No fake PID or signals. |
 
 Supported operations still depend on each backend and the received rights.
@@ -219,14 +219,62 @@ leading slash, preserve the documented empty-path no-op and concurrent creators.
 Existing final `.`/`..` require actual resolution. Failure may leave created
 parents; there is no transaction/rollback promise.
 
-**Next Rust std work item:** proper native remove_dir_all and fs::copy, needed
-by Cargo, tempfile cleanup and installers. They remain Unsupported only for
-this directory stage, not a long-term disabled profile. Recursive removal needs
-held-parent traversal/deletion without following links; copy must handle actual
-native authority and identity without self-truncation or fabricated permissions.
-Do not select the shared fallbacks incidentally: one reopens saved paths and the
-other writes before failing unsupported permission application. This next item
-still needs its own implementation assignment and just-in-time decisions.
+### Recursive removal and copy — accepted (chronium, 2026-10-26)
+
+Implementation and qualification are delivered in
+[userland #394](https://git.internal/PyxisOS/pyxis-userland/pulls/394),
+[libc #6](https://git.internal/PyxisOS/pyxis-libc/pulls/6),
+[Rust #7](https://git.internal/PyxisOS/pyxis-rust/pulls/7) and
+[Pyxis #1268](https://git.internal/PyxisOS/pyxis-os/pulls/1268); see the
+[record](../development/experiments/rust-copy-remove.md). These
+operations use narrow native libc helpers, not the shared path-reopening or
+permission-setting fallbacks.
+
+- Removal unlinks HOST symlinks without following them, including a symlink
+  operand. The native REMOVE gains exact SYMLINK support for HOST only; no link
+  opening, traversal or creation is added. Other special entries remain
+  Unsupported. A regular-file operand fails as not a directory.
+- Resolve through retained native parents with one captured cwd for relative
+  paths and one capture of each explicit root. Reject scheme roots and final
+  dot/dotdot, but add no named-cwd/ancestor ban or one-filesystem promise. HOST
+  bind-mounted contents can be emptied before final BUSY. A moved-away held
+  directory can still be emptied and a replacement empty directory removed by
+  the final name operation; this is not an identity-conditioned deletion.
+- The iterative traversal grows fallibly with actual memory/handle/name limits,
+  without a fixed depth or total-work cap. Collect bounded batches and reset
+  observation after own confirmed removals. Allow eight consecutive CHANGED
+  observation restarts without confirmed removal; the ninth returns EAGAIN.
+  Progress resets the count, so creators can prolong the operation. Initial
+  missing root returns NotFound; disappearance after admission is tolerated.
+  Final nonempty/busy errors return immediately.
+- Copy overwrites an existing retained FILE in place, preserving its identity
+  and effects on other hardlinks/held handles. Source READ and target WRITE
+  suffice for existing objects; absence uses exclusive CREATE. Reject known
+  aliases before resize with InvalidInput, unprovable distinctness with
+  Unsupported. Fresh exclusive creation proves a new object. Do not guess
+  from paths or metadata zeroes, reopen a competing creator or stage replacement.
+  The existing HOST bind-alias/cross-session identity exclusions remain.
+- Copy contents and length only: no grant readonly, mode, ownership, time or
+  other metadata propagation. Qualify Rust's public permission-copy sentence
+  for Pyxis. Completed regular provider FILE sources remain allowed through
+  read-only routes and real metadata/identity checks; source OPEN may already
+  do network I/O when a later target fails. Native-only targets refuse writer
+  OPEN/STAGE before effects. Streams without file metadata, symlink sources
+  and special objects fail; no hidden materializer or symlink following.
+- Copy the source's initial length with bounded scratch, ignoring later growth
+  and reporting UnexpectedEof on premature EOF. Holes can become allocated
+  zero bytes. Existing off_t/backend limits apply, without another size cap.
+  Concurrent changes can mix data; no snapshot or hole/offload promise.
+- First substantive failure stops new work, preserving partial effects. Never
+  replay an uncertain mutation, roll back or unlink a partial copy by pathname.
+  All helper-owned closes are checked: return a close failure after otherwise
+  successful work, preserve an earlier failure during remaining cleanup.
+  Public File/Dir destructor fatal-close policy remains unchanged. Neither
+  operation implicitly syncs or promises crash durability.
+
+These are proper native operations for Cargo, tempfile cleanup and installers,
+not a permanently disabled profile. The entire std profile still needs its
+separate close-out qualification; this task does not authorize later ports.
 
 References: [process environment](../interfaces/environment.md),
 [cwd and TEXT](../userland/process-state.md), [paths](../userland/paths.md),
@@ -250,8 +298,7 @@ without asking for file content rights. Native create/remove/rename and checked
 create_dir_all preserve backend limits and partial effects. Provider directory
 operations refuse before invocation. The [record](../development/experiments/rust-directories.md)
 separates one/four-CPU RAM/HOST/npfs and GDB checks, matched costs and limits.
-No native hardware run, new kernel interface or new grant is claimed. Recursive
-removal and copy remain the explicitly listed next item, not part of this delivery.
+No native hardware run, new kernel interface or new grant is claimed. That directory stage left recursive removal and copy to the separate delivery above.
 
 ### Worker yield — accepted (chronium, 2026-10-26)
 
@@ -325,7 +372,8 @@ consoles do not acquire a synthetic seekable length. Only reported mtimes are
 exposed. Hexyl originally qualified the read-only backend; the native writable-file
 task extends the shared std backend under the authority contract above.
 The later native-file stages add directory iteration and namespace mutation.
-File locks, recursive removal and copy remain outside this directory delivery.
+File locks remain outside the profile. The later copy/removal delivery adds real
+native convenience operations without changing the original hexyl port patches.
 
 Two platform patches replace the direct libc ESPIPE dependency with
 NotSeekable and add a native supplied-console backend to terminal_size. Its rustix dependency applies
@@ -376,14 +424,14 @@ Installed std metadata does not promise every std API or crate works.
    initialized during key cleanup. Record panic-abort and live-worker exit limits.
    **After this task chronium can:** run managed Rust workers with real thread-local
    state, channels, synchronization and deadlines.
-4. [ ] **Native files.** Add the selected fs subset and retained ownership over
+4. [x] **Native files.** Add the selected fs subset and retained ownership over
    supplied roots/streams; preserve metadata validity and Unsupported boundaries.
    - [x] Native writable FILE opens, writes/resize/sync and authority metadata
      (accepted 2026-10-26); see the [qualification](../development/experiments/rust-native-files.md).
    - [x] Directory enumeration and namespace mutation (accepted 2026-10-26);
      see the [qualification](../development/experiments/rust-directories.md).
-   - [ ] Next: native remove_dir_all and fs::copy (Cargo/tempfile/installers);
-     Unsupported only for the directory stage, separate implementation assignment.
+   - [x] Native remove_dir_all and fs::copy (Cargo/tempfile/installers), accepted
+     2026-10-26; see the [qualification](../development/experiments/rust-copy-remove.md).
    **After this task chronium can:** read, write, seek, sync and enumerate granted
    files from std without an ambient filesystem or process launch mechanism.
 5. [x] **Hexyl.** Pin/patch/build/package hexyl with the read-only File subset;

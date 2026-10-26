@@ -1736,6 +1736,21 @@ a consumer may therefore need an explicit worker count. Revisit a native yield
 only with a concrete workload, and expose truthful effective eligibility before
 replacing that error. This gate adds neither scheduler controls nor a fake count.
 
+## Rust filesystem mutation limits
+
+Native [Rust copy/removal](development/experiments/rust-copy-remove.md) preserves
+partial effects and does not imply sync. Copy materializes sparse holes and can
+use substantially more destination backing; revisit native hole/extent support
+with a sparse-heavy consumer. Removal holds parents but final deletion is still
+by name: concurrent rename can move a directory out of the tree being emptied
+or replace its final name. HOST submounts can be emptied before final BUSY and
+hidden bind cycles can exhaust resources. There is no one-filesystem guarantee,
+fixed depth cap or total-time bound under ongoing creation. Revisit conditional
+native deletion or truthful mount-boundary metadata when a consumer needs
+isolation from concurrent namespace changes; an identity precheck is not that
+mechanism. HOST bind-alias/cross-session comparison remains outside the existing
+[file identity contract](interfaces/file-metadata.md#identity-and-lifetime).
+
 ## Hexyl upstream I/O errors
 
 The optional hexyl 0.17.0 port retains its upstream read loop: persistent input

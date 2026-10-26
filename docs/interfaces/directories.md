@@ -233,9 +233,17 @@ parent keeps an independent child reference.
 ## Removal
 
 REMOVE takes one counted name and FILE, DIRECTORY or ANY as its expected kind.
+HOST also accepts exact SYMLINK: it unlinks that entry without following it.
+Other backings reject that kind with BAD_OPERATION; no link handle, read,
+creation or traversal is added. ANY retains its existing FILE/DIRECTORY scope.
 ANY accepts either kind in the same atomic operation, without a userspace
 lookup/remove race. Only REMOVE on the parent is required; file READ/WRITE and
 parent LOOKUP/ENUMERATE are not implied or needed. It returns no reply bytes.
+HOST symlink removal observes its kind without following it and releases the
+lookup before UNLINK. An external replacement can still change which name is
+affected; a replacement directory is never recursively entered or sent RMDIR
+by this exact SYMLINK operation. Other special kinds remain refused.
+
 Names have the same component rules as LOOKUP. A missing name returns NOT_FOUND,
 a kind mismatch WRONG_TYPE, and a nonempty directory NOT_EMPTY. Insufficient
 rights returns DENIED before immutable backing can report READ_ONLY.
