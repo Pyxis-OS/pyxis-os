@@ -4,7 +4,7 @@ members = ["runtime", "hello", "scene", "raster", "raster-host", "std-main"]
 default-members = ["raster-host"]
 
 [patch.crates-io]
-libc = { git = "https://git.internal/PyxisOS/pyxis-libc.git", rev = "417acae00d4e21abf1a668c8dc71361bfa03d3aa" }
+libc = { git = "https://git.internal/PyxisOS/pyxis-libc.git", rev = "bdaad80e28d7dc793f034460787c94dea622f588" }
 
 [workspace.package]
 version = "0.1.0"
