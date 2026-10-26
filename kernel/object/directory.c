@@ -1838,6 +1838,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     }
     required = DIRECTORY_RIGHT_FILESYSTEM_INFO;
     break;
+  case DIRECTORY_APPEND_SUPPORT:
+    required = DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES;
+    break;
   case DIRECTORY_CREATE:
     required = DIRECTORY_RIGHT_CREATE;
     break;
@@ -1866,7 +1869,8 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   if (required && !(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  if ((operation == DIRECTORY_LINK || operation == DIRECTORY_REPOSITORY_VIEW) &&
+  if ((operation == DIRECTORY_LINK || operation == DIRECTORY_REPOSITORY_VIEW ||
+       operation == DIRECTORY_APPEND_SUPPORT) &&
       (rights & required) != required) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
@@ -1876,6 +1880,17 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == DIRECTORY_APPEND_SUPPORT) {
+    const unsigned char *bytes = (const void *)&request;
+    for (size_t i = 0; i < sizeof(request); ++i) {
+      if (bytes[i]) {
+        return (struct syscall_result){CALL_BAD_REQUEST, 0};
+      }
+    }
+    bool supported = directory->backing == DIRECTORY_RAM ||
+        directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32;
+    return (struct syscall_result){supported ? CALL_OK : CALL_BAD_OPERATION, 0};
   }
   if (operation == DIRECTORY_REPOSITORY_VIEW) {
     return repository_view(directory, reply_address, reply_capacity);

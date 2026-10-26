@@ -547,17 +547,19 @@ unknown domain, missing required identity or failed query aborts before any
 truncation. See [file metadata](../interfaces/file-metadata.md).
 Only after this check are non-append outputs truncated, in written order, and
 children launched.
-Append retains existing bytes and writes at the current FILE size, with the
-[non-atomic append limit](stdio.md). Every redirected FILE output, truncated or
-not, is passed with the `stdout.append` or `stderr.append` companion: the shell
-truncates once, and every writer of the stream then appends. A script, or any
-other program that launches commands of its own, passes the stream on, so
-`shell o.sh > out` with `echo aaaa` then `echo b` leaves `aaaa` then `b`, as
-`>` then `>>` at the prompt does. Seeking in such a stream no longer overwrites
-earlier bytes, and concurrent writers, such as background commands, append
-non-atomically and can still overwrite one another. The child receives independent
-FILE grants, including exported CALL transport where needed, not filenames to
-reopen. Temporary shell handles close after launch or failure. `<` withholds keyboard and pointer grants.
+Append retains existing bytes and uses [native FILE_APPEND](stdio.md), atomic
+per operation of at most 4,080 bytes. Larger flushes/lines may interleave, without
+a durability guarantee. Every append-capable redirected FILE, truncated or not,
+is passed with `stdout.append` or `stderr.append`; descendants inherit the policy
+and continue at EOF. Scripts therefore preserve successive commands' output.
+
+An unsupported backing such as HOST refuses `>>` before create/truncate. Plain
+`> host://file` prepares the existing positioned byte relay first; descendants
+receive its PIPE and share that worker's cursor. It needs declared helper/pipe/
+launch grants and cannot seek or hand off capabilities. Native/capture output
+keeps a real FILE. Classification uses held FILE/parent capabilities, not URI
+spelling, and a later creation or authority failure is final. Temporary handles
+close after launch or failure. `<` withholds keyboard and pointer grants.
 If stdout remains a console, the final foreground stage receives named terminal
 input with READ alone, so a pager can read keys independently of its file stdin.
 The separate terminal-output grant remains available for explicit terminal
@@ -572,9 +574,10 @@ shell's own stderr; `2>` redirects the child's stderr only.
 
 `cat < file > alias` is protected even through different root/path spellings.
 Argument files are outside the check: `cat file > file` can still destroy its input.
-With `> out 2> out`, stdout and stderr append independently, so their writes can
-interleave and, when they race, overwrite one another. This is not a merged output
-stream; use `2>&1`.
+With independent `> out 2> out`, the streams have independent bindings and no
+combined ordering. Native append operations cannot overwrite one another, but
+independent HOST workers have separate positioned cursors and may overwrite.
+Use `> out 2>&1` for one shared byte stream.
 
 ### Merged output
 
@@ -593,8 +596,8 @@ prior stdout. The third combines both in the pipe; the fourth puts only stderr
 in the pipe. PIPE and CONSOLE sinks share the same endpoint and keep ordinary
 command wait, cancellation and launcher behavior. A FILE or capture sink uses one bounded
 byte relay with a sole cursor, including across successive descendant commands.
-Explicit/inherited append is honored, without atomic append or stronger ordering
-than actual writes and application buffering. Independent `> file 2> file`
+Explicit/inherited native append is honored per bounded operation, without
+whole-line ordering beyond actual writes and application buffering. Independent `> file 2> file`
 redirects still have independent cursors; use `> file 2>&1` to merge.
 
 Merged output is byte-oriented: no seek or capability handoff across the merge

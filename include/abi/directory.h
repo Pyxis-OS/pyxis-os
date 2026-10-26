@@ -29,6 +29,7 @@
 #define DIRECTORY_LOOKUP_TYPED UINT64_C(9)
 #define DIRECTORY_LINK UINT64_C(10)
 #define DIRECTORY_REPOSITORY_VIEW UINT64_C(16)
+#define DIRECTORY_APPEND_SUPPORT UINT64_C(20)
 #define DIRECTORY_REPOSITORY_VIEW_RIGHTS \
   (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_READ_FILES | DIRECTORY_RIGHT_CREATE | \
    DIRECTORY_RIGHT_WRITE_FILES | DIRECTORY_RIGHT_REMOVE)
@@ -159,6 +160,11 @@ union directory_payload {
   struct directory_link_request link;
 };
 
+/* APPEND_SUPPORT takes a complete zeroed message and returns no reply. Both
+ * CREATE and WRITE_FILES are required. OK means the native backing supports
+ * creating append-capable files; BAD_OPERATION means it does not. This checks
+ * backing support only: no name is selected, reserved or created, and later
+ * CREATE/APPEND still perform their ordinary admission checks. */
 /* SYNC requires either CREATE or REMOVE. Send the complete zeroed message;
  * it ignores the body and returns no reply. Synchronizes this directory's
  * entries, not its children or the whole filesystem. RAM succeeds as a no-op;
