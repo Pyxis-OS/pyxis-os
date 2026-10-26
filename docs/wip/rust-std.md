@@ -233,6 +233,26 @@ References: [process environment](../interfaces/environment.md),
 [native threads/TLS](../interfaces/threads.md), [libc threads](../userland/threads.md),
 [libc profile](../userland/libc-portability.md), [loading](../kernel/program-loading.md).
 
+### Native-directory delivery
+
+[Userland #392](https://git.internal/PyxisOS/pyxis-userland/pulls/392),
+[libc #5](https://git.internal/PyxisOS/pyxis-libc/pulls/5),
+[Rust #6](https://git.internal/PyxisOS/pyxis-rust/pulls/6) and
+[Pyxis #1262](https://git.internal/PyxisOS/pyxis-os/pulls/1262) deliver the
+accepted directory contract. ReadDir/DirEntry retain one native parent, including
+across iterator drop, cwd change and root rebinding. Entry metadata uses that
+parent and the saved name; path() remains display spelling and can resolve
+elsewhere later. Entries may keep a mount release BUSY until dropped.
+
+Live enumeration yields a real error once, then ends; earlier entries stay
+usable. Known types need no child lookup; unknown types use native typed lookup
+without asking for file content rights. Native create/remove/rename and checked
+create_dir_all preserve backend limits and partial effects. Provider directory
+operations refuse before invocation. The [record](../development/experiments/rust-directories.md)
+separates one/four-CPU RAM/HOST/npfs and GDB checks, matched costs and limits.
+No native hardware run, new kernel interface or new grant is claimed. Recursive
+removal and copy remain the explicitly listed next item, not part of this delivery.
+
 ### Worker yield — accepted (chronium, 2026-10-26)
 
 For this native profile, `std::thread::yield_now` is a weak processor hint under
@@ -262,7 +282,7 @@ writers before OPEN, STAGE, create or truncate; keep existing provider reads.
 Native files are unbuffered at this layer, so `File::flush` has no pending data;
 `sync_all` and `sync_data` use the backend's real sync operation. Preserve short
 progress, checked close failures and actual metadata validity. Directory
-iteration and namespace mutation remain a separate task.
+enumeration and namespace mutation are delivered separately above.
 
 Append returns Unsupported in one Rust option-validation guard before lookup
 or effects. Replace that guard when the separately assigned native atomic-append
@@ -288,7 +308,7 @@ Spawn transfers startup state once; join consumes the managed observer, and
 JoinHandle drop detaches through libc. Names and ThreadId are Rust metadata;
 no native OS identity or scheduler control is invented. Contended synchronization,
 channels and TLS/key/runtime cleanup are qualified on one and four QEMU CPUs.
-Writable files and directory mutation remain the next separate gate.
+The later native-file stages qualify writable files and directory mutation separately.
 
 ## Hexyl admission
 
@@ -304,8 +324,8 @@ shared cloned cursors. Regular files report their actual length; pipes and
 consoles do not acquire a synthetic seekable length. Only reported mtimes are
 exposed. Hexyl originally qualified the read-only backend; the native writable-file
 task extends the shared std backend under the authority contract above.
-Directory iteration, namespace mutation, file locks and the rest of gate 4
-remain undelivered.
+The later native-file stages add directory iteration and namespace mutation.
+File locks, recursive removal and copy remain outside this directory delivery.
 
 Two platform patches replace the direct libc ESPIPE dependency with
 NotSeekable and add a native supplied-console backend to terminal_size. Its rustix dependency applies
@@ -360,7 +380,8 @@ Installed std metadata does not promise every std API or crate works.
    supplied roots/streams; preserve metadata validity and Unsupported boundaries.
    - [x] Native writable FILE opens, writes/resize/sync and authority metadata
      (accepted 2026-10-26); see the [qualification](../development/experiments/rust-native-files.md).
-   - [ ] Directory enumeration and namespace mutation (accepted/assigned 2026-10-26).
+   - [x] Directory enumeration and namespace mutation (accepted 2026-10-26);
+     see the [qualification](../development/experiments/rust-directories.md).
    - [ ] Next: native remove_dir_all and fs::copy (Cargo/tempfile/installers);
      Unsupported only for the directory stage, separate implementation assignment.
    **After this task chronium can:** read, write, seek, sync and enumerate granted
