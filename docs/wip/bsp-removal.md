@@ -151,7 +151,9 @@ beyond this accepted scope without a further decision.
 The merged [implementation and matched result](../development/experiments/frame-batches/README.md)
 reduce the four-client large-allocation lock cost without retained free pools.
 Real exhaustion/rollback, bitmap accounting and completed cross-CPU frees pass.
-Native batch qualification is still open; the task 1 packet remains unchanged.
+The [native A/B/C record](../development/experiments/memory-native-abc/README.md)
+closes the task 1/2 functional packet; it does not establish a native batch
+speedup or multi-CPU scaling.
 
 ## Implementation sequence
 
