@@ -208,8 +208,13 @@ while another process mutates, address-wait withdrawal/reuse, caller stop during
 stepped work, batch-launch refusal/unwind, actual process/group retirement and
 old output/late-reply guarantees. Invalidation qualification includes concurrent
 initiators, root entry/exit races, shared kernel range reuse and both permission
-directions with independent state checks. Any private fault-injection or
-failure hook needs separate explicit authorization; no such run is included here.
+directions with independent state checks. Private fault-injection/failure scopes
+need explicit authorization. Chronium approved the bounded, RAM-only delayed-ACK
+check on 2026-10-26: [production #1269 kernel, GDB-paused CPU, PASS](../development/experiments/vm-epochs/README.md#delayed-acknowledgement-production-kernel-qemu-pass).
+The existing resize consumer retains five ranges/2,940 backed pages, fences
+further resizing, and does not reclaim on a late ACK; private MEMORY/Remote keep
+working. No kernel hook or test code is merged. Task 3's shared-owner integration
+and other failure scenarios remain unqualified by this check.
 
 Native windows go through the orchestrator on live RAM/owned workspaces.
 Include the existing audio/network/display mixed load to detect CPU0 starvation

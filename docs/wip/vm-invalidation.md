@@ -219,9 +219,13 @@ not the recommended recovery policy either.
    stable device queries and shutdown/reaper paths detect unsafe admission or
    broad ownership stalls. Record matched baseline/regression controls.
 
-A deliberately missed/delayed ACK or injected transport failure is **not yet
-authorized**. Propose a bounded, never-merged QEMU-only hook when that test step
-is reached; no such hook/run and no native fault test are part of this proposal.
+**Scoped failure-path approval (chronium, 2026-10-26):** one disposable RAM-only
+QEMU delayed-ACK check, preferably by pausing a vCPU through GDB rather than a
+kernel hook. The [production-kernel check passed](../development/experiments/vm-epochs/README.md#delayed-acknowledgement-production-kernel-qemu-pass):
+timeout retains the existing resize consumer's backing, fences further resizing,
+and a late ACK cannot reclaim storage. No hook or test code is merged. This does
+not qualify the remaining shared-owner integration or authorize other fault
+scenarios/native fault tests. Raise those scopes separately when reached.
 Native work goes through the orchestrator after ordinary QEMU qualification.
 The task 1/2 A/B/C native packet has no task 3 implementation or instrumentation.
 
