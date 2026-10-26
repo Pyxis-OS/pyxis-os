@@ -1,7 +1,8 @@
 # Remove BSP-owned allocation and VM mutation
 
-Proposal only (chronium assignment, 2026-10-26). No implementation is authorized
-by this document. XSAVE/AVX is merged and natively qualified; its qualification
+Decisions 1–3 accepted (chronium, 2026-10-26). Task 1 is assigned to Codex alpha;
+capture its matched baseline before implementation. Later tasks raise decisions
+when reached. XSAVE/AVX is merged and natively qualified; its qualification
 record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
 The accepted JIT grant remains after this milestone.
 
@@ -39,14 +40,15 @@ The old native MEMORY comparison measured about 1.6–4.2 µs added per mutation
 evidence, not today's baseline or a predicted gain. Bounded teardown reduced long
 interrupt-off stalls but retained CPU0 ownership; this proposal does not undo it.
 
-## Decisions needed now
+## Accepted decisions (chronium, 2026-10-26)
 
 ### 1. Execute on the calling CPU without a new worker layer
 
-**Recommended default:** the requesting user task runs an explicit kernel-root
+**Accepted:** the requesting user task runs an explicit kernel-root
 continuation on the CPU where it entered the syscall. The scheduler first saves
 its stack/state, leaves the private root on the permanent scheduler stack and
-acknowledges departure. Only then may the continuation become runnable. Keep the continuation on that CPU. It can
+acknowledges departure. Only then may the continuation become runnable. Keep
+the continuation on that CPU. It can
 park/yield in bounded work without entering the private root; final reply uses
 the existing mutator-only reentry and fresh output validation.
 
@@ -63,7 +65,7 @@ needed. Neither option permits live kernel-worker migration or work stealing.
 
 ### 2. First task keeps the proven quiescence semantics
 
-**Recommended default:** first unpin private MEMORY operations while retaining
+**Accepted:** first unpin private MEMORY operations while retaining
 whole-process root/borrower drainage, competing-mutation BUSY, the current
 pre-effect quiescence budget, all-or-nothing backing and bounded stepping.
 The same owner token also excludes existing BSP DISPLAY/thread mutations; those
@@ -83,27 +85,30 @@ part is rewritten is also possible, but provides no reviewable unpinning step.
 
 ### 3. Reuse the any-CPU allocator before designing caches
 
-**Recommended default:** task 1 allocates/zeros/frees backing on its executing
+**Accepted:** task 1 allocates/zeros/frees backing on its executing
 CPU using the existing PMM lock and local scratch slots. This is CPU-local
 execution, not a lock-free or cached PMM. Do not introduce per-CPU frame budgets,
 remote-free queues or new free-memory accounting in that task.
 
-Measure the shared PMM path once the dispatcher is gone. The frame-allocation
-task below then proposes any local cache/refill/drain budget and low-memory
-behavior just in time; it must account for every free frame and preserve a way
-to reclaim cached frames under pressure. This does not drop the milestone's
-per-CPU allocation goal. Alternative: design those budgets and cache lifetime
+Task 2 starts with a measured decision point: after task 1 removes the
+dispatcher, measure the shared PMM path and bring chronium a decision on whether
+to move frame allocation into per-CPU caches or another local mechanism. Do not
+assume caches are required or unnecessary. Any proposed cache/refill/drain
+budget and low-memory behavior must account for every free frame and preserve
+a way to reclaim cached frames under pressure. This does not drop the
+milestone's per-CPU allocation goal. Alternative: design those budgets and cache lifetime
 before task 1, expanding its scope while the actual PMM contention is unknown.
 
-## Implementation sequence after acceptance
+## Implementation sequence
 
-Each row is a delivery/review boundary, not permission to start it. Later tasks
-raise their own behavior, lifetime and policy decisions when reached.
+Task 1 is authorized (chronium, 2026-10-26). Each row is a delivery/review
+boundary; later tasks raise their behavior, lifetime and policy decisions when
+reached. Task 2 begins with the explicit measure-then-decide point above.
 
 | Task | Concrete delivery and check | What chronium can do afterward |
 | --- | --- | --- |
 | 1. Private MEMORY on its caller CPU | Per-space owner proof, stable queries, counters/identities and pin synchronization; kernel-root continuations; all existing ordinary/guarded/sparse MEMORY operations. Preserve the BSP clients' use of the same gate. Check real AP execution, unrelated processes mutating concurrently, same-process competition, parked I/O and stop/unwind. | Run memory-heavy processes on APs without CPU0 servicing their MEMORY bodies; sibling quiescence still applies. |
-| 2. Frame allocation on each CPU | Attribute PMM lock/search/zero/map costs with the routing bottleneck gone. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
+| 2. Frame allocation on each CPU | First measure PMM lock/search/zero/map costs with the routing bottleneck gone and bring chronium the decision whether to move frame allocation out. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
 | 3. Invalidation and shared kernel VM | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
 | 4. Preparation and reclamation | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
 | 5. Remaining VM consumers and JIT gate | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Start the separately accepted JIT kernel task as a consumer of the common VM transaction, rather than add a BSP-only JIT service. |

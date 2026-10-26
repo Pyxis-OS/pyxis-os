@@ -141,8 +141,10 @@ installed ThinkPad is open.
 to Codex alpha (chronium, 2026-10-26), after merged/native-qualified XSAVE/AVX
 and before the JIT kernel task. Caller-CPU transactions, per-address-space
 ownership, frame allocation, acknowledged invalidation and non-centralized
-cleanup; the first-task execution/quiescence/allocator decisions are pending.
-No implementation is authorized by the proposal.
+cleanup. The first-task execution/quiescence/allocator decisions are accepted
+(chronium, 2026-10-26); task 1 starts with a matched baseline. Task 2 starts by
+measuring the shared PMM path after dispatcher removal and bringing the frame
+allocation decision to chronium.
 
 ## Candidates for the next milestone
 
