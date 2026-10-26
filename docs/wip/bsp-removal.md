@@ -2,8 +2,8 @@
 
 Decisions 1–3 accepted (chronium, 2026-10-26). Task 1 is merged in #1254;
 its hands-free native packet is prepared and awaits the orchestrator. Task 2
-measurement and bounded-batch implementation are complete for review; decision 4
-is accepted (chronium, 2026-10-26). Later tasks raise decisions
+measurement and bounded-batch implementation are merged in #1260/#1263.
+Task 3 is [proposed](vm-invalidation.md), with decisions 5–7 pending. Later tasks raise decisions
 when reached. XSAVE/AVX is merged and natively qualified; its qualification
 record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
 The accepted JIT grant remains after this milestone.
@@ -146,14 +146,14 @@ this recommendation does not reverse the earlier recursive-walk preference or
 claim to finish all per-CPU allocation work. No allocator implementation begins
 beyond this accepted scope without a further decision.
 
-The [implementation and matched result](../development/experiments/frame-batches/README.md)
+The merged [implementation and matched result](../development/experiments/frame-batches/README.md)
 reduce the four-client large-allocation lock cost without retained free pools.
 Real exhaustion/rollback, bitmap accounting and completed cross-CPU frees pass.
 Native batch qualification is still open; the task 1 packet remains unchanged.
 
 ## Implementation sequence
 
-Task 1 is merged; task 2's bounded frame-batch implementation is authorized. Each row is a delivery/review
+Tasks 1–2 are merged; task 3 awaits its [decisions](vm-invalidation.md). Each row is a delivery/review
 boundary; later tasks raise their behavior, lifetime and policy decisions when
 reached. Task 2 begins with the explicit measure-then-decide point above.
 
