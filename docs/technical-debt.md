@@ -5,6 +5,28 @@ cost, and when to reconsider it. This is a working record, not a roadmap or a
 commitment to replace every simple implementation. Remove or update entries
 when the underlying tradeoff changes.
 
+## LUS controller reference retention
+
+The pinned upstream physical-device manager drops raw controller pointers on
+refresh without balancing each successful SDL open; failed instance-ID lookup
+also abandons an open reference. Refresh with another controller still attached
+may retain references; the single-Edge replug check did not establish a leak.
+The port preserves upstream handle management (chronium, 2026-10-26);
+platform-independent fixes belong upstream, including coordination with SDL
+shutdown and borrowed pointers. Revisit with a confirmed reproduction or an
+upstream fix. The local source-inspected concern is retained at
+`/shared/present/controller-support/soh/UPSTREAM-LUS.md` and has not been filed.
+
+## LUS gamepad settings-menu entry
+
+The native LUS/SoH integration retains upstream settings-controlled ImGui
+gamepad navigation, gated by a visible menu or popup. Escape opens the main
+settings menu; controller navigation/closing works while it is visible. Opening
+that hidden menu using only the pad is not qualified. Revisit the application
+menu-entry behavior when pad-only operation is assigned; do not change SDL core
+or the shared ImGui default to work around it. See the
+[controller milestone](wip/controller-support.md#task-3-implementation-and-qualification).
+
 ## Git writable-close cost and editing limits
 
 Git syncs every writable file on close, including checkout files, beyond syncing

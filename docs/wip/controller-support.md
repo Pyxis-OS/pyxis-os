@@ -248,7 +248,7 @@ block; preserve current source and DMA/retirement ownership rules.
   wakeup in both SDL profiles. Validate raw and mapped axes/buttons/hat in a
   hand-run viewer; the backend refuses real output requests. SDL core retains
   upstream cached-LED and zero-rumble shortcuts (chronium, 2026-10-26).
-- [ ] **3. Edge in LUS/SoH.** Remove native controller-init/default-map exclusions,
+- [x] **3. Edge in LUS/SoH.** Remove native controller-init/default-map exclusions,
   declare bundle input, and use the existing controller manager/settings UI.
   Verify fresh and existing keyboard-only configs, editable bindings without
   erasure, save/reopen, simultaneous controls, menus/aiming and reconnection.
@@ -292,6 +292,39 @@ zero-rumble success shortcuts are retained (chronium, 2026-10-26). The Pyxis
 backend reports zero output capabilities and returns Unsupported for real
 output requests; no LED, rumble or sensor implementation is added. Task 2 is
 complete; task 3 uses LUS/SoH's existing controller manager and settings UI.
+
+## Task 3 implementation and qualification
+
+The original native LUS patch no longer excludes upstream controller
+initialization, its hotplug handler, fresh-config SDL defaults,
+settings-controlled menu navigation or ImGui AutoAll mode. Upstream controller
+initialization and handle management are unchanged. There is no stacked patch
+undoing the exclusions and no platform-independent controller cleanup fix. The
+public demo declares `gamepad/input`.
+The private SoH integration registers its existing binding editor; no game
+source or assets are added to the public port.
+
+Fresh SDL/LUS and private SoH builds passed. Hand-run QEMU with an external
+synthetic Edge exercised fresh defaults, preservation of an existing keyboard-only
+configuration, adding SDL defaults without changing keyboard mappings, editing
+a binding in the UI, and that binding after quit/reopen. The N64 file and pause
+menus work with the pad. Debugger snapshots at the game's input boundary show
+simultaneous stick/button/trigger input, keyboard button plus pad stick, and
+right-stick camera/C-button inputs. Removal/replug updates the running game's
+device list, creates a new SDL instance and resumes input with saved mappings.
+Normal process shutdown is checked; upstream handle retention is recorded in
+[technical debt](../technical-debt.md#lus-controller-reference-retention).
+
+The main settings menu still opens with Escape. Its existing controller-nav
+setting permits navigation/closing while visible; pad-only opening from hidden
+state is not qualified. These checks use a short saved scene and synthetic USB,
+not native SoH, aiming accuracy, audio/performance or start-to-end playability.
+The QEMU HDA run reported recovery/starvation messages; renderer/audio changes
+are outside task 3. Physical game qualification and persistence across reboot
+remain task 4. Native SoH play waits for llvmpipe (chronium, 2026-10-26);
+the current roughly 5 fps scene is not a native-play qualification.
+Evidence is retained in
+`/shared/present/controller-support/soh/` and the private game workspace.
 
 ## Validation and limits
 
