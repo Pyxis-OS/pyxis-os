@@ -1,3 +1,4 @@
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 #include <abi/console.h>
@@ -6,6 +7,7 @@
 #include <abi/pointer.h>
 #include <abi/audio.h>
 #include <arch/smp.h>
+#include <arch/cpu.h>
 #include <kernel/format.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
@@ -38,8 +40,11 @@ struct launch_prepared {
 };
 
 struct launch_preparation {
+  struct launch_preparation *retire_next;
   struct process *parent;
-  struct execution_group *execution_group;
+  struct process *reservation_parent; /* Pins the borrowed capability table. */
+  struct execution_group *cleanup_group;
+  struct execution_group *execution_group; /* Owned storage until publish/abort. */
   size_t count;
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[LAUNCH_BATCH_MAX];
@@ -100,6 +105,7 @@ static enum call_status install_grants(struct launch_capture *capture, struct pr
 
 static void launcher_batch_abort(struct launch_preparation *group)
 {
+  KASSERT(vm_kernel_owner_held());
   struct execution_group *previous = object_cleanup_enter(group->execution_group);
   for (size_t i = group->count; i > 0; --i) {
     struct launch_prepared *stage = &group->stages[i - 1];
@@ -109,7 +115,15 @@ static void launcher_batch_abort(struct launch_preparation *group)
   }
   group->count = 0;
   capability_reservation_release(&group->reservation, group->slots);
+  if (group->reservation_parent) {
+    process_cleanup_unpin(group->reservation_parent);
+    group->reservation_parent = NULL;
+  }
   object_cleanup_leave(previous);
+  if (group->execution_group) {
+    object_release(&group->execution_group->object);
+    group->execution_group = NULL;
+  }
 }
 
 struct launch_preparation *launcher_batch_create(void)
@@ -126,6 +140,12 @@ enum capability_result launcher_batch_reserve(struct launch_preparation *group, 
 {
   KASSERT(group && !group->count && !group->reservation.count);
   KASSERT(count && count <= LAUNCH_BATCH_MAX);
+  struct process *parent = process_current();
+  KASSERT(parent && !group->reservation_parent);
+  if (!process_cleanup_pin(parent)) {
+    return CAP_LIMIT;
+  }
+  group->reservation_parent = parent;
   return capability_request_reservation(count, &group->reservation, group->slots);
 }
 
@@ -265,7 +285,6 @@ static enum call_status prepare_child(struct launch_preparation *group,
   KASSERT(group->reservation.table == &parent->capabilities);
   KASSERT(group->count < group->reservation.count);
   group->parent = parent;
-  group->execution_group = execution_group;
   struct process *child;
   uintptr_t entry, stack_top;
   /* Only boot-archive images are read in place; the others were copied. */
@@ -279,13 +298,23 @@ static enum call_status prepare_child(struct launch_preparation *group,
     }
     return status;
   }
+  if (execution_group && !group->execution_group) {
+    if (!object_retain(&execution_group->object)) {
+      if (!external) {
+        file_end_operation(capture->image);
+      }
+      return CALL_LIMIT;
+    }
+    group->execution_group = execution_group;
+  }
   enum mm_result loaded = user_process_load(space, bytes, size,
       capture->initial_stack_bytes, &child, &entry, &stack_top);
   if (!external) {
     file_end_operation(capture->image);
   }
   if (loaded != MM_OK) {
-    return loaded == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
+    return loaded == MM_BUSY ? CALL_BUSY :
+        loaded == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
   }
 
   if (execution_group) {
@@ -311,7 +340,8 @@ static enum call_status prepare_child(struct launch_preparation *group,
   enum mm_result prepared = process_prepare_startup(child, &startup);
   if (prepared != MM_OK) {
     kfree(entries);
-    status = prepared == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
+    status = prepared == MM_BUSY ? CALL_BUSY :
+        prepared == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
     goto fail;
   }
 
@@ -339,7 +369,8 @@ static enum call_status prepare_child(struct launch_preparation *group,
   /* Publication places the child; equal loads favour the preferred CPU. */
   enum mm_result submitted = user_task_prepare(child, entry, stack_top, preferred_cpu, &task);
   if (submitted != MM_OK) {
-    status = submitted == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
+    status = submitted == MM_BUSY ? CALL_BUSY :
+        submitted == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
     goto fail;
   }
 
@@ -362,7 +393,7 @@ fail:
   return status;
 }
 
-enum call_status launcher_batch_prepare(struct launch_preparation *group,
+static enum call_status launcher_batch_prepare_owned(struct launch_preparation *group,
     struct launch_capture *capture, struct process *parent, size_t parent_cpu,
     struct execution_group *execution_group)
 {
@@ -397,17 +428,70 @@ enum call_status launcher_batch_publish(struct launch_preparation *group, handle
   capability_install_reserved(&group->reservation, group->slots, group->observers,
       count, children);
   group->count = 0;
+  if (group->reservation_parent) {
+    process_cleanup_unpin(group->reservation_parent);
+    group->reservation_parent = NULL;
+  }
+  if (group->execution_group) {
+    object_release(&group->execution_group->object);
+    group->execution_group = NULL;
+  }
   return CALL_OK;
+}
+
+static struct launch_preparation *retired_preparations;
+
+bool launcher_retire_pending(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  return retired_preparations != NULL;
 }
 
 void launcher_batch_discard(struct launch_preparation *group)
 {
-  KASSERT(arch_cpu_index() == 0 && group);
-  launcher_batch_abort(group);
-  kfree(group);
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled() && group);
+  struct vm_kernel_owner owner = {0};
+  if (vm_kernel_owner_try(&owner)) {
+    launcher_batch_abort(group);
+    kfree(group);
+    vm_kernel_owner_release(&owner);
+    return;
+  }
+  if (group->execution_group) {
+    execution_group_cleanup_begin(group->execution_group);
+    group->cleanup_group = group->execution_group;
+  } else {
+    group->cleanup_group = object_cleanup_defer();
+  }
+  group->retire_next = retired_preparations;
+  retired_preparations = group;
+  process_cleanup_notify();
 }
 
-enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
+void launcher_reap_prepared(void)
+{
+  KASSERT(arch_cpu_index() == 0 && cpu_interrupts_enabled());
+  struct vm_kernel_owner owner = {0};
+  vm_kernel_owner_cleanup(&owner);
+  uint64_t flags = cpu_save_interrupts();
+  struct launch_preparation *group = retired_preparations;
+  if (group) {
+    retired_preparations = group->retire_next;
+    struct execution_group *cleanup_group = group->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(cleanup_group);
+    launcher_batch_abort(group);
+    kfree(group);
+    object_cleanup_leave(previous);
+    if (cleanup_group) {
+      execution_group_cleanup_end(cleanup_group);
+    }
+  }
+  vm_kernel_owner_release(&owner);
+  cpu_restore_interrupts(flags);
+}
+
+static enum call_status launcher_start_owned(struct launch_capture *capture,
+    struct process *parent,
     size_t parent_cpu, struct execution_group *execution_group,
     struct capability_reservation *reservation, struct capability_reserved_slot *slots,
     handle_t *result)
@@ -427,7 +511,8 @@ enum call_status launcher_start(struct launch_capture *capture, struct process *
   return status;
 }
 
-enum call_status launcher_create_space(struct launch_capture *capture, struct process *parent,
+static enum call_status launcher_create_space_owned(struct launch_capture *capture,
+    struct process *parent,
     struct capability_reservation *reservation, struct capability_reserved_slot *slots,
     handle_t *result)
 {
@@ -484,4 +569,58 @@ enum call_status launcher_create_space(struct launch_capture *capture, struct pr
   }
   kinfo("userspace: space %s started\n", space->name);
   return CALL_OK;
+}
+
+enum call_status launcher_batch_prepare(struct launch_preparation *group,
+    struct launch_capture *capture, struct process *parent, size_t parent_cpu,
+    struct execution_group *execution_group)
+{
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    if (capture->image->backing == FILE_INITRD) {
+      file_end_operation(capture->image);
+    }
+    return CALL_BUSY;
+  }
+  enum call_status status = launcher_batch_prepare_owned(group, capture, parent,
+      parent_cpu, execution_group);
+  vm_kernel_owner_release(&owner);
+  return status;
+}
+
+enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
+    size_t parent_cpu, struct execution_group *execution_group,
+    struct capability_reservation *reservation, struct capability_reserved_slot *slots,
+    handle_t *result)
+{
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    *result = HANDLE_INVALID;
+    if (capture->image->backing == FILE_INITRD) {
+      file_end_operation(capture->image);
+    }
+    return CALL_BUSY;
+  }
+  enum call_status status = launcher_start_owned(capture, parent, parent_cpu,
+      execution_group, reservation, slots, result);
+  vm_kernel_owner_release(&owner);
+  return status;
+}
+
+enum call_status launcher_create_space(struct launch_capture *capture, struct process *parent,
+    struct capability_reservation *reservation, struct capability_reserved_slot *slots,
+    handle_t *result)
+{
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    *result = HANDLE_INVALID;
+    if (capture->image && capture->image->backing == FILE_INITRD) {
+      file_end_operation(capture->image);
+    }
+    return CALL_BUSY;
+  }
+  enum call_status status = launcher_create_space_owned(capture, parent,
+      reservation, slots, result);
+  vm_kernel_owner_release(&owner);
+  return status;
 }

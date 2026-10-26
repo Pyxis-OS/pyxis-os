@@ -10,6 +10,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/dma.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
@@ -1224,13 +1225,14 @@ static void release_resource_storage(struct gpu_resource *resource)
   KASSERT(!resource->created && !resource->attached && !gpu.queue.outstanding &&
       !gpu.cursor_queue.outstanding);
   uint64_t flags = cpu_save_interrupts();
+  KASSERT(vm_kernel_owner_held());
+  /* The presenter is the only CPU reader. Rejected/unpublished resources, or
+   * completed detach/unref, have also returned every device reference. */
   if (resource->attach_address) {
-    KASSERT(vm_free(vm_kernel_space(), resource->attach_address,
-        resource->attach_extent) == MM_OK);
+    vm_kernel_retire(resource->attach_address, resource->attach_extent);
   }
   if (resource->target.address) {
-    KASSERT(vm_free(vm_kernel_space(), resource->target.address,
-        resource->backing_bytes) == MM_OK);
+    vm_kernel_retire(resource->target.address, resource->backing_bytes);
   }
   kfree(resource->segments);
   *resource = (struct gpu_resource){0};
@@ -1240,6 +1242,7 @@ static void release_resource_storage(struct gpu_resource *resource)
 static const char *allocate_resize_resource(struct gpu_resource *resource,
     uint32_t width, uint32_t height)
 {
+  KASSERT(vm_kernel_owner_held());
   size_t pitch = (size_t)width * sizeof(uint32_t);
   if (!width || !height || height > SIZE_MAX / pitch) {
     return "framebuffer extent overflows";

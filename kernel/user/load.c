@@ -1,3 +1,4 @@
+#include <kernel/mm/kernel_owner.h>
 #include <abi/launcher.h>
 #include <arch/smp.h>
 #include <kernel/image.h>
@@ -22,7 +23,8 @@ enum mm_result user_initial_stack_size(uint64_t requested, size_t *size)
   return MM_OK;
 }
 
-enum mm_result user_process_load(struct space *space, const void *bytes, size_t size,
+static enum mm_result user_process_load_owned(struct space *space,
+    const void *bytes, size_t size,
     uint64_t initial_stack_bytes, struct process **process, uintptr_t *entry,
     uintptr_t *stack_top)
 {
@@ -42,7 +44,8 @@ enum mm_result user_process_load(struct space *space, const void *bytes, size_t 
   enum image_result image = image_load(bytes, size,
       guard_base, INITIAL_STACK_TOP, &address_space, &start);
   if (image != IMAGE_OK) {
-    return image == IMAGE_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
+    return image == IMAGE_BUSY ? MM_BUSY :
+        image == IMAGE_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
   }
   /* Image validation excludes this interval before backing. Reserve the guard
    * so later allocations cannot fill it; stack and image belong to this VM. */
@@ -61,4 +64,20 @@ enum mm_result user_process_load(struct space *space, const void *bytes, size_t 
   *entry = start;
   *stack_top = INITIAL_STACK_TOP;
   return MM_OK;
+}
+
+enum mm_result user_process_load(struct space *space, const void *bytes, size_t size,
+    uint64_t initial_stack_bytes, struct process **process, uintptr_t *entry,
+    uintptr_t *stack_top)
+{
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    *process = NULL;
+    *entry = *stack_top = 0;
+    return MM_BUSY;
+  }
+  enum mm_result result = user_process_load_owned(space, bytes, size,
+      initial_stack_bytes, process, entry, stack_top);
+  vm_kernel_owner_release(&owner);
+  return result;
 }

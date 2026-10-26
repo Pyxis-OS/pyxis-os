@@ -8,6 +8,10 @@ struct process;
 struct mount_config;
 struct space;
 
+/* BSP IF=0 query; IF=1 reaper owns deferred whole prepared batches. */
+bool launcher_retire_pending(void);
+void launcher_reap_prepared(void);
+
 /* Pure admission: zero selects the default; explicit sizes obey launcher ABI
  * bounds and page alignment. Clears SIZE on failure. No allocation or VM work. */
 enum mm_result user_initial_stack_size(uint64_t requested, size_t *size);

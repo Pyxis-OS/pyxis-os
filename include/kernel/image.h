@@ -10,6 +10,7 @@ enum image_result {
   IMAGE_OK,
   IMAGE_INVALID,
   IMAGE_NO_MEMORY,
+  IMAGE_BUSY,
 };
 
 /* Load P1F bytes from a stable, readable kernel mapping after heap/VM init.

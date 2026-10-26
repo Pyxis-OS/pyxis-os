@@ -40,6 +40,7 @@ void display_request_execute(struct display_request *request);
 struct display_frame {
   struct framebuffer fb;
   size_t references;
+  struct display_frame *retire_next; /* Final reference owned by BSP reaper. */
   struct execution_group *cleanup_group; /* Retired session backing awaiting the presenter. */
 };
 
@@ -73,6 +74,9 @@ struct display_frame *display_snapshot(struct display_object *display);
 /* BSP, IF=0. The owner's slot layout, or NULL without an acquired session. */
 const struct framebuffer *display_slot_layout(const struct display_object *display);
 void display_frame_release(struct display_frame *frame);
+/* BSP IF=0 query; IF=1 reaper keeps whole frames until bounded reclamation. */
+bool display_retire_pending(void);
+void display_reap_frames(void);
 /* BSP, IF=0. No-op before the first SUBMIT or when the layer is already selected. */
 void display_select_layer(struct display_object *display, bool graphics);
 
