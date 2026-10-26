@@ -152,8 +152,10 @@ cleanup. The first-task execution/quiescence/allocator decisions are accepted
 (chronium, 2026-10-26). Task 1 is merged; its hands-free native packet awaits
 the orchestrator. Task 2 has measured the shared PMM after dispatcher removal
 and bounded caller-owned frame batches are accepted (chronium, 2026-10-26).
-The bounded-batch implementation is qualified in nested QEMU and ready for
-review; no retained per-CPU cache is implemented. Native batches remain open.
+Tasks 1–2 are merged; no retained per-CPU cache is implemented. The sealed
+hands-free native packet now compares A/B/C, including current-main batches.
+Task 3 [invalidation and shared kernel VM](vm-invalidation.md) is proposed, with
+decisions pending; no task 3 code is authorized yet.
 
 ## Candidates for the next milestone
 
