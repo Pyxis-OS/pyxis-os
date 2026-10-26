@@ -1,8 +1,9 @@
 # 0.0.10 package upgrades
 
-Status: **tasks 1–3 merged; owned Coexist publication in review (2026-10-26).**
-This milestone changes the delivered [updater](pkg-upgrade.md). The signing-floor
-choice below remains open; this plan does not claim a completed release.
+Status: **tasks 1–3 and owned Coexist publication merged; signing-floor task
+qualified in QEMU (2026-10-26).**
+This milestone changes the delivered [updater](pkg-upgrade.md). Release tagging,
+native qualification and the remaining candidate checks are separate work.
 
 ## Accepted contract
 
@@ -75,6 +76,20 @@ choice below remains open; this plan does not claim a completed release.
    Multiple possible sources need an explicit console choice, batched by
    source; `--yes` cannot choose an ambiguous
    origin. Proposed removals need individual approval. *(chronium, 2026-10-26)*
+7. **Reviewed signed-index floor.** Freeze the latest published index for each
+   stock signed repository from chronium's controlled signing tree. Compare
+   `current` and exact index bytes with the published copy and verify the
+   signature and signer under the pinned Software Signing CA before recording
+   the snapshot in reviewed source. A network response alone never creates or
+   advances the floor. The version-1 archive table is bounded per repository
+   by name, canonical URL and signed policy, and holds the serial, signed UTC
+   time and exact index SHA-256. A signed index must pass both this embedded
+   floor and the packages volume's accepted-index record. Stock signed roots
+   without an embedded floor refuse first contact. Ordinary development images
+   carry the last checked-in snapshot without fetching; explicitly configured
+   unsigned local roots still work. User-added signed roots not in the stock
+   snapshot retain the current commit-time first-contact rule until a separate
+   reviewed-floor import is designed. *(chronium, 2026-10-26)*
 
 The pending transition is proof of the next selection, not a second active
 selection or rollback binding. An old set may occupy space until the first
@@ -102,7 +117,9 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   option after verification, and add boot/`pkg` diagnostics. Qualify Install,
   unrecorded Update and representative refusal boundaries on disposable OVMF
   images. Native firmware and power-cut qualification remain open.
-- [ ] Settle the signing-floor source and qualify first repository contact.
+- [x] Freeze the signed-repository floor from chronium's confirmed signing
+  trees, compare with the published copies, and qualify first contact and a
+  used packages volume. Embed the reviewed source in both boot archives.
 
 ## Task 3 qualification
 
@@ -128,10 +145,12 @@ boot-selection proof made boot-init enter core rescue before starting the
 installed space. These checks establish the refusal and negative proof path;
 they do not simulate power loss at every publication write.
 
-At the task-3 revision, the in-system `pkg upgrade` staging path and its final instruction built at
-this revision but were not run against a signed release repository: the
-signing-floor source is still an open decision. The 0.0.10 release notes must tell 0.0.9 users to use installer
-Update, because the 0.0.9 `pkg upgrade` client cannot stage this transition.
+At the task-3 revision, the in-system `pkg upgrade` staging path and its final
+instruction built but were not run against a signed release repository. The
+signing-floor source is now frozen, while a full in-system upgrade still needs
+release-candidate qualification. The 0.0.10 release notes must tell 0.0.9
+users to use installer Update, because the 0.0.9 `pkg upgrade` client cannot
+stage this transition.
 
 ## Owned Coexist qualification
 
@@ -160,13 +179,52 @@ OVMF does not qualify native UEFI variable behavior, firmware that ignores
 flushes, or every interrupted write boundary. The move-first BootOrder choice
 was inspected in code but was not exercised in QEMU.
 
+## Signing-floor qualification
+
+The full image built with userland #396 `aadc9de` on this branch. A 4-vCPU
+Q35/KVM/OVMF QEMU guest with a disposable RAM packages volume read a local
+signed repository fixture. A test-only embedded floor for `public` serial 2
+refused signed serial 1 on first contact. After serial 2 installed
+`clang-hosted` and its two dependencies as set 1, the same volume refused an
+update from serial 1 and retained set 1. The 281.2 MB archive's first displayed
+extracted-file count followed verification by 1.028 s in this QEMU run; the
+older 0.0.7a native stall did not reproduce, so debt issue #1496 was closed
+with the workload difference recorded. The exact fixture and timestamped
+output are in `/shared/present/pkg-upgrade-0.0.10/signing-floor/daybreak-qemu/`.
+
+Chronium confirmed that the 0.0.9 staging trees were the controlled trees he
+signed and uploaded from. The freeze tool compared their `current`, serial-2
+index, signature and signer bytes with the published `public` and `releases`
+copies, verified both signatures under the pinned Software Signing CA, then
+produced and rechecked the committed source table. The frozen `public` hash is
+`c1f08889a2b1fc071ea26bd79ed4b22e481dbc12b0f2bc1bb72f25eeb78088a6`;
+the `releases` hash is
+`c2185dc61d5772f42737d36826bb8d518f0656c176cb9871061d7f4f9325e243`.
+An image built with the production HTTPS roots booted in 4-vCPU QEMU; `pkg
+list --available` read the signed `public` index and exited successfully on
+first contact. The signed `releases` floor was verified by the host freeze
+tool; a full installed `pkg upgrade` is outside this QEMU check. Freeze input,
+image hash and guest output are in
+`/shared/present/pkg-upgrade-0.0.10/signing-floor/daybreak-release/`.
+
 ## Open decisions for later rounds
 
-- **Signing-floor snapshot authority:** choose the trusted build-time source
-  and schema of the shipped signed-index floor. A network response observed
-  at build time is not itself a trusted floor.
+- The reviewed floor proves the published state at freeze time, not that no
+  later index exists. A release must stop if the controlled tree, published
+  copy or signature disagree. A signed release tag and signed ISO bind the
+  checked-in table to the delivered core archive; CI needs no signing key.
 - **Reboot initiation:** keep a separate design open; this task gives `pkg` no
   power grant and no mediated restart action.
+
+## Follow-ups after 0.0.10
+
+- Extend the typed `uefi` grant with bounded, structured operations to list
+  boot entries, read and update `BootOrder`, and set `BootNext`. Add a small
+  boot-entry tool so an authorized Remote session can request a one-time boot
+  of an existing entry, such as Fedora on vela. Scope, readback and failure
+  behavior need their own authority decision; this milestone does not implement
+  the operations or grant them to ordinary programs. *(chronium idea,
+  2026-10-26)*
 
 ## You should know
 

@@ -48,6 +48,8 @@ return function(inputs)
       { file = "LICENSE", at = "share/licenses/volume-icons/LICENSE" },
       { file = "boot/rescue.list", at = "share/installer/rescue.list" },
       { file = "packages/signing/pyxis-signing-ca.pem", at = "share/pyxis/trust/software-signing-ca.pem" },
+      { file = "packages/signing/repository-floors.lua",
+        at = "share/pyxis/trust/repository-floors.lua" },
     }) do
       common[#common + 1] = entry
     end

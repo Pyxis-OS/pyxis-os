@@ -129,15 +129,21 @@ only when:
 4. the signature verifies and `repository` equals the configured name;
 5. `serial` is not below, and `signed` not before, the last index this packages
    volume accepted from that repository, and an equal serial has identical
-   bytes. On first contact `signed` must not be before the image's
-   `signed_floor`, its build commit time in `boot://os-release`. First contact
-   is refused when `os-release` cannot be read; a build without Git has no
-   floor.
+   bytes. Stock signed `public` and `releases` roots also have an independently
+   reviewed floor in `boot://share/pyxis/trust/repository-floors.lua`, keyed by
+   name, canonical URL and signed policy. A lower serial or earlier signed time
+   refuses; an equal serial must have the exact recorded SHA-256. The table is
+   a strict version-1 literal with at most eight entries and 16 KiB of source.
+   Without its floor, first contact with a stock signed root refuses. A
+   user-added signed root absent from that table still uses `signed_floor`,
+   the build commit time in `boot://os-release`, at first contact; unreadable
+   `os-release` refuses. Explicitly unsigned development roots use neither
+   signed floor.
 
-Step 5 stops a replayed older index and an index backdated into an expired or
-retired certificate's validity. A writer records the accepted serial, time and
-hash in `packages/repositories/NAME`, with the repository's URL; another URL
-under the name starts from the floor again. Any failure names its step and
+Step 5 stops a replayed index below the reviewed publish state even on a fresh
+packages volume. A writer records the accepted serial, time and hash in
+`packages/repositories/NAME`, with the repository's URL; another URL under the
+name starts from the image's floor again. Any failure names its step and
 makes the repository unusable for that command; nothing falls back to
 reading it unsigned. The private key never leaves the owner's vault, and only
 `tools/sign-repository.sh` on the owner's machine signs.
