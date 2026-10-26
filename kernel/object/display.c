@@ -50,6 +50,17 @@ void display_frame_release(struct display_frame *frame)
   if (--frame->references) {
     return;
   }
+  /* Process teardown already holds exclusion: unleased backing must be gone
+   * before its completion is published. */
+  if (vm_kernel_owner_held()) {
+    struct execution_group *group = frame->cleanup_group;
+    KASSERT(vm_free(vm_kernel_space(), frame->fb.address, frame->fb.size) == MM_OK);
+    kfree(frame);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
+    return;
+  }
   if (!frame->cleanup_group) {
     frame->cleanup_group = object_cleanup_defer();
   }
