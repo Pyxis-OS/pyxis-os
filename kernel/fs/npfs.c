@@ -20,6 +20,7 @@
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/completion.h>
+#include <kernel/bulk.h>
 #include <kernel-config.h>
 #include "npfs_store.h"
 #include "npfs_adapter.h"
@@ -664,6 +665,9 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   if (task_deadline_expired(context->deadline)) {
     return CALL_TIMED_OUT;
   }
+  if (job->operation == NPFS_MEMORY_READ_BULK) {
+    return file_bulk_read_memory(job);
+  }
   if (job->fat_node || (job->operation >= NPFS_FAT_OPEN && job->operation <= NPFS_FAT_CHECK)) {
     if (job->raw && job->operation == NPFS_FAT_OPEN) {
       enum call_status status = disk_validate_binding(job->raw, job->partition);
@@ -740,6 +744,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   case NPFS_LINK: required = DIRECTORY_LINK_SOURCE_RIGHTS; break;
   case NPFS_FILESYSTEM_INFO: required = DIRECTORY_RIGHT_FILESYSTEM_INFO; break;
   case NPFS_READ:
+  case NPFS_READ_BULK:
   case NPFS_CAPTURE: required = FILE_RIGHT_READ; break;
   case NPFS_SIZE: required = FILE_RIGHTS; break;
   case NPFS_INFO: required = directory ? 0 : FILE_RIGHTS; break;
@@ -779,6 +784,20 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     if (status == CALL_OK || job->completion) {
       job->count = count;
     }
+    return status;
+  }
+  case NPFS_READ_BULK: {
+    if (!job->bulk || job->count > job->bulk->capacity ||
+        job->count > FILE_READ_BULK_MAX_BYTES || job->count > UINT64_MAX - job->offset) {
+      return CALL_BAD_REQUEST;
+    }
+    size_t count = 0;
+    context->bulk_read = true;
+    enum call_status status = npfs_store_read(context, node->inode, job->offset,
+        job->bulk->data, job->count, &count);
+    context->bulk_read = false;
+    job->progress = count;
+    job->count = count;
     return status;
   }
   case NPFS_SIZE:
@@ -853,6 +872,17 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   }
 }
 
+static void release_bulk_job(struct npfs_job *job)
+{
+  if (job->bulk_memory) {
+    file_end_operation(job->bulk_memory);
+    object_release(&job->bulk_memory->object);
+    job->bulk_memory = NULL;
+  }
+  bulk_buffer_release(job->bulk);
+  job->bulk = NULL;
+}
+
 static void complete_job(struct npfs_job *job)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -861,6 +891,7 @@ static void complete_job(struct npfs_job *job)
       job->user_request->request.cleanup_group : job->completion ?
       job->completion->cleanup_group : NULL);
   file_transfer_finish(job);
+  release_bulk_job(job);
   object_cleanup_leave(transfer_previous);
   struct npfs_request *request = job->user_request;
   struct native_completion *completion = job->completion;
@@ -910,6 +941,13 @@ static void complete_job(struct npfs_job *job)
         memcpy(output, &reply, sizeof(reply));
         size = sizeof(reply);
       }
+    } else if (job->operation == NPFS_READ_BULK || job->operation == NPFS_MEMORY_READ_BULK) {
+      completion->bulk_count = job->progress;
+      completion->progress = job->progress;
+      completion->progress_known = job->progress || status != CALL_OUTCOME_UNKNOWN;
+      struct file_read_reply reply = {.read = job->progress};
+      memcpy(output, &reply, sizeof(reply));
+      size = sizeof(reply);
     } else if (job->operation == NPFS_READ) {
       completion->progress = job->progress;
       completion->progress_known = job->progress || status != CALL_OUTCOME_UNKNOWN;
@@ -955,6 +993,8 @@ static bool allowed_while_sealed(enum npfs_operation operation)
   case NPFS_COMMAND_BIND:
   case NPFS_ENUMERATE:
   case NPFS_READ:
+  case NPFS_READ_BULK:
+  case NPFS_MEMORY_READ_BULK:
   case NPFS_SIZE:
   case NPFS_INFO:
   case NPFS_CAPTURE:
@@ -1070,7 +1110,8 @@ static void npfs_worker(void *argument)
       context.completion = job->completion;
       if (!start) {
         job->status = job->completion ? native_completion_cancel_reason(job->completion) : CALL_DENIED;
-        if (job->operation == NPFS_READ || job->operation == NPFS_WRITE) {
+        if (job->operation == NPFS_READ || job->operation == NPFS_WRITE ||
+            job->operation == NPFS_READ_BULK || job->operation == NPFS_MEMORY_READ_BULK) {
           job->count = 0;
         }
       } else {
@@ -1260,6 +1301,7 @@ void npfs_completion_discard(struct native_completion *operation)
   KASSERT(atomic_fetch_sub_explicit(&admitted, 1, memory_order_relaxed));
   job->status = CALL_ABANDONED;
   file_transfer_finish(job);
+  release_bulk_job(job);
   operation->backend = NULL;
   kfree(job);
   wake_worker();
@@ -1288,7 +1330,8 @@ void npfs_request_release(struct npfs_request *request)
       !request->job.next && !request->job.user_request && !request->job.admitted &&
       !request->job.transfer_source.object && !request->job.transfer_destination &&
       !request->job.transfer_memory &&
-      !request->job.transfer && !request->job.transfer_data);
+      !request->job.transfer && !request->job.transfer_data &&
+      !request->job.bulk && !request->job.bulk_memory);
   bsp_request_release(&request->request);
 }
 
@@ -1322,7 +1365,10 @@ void npfs_request_published(struct npfs_request *request)
     KASSERT(request->job.admitted && request->job.fat_node && request->job.fat_actor);
     return;
   }
-  request->job.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
+  if (request->job.operation != NPFS_READ_BULK &&
+      request->job.operation != NPFS_MEMORY_READ_BULK) {
+    request->job.deadline = task_deadline_after_ms(NPFS_TIMEOUT_MS);
+  }
   request->job.admitted = reserve_job();
   request->job.status = request->job.admitted ? CALL_OK :
       storage_draining() ? CALL_UNAVAILABLE : CALL_BUSY;

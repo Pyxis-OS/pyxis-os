@@ -46,9 +46,9 @@ without conflict.
 
 Chosen by the owner, each starting with a proposal.
 
-[Bulk FILE reads](bulk-file-reads.md): chronium-authorized proposal (2026-10-25)
-for bounded provider/npfs reads preserving authority and owned lifetimes. Public
-ABI work waits until after 0.0.9; implementation awaits the proposed decisions.
+[Bulk FILE reads](bulk-file-reads.md): accepted and assigned (chronium, 2026-10-25),
+with bounded provider/npfs reads preserving authority and owned lifetimes.
+The 0.0.9 release merge gate is lifted; new consumers need bulk-capable kernels.
 
 [Capability model implementation](capability-model-implementation.md): owner-assigned
 2026-10-14; Codex beta owns integration, with Codex delta on the kernel tasks.

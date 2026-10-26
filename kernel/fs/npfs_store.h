@@ -23,6 +23,7 @@ struct npfs_store_context {
   enum block_result backing_error;
   enum npfs_status format_error;
   bool time_valid;
+  bool bulk_read; /* Per-page fairness and exact interruption for owned bulk reads. */
   int64_t time_ns;
   struct native_completion *completion; /* Optional owned cancellation control. */
 };

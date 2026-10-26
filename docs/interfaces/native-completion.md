@@ -21,6 +21,14 @@ operation/request/result storage, dedicated delivery/receipt claims, captured
 lineage metadata and backend/capture reservations. It does not charge an entire
 pre-existing target object graph again. Network operation storage also consumes
 the independent shared TCP/UDP allowance; filesystem operations do not.
+FILE_READ_BULK separately reserves up to 1 MiB from a **16 MiB per-process bulk-data
+allowance**, before endpoint/backend admission. Its fixed completion payload is
+only `file_read_reply`; collect data with the receipt's `ENDPOINT_COLLECT_BULK`
+right, then CLOSE/ACK. Failed/short collection preserves the result; success
+consumes data. Actual native status and cancellation reason remain independent.
+A nonzero inner FILE deadline can shorten, never renew, the required finite
+outer submission deadline. Metadata accounting is unchanged.
+
 FILE_TRANSFER charges its descriptor, job/state and completion metadata, not its
 requested I/O length: the sole filesystem worker allocates/frees at most one
 1 MiB transfer scratch buffer before terminal publication.
@@ -63,6 +71,7 @@ acceptance; workers never resolve a caller-local handle.
 | TCP service CONNECT | `completion_connect_request`; result `tcp_connect_reply` with zero handle plus attached TCP_RIGHTS grant |
 | UDP SEND | `completion_udp_send_request` followed by exact datagram bytes; native status, successful accepted length as known progress |
 | UDP RECEIVE | `completion_udp_receive_request`; native peer/count reply followed by datagram |
+| FILE READ_BULK | `file_bulk_read_request`; fixed count metadata, separately collected copied bytes |
 | FILE TRANSFER | `file_transfer_request`, captured source READ plus destination WRITE; confirmed count in `file_transfer_reply` |
 | FILE READ / WRITE / RESIZE / SIZE | Existing address-free native request/reply layouts, including READ's count prefix |
 | DIRECTORY CREATE | `completion_create_request` plus one name component; exclusive FILE READ/WRITE creation, attached FILE_RIGHTS grant |

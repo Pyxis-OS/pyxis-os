@@ -5,6 +5,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
+#include <kernel/bulk.h>
 #include <kernel/completion.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -101,6 +102,7 @@ static void destroy_operation(struct kernel_object *object)
   }
   forwarder_operation_release(&operation->lineage);
   capability_grant_release(&operation->returned);
+  bulk_buffer_release(operation->bulk);
   struct completion_gate *gate = operation->gate;
   size_t charged_bytes = operation->charged_bytes;
   size_t network_bytes = operation->network_bytes;
@@ -244,6 +246,29 @@ static enum call_status deadline_status(uint64_t deadline, uint64_t maximum)
   return deadline - now > maximum ? CALL_BAD_REQUEST : CALL_OK;
 }
 
+static enum call_status reserve_bulk(struct native_completion *operation, struct process *owner)
+{
+  if (operation->protocol != PROTOCOL_FILE || operation->operation != FILE_READ_BULK) {
+    return CALL_OK;
+  }
+  struct file_bulk_read_request request;
+  if (operation->input_size != sizeof(request)) {
+    return CALL_BAD_REQUEST;
+  }
+  memcpy(&request, operation->input, sizeof(request));
+  if (request.capacity > FILE_READ_BULK_MAX_BYTES ||
+      request.capacity > UINT64_MAX - request.offset) {
+    return CALL_BAD_REQUEST;
+  }
+  if (request.deadline_ns && request.deadline_ns < operation->deadline_ns) {
+    operation->deadline_ns = request.deadline_ns;
+  }
+  if (task_deadline_expired(operation->deadline_ns)) {
+    return CALL_TIMED_OUT;
+  }
+  return bulk_buffer_create(owner, request.capacity, &operation->bulk);
+}
+
 void completion_admit_execute(struct completion_admit_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -315,6 +340,9 @@ void completion_admit_execute(struct completion_admit_request *request)
       }
     }
     if (status == CALL_OK) {
+      status = reserve_bulk(operation, request->owner);
+    }
+    if (status == CALL_OK) {
       status = endpoint_completion_reserve((struct endpoint *)request->receiver.object,
           operation, &request->reservation, request->slots);
     }
@@ -376,7 +404,7 @@ static enum call_status source_status(struct kernel_object *object, uint64_t rig
     if (protocol != PROTOCOL_FILE) {
       return CALL_BAD_OPERATION;
     }
-    if (operation == FILE_READ) {
+    if (operation == FILE_READ || operation == FILE_READ_BULK) {
       required = FILE_RIGHT_READ;
     } else if (operation == FILE_WRITE || operation == FILE_RESIZE || operation == FILE_TRANSFER) {
       required = FILE_RIGHT_WRITE;

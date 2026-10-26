@@ -23,16 +23,40 @@
 #define FILE_OUTPUT_STATUS UINT64_C(8)
 #define FILE_TRANSFER UINT64_C(9)
 #define FILE_TRANSFER_MAX_BYTES (1024u * 1024u)
+#define FILE_READ_BULK UINT64_C(10)
+#define FILE_READ_BULK_MAX_BYTES (1024u * 1024u)
 
 /* Payloads contain no caller addresses. The native message header is separate;
  * exported delivery carries protocol/operation in its transport metadata.
  * Request/reply payloads, including their count/offset fields, fit in 4 KiB.
  * Send only the operation's fields and actual bytes, never unused capacity. */
+/* The fixed payload bound applies to ordinary operations; bulk data is separate. */
 #define FILE_PAYLOAD_MAX 4096
 
 struct file_read_request {
   uint64_t offset;
   uint64_t capacity;
+};
+
+/* Positioned bulk READ borrows the same READ authority as READ, plus CALL
+ * transport for exports. Capacity is at most FILE_READ_BULK_MAX_BYTES and
+ * offset + capacity must not overflow. deadline_ns is absolute monotonic time,
+ * zero for unlimited; one deadline covers the entire operation.
+ * Native CALL returns raw bytes, with the actual count in syscall reply_size;
+ * exported calls use ENDPOINT_CALL_BULK with this 24-byte payload. The output
+ * buffer must hold capacity bytes and remain owned/reserved until return.
+ * No caller address is sent to a provider and no attachments are accepted.
+ * Short reads are valid; zero for nonzero capacity means EOF. Zero capacity
+ * still validates authority/arguments, then succeeds with no bytes. Only the
+ * actual initialized count is exposed, never unused capacity. Errors provide
+ * no usable count; output contents are unspecified and no writes follow return.
+ * Admission charges kernel bulk data to the initiating process: at most 16 MiB
+ * of live data, separately from ordinary completion metadata. LIMIT refuses
+ * budget exhaustion; NO_MEMORY refuses allocation failure before delivery/I/O. */
+struct file_bulk_read_request {
+  uint64_t offset;
+  uint64_t capacity;
+  uint64_t deadline_ns;
 };
 
 /* Followed immediately by size bytes, at most FILE_WRITE_MAX_BYTES. */
@@ -108,6 +132,7 @@ _Static_assert(sizeof(struct file_write_request) == 16, "file write request layo
 _Static_assert(sizeof(struct file_write_reply) == 8, "file write reply layout");
 _Static_assert(sizeof(struct file_resize_request) == 8, "file resize request layout");
 _Static_assert(sizeof(struct file_read_request) == 16, "file read request layout");
+_Static_assert(sizeof(struct file_bulk_read_request) == 24, "file bulk read request layout");
 _Static_assert(sizeof(struct file_read_reply) == 8, "file read reply layout");
 _Static_assert(sizeof(struct file_size_reply) == 8, "file size reply layout");
 

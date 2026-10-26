@@ -98,10 +98,27 @@ descendants returns DENIED; a live export whose receiver has closed returns
 ENDPOINT_CLOSED. Forwarded holders retain the target's attested interface.
 
 FILE helpers select native syscall dispatch or exported endpoint CALL from that
-query. Both routes use the same [copied FILE payloads](../../include/abi/file.h): at
-most 4,088 read bytes or 4,080 write bytes per helper call. Providers check the
+query. Ordinary operations use the same [copied FILE payloads](../../include/abi/file.h):
+at most 4,088 read bytes or 4,080 write bytes per helper call. Providers check the
 kernel-authenticated invoking rights for each operation. Clients validate counts,
 reply extents and application status; unexpected attachments are closed.
+
+The explicit `file_read_bulk` helper uses `FILE_READ_BULK`: offset, capacity and
+one absolute deadline, with at most 1 MiB returned as raw syscall bytes. Native
+RAM, archive and npfs FILEs support it; other native backings refuse. Exported
+FILEs use `ENDPOINT_CALL_BULK`, with the same READ and CALL authority. Ordinary
+READ, libc and Go are unchanged; there is no small-read fallback. Httpfs serves
+completed snapshots through a separately owned backing bulk completion.
+
+The initiating process has a separate 16 MiB kernel bulk-data allowance. Each
+layer reserves its own result buffer before delivery/I/O: client endpoint data
+and provider backing-completion data may coexist and both count. LIMIT,
+NO_MEMORY and QUEUE_FULL refuse without eviction or waiting for budget. No
+caller address reaches the provider. Owned buffers survive outstanding work and
+copies; cancellation cannot keep them alive solely through an unused receipt.
+Final user copies use short mapping leases and cooperative page-sized steps,
+with no large endpoint-locked or interrupt-disabled copy. Short reads and EOF
+remain valid; failures return no usable count and never write after return.
 
 A receiver owner can attach a native RAM read backing to a complete, successful,
 re-readable, READ-only FILE export through `ENDPOINT_DESCRIBE_PUBLISH`. The source

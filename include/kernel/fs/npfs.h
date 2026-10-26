@@ -37,9 +37,11 @@ struct npfs_request;
 struct native_completion;
 struct file_object;
 struct file_transfer_state;
+struct bulk_buffer;
 
 enum npfs_operation {
-  NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
+  NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_READ_BULK,
+  NPFS_MEMORY_READ_BULK, NPFS_SIZE,
   NPFS_COMMAND_VIEW, NPFS_COMMAND_CAPTURE, NPFS_COMMAND_INFO, NPFS_COMMAND_LOOKUP, NPFS_COMMAND_BIND,
   NPFS_ROOT_VIEW, NPFS_ROOT_SELECT, NPFS_SDK_VIEW,
   NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_INFO, NPFS_CREATE, NPFS_REMOVE,
@@ -87,6 +89,10 @@ struct npfs_job {
   /* LOOKUP with ANY selects child_rights for FILE, this mask for DIRECTORY. */
   uint64_t directory_child_rights;
   size_t count;
+  /* Separate bounded bulk storage; held through actual worker retirement.
+   * Memory reads also own a retained FILE and its busy loan. */
+  struct bulk_buffer *bulk;
+  struct file_object *bulk_memory;
   /* FILE_TRANSFER owns both captured objects and its memory loan until actual
    * worker retirement. Ordinary FILE messages leave these fields empty. */
   struct capability_reference transfer_source;

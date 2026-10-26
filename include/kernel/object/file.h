@@ -155,6 +155,10 @@ enum call_status file_transfer_job_init(struct npfs_job *job, struct file_object
 enum call_status file_transfer_prepare(struct npfs_job *job);
 void file_transfer_finish(struct npfs_job *job);
 
+/* Existing filesystem worker, IF=1. The job owns busy and a live memory FILE.
+ * Copies page-sized pieces with short scratch mappings and fairness points. */
+enum call_status file_bulk_read_memory(struct npfs_job *job);
+
 /* BSP/IF=0, copied kernel payload and retained target. RAM/archive reserve busy
  * without waiting; native admission reserves the existing filesystem queue. */
 enum call_status file_completion_reserve(struct native_completion *operation);

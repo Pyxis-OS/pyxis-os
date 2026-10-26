@@ -380,7 +380,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_ENDPOINT_SERVICE:
     return !(rights & ~ENDPOINT_SERVICE_RIGHT_CREATE);
   case OBJECT_ENDPOINT_RECEIPT:
-    return !(rights & ~ENDPOINT_RIGHT_REPLY);
+    return !(rights & ~(ENDPOINT_RIGHT_REPLY | ENDPOINT_RIGHT_COLLECT));
   default:
     return false;
   }

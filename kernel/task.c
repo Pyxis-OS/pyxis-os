@@ -1478,6 +1478,33 @@ void kernel_task_yield_masked(void)
   cpu_save_interrupts();
 }
 
+void task_yield_masked(void)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  /* Service interrupts between bounded steps, then relinquish this kernel
+   * continuation without holding a user mapping or subsystem lock. */
+  cpu_enable_interrupts();
+  cpu_save_interrupts();
+  struct scheduler *scheduler = local_scheduler();
+  struct task *task = scheduler->current_task;
+  KASSERT(task && !task->exited && !task->vm_borrowers);
+  KASSERT(task->kind == TASK_USER ? task->in_syscall : arch_cpu_index() == 0);
+  lock_queues();
+  bool runnable = scheduler->ready_head != NULL ||
+      scheduler->expired_address_waits != NULL ||
+      (arch_cpu_index() == 0 && completed_head != NULL);
+  unlock_queues();
+  if (arch_cpu_index() == 0 && object_reap_pending()) {
+    runnable = true;
+  }
+  if (runnable) {
+    if (task->kind == TASK_USER) {
+      arch_user_save(&task->cpu);
+    }
+    arch_context_switch(&task->saved_stack, scheduler->stack);
+  }
+}
+
 [[noreturn]] void task_schedule(void)
 {
   size_t cpu_index = arch_cpu_index();

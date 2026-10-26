@@ -120,6 +120,26 @@ rolling back provider effects. Exact unreported returned generations are closed,
 while cancellation notifications never revoke their preexisting receipt handles.
 See [user buffers](processes.md#implemented-user-buffer-access).
 
+## Copied bulk FILE transport
+
+`ENDPOINT_CALL_BULK` carries only a `file_bulk_read_request` on a READ/CALL FILE
+export. The provider receives its normal small packet and reply receipt, never
+the client's output address. `ENDPOINT_REPLY_BULK` supplies provider-local bytes
+up to the admitted capacity, with a native status and no attachments. Errors
+require zero bytes. Ordinary and bulk REPLY reject each other's receipt kind
+without consuming it. The accepted reply wins the existing terminal election;
+final copying does not restart a deadline or overwrite that result on later CUT
+or receiver closure. A stopped caller or invalid output can still fail copying.
+
+Bulk native completions additionally give their receipt `COLLECT`, authorizing
+only that result's initialized data. `ENDPOINT_COLLECT_BULK` returns raw bytes;
+a short/invalid output preserves retry, successful collection consumes the data,
+and explicit CLOSE still acknowledges the small completion. Ordinary receipts
+gain no collection right. No receipt is copyable, transferable or inherited.
+Bulk data has the separate per-process allowance described in
+[FILE dispatch](file-providers.md#file-dispatch-and-lifetime); control packets
+and the sixteen delivery slots keep their ordinary bounds.
+
 ## Receiver readiness
 
 `wait_many` accepts an owned receiver with READABLE and/or CLOSED, requiring
