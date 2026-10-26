@@ -54,13 +54,16 @@ static bool try_locked(struct vm_kernel_owner *owner)
 
 bool vm_kernel_owner_held(void)
 {
-  KASSERT(!cpu_interrupts_enabled());
+  uint64_t flags = cpu_save_interrupts();
   if (!vm_kernel_runtime()) {
-    return arch_cpu_index() == 0;
+    bool held = arch_cpu_index() == 0;
+    cpu_restore_interrupts(flags);
+    return held;
   }
   spin_lock(&owner_guard);
   bool held = current_owner && same_actor(current_owner);
   spin_unlock(&owner_guard);
+  cpu_restore_interrupts(flags);
   return held;
 }
 

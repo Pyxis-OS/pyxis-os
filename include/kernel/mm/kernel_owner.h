@@ -22,7 +22,7 @@ struct vm_kernel_owner {
  * A failed try changes nothing. Bootstrap before scheduler publication has its
  * explicit BSP-exclusive proof; runtime ownership is CPU-neutral/kernel-root. */
 bool vm_kernel_owner_try(struct vm_kernel_owner *owner);
-bool vm_kernel_owner_held(void);
+bool vm_kernel_owner_held(void); /* Short scalar query, preserves caller IF. */
 void vm_kernel_owner_release(struct vm_kernel_owner *owner);
 
 /* IF=1, retained task in kernel root; no mapping loan/short lock held. One
