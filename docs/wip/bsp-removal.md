@@ -5,8 +5,8 @@ tasks 1/2 hands-free native A/B/C qualification is recorded in
 [#1266](https://git.internal/PyxisOS/pyxis-os/pulls/1266). Task 2 measurement and
 bounded-batch implementation are merged in #1260/#1263.
 Task 3 [decisions 5–9](vm-invalidation.md) are accepted (chronium, 2026-10-26);
-shared-owner integration and QEMU qualification are in #1500 for review. Later tasks raise decisions
-when reached. XSAVE/AVX is merged and natively qualified; its qualification
+shared-owner integration and QEMU qualification are in #1500 for review. Later
+tasks raise decisions when reached. XSAVE/AVX is merged and natively qualified; its qualification
 record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
 The accepted JIT grant remains after this milestone.
 
@@ -42,7 +42,7 @@ the post-task1 measurement and remaining work are recorded below.
 | Shared kernel VM | Reused ranges require remote exclusion, not just a page-table lock. The existing helper is a BSP-initiated, one-generation all-CPU flush after callers stop refills. [SMP contract](../kernel/smp.md#memory-and-output-boundaries). | An any-CPU owner/invalidation protocol, with old backing retained until actual access and translation retirement are proved. Do not turn the current singleton into concurrent private shootdown by dropping its BSP assertion. |
 
 The old native MEMORY comparison measured about 1.6–4.2 µs added per mutation
-([record](../development/experiments/threads-task 4/README.md)). That is historical
+([record](../development/experiments/threads-task4/README.md)). That is historical
 evidence, not today's baseline or a predicted gain. Bounded teardown reduced long
 interrupt-off stalls but retained CPU0 ownership; this proposal does not undo it.
 

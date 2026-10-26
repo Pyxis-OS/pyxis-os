@@ -32,7 +32,7 @@ After foundation: `2d4dd5a1`. Clang 23 builder
 the one-CPU configuration confines Remote children to CPU 0, the four-CPU
 configuration to CPU 1. All command lines, configuration/archive/kernel hashes,
 probe outputs and build logs are retained at
-`/shared/present/bsp-removal/task 3/`.
+`/shared/present/bsp-removal/task3/`.
 
 One completed run per configuration before and after: eager allocation/release,
 zeroing, sparse/self-unmap, context pins and unwind, sibling quiescence, parked
@@ -74,7 +74,7 @@ initiators is two and both complete. The fixture changes no PTE, drops no IPI
 and suppresses/delays no acknowledgement. It is not merged, added to the ABI,
 or placed in a native packet. Production sources were restored and rebuilt.
 The patch, source, ELF hash, configuration, scripts and final passing record are
-under `task 3/concurrent/ordinary-two-initiators-gdb-final/` and its parent.
+under `task3/concurrent/ordinary-two-initiators-gdb-final/` and its parent.
 Earlier collector/GDB setup failures are recorded separately in `evidence.json`.
 
 Read-only GDB hardware breakpoints establish on CPU 1:
@@ -143,7 +143,7 @@ The observed KVM clock floor after timeout exceeds the captured absolute
 deadline. Host/GDB stop intervals are not treated as target performance data.
 The source/ELF, host commands, QEMU command line, GDB script/transcript, full
 page/bitmap checks and snapshots are retained under
-`/shared/present/bsp-removal/task 3/delayed-ack/gdb-paused-vcpu/` and its parent,
+`/shared/present/bsp-removal/task3/delayed-ack/gdb-paused-vcpu/` and its parent,
 with a hash inventory. Only this prose is committed; no raw log, image or
 test code. All owned QEMU/GDB/Remote helpers are stopped and joined.
 
@@ -171,7 +171,7 @@ stop/resize collector. A separate private fixture on CPUs 1/2 also completes 32
 queries of each actor's retained kernel stack and 32 concurrent invalidations
 per CPU, with overlap 2. The scalar snapshot is not a lease; the actor retains
 its stack throughout. The same GDB departure/re-entry checks pass. Evidence is
-under `/shared/present/bsp-removal/task 3/shared-query-fixture/` and baseline
+under `/shared/present/bsp-removal/task3/shared-query-fixture/` and baseline
 labels `query-guard-1cpu` / `query-guard-preallocated-4cpu`. No failure injected,
 no production diagnostic/test operation, all sources restored and guests stopped.
 
