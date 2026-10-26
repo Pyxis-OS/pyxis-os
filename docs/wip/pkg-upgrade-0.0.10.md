@@ -1,6 +1,6 @@
 # 0.0.10 package upgrades
 
-Status: **tasks 1–2 merged; task 3 in qualification (chronium, 2026-10-26).**
+Status: **tasks 1–2 merged; task 3 ready for review (chronium, 2026-10-26).**
 This milestone changes the delivered [updater](pkg-upgrade.md). The signing-floor
 choice below remains open; this plan does not claim a completed release.
 
@@ -79,36 +79,43 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   reference docs together. Assigned to Daybreak.
 - [x] Record origins and resolve a complete target set, including explicit
   review of legacy origins and removals.
-- [ ] Add durable pending transition evidence and the verified first-boot
+- [x] Add durable pending transition evidence and the verified first-boot
   `packages/current` switch before installed consumers start. Qualify
   interruption boundaries and core-rescue refusal.
-- [ ] Integrate the set planner with `pkg upgrade` and 0.0.10 installer Update;
+- [x] Integrate the set planner with `pkg upgrade` and 0.0.10 installer Update;
   qualify the actual 0.0.9 migration and the post-stage instruction.
 - [ ] Add Coexist activation evidence and specific boot/`pkg` diagnostics.
 - [ ] Settle the signing-floor source and qualify first repository contact.
 
-## Task 3 qualification to date
+## Task 3 qualification
 
-On a disposable 3 GiB QEMU disk, a Classic Install from the task-3 image
-published the boot/package identity and booted into its installed shell. A
-released 0.0.9 image installed 38 packages on another disposable disk; for a
-small local migration fixture, its package set was explicitly reduced to
-`shell` and its single repository was redirected to the matching task-3 build.
-The 0.0.10 installer Update reviewed the target, staged set 3 while `current`
-remained set 2, published a new ESP attempt, and reported verified activation.
-The installed boot then logged `verified package set 3 for this boot`, reached
-the shell, changed `current` to set 3, published a matching `.boot-selection`
-and removed `.upgrade-pending`. This checks the 0.0.9 migration path with one
-legacy-origin package, not a 38-package download at the target revision. An
-earlier refused Update had synchronized system configuration on this disk but
-left its 0.0.9 boot selection and package set unchanged; the successful run
-therefore also checked a retry after that no-publication failure.
+At pyxis-os `a482367f` with pyxis-userland `68b8688b`, the full core image
+built and 4-vCPU QEMU ran on disposable 3 GiB disks. A released 0.0.9 image
+installed 38 packages; the migration fixture reduced its active set to one
+`shell` package and used a local repository built from the exact task-3 image.
+Classic Update displayed `1 package adopted from public (only source)`, staged
+set 3 while `current` remained set 2, and verified the new ESP attempt. The
+installed disk-only boot logged `verified package set 3 for this boot` and
+started the installed space; afterward `current` and `.boot-selection` named
+set 3, and `.upgrade-pending` was gone. An earlier refused Update had changed
+configuration without publishing boot selection, so this run also checked a
+retry from that no-publication state. The test covers one legacy-origin
+package at the target revision, not a 38-package target download.
 
-The in-system `pkg upgrade` publication, uncertain boot
-evidence and Coexist activation record still need qualification or later-round
-work before this milestone is complete. The 0.0.10 release notes must tell
-0.0.9 users to use installer Update, because the 0.0.9 `pkg upgrade` client
-cannot stage this transition.
+A second disposable disk had a foreign boot file and Linux partition. Coexist
+Install added a Pyxis pool, but selecting Coexist Update returned to the
+installer menu with the explicit refusal. The whole-disk SHA-256 was identical
+before and after the refused Update, and the foreign boot file was unchanged.
+On a scratch clone of the installed Classic disk, corrupting the retained
+boot-selection proof made boot-init enter core rescue before starting the
+installed space. These checks establish the refusal and negative proof path;
+they do not simulate power loss at every publication write.
+
+The in-system `pkg upgrade` staging path and its final instruction built at
+this revision but were not run against a signed release repository: the
+signing-floor source is still an open decision. Coexist activation records are
+also later work. The 0.0.10 release notes must tell 0.0.9 users to use installer
+Update, because the 0.0.9 `pkg upgrade` client cannot stage this transition.
 
 ## Open decisions for later rounds
 
@@ -121,8 +128,8 @@ cannot stage this transition.
 ## You should know
 
 `packages/current` is a live view: changing it during the old boot would show
-new-ABI packages to old-release processes. The first-boot gate is therefore a
-required later task, not part of retiring rollback interfaces. ESP and npfs
+new-ABI packages to old-release processes. Task 3 therefore switches it only
+after verified first-boot selection. ESP and npfs
 cannot commit atomically; the gate must refuse uncertain evidence rather than
 show a mixed system. Staging can temporarily occupy space for both sets. The
 standalone rescue pair is a recovery tool, not a previous-version selection.
