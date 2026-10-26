@@ -29,6 +29,8 @@
 #define PCI_ECAM_SIZE (UINT64_C(256) << 20)
 #define FRAMEBUFFER_BASE UINT64_C(0xfffffe8080000000)
 #define FRAMEBUFFER_END UINT64_C(0xffffff0000000000) /* Start of recursive slot. */
+#define EFI_RUNTIME_BYTES (UINT64_C(128) << 20)
+#define EFI_RUNTIME_BASE (FRAMEBUFFER_END - EFI_RUNTIME_BYTES)
 #define RECURSIVE_SLOT 510
 
 extern char __kernel_start[], __kernel_end[];

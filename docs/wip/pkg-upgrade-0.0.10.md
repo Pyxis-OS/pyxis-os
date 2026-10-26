@@ -43,12 +43,27 @@ choice below remains open; this plan does not claim a completed release.
    Do not build a 0.0.9-compatible bridge `pkg`. Release notes must say that
    0.0.9 `pkg upgrade` cannot perform this transition. *(chronium,
    2026-10-26)*
-5. **Coexist provenance.** A reviewed Coexist Install/Update writes the
-   activation record and prints one manual boot entry; it never edits a
-   foreign boot menu. An existing unrecorded Coexist installation needs the
-   installer's Update to gain that record. Boot warns loudly when the record
-   is absent or invalid, and `pkg` returns a specific refusal rather than
-   obtaining ESP write authority. *(chronium, 2026-10-26)*
+5. **Owned Coexist boot.** A reviewed Coexist Install/Update publishes Pyxis's
+   pinned Limine at `EFI/pyxis/BOOTX64.EFI`, normal and static rescue entries,
+   and a Classic-style committed activation record. It registers one `Pyxis OS`
+   UEFI boot option for that stable file after verified publication. The option
+   is appended to `BootOrder` without changing the relative order of existing
+   options. Installer review asks whether to move Pyxis first; the default is
+   no. No Fedora GRUB chainload, manual entry, per-attempt selector, or foreign
+   bootloader configuration write is part of the path. Ambiguous ownership or
+   firmware registration refuses rather than guessing or blindly retrying.
+   An existing unrecorded Coexist installation needs the installer's Update to
+   gain the owned loader, option and record. Boot warns loudly when evidence is
+   absent or invalid; `pkg` returns a specific refusal rather than obtaining
+   ESP write authority. Conflicting evidence enters rescue.
+   *(chronium, 2026-10-26)*
+   Firmware variable access requires a typed UEFI grant. Any holder may request
+   the grant's bounded, structured `Boot####`/`BootOrder` writes; the installer
+   and other trusted tools receive it through normal grant configuration, and
+   ordinary programs do not. Runtime firmware calls are serialized under a
+   lock from any CPU, without a CPU 0 ownership requirement. A failed or
+   uncertain registration is reported as incomplete and is not automatically
+   retried. *(chronium, 2026-10-26)*
    Until that activation-record task lands, Coexist Update refuses before any
    target write with a clear message. Classic Update remains available.
    *(chronium, 2026-10-26)*
@@ -84,7 +99,11 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   interruption boundaries and core-rescue refusal.
 - [x] Integrate the set planner with `pkg upgrade` and 0.0.10 installer Update;
   qualify the actual 0.0.9 migration and the post-stage instruction.
-- [ ] Add Coexist activation evidence and specific boot/`pkg` diagnostics.
+- [ ] Add kernel UEFI runtime support and the typed, boot-option-scoped grant;
+  qualify bounded firmware variable operations in OVMF.
+- [ ] Publish the owned Coexist Limine/config/record, register its firmware
+  option after verification, and add boot/`pkg` diagnostics. Qualify Install,
+  unrecorded Update and interruption boundaries on disposable OVMF images.
 - [ ] Settle the signing-floor source and qualify first repository contact.
 
 ## Task 3 qualification

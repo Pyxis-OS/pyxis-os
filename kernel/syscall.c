@@ -46,6 +46,8 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/object/power.h>
+#include <kernel/object/uefi.h>
+#include <abi/uefi.h>
 #include <kernel/object/screen_capture.h>
 #include <kernel/syscall.h>
 #include <kernel/fs/fat32.h>
@@ -317,6 +319,12 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return power_call(rights, header.operation, request_size, reply_capacity);
+  case OBJECT_UEFI:
+    if (header.protocol != PROTOCOL_UEFI) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return uefi_call(rights, header.operation, request_address, request_size,
+        reply_capacity);
   case OBJECT_SCREENSHOT_SAVER:
     if (header.protocol != PROTOCOL_SCREENSHOT_SAVER) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

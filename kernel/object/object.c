@@ -47,6 +47,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/process.h>
 #include <abi/power.h>
+#include <abi/uefi.h>
 #include <kernel/object/object.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/file.h>
@@ -178,6 +179,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_SPACE_FACTORY;
   case OBJECT_POWER:
     return PROTOCOL_POWER;
+  case OBJECT_UEFI:
+    return PROTOCOL_UEFI;
   case OBJECT_PROFILE:
     return PROTOCOL_PROFILE;
   case OBJECT_PIPE_SERVICE:
@@ -284,6 +287,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~SPACE_FACTORY_RIGHTS);
   case OBJECT_POWER:
     return !(rights & ~POWER_RIGHTS);
+  case OBJECT_UEFI:
+    return !(rights & ~UEFI_RIGHTS);
   case OBJECT_WIFI:
     return !(rights & ~(WIFI_RIGHTS | WIFI_RIGHT_SUPPLICANT));
   case OBJECT_WIFI_SCAN:

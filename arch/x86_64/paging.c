@@ -10,6 +10,7 @@
 #include <arch/paging.h>
 #include <arch/pci.h>
 #include <arch/smp.h>
+#include <arch/uefi.h>
 #include <kernel/fb/early_console.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
@@ -40,6 +41,24 @@
 #define PAT_WRITE_COMBINING 1
 #define PAT_DEVICE_INDEX 3
 #define PAT_UNCACHEABLE 0
+
+#define EFI_RUNTIME_CODE 5u
+#define EFI_RUNTIME_DATA 6u
+#define EFI_MEMORY_UC UINT64_C(1)
+#define EFI_MEMORY_WC (UINT64_C(1) << 1)
+#define EFI_MEMORY_WT (UINT64_C(1) << 2)
+#define EFI_MEMORY_WB (UINT64_C(1) << 3)
+#define EFI_MEMORY_XP (UINT64_C(1) << 14)
+#define EFI_MEMORY_RO (UINT64_C(1) << 17)
+#define EFI_MEMORY_RUNTIME (UINT64_C(1) << 63)
+
+struct efi_map_descriptor {
+  uint32_t type, padding;
+  uint64_t physical, virtual, pages, attributes;
+};
+
+typedef uint64_t (__attribute__((ms_abi)) *efi_set_virtual_map_fn)(
+    size_t, size_t, uint32_t, void *);
 
 /* Only bits 51:12 belong to the frame address; never carry NX into an address. */
 #define PTE_ADDRESS_MASK UINT64_C(0x000ffffffffff000)
@@ -84,6 +103,10 @@ static uint64_t bootstrap_offset;
 static bool active;
 static phys_addr_t display_aperture_physical;
 static size_t display_aperture_bytes;
+static bool efi_prepared;
+static uint64_t efi_map_physical, efi_set_map_physical;
+static uintptr_t efi_get_virtual, efi_set_virtual;
+static size_t efi_mapped_bytes;
 
 /* Each CPU index owns one pair of slots. Only that CPU reads or changes its row
  * or remaps its pages, so its local invlpg is sufficient. */
@@ -236,6 +259,205 @@ static void bootstrap_map(uintptr_t virtual, phys_addr_t physical,
   *entry = physical | leaf_flags(permissions);
 }
 
+/* The one-time firmware transition needs physical identity mappings in the
+ * owned root. They are absent from process roots, which share only kernel
+ * slots; all later runtime calls use the permanent upper-half mappings. */
+static void bootstrap_map_efi(uintptr_t virtual, phys_addr_t physical,
+    unsigned permissions, uint64_t cache_flags)
+{
+  KASSERT(canonical(virtual) && !(virtual & (PAGE_SIZE - 1)) &&
+      physical_valid(physical) &&
+      (permissions_valid(permissions) ||
+          permissions == (PAGE_WRITE | PAGE_EXEC)));
+  uint64_t *entry = bootstrap_leaf(virtual);
+  if (*entry & PTE_PRESENT) {
+    KASSERT((*entry & PTE_ADDRESS_MASK) == physical);
+    return;
+  }
+  *entry = physical | leaf_flags(permissions) | cache_flags;
+}
+
+static void bootstrap_map_efi_identity(uint64_t physical, size_t bytes)
+{
+  uint64_t first = physical & ~(PAGE_SIZE - 1);
+  uint64_t end = physical + bytes;
+  KASSERT(bytes && end >= physical && end <= LOWER_HALF_MAX - PAGE_SIZE);
+  for (uint64_t page = first; page < end; page += PAGE_SIZE) {
+    bootstrap_map_efi(page, page, PAGE_WRITE, 0);
+  }
+}
+
+static uint64_t efi_cache_flags(uint64_t attributes)
+{
+  if (attributes & EFI_MEMORY_WB) return 0;
+  if (attributes & EFI_MEMORY_WT) return PTE_WRITE_THROUGH;
+  if (attributes & EFI_MEMORY_WC) return PTE_PAT_4K | PTE_WRITE_THROUGH;
+  return PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+}
+
+static bool efi_pointer_in_code(const struct boot_info *boot, uint64_t pointer)
+{
+  const uint8_t *map = (const uint8_t *)boot->efi_map_words;
+  for (size_t offset = 0; offset < boot->efi_map_size;
+       offset += boot->efi_descriptor_size) {
+    struct efi_map_descriptor descriptor;
+    memcpy(&descriptor, map + offset, sizeof(descriptor));
+    if (descriptor.type == EFI_RUNTIME_CODE &&
+        (descriptor.attributes & EFI_MEMORY_RUNTIME) &&
+        pointer >= descriptor.physical &&
+        pointer - descriptor.physical < descriptor.pages * PAGE_SIZE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static uintptr_t efi_pointer_virtual(const struct boot_info *boot, uint64_t pointer)
+{
+  const uint8_t *map = (const uint8_t *)boot->efi_map_words;
+  for (size_t offset = 0; offset < boot->efi_map_size;
+       offset += boot->efi_descriptor_size) {
+    struct efi_map_descriptor descriptor;
+    memcpy(&descriptor, map + offset, sizeof(descriptor));
+    if ((descriptor.attributes & EFI_MEMORY_RUNTIME) &&
+        pointer >= descriptor.physical &&
+        pointer - descriptor.physical < descriptor.pages * PAGE_SIZE) {
+      return descriptor.virtual + (pointer - descriptor.physical);
+    }
+  }
+  return 0;
+}
+
+static void efi_runtime_prepare(struct boot_info *boot)
+{
+  if (!boot->efi_map_valid || !boot->efi_system_table_physical ||
+      !boot->efi_runtime_table_physical || !boot->efi_set_virtual_map_physical ||
+      !boot->efi_get_variable_physical || !boot->efi_set_variable_physical ||
+      boot->efi_descriptor_size < sizeof(struct efi_map_descriptor) ||
+      !boot->efi_map_size || boot->efi_map_size % boot->efi_descriptor_size) {
+    return;
+  }
+
+  const uint8_t *map = (const uint8_t *)boot->efi_map_words;
+  size_t total = 0;
+  for (size_t offset = 0; offset < boot->efi_map_size;
+       offset += boot->efi_descriptor_size) {
+    struct efi_map_descriptor descriptor;
+    memcpy(&descriptor, map + offset, sizeof(descriptor));
+    if (!(descriptor.attributes & EFI_MEMORY_RUNTIME)) continue;
+    if (!descriptor.pages || descriptor.pages > EFI_RUNTIME_BYTES / PAGE_SIZE ||
+        (descriptor.physical & (PAGE_SIZE - 1)) ||
+        descriptor.physical >= physical_limit ||
+        descriptor.pages * PAGE_SIZE > physical_limit - descriptor.physical ||
+        descriptor.pages * PAGE_SIZE > EFI_RUNTIME_BYTES - total ||
+        descriptor.physical > LOWER_HALF_MAX - descriptor.pages * PAGE_SIZE ||
+        !(descriptor.attributes & (EFI_MEMORY_UC | EFI_MEMORY_WC |
+            EFI_MEMORY_WT | EFI_MEMORY_WB)) ||
+        (descriptor.type == EFI_RUNTIME_CODE &&
+            (descriptor.attributes & EFI_MEMORY_XP))) {
+      kwarn("UEFI: runtime map unsupported; variables unavailable\n");
+      return;
+    }
+    for (size_t earlier = 0; earlier < offset;
+         earlier += boot->efi_descriptor_size) {
+      struct efi_map_descriptor other;
+      memcpy(&other, map + earlier, sizeof(other));
+      if ((other.attributes & EFI_MEMORY_RUNTIME) &&
+          descriptor.physical < other.physical + other.pages * PAGE_SIZE &&
+          other.physical < descriptor.physical + descriptor.pages * PAGE_SIZE) {
+        kwarn("UEFI: overlapping runtime ranges; variables unavailable\n");
+        return;
+      }
+    }
+    total += descriptor.pages * PAGE_SIZE;
+  }
+  if (!total || !efi_pointer_in_code(boot, boot->efi_set_virtual_map_physical) ||
+      !efi_pointer_in_code(boot, boot->efi_get_variable_physical) ||
+      !efi_pointer_in_code(boot, boot->efi_set_variable_physical)) {
+    kwarn("UEFI: runtime entry points invalid; variables unavailable\n");
+    return;
+  }
+
+  size_t used = 0;
+  uint8_t *mutable_map = (uint8_t *)boot->efi_map_words;
+  for (size_t offset = 0; offset < boot->efi_map_size;
+       offset += boot->efi_descriptor_size) {
+    struct efi_map_descriptor descriptor;
+    memcpy(&descriptor, mutable_map + offset, sizeof(descriptor));
+    if (!(descriptor.attributes & EFI_MEMORY_RUNTIME)) continue;
+    descriptor.virtual = EFI_RUNTIME_BASE + used;
+    memcpy(mutable_map + offset, &descriptor, sizeof(descriptor));
+    /* Firmware may patch its own code/table pages while converting pointers.
+     * Seal the final mappings after SetVirtualAddressMap returns. */
+    unsigned permissions = descriptor.type == EFI_RUNTIME_CODE ?
+        PAGE_WRITE | PAGE_EXEC : PAGE_WRITE;
+    uint64_t cache_flags = efi_cache_flags(descriptor.attributes);
+    size_t bytes = descriptor.pages * PAGE_SIZE;
+    for (size_t page = 0; page < bytes; page += PAGE_SIZE) {
+      bootstrap_map_efi(descriptor.physical + page, descriptor.physical + page,
+          permissions, cache_flags);
+      bootstrap_map_efi(descriptor.virtual + page, descriptor.physical + page,
+          permissions, cache_flags);
+    }
+    used += bytes;
+  }
+
+  uintptr_t raw_map = (uintptr_t)boot->efi_map_words;
+  if (boot->efi_map_size > boot->kernel_size || raw_map < boot->kernel_virt ||
+      raw_map - boot->kernel_virt > boot->kernel_size - boot->efi_map_size) {
+    panic("UEFI map outside kernel image");
+  }
+  efi_map_physical = boot->kernel_phys + (raw_map - boot->kernel_virt);
+  bootstrap_map_efi_identity(efi_map_physical, boot->efi_map_size);
+  bootstrap_map_efi_identity(boot->efi_system_table_physical, 120);
+  bootstrap_map_efi_identity(boot->efi_runtime_table_physical, 128);
+  efi_set_map_physical = boot->efi_set_virtual_map_physical;
+  efi_get_virtual = efi_pointer_virtual(boot, boot->efi_get_variable_physical);
+  efi_set_virtual = efi_pointer_virtual(boot, boot->efi_set_variable_physical);
+  KASSERT(efi_get_virtual && efi_set_virtual);
+  efi_mapped_bytes = used;
+  efi_prepared = true;
+}
+
+static void efi_runtime_seal(const struct boot_info *boot)
+{
+  const uint8_t *map = (const uint8_t *)boot->efi_map_words;
+  for (size_t offset = 0; offset < boot->efi_map_size;
+       offset += boot->efi_descriptor_size) {
+    struct efi_map_descriptor descriptor;
+    memcpy(&descriptor, map + offset, sizeof(descriptor));
+    if (!(descriptor.attributes & EFI_MEMORY_RUNTIME) ||
+        (descriptor.type != EFI_RUNTIME_CODE &&
+            !(descriptor.attributes & EFI_MEMORY_RO))) continue;
+    size_t bytes = descriptor.pages * PAGE_SIZE;
+    for (size_t page = 0; page < bytes; page += PAGE_SIZE) {
+      uintptr_t identity = descriptor.physical + page;
+      uintptr_t virtual = descriptor.virtual + page;
+      *active_table(identity, LEVEL_PT) &= ~PTE_WRITE;
+      *active_table(virtual, LEVEL_PT) &= ~PTE_WRITE;
+      invlpg(identity);
+      invlpg(virtual);
+    }
+  }
+}
+
+static void efi_runtime_activate(struct boot_info *boot)
+{
+  if (!efi_prepared) return;
+  efi_set_virtual_map_fn set_map = (efi_set_virtual_map_fn)(uintptr_t)
+      efi_set_map_physical;
+  uint64_t status = set_map(boot->efi_map_size, boot->efi_descriptor_size,
+      boot->efi_descriptor_version, (void *)(uintptr_t)efi_map_physical);
+  efi_runtime_seal(boot);
+  if (status) {
+    kwarn("UEFI: SetVirtualAddressMap status=0x%lx; variables unavailable\n", status);
+    return;
+  }
+  arch_uefi_enable(efi_get_virtual, efi_set_virtual);
+  kinfo("UEFI: runtime variables ready (%zu mapped bytes)\n",
+      efi_mapped_bytes);
+}
+
 static void map_kernel_section(const struct boot_info *boot, char *start, char *end,
                                unsigned permissions)
 {
@@ -325,7 +547,7 @@ static void map_framebuffer(struct boot_framebuffer *fb)
     panic("framebuffer mapping extent overflows");
   }
   size_t bytes = (page_offset + fb->size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  if (bytes > FRAMEBUFFER_END - FRAMEBUFFER_BASE || first_frame >= physical_limit ||
+  if (bytes > EFI_RUNTIME_BASE - FRAMEBUFFER_BASE || first_frame >= physical_limit ||
       bytes > physical_limit - first_frame) {
     panic("framebuffer outside supported address range");
   }
@@ -445,6 +667,7 @@ void paging_init(struct boot_info *boot)
   map_local_apic();
   map_hpet();
   unsigned pci_buses = map_pci_ecam(boot);
+  efi_runtime_prepare(boot);
 
   for (size_t offset = 0; offset < metadata_bytes; offset += PAGE_SIZE) {
     bootstrap_map(PMM_METADATA_BASE + offset, plan.metadata_phys + offset,
@@ -481,6 +704,7 @@ void paging_init(struct boot_info *boot)
     early_console_rebind(boot->framebuffer.address);
   }
   active = true;
+  efi_runtime_activate(boot);
   cpu_current()->active_space = &kernel_space;
   pmm_rebase((void *)PMM_METADATA_BASE);
   bootstrap_offset = 0;

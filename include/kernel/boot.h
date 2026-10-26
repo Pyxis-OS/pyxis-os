@@ -6,6 +6,7 @@
 
 #define BOOT_MAX_REGIONS 256
 #define BOOT_COMMAND_LINE_SIZE 4096
+#define BOOT_EFI_MAP_BYTES 32768
 
 enum boot_region_type {
   BOOT_USABLE,
@@ -80,6 +81,16 @@ struct boot_info {
   bool efi_map_valid;
   size_t efi_region_count;
   struct boot_efi_region efi_regions[BOOT_MAX_REGIONS];
+  size_t efi_map_size, efi_descriptor_size;
+  uint32_t efi_descriptor_version;
+  uint64_t efi_system_table_physical;
+  uint64_t efi_runtime_table_physical;
+  uint64_t efi_set_virtual_map_physical;
+  uint64_t efi_get_variable_physical;
+  uint64_t efi_set_variable_physical;
+  /* The exact firmware descriptor layout, including any trailing fields, is
+   * needed for SetVirtualAddressMap. Keep its storage in the kernel image. */
+  uint64_t efi_map_words[BOOT_EFI_MAP_BYTES / sizeof(uint64_t)];
 };
 
 /* BSP only, after VM/heap setup: finish the bootloader's AP handoff. */
