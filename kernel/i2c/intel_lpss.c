@@ -7,6 +7,7 @@
 #include <kernel/i2c/designware.h>
 #include <kernel/input/hid_i2c.h>
 #include <kernel/log.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
 #include <kernel/pci/assignment.h>
@@ -253,15 +254,21 @@ static void descriptor_worker(void *argument)
 {
   (void)argument;
   if (lpss.assignment_pending) {
+    /* Keep the whole pending preparation across admission, before any attempt
+     * record or hardware effect. Contention cannot declare it unsupported. */
+    struct vm_kernel_owner owner = {0};
+    vm_kernel_owner_cleanup(&owner);
     uint64_t flags = cpu_save_interrupts();
     uintptr_t address;
     if (!pci_assign_memory_bar(&lpss.claim, 0, &lpss.assignment_window, &address)) {
       preparation_refused("PCI memory assignment; see resource refusal");
+      vm_kernel_owner_release(&owner);
       cpu_restore_interrupts(flags);
       return;
     }
     if (lpss.claim.bars[0].bytes < LPSS_MAPPING_BYTES) {
       preparation_refused("assigned BAR0 is smaller than the LPSS register extent");
+      vm_kernel_owner_release(&owner);
       cpu_restore_interrupts(flags);
       return;
     }
@@ -269,6 +276,7 @@ static void descriptor_worker(void *argument)
      * proof. Complete it before enabling MMIO; iDMA is never enabled. */
     if (!pci_complete_claim(&lpss.claim)) {
       preparation_refused("assigned PCI claim completion");
+      vm_kernel_owner_release(&owner);
       cpu_restore_interrupts(flags);
       return;
     }
@@ -281,10 +289,12 @@ static void descriptor_worker(void *argument)
         PCI_COMMAND_IO | PCI_COMMAND_INTX_DISABLE)) !=
         (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE)) {
       preparation_refused("assigned PCI memory-decode enable readback");
+      vm_kernel_owner_release(&owner);
       cpu_restore_interrupts(flags);
       return;
     }
     lpss.mapping.address = address;
+    vm_kernel_owner_release(&owner);
     initialize_controller(true);
     cpu_restore_interrupts(flags);
     if (lpss.state != LPSS_PREPARED) {

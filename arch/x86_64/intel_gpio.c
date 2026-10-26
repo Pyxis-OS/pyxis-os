@@ -34,7 +34,7 @@ struct gpio_input {
 static struct boot_region regions[BOOT_MAX_REGIONS];
 static size_t region_count;
 static uint64_t framebuffer_physical, framebuffer_bytes;
-static uintptr_t window;
+static struct vm_kernel_window window;
 static size_t page_count;
 static phys_addr_t mapped_pages[GPIO_MAPPING_PAGES];
 static struct gpio_input input;
@@ -49,7 +49,7 @@ static bool overlaps(uint64_t first, uint64_t bytes, uint64_t other, uint64_t le
 void intel_gpio_input_prepare(const struct boot_info *boot)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(!window && !attempted);
+  KASSERT(!window.base && !attempted);
   if (boot->region_count > BOOT_MAX_REGIONS) {
     kinfo("gpio-intel: preparation refused: boot memory-map capacity\n");
     return;
@@ -58,9 +58,8 @@ void intel_gpio_input_prepare(const struct boot_info *boot)
   region_count = boot->region_count;
   framebuffer_physical = boot->framebuffer.physical;
   framebuffer_bytes = boot->framebuffer.size;
-  if (vm_reserve(vm_kernel_space(), GPIO_MAPPING_PAGES * PAGE_SIZE, PAGE_SIZE,
+  if (vm_kernel_window_prepare(GPIO_MAPPING_PAGES * PAGE_SIZE, PAGE_SIZE,
       &window) != MM_OK) {
-    window = 0;
     kinfo("gpio-intel: preparation refused: native window reservation\n");
   }
 }
@@ -93,15 +92,15 @@ static uintptr_t map_register(const struct acpi_gpio_input *snapshot, uint64_t o
   phys_addr_t page = physical & ~(PAGE_SIZE - 1);
   for (size_t i = 0; i < page_count; ++i) {
     if (mapped_pages[i] == page) {
-      return window + i * PAGE_SIZE + physical - page;
+      return window.base + i * PAGE_SIZE + physical - page;
     }
   }
   if (page_count == GPIO_MAPPING_PAGES || !page_available(page)) {
     return 0;
   }
-  uintptr_t address = window + page_count * PAGE_SIZE;
+  uintptr_t address;
   mapped_pages[page_count++] = page;
-  if (vm_map_mmio(address, page) != MM_OK) {
+  if (vm_kernel_window_map(&window, page, PAGE_SIZE, true, &address) != MM_OK) {
     mapping_failed = true;
     return 0;
   }
@@ -134,7 +133,7 @@ bool gpio_input_level(const struct gpio_input *reader, bool *high)
 const struct gpio_input *intel_gpio_input_attach(const struct acpi_gpio_input *snapshot)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (!window || attempted) {
+  if (!window.base || attempted) {
     return NULL;
   }
   attempted = true;
