@@ -175,3 +175,12 @@ its stack throughout. The same GDB departure/re-entry checks pass. Evidence is
 under `/shared/present/bsp-removal/task3/shared-query-fixture/` and baseline
 labels `query-guard-1cpu` / `query-guard-preallocated-4cpu`. No failure injected,
 no production diagnostic/test operation, all sources restored and guests stopped.
+
+The checkpoint was rebased onto main `d69b24c6` after #1269/#1271 merged.
+Source `463c9322` adds an initialization check using immutable `total_pages` for
+kernel queries, avoiding a read of the mutable range-list head; private queries
+retain their existing head/ownership check. The current kernel builds, and one
+ordinary run each at one/four CPUs passes the same memory/Go/stop/resize
+collector (`owner-query-current-1cpu` / `owner-query-current-4cpu`). The four-CPU
+run uses the already documented preallocated-RAM configuration. No new timing
+comparison or shared structural-owner qualification is claimed.
