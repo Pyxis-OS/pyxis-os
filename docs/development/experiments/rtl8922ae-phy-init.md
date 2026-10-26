@@ -185,3 +185,30 @@ nonzero symbols and their modules. Timeout capture precedes checked retirement;
 there is no resume/retry permission. Raw stacks stay private on vela. The next
 hardware window is this one fresh Linux diagnostic invocation, not a new
 Pyxis calibration or passive-scan request.
+
+
+### Linux comparator completion (2026-10-26)
+
+The fresh `vfio-mac-checkpoints-v2` invocation on vela passed its frozen
+Fedora 7.2.10 review, all module/symbol checkpoints and four hardware guards.
+One interface-up token reached the primary `rtw89_phy_init_bb_reg` entry;
+there was no resume after it. The reviewed callgraph places that entry after
+MAC initialization and before BB-table programming. QEMU retired and VFIO
+was unowned; no timeout-stack capture was needed. Evidence is in
+`vfio-mac-checkpoints-v2/evidence-checkpoints/` and its read-only
+`linux-control-readonly.json` supplement.
+
+The captured MAC sequence writes `0x210e05f0` to `0x9c94`, then continues
+with `0x9b00`, `0x9cc0`, `0x8938` and `0x9d00`. This agrees with the reviewed
+Fedora module, which lacks Pyxis's former immediate equality check. Its extra
+ADDRCAM bit 29 is a newer-source difference; retain the pinned v6.18 Pyxis
+value `0x010e05f0`. No bit-24 write-only/self-clearing semantics are established.
+The trace has BEGIN/END and 7,654 parsed access records, but still reports USDT
+operand-parser warnings: do not claim complete MMIO capture. MAC completion
+is established by the reviewed live primary guard, not trace completeness.
+
+Next qualify the already accepted Pyxis equality-check removal against the
+same MAC-only boundary before advancing to full PHY/RFK qualification. No
+additional register relaxation, newer-source bit or reordered hardware step is
+justified by this result. It is not BB/RF, calibration, physical silence or
+passive-scan qualification.
