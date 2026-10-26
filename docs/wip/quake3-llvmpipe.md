@@ -333,7 +333,7 @@ container is not affected.
   natural libc extension on a native object; until then, set `LP_NUM_THREADS`
   explicitly from the program.
 - **AVX depends on the qualified kernel profile.** The separate
-  [XSAVE/AVX task](xsave-avx.md) enables x87/SSE/AVX on compatible CPUs and
+  [XSAVE/AVX reference](../kernel/xsave-avx.md) enables x87/SSE/AVX on compatible CPUs and
   otherwise retains legacy FXSAVE. Mesa still requires CPUID, OSXSAVE and
   `xgetbv` agreement (`src/util/u_cpu_detect.c:894-896`); record llvmpipe's
   actual chosen features, not just hardware AVX2 support. This kernel work
