@@ -180,6 +180,8 @@ stack and separately allocated DMA buffer takes one, and exhaustion returns
 `NO_MEMORY` (for example from task creation). Userspace spaces allocate their
 records from the heap. See [technical debt](../technical-debt.md#kernel-vm-range-record-array).
 
+Qualification and measured limits: [caller-CPU MEMORY](../development/experiments/memory-caller-cpu/README.md).
+
 ## Native use
 
 [Libpyxis](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/memory.h) exposes `memory_allocate()` and
