@@ -82,7 +82,7 @@ qualification artifacts, not merged boot tests. One- and four-vCPU runs cover:
   kept across either wait.
 - Two independent processes run these checks concurrently on four CPUs.
   Each also completes the existing Go copied-stack/GC/channel/mutex workload
-  (512 jobs, peak 16 active tasks) and 128 locked-M retirements.
+  (512 jobs, peak 16 overlapping job handlers) and 128 locked-M retirements.
 - Invalid second batch handle refuses with no published children. A stopped
   large-allocation child is observed through actual process retirement.
   Its ready pipe synchronizes the stop test before the parent's short sleep;
@@ -99,8 +99,8 @@ borrowers=0, its user task in kernel-root mode, and CR3 equal to the kernel root
 (`0x62000` in that boot). A later breakpoint sees CPU2 between backing steps
 of the 512 MiB request with stop_requested=true, the same exclusive phase,
 zero roots/borrowers and its retained request still FORWARDED. Continuing leads
-to TERMINATED and completed retirement, not a discarded call. No register/state
-writes or failure hooks were used.
+to TERMINATED and completed retirement, not a discarded call. No data-register/kernel-memory
+edits or failure hooks were used.
 
 Build, diff and released-header ABI checks pass. No new default-boot log output.
 Evidence stays in `/shared/present/bsp-removal/`: ELF/config/command/program
