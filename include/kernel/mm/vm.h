@@ -7,6 +7,34 @@
 
 struct vm_space;
 
+/* Boot-created permanent firmware/native mapping domain. The fixed BSP owner
+ * consumes fresh slots monotonically; successful mappings live until reboot,
+ * failed fills consume their slots. Generic unmap/protect/release is forbidden.
+ * Prepare ancestors before AP startup, so runtime fills never allocate or wait. */
+struct vm_kernel_window {
+  uintptr_t base;
+  size_t bytes, used;
+};
+enum mm_result vm_kernel_window_prepare(size_t bytes, size_t alignment,
+    struct vm_kernel_window *window);
+enum mm_result vm_kernel_window_map(struct vm_kernel_window *window,
+    phys_addr_t physical, size_t bytes, bool mmio, uintptr_t *address);
+
+/* IF=0. Transfer a whole VM-owned RAM allocation to retained cleanup after all
+ * accesses/refills stop (unpublished/local or already confirmed shared proof).
+ * Keeps group cleanup attribution; may return before physical reclamation.
+ * No task/scheduler/executing stack, MMIO, borrowed frames or uncertain range.
+ * Existing reaper performs bounded steps; no new worker. Source descriptor may
+ * be cleared only after this transfer. Never reports fabricated MM_OK freeing. */
+void vm_kernel_retire(uintptr_t base, size_t bytes);
+bool vm_kernel_retire_pending(void);
+void vm_kernel_reap(void); /* Existing reaper, IF=1; retains owner across steps. */
+
+/* IF=0 and structural owner held. Permanently retain a failed shared-retirement
+ * reservation/mapping; generic destructive operations refuse afterward. The
+ * caller also fences its concrete consumer and retains any non-VM backing. */
+void vm_kernel_quarantine(uintptr_t base, size_t bytes);
+
 struct vm_stats {
   size_t total_pages, reserved_pages, backed_pages;
   size_t range_records;
@@ -23,6 +51,18 @@ struct vm_space *vm_kernel_space(void);
  * with IF=0; timeout requires retaining the mappings and backing until reboot.
  * This flush changes neither page tables nor VM ownership. */
 bool vm_kernel_flush_remote(void);
+
+/* Prepared, prevalidated destruction. Retain exclusive ownership/exclusion
+ * through completion; each step frees <=budget backing pages, then metadata.
+ * No allocation or IPI wait after the first mapping effect. Private callers
+ * keep their drained root proof; kernel callers retain the structural token. */
+struct vm_reclaim {
+  struct vm_range *range;
+  struct vm_space *space;
+};
+enum mm_result vm_free_begin(struct vm_space *space, uintptr_t base, size_t bytes,
+    struct vm_reclaim *reclaim);
+bool vm_free_step(struct vm_reclaim *reclaim, size_t budget);
 /* Requires an initialized heap. New spaces share kernel mappings and start
  * with an empty user area. Failure sets *result to NULL. Allocation, queries
  * and mutation require IF=0 and exclusive ownership; no VM operations from
