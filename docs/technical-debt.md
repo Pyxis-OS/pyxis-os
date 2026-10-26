@@ -2922,12 +2922,3 @@ they cannot reuse SDL's gesture-bound system clipboard authority. Cross-program
 copy/paste is unavailable in this profile. Revisit with the first ImGui consumer
 needing it, designing deferred gesture authority rather than adding ambient
 clipboard access. [Profile](development/library-dev-packages.md#dear-imgui).
-
-## Go SHA fast paths await XSAVE/AVX
-
-Caelum preserves x87/SSE with FXSAVE and leaves OSXSAVE disabled. Go's standard
-SHA-1/SHA-256 assembly therefore stays disabled even when CPUID advertises SHA-NI;
-other Go AVX paths also remain unavailable. Git's collision-detecting sha1cd
-already uses its independent legacy-SSE SHA-NI backend. Revisit proper XSAVE/AVX
-state ownership with llvmpipe; do not bypass Go's feature gates or remove collision
-detection. [Shared hash scope](userland/sha256.md).
