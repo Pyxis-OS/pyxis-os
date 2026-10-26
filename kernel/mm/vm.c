@@ -1217,7 +1217,7 @@ enum mm_result vm_query(struct vm_space *space, uintptr_t address,
                         struct page_translation *result)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (!space || !space->head) {
+  if (!space || (space == &kernel_space ? !space->total_pages : !space->head)) {
     return MM_INVALID;
   }
   return arch_page_query(page_space(space), address, result);
