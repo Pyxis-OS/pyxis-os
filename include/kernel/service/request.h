@@ -77,7 +77,7 @@ struct bsp_request {
   struct forwarder_operation *operation;
   enum bsp_service service;
   enum bsp_request_state state;
-  struct process *vm_process; /* Only deferred VM mutation requests. */
+  struct process *vm_process; /* Staged local MEMORY or deferred BSP VM mutation. */
   struct task *vm_mutator;
   bool vm_reply_owned; /* Consumed before releasing the completed record. */
 };
@@ -92,7 +92,7 @@ void bsp_request_storage_destroy(struct bsp_request *storage);
  * prepare, fill the typed record, submit/wait, consume results, release.
  * Preparation uses reserved shared storage and cannot fail allocation. */
 struct bsp_request *bsp_request_prepare(enum bsp_service service);
-/* Memory, display and screen capture require post-switch publication, chosen
+/* Display and screen capture require post-switch publication, chosen
  * by the closed service catalog. Other requests publish before sleeping. */
 void bsp_request_submit_and_wait(struct bsp_request *request);
 void bsp_request_release(struct bsp_request *request);
