@@ -8,7 +8,7 @@ libc startup, initial-thread TLS and unchanged tiny-skia, not std or Rust worker
 This milestone supplies a cross-built native std and a first command-line port;
 hosted rustc/Cargo and general crate compatibility remain later work.
 
-## Qualified draft delivery
+## Qualified delivery
 
 Gate 1 qualified the fork compiler/core+alloc; see the
 [compiler record](../development/experiments/rust-std-toolchain.md).
@@ -21,7 +21,8 @@ The stacked hexyl step uses Rust `a5c9a181`, libc crate `417acae0` and
 ports `76f154a6`, retaining that userland/SDK. Its
 [qualification](../development/experiments/rust-hexyl.md) covers the read-only
 file subset and optional package, not workers or the full filesystem gate.
-All std and hexyl PRs remain drafts until after the 0.0.9 tag.
+The stack is rebased and requalified after the 0.0.9 release; the original
+release excluded Rust.
 The [stage-1 target JSON](../../toolchain/rust/x86_64-unknown-pyxis.json) and
 [SDK link adapter](../../toolchain/rust/pyxis-link.py) remain the original
 code-generation and link-contract sources of truth; the built-in target retains
@@ -272,7 +273,7 @@ Installed std metadata does not promise every std API or crate works.
    install/verify in one- and four-CPU QEMU. See the
    [record](../development/experiments/rust-hexyl.md).
    **After this task chronium can:** install and use a std-based hex viewer on
-   files or pipelines in Pyxis, subject to the draft release hold.
+   files or pipelines in Pyxis.
 6. [ ] **Profile close-out.** After the remaining worker/filesystem gates,
    qualify the complete first profile and publish concise implemented interfaces
    and limits. Hexyl delivery alone does not complete the std milestone.

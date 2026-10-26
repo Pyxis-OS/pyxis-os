@@ -1,7 +1,8 @@
 # Hexyl on native Rust std
 
 2026-10-25, the read-only consumer step of the [std milestone](../../wip/rust-std.md).
-The optional port and its prerequisites remain drafts until after the 0.0.9 tag.
+The initial qualification preceded the 0.0.9 tag; the post-release recheck is
+recorded below.
 This qualifies hexyl, not managed Rust workers or the full filesystem profile.
 
 ## Inputs and build
@@ -112,3 +113,27 @@ No complete-std or general-crate compatibility claim follows from hexyl.
 Raw commands, compiler/SDK receipts, images, host reference output, QEMU/GDB
 captures and package records stay in `/shared/present/rust-hexyl/`.
 The unedited final console screenshot is retained under `screenshots-keep/rust`.
+
+## Post-release rebase, 2026-10-26
+
+Gate 2 rebases onto main `09a19c94` as `17171e74`; hexyl restacks on that
+head as `d0b05009`. Dependency bases were already current: userland `81ee85f9`,
+ports `4d07f4c1`, Rust `pyxis` at `0ea5d9dd`, libc `libc-0.2` at `ccc2ff4a`.
+Their published heads and selected compiler prefixes therefore remain unchanged.
+Child PR bases now name their parent branches, excluding duplicated parent diffs.
+After each parent merges, retarget its child to the integration branch before
+merging it; this does not require replaying or changing its commits.
+
+The existing compiler container rebuilds the SDK and current-main kernel.
+SDK headers, startup, linker script and libraries are byte-identical to the
+initial qualification; only its manifest and two pkg-config paths differ.
+The actual ports recipe and both ordinary-main samples rebuild/relink against
+that SDK. Fresh one/four-CPU guests repeat every hexyl case above, plus gate 2's
+18 main/args/TEXT/TLS, allocation, clock/entropy, grant/failure, overflow,
+file/pipe, late-C++-TLS and core+alloc regression cases: all pass. GDB repeats
+main/FS/alignment and native File open/read on both CPU counts. Final artifact
+checks pass again; executable SHA-256 is
+`3057b0d73236cdc42893853b259f887ad43a4afe9f86d9fef929e6a09d7ff8b3`.
+The private ABI-0.0.9 package `0.17.0+d0b05009f748` installs and verifies on
+both guests. No new performance or native results are claimed. Rebase evidence
+is retained in `/shared/present/rust-rebase-20261026/`.

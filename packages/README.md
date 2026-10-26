@@ -214,4 +214,4 @@ make hexyl-package RUST_PREFIX=/absolute/pyxis-rust-prefix REPOSITORY=/absolute/
 
 Supply the qualified read-only-file std prefix and matching SDK; ordinary builds
 do not bootstrap Rust. See [Rust toolchains](../docs/development/rust-toolchain.md#optional-hexyl-package)
-for dependency provenance, character/colour options and the draft release hold.
+for dependency provenance, character/colour options and the supported std profile.

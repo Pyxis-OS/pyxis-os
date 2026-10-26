@@ -277,7 +277,7 @@ Rust prefix, then packs and publishes the optional package using the existing
 repository signing controls. It never bootstraps Rust or adds hexyl to the base,
 rescue archive, default port aggregate or ordinary image CI. A source/SDK change
 still requires rebuilding its affected libraries and program. Rust is held out
-of 0.0.9; these drafts are not release artifacts.
+of the 0.0.9 release; this optional profile is separate from those release artifacts.
 
 The recipe pins v0.17.0, vendors its locked graph through the closed Cargo proxy,
 then builds frozen/offline with panic-abort, LTO and embedded bitcode off. It
