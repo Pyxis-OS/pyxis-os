@@ -12,6 +12,7 @@ import argparse
 from datetime import datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -146,7 +147,16 @@ def main():
     if args.check:
         require(OUTPUT.read_text() == result, f"{OUTPUT} differs from verified publish state")
     else:
-        OUTPUT.write_text(result)
+        with tempfile.NamedTemporaryFile(mode="w", dir=OUTPUT.parent, prefix=".repository-floors-",
+                                         delete=False) as temporary:
+            staged = Path(temporary.name)
+            temporary.write(result)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        try:
+            os.replace(staged, OUTPUT)
+        finally:
+            staged.unlink(missing_ok=True)
     for entry in entries:
         print(f"{entry['name']}: serial {entry['serial']} {entry['sha256']}")
 
