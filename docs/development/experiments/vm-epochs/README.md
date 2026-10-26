@@ -190,7 +190,9 @@ comparison or shared structural-owner qualification is claimed.
 and sealed firmware windows. Production source `29687ba6` is rebased on main
 `2df220a3`; no dependency pin, public ABI, grant, production fixture or default
 log output is added. Build and single ordinary one-/four-CPU runs use the
-configuration above, with preallocated guest RAM. The collector passes eager,
+configuration above, with preallocated guest RAM. The earlier one-CPU before
+sample used demand-provisioned RAM; its timing is not matched to the final
+one-CPU run. Both four-CPU runs use preallocated RAM. The collector passes eager,
 sparse, unwind, pin, parked-I/O, Go parallel/retiring-thread, stopped-child and
 VirtIO-resize checks. Evidence: `baseline/owner-final-{1,4}cpu/` under the same
 shared task 3 directory. The earlier query-only checkpoint is the before sample:

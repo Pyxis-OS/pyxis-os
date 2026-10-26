@@ -1,8 +1,9 @@
 # Remove BSP-owned allocation and VM mutation
 
 Decisions 1–3 accepted (chronium, 2026-10-26). Task 1 is merged in #1254;
-its hands-free native packet is prepared and awaits the orchestrator. Task 2
-measurement and bounded-batch implementation are merged in #1260/#1263.
+tasks 1/2 hands-free native A/B/C qualification is recorded in
+[#1266](https://git.internal/PyxisOS/pyxis-os/pulls/1266). Task 2 measurement and
+bounded-batch implementation are merged in #1260/#1263.
 Task 3 [decisions 5–9](vm-invalidation.md) are accepted (chronium, 2026-10-26);
 shared-owner integration and QEMU qualification are in #1500 for review. Later tasks raise decisions
 when reached. XSAVE/AVX is merged and natively qualified; its qualification

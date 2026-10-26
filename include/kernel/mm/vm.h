@@ -67,7 +67,8 @@ bool vm_free_step(struct vm_reclaim *reclaim, size_t budget);
 /* Requires an initialized heap. New spaces share kernel mappings and start
  * with an empty user area. Failure sets *result to NULL. Allocation, queries
  * and mutation require IF=0 and exclusive ownership; no VM operations from
- * fault handlers. Kernel mutation requires its CPU-neutral structural owner. Published private changes require the process mutation token after
+ * fault handlers. Kernel mutation requires its CPU-neutral structural owner.
+ * Published private changes require the process mutation token after
  * acknowledged root departure and borrower drainage, on its recorded owner CPU.
  * Unpublished loading and drained retirement remain BSP-owned in this slice;
  * resumption reloads CR3. No generic remote/live-root mutation is authorized. */
