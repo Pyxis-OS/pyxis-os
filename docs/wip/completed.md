@@ -176,6 +176,12 @@ natively on the ThinkPad: the [kernel writer](../devices/filesystem-native-adapt
 the [native installer](../userland/installer.md), [system updates](../userland/system-updates.md)
 and [USB installation](../devices/usb-installation.md).
 
+[Package and release upgrades](../userland/package-upgrades.md), 2026-10-26:
+whole-set package updates, one active release, verified reboot-time set selection,
+owned Classic/Coexist publication and reviewed signed-index floors. QEMU/OVMF
+qualified; the [release-day vela gate](https://git.internal/PyxisOS/pyxis-os/issues/1509)
+remains open.
+
 [PCI BAR assignment](../devices/pci.md#assigning-an-unassigned-memory-bar),
 2026-10-15 (#897): claimed-device memory BARs placed from ACPI root apertures with
 a conservative collision proof, native-qualified on vela.

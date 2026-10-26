@@ -1,5 +1,9 @@
 # Fedora GRUB and Pyxis Limine chainloading
 
+This is the earlier manually configured ThinkPad route. Current Coexist
+Install/Update publishes Pyxis's owned Limine and UEFI boot option as described
+in [package upgrades](package-upgrades.md); it does not need Fedora GRUB.
+
 Fedora GRUB can EFI-chainload Pyxis through the pinned Limine executable on a
 shared ESP. The route is accepted (chronium, 2026-10-21) and qualified on the
 ThinkPad T14 Gen 1 AMD: Coexist Install, installed normal/rescue boot, same-source

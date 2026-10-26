@@ -36,7 +36,7 @@ pages that 0.0.8 ships with.
 | Page | What it covers | Release |
 | --- | --- | --- |
 | [Packages with pkg](packages.md) | Install, list, remove and check packages, and choose repositories. | 0.0.8 core |
-| Updating with pkg upgrade | Fetch a new release, boot the new entry and fall back to the previous one. | 0.0.8 core |
+| [Updating with pkg upgrade](packages.md#updating-with-pkg-upgrade) | Stage a release and complete its package-set switch at verified reboot; use rescue or installer Update if the new boot fails. | 0.0.10 |
 
 ## Development
 

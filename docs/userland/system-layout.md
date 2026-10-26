@@ -89,13 +89,12 @@ command-directory entry. ZIP launch remains
 
 Install formats the pool, creates the `system`, `home`, `packages` and
 `http-work` volumes, writes the initial configuration, and copies the kernel and
-the core archive to the ESP as built. [Update](system-updates.md) keeps the GPT,
-the packages and the contents of `system` and `home`, creating any missing
-volume, and replaces the kernel and the core archive. Installs from before the
-core archive kept their programs in `bin/REVISION` on a `bin` volume; once
-Update has published a new revision it removes every such directory except the
-previous revision's, which that boot entry still binds, or none when the
-previous revision is unknown. The emptied `bin` volume stays
+the core archive to the ESP as built. [Update](system-updates.md) keeps the GPT
+and the contents of `system` and `home`, creating any missing volume, prepares a
+compatible complete package set, and replaces the kernel and core archive.
+Installs from before the core archive kept their programs in `bin/REVISION` on a
+`bin` volume; Update removes copies only when it can prove their ownership. The
+emptied `bin` volume stays
 ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1426)).
 
 ## Limits

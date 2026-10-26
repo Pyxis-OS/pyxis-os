@@ -16,11 +16,13 @@ join comes with the curses TUI installer ([decision 70](../wip/pkg-upgrade.md#de
 target is chosen Install runs `pkg check base`; without network, or without
 `base` for this revision, it refuses, writes nothing and returns to the action
 list, where Update remains. A Replay of an Install plan fetches `base` too and
-needs the network; a Replay of an Update does not. After
+needs the network; Update or its Replay also needs network when the compatible
+target package set must be fetched. After
 the pool stage it runs `pkg --yes install base` into the new `packages` volume
 and publishes the boot entries only once that set is active. A failure there
-leaves a partial disk that does not boot; run Install again. Update fetches
-nothing.
+leaves a partial disk that does not boot; run Install again. Update prepares
+the target release's complete package set before boot activation, preserving
+the active set on a refusal; see [package upgrades](package-upgrades.md).
 
 The separate [read-only FAT32 inspector](../devices/fat32-inspection.md) lists
 and reads a selected GPT volume without invoking Install/Update. Strict inspector
@@ -266,7 +268,7 @@ attempt.
 
 An Update stopped between its prepared and committed record leaves
 `EFI/pyxis/config/config.record` with `state prepared`. The menu has not
-changed, so the previous entries still boot, and Update refuses with "an
+changed, so its currently selected entries still boot, and Update refuses with "an
 earlier Update stopped before its boot record committed". The committed record
 for that attempt was written and verified before the prepared one, as
 `EFI/pyxis/config/.pyxis-config-ATTEMPT-config.record.committed`, where ATTEMPT

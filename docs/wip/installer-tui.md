@@ -7,11 +7,11 @@ Task 4 is merged and scratch-qualified
 [userland #247](https://git.internal/PyxisOS/pyxis-userland/pulls/247)). Task 5 is
 assigned to Codex alpha: all three task-5 defaults accepted **2026-10-13**.
 The owner accepted Classic normal-build publication and installed-loader
-activation on 2026-10-20 after the prior-UI native gate. Coexist retains manual
-entry staging; new publication activation requires separate qualification and
-an activation record. Corrected action/completion QEMU evidence is recorded
-separately. The Classic origin-marker contract is accepted; marker qualification
-and re-review remain before merge.
+activation on 2026-10-20 after the prior-UI native gate. The later
+[0.0.10 upgrade reference](../userland/package-upgrades.md) supersedes the
+manual-entry Coexist and previous-release parts of this historical task record:
+owned Coexist publication and its activation record have disposable OVMF
+qualification, with native firmware checks still open.
 
 **Superseded in part (chronium, 2026-10-22):** the configuration half of this
 plan is retired. Decision 24 of [package upgrades](pkg-upgrade.md) moved the

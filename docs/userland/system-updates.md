@@ -51,12 +51,14 @@ admission, not whole-pool fsck.
 
 Coexistence targets instead use their healthy GPT's explicitly selected existing
 ESP and native pool, supported native ESP admission and installed-payload
-ownership evidence. Their current update path stages a fresh immutable attempt
-and prints a manual boot entry; it does not publish the configuration record,
-static fallback or owned menu spans. Full QEMU Install/Update/completion
-qualification and a separate activation record gate that integration. They never gain Classic's erase or ESP-rebuild grants.
-The later `pkg upgrade` receives its own narrow authority; the Update tab stays
-until that path is qualified.
+ownership evidence. Update publishes a fresh immutable attempt through the
+owned record and menu, verifies the pinned Pyxis Limine loader and its UEFI boot
+option, and preserves foreign bootloader files and configuration. Existing
+unrecorded Coexist installations need one installer Update to gain that record,
+loader and option. They never gain Classic's erase or ESP-rebuild grants.
+Installed `pkg upgrade` has separate narrow authority and a
+[verified reboot-time package-set switch](package-upgrades.md); live-media Update
+remains available for migration and recovery.
 
 A selected committed journal is refused: boot the installed system once to
 recover it, then update. Eligibility inspection never mounts, replays or
@@ -109,8 +111,8 @@ snapshots; do not modify or delete published development trees while programs
 use them.
 
 Until the ESP holds the new kernel, the disk boots its old kernel and archive.
-An install from before the core archive binds its own `bin/REVISION`, which
-Update keeps while that entry is the previous one.
+An install from before the core archive may still hold legacy `bin/REVISION`
+program copies; Update removes only copies whose ownership it can prove.
 
 ## Installs from before the core archive
 
@@ -195,8 +197,8 @@ before writes; old attempts give no capacity credit.
 
 After verified activation and view retirement, `system` is reopened read-only.
 The installer removes `bin/REVISION` program copies left by installs from before
-the core archive, except the known previous revision's; unknown previous
-ownership skips cleanup. The emptied `bin` volume stays
+the core archive when their ownership is proven; unknown ownership skips
+cleanup. The emptied `bin` volume stays
 ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1426)). Cleanup is best effort
 and warns on failure. Only completed publication reports `updated` and
 [offers a restart](installer.md#restart). Remove the live medium before restarting.
@@ -225,7 +227,9 @@ A reviewed ESP rebuild failure can leave an incomplete ESP.
 Inspect the reported phase before booting live media and reviewing another Update.
 The GPT and pool remain the recovery anchor, and the same eligibility checks
 apply on the next run. There is no automatic retry, rollback, pool repair or
-power-loss durability guarantee. Firmware variables are never changed.
+power-loss durability guarantee. Classic Update leaves firmware variables
+unchanged; Coexist registers or verifies its Pyxis-owned UEFI boot option with
+bounded structured writes and readback.
 
 The [recognition record](../development/experiments/system-updates-task1/README.md)
 covers the initial action menu, revision recording and candidate/refusal cases.
@@ -239,8 +243,9 @@ record](../development/experiments/usb-installer-c3/README.md). The first
 [native USB installation](../devices/usb-installation.md#validation) on the
 ThinkPad passed one physical Update round trip, preserving a synced file. Power
 loss and uncertain I/O remain [deferred](https://git.internal/PyxisOS/pyxis-os/issues/1416).
-Updates from inside a running installed system, image downloading and npfs
-format migration are outside this interface.
+This interface is the live-media installer Update. The separate installed
+[`pkg upgrade`](package-upgrades.md#upgrading-the-release) stages a signed
+release and complete package set. npfs format migration remains outside both.
 
 The [publication record](../development/experiments/installer-publication/README.md)
 separates integrated disposable-QEMU evidence from the owner-reported 2026-10-20

@@ -6,8 +6,11 @@ The task-3 decisions below are owner-accepted. The ThinkPad's
 [manual GRUB → Limine integration](../userland/grub-limine-chainload.md) passed
 [native qualification](../development/experiments/grub-limine-native.md) on
 2026-10-21: Coexist Install/Update, installed normal/rescue and Fedora returns.
-Other native write scopes still need separate approval. Vela, automatic Coexist
-publication and the later Limine-first migration remain separate gates.
+Other native write scopes still need separate approval. Owned Coexist
+publication is now implemented and QEMU-qualified under
+[package upgrades](../userland/package-upgrades.md); vela's native firmware
+gate remains separate. The manual GRUB route below records the earlier native
+qualification, not the current owned installation path.
 Decisions 1 and 3 were accepted on 2026-10-10; decision 2's owner-run Limine
 migration and the later owned-entry editor direction remain as recorded below.
 Both the ThinkPad and [vela](../targets/ideapad-slim5-16iph11/notes.md) are targets.

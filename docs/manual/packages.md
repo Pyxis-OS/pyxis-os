@@ -21,8 +21,9 @@ set of packages, and the number goes up each time.
 
 ## See what is available
 
-`pkg list --available` reads every repository and prints one line per package
-that is built for your system:
+`pkg list --available` reads configured package repositories and prints one
+line per package built for your system; the `releases` repository is reserved
+for `pkg upgrade`:
 
 ```text
 home://> pkg list --available
@@ -178,3 +179,28 @@ pkg: repository configuration updated
 
 If two repositories offer the same package name, `pkg install NAME` asks which
 one to use. Write `pkg install lab/NAME` to choose.
+
+## Updating packages
+
+`pkg update` reviews newer builds of every installed package. `pkg update
+NAME...` selects only those names and any dependency changes they need; both
+validate the complete proposed set. If nothing changes, it reports `already up
+to date` without creating another set. `--yes` still cannot approve removal of
+an installed package or choose among several possible origins for an older
+originless package. The review summarizes packages adopted from their only
+available repository.
+
+## Updating with pkg upgrade
+
+On an installed 0.0.10 system, `pkg upgrade [VERSION]` stages the new Pyxis
+release together with a complete compatible package set. It ends with
+`Upgrade staged; type reboot to finish`. The running system keeps its old
+package set until the first verified boot of the new release. The command
+does not restart the machine, and a pending upgrade blocks other package
+changes. There is no previous-version boot entry or `pkg rollback`; rescue
+and installer Update are the recovery paths if a new release fails to boot.
+
+To move from **0.0.9 to 0.0.10**, boot the 0.0.10 installer and select
+**Update**. The 0.0.9 `pkg` cannot stage that release transition. The
+[package-upgrade reference](../userland/package-upgrades.md) explains boot
+ownership, signed-index checks and current qualification limits.
