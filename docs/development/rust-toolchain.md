@@ -121,7 +121,8 @@ with built-in `x86_64-unknown-pyxis`, installed Pyxis std/core/alloc and host
 std/proc_macro for build scripts. Gate 2's compiler revision is
 `5e85f86de5f7dc45a485fa8a3eb376487923bc0b`; hexyl adds the read-only File
 backend at `a5c9a1815816cddb77f5c58238adf549e618b3a4`. Managed workers
-are added at `f08e6f816abf6396aa4547fe11ff0f214a951384`.
+are added at `f08e6f816abf6396aa4547fe11ff0f214a951384`; native writable files
+and authority metadata use `7bb492df8d26d97a2bc37c7b225c29cd6626cf00`.
 The target keeps `target_os="pyxis"`
 and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
 [first std main record](experiments/rust-std-main.md) separate their qualification
@@ -133,14 +134,18 @@ at `a6aac31c87316e4a351d8e7185ad8898e545d22a`, with read-only file
 bindings added by [libc #2](https://git.internal/PyxisOS/pyxis-libc/pulls/2)
 at `417acae00d4e21abf1a668c8dc71361bfa03d3aa`. Managed-worker declarations
 come from [libc #3](https://git.internal/PyxisOS/pyxis-libc/pulls/3) at
-`bdaad80e28d7dc793f034460787c94dea622f588`, overlaid through exact HTTPS
+`bdaad80e28d7dc793f034460787c94dea622f588`; native file helpers use
+[libc #4](https://git.internal/PyxisOS/pyxis-libc/pulls/4) at
+`94498eae9e79ef076eded365fcd9625f17f63377`, overlaid through exact HTTPS
 `[patch.crates-io]` entries in the Rust compiler workspace, library workspace
 and sample workspace, with their matching lockfiles. Keep this overlay in
 consumer workspaces that import libc; it does not change the closed crates.io proxy. The SDK
 uses [userland #384](https://git.internal/PyxisOS/pyxis-userland/pulls/384) at
 `6cd1cf577ca46faf031fa7ba2a9a67bae56eabff` for owned all-TEXT capture and the
 end-of-TLS-drain cleanup hook. Rebuild the SDK and affected Rust libraries and
-programs when these native interfaces change; libc still owns startup and FS.
+programs when these native interfaces change; libc still owns startup and FS. Native writable files and coherent authority
+metadata require [userland #388](https://git.internal/PyxisOS/pyxis-userland/pulls/388)
+at `9acda3e487af9bdaaed845f02ea4f26ff33e6a78`.
 
 [fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the base
 Rust revision, CI LLVM, the three upstream stage0 beta archives, backtrace source
@@ -159,7 +164,7 @@ On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
 ```sh
 git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
 git -C /absolute/pyxis-rust fetch origin
-git -C /absolute/pyxis-rust checkout --detach f08e6f816abf6396aa4547fe11ff0f214a951384
+git -C /absolute/pyxis-rust checkout --detach 7bb492df8d26d97a2bc37c7b225c29cd6626cf00
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
@@ -269,9 +274,15 @@ worker stacks are 1 MiB, explicit requests round up within the 8 MiB ceiling,
 and real record/backing failures remain errors. Panic aborts the process; join
 workers before orderly main return. `yield_now` is a weak CPU hint without a
 forced reschedule or fairness promise, and `available_parallelism` remains
-Unsupported. Gate 4 file operations are still pending. Writable opens, enumeration,
-namespace mutation, child processes and network operations remain unsupported;
-hexyl delivery does not complete the std milestone.
+Unsupported. The native writable-file extension adds create/exclusive/truncate,
+read/write, resize and backend sync. `File::metadata` reports held rights;
+`fs::metadata(path)` reports authority obtainable through the captured path.
+Files use WRITE, directories use CREATE or REMOVE. Unknown provider facts,
+append and writable provider routes return Unsupported; no write request is
+prepared while querying permissions. `Permissions::set_readonly` changes only
+the local value; applying permissions remains Unsupported. Directory enumeration
+and mutation, child processes and network operations remain later work; hexyl
+delivery does not complete the std milestone.
 
 ## Optional hexyl package
 
