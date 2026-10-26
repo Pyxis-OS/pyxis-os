@@ -171,7 +171,7 @@ was inspected in code but was not exercised in QEMU.
      under the pinned Software Signing CA, then records the snapshot in a
      reviewed source file before the release tag. A network response alone
      cannot supply or advance the floor; a missing or disagreeing tree, server
-     or signature stops the release build. The owner-signed release tag and
+     or signature stops the release build. The chronium-signed release tag and
      signed ISO bind the reviewed snapshot to the delivered core archive. This
      needs no new private signing key in CI. The resulting floor proves the
      owner-reviewed publish state at freeze time, not that no later publish
