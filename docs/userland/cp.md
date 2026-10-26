@@ -3,6 +3,9 @@
 The native `cp` copies regular files, and with `-r` directory trees, within a root
 or across roots using the caller's existing grants. Relative paths use the inherited working directory.
 
+The examples use `boot://share/hello.txt` from a `DISTRIBUTION=full` development
+image. The default core archive omits it; substitute another readable file.
+
 ```text
 cp boot://share/hello.txt home://note.txt
 cp boot://share/hello.txt home://

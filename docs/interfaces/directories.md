@@ -360,7 +360,8 @@ without allocation or path parsing. The optional Hello example gets
 both lookup handles and its startup grants. Its fixed name buffer reports an
 oversized entry as an error rather than silently truncating it.
 
-The sample text is packaged at `share/hello.txt`; the source remains beside hello.
+The sample text is packaged at `share/hello.txt` in `DISTRIBUTION=full`
+development images; the default core archive omits it. The source remains beside hello.
 The endpoint client retains a directly supplied file capability for its existing
 transfer example. [Path helpers](../userland/paths.md) now compose these component operations
 for explicit schemes and relative paths, retaining working-directory handles

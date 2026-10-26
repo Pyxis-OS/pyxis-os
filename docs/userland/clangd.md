@@ -20,8 +20,9 @@ Neovim and `clang` compiled and ran a C program.
    no archive fallback. The default launch reports when the package is absent.
 2. Add `vim.lsp.enable('clangd')` to `home://.config/nvim/init.lua`, or copy the
    [example `init.lua`](neovim.md#language-servers), `boot://share/examples/nvim/init.lua`,
-   which also turns on completion. A live boot has no user `init.lua`; copy the
-   example into place, or run `:lua vim.lsp.enable('clangd')` in the session.
+   from a `DISTRIBUTION=full` development image, which also turns on completion.
+   The default core archive omits the example. With a configured writable
+   `home://`, create a missing `init.lua` with the enable call, or run `:lua vim.lsp.enable('clangd')` in the session.
 3. For a project whose headers are not beside the files that include them, add
    `compile_flags.txt` at its root, for example `-std=c23`, `-Wall`, `-Iinclude`,
    one per line.
