@@ -17,11 +17,14 @@ struct arch_fp_state {
 struct arch_user_state {
   uint64_t fs_base, gs_base;
   uint16_t ds, es, fs, gs;
-  struct arch_fp_state fp;
+  void *fp_storage, *fp;
 };
 
 void arch_user_init(void);
-void arch_user_state_init(struct arch_user_state *state);
+bool arch_user_state_init(struct arch_user_state *state);
+void arch_user_state_destroy(struct arch_user_state *state);
+void arch_user_state_inherit(struct arch_user_state *target,
+    const struct arch_user_state *creator);
 void arch_user_save(struct arch_user_state *state);
 void arch_user_restore(const struct arch_user_state *state);
 bool arch_user_entry_valid(uintptr_t entry, uintptr_t stack_top);

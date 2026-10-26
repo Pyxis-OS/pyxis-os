@@ -1033,6 +1033,7 @@ static void free_task(struct task *task)
       !task->address_wait_record.linked);
   bsp_request_storage_destroy(task->request_storage);
   profile_storage_destroy(task->profile);
+  arch_user_state_destroy(&task->cpu);
   KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
   kfree(task);
 }
@@ -1142,7 +1143,10 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
   task->user_argument = process->startup_address;
   /* Holds only the placement preference until publication places the task. */
   task->cpu_index = preferred_cpu;
-  arch_user_state_init(&task->cpu);
+  if (!arch_user_state_init(&task->cpu)) {
+    free_task(task);
+    return MM_NO_MEMORY;
+  }
   process_task_attach(process, &task->process_member, task);
   *result = task;
   return MM_OK;
@@ -1201,6 +1205,9 @@ enum call_status task_thread_prepare(struct task *creator, const struct thread_c
       status = CALL_NO_MEMORY;
     }
   }
+  if (status == CALL_OK && !arch_user_state_init(&task->cpu)) {
+    status = CALL_NO_MEMORY;
+  }
   if (status != CALL_OK) {
     private_context_unpin(&task->stack_context);
     private_context_unpin(&task->fs_context);
@@ -1215,10 +1222,9 @@ enum call_status task_thread_prepare(struct task *creator, const struct thread_c
   task->cpu_index = creator->cpu_index;
   task->thread_control = control;
   task->fs_bound = input->context_identity != 0;
-  arch_user_state_init(&task->cpu);
   task->cpu.fs_base = input->fs_base;
   /* The creator's state was saved before the deferred BSP handoff. */
-  memcpy(&task->cpu.fp, &creator->cpu.fp, sizeof(task->cpu.fp));
+  arch_user_state_inherit(&task->cpu, &creator->cpu);
   *result = task;
   return CALL_OK;
 }

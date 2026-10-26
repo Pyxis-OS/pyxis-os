@@ -2,10 +2,12 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/descriptors.h>
+#include <arch/fp.h>
 #include <arch/layout.h>
 #include <arch/user.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
+#include <kernel/mm/heap.h>
 #include <kernel/panic.h>
 #include <kernel/user.h>
 #include <stddef.h>
@@ -24,6 +26,7 @@
 #define X87_DEFAULT_CONTROL 0x037f
 #define MXCSR_DEFAULT 0x1f80
 #define USER_STACK_ALIGNMENT 16
+#define FP_ALIGNMENT 64
 
 struct switch_frame {
   uint64_t r15, r14, r13, r12, rbp, rbx;
@@ -45,25 +48,51 @@ void arch_user_init(void)
 
   write_cr0((read_cr0() | CR0_MONITOR_COPROCESSOR | CR0_NUMERIC_ERROR) &
             ~(CR0_EMULATE_FPU | CR0_TASK_SWITCHED));
-  /* Eager x87/SSE preservation only: AVX and user FS/GS-base instructions stay
-   * disabled. Kernel compilation forbids FP/SIMD register use. */
+  /* Bootstrap starts at the legacy baseline. Final FP policy waits for every
+   * CPU; kernel compilation forbids arithmetic FP/SIMD register use. */
   write_cr4((read_cr4() | CR4_OSFXSR | CR4_OSXMMEXCPT) &
             ~(CR4_OSXSAVE | CR4_FSGSBASE));
+  arch_fp_detect();
   apic_timer_start();
 }
 
-void arch_user_state_init(struct arch_user_state *state)
+bool arch_user_state_init(struct arch_user_state *state)
 {
   memset(state, 0, sizeof(*state));
+  size_t bytes = arch_fp_size();
+  if (bytes > SIZE_MAX - (FP_ALIGNMENT - 1)) {
+    return false;
+  }
+  state->fp_storage = kmalloc(bytes + FP_ALIGNMENT - 1);
+  if (!state->fp_storage) {
+    return false;
+  }
+  state->fp = (void *)(((uintptr_t)state->fp_storage + FP_ALIGNMENT - 1) &
+      ~(uintptr_t)(FP_ALIGNMENT - 1));
+  memset(state->fp, 0, bytes);
   state->ds = GDT_USER_DATA_SELECTOR;
   state->es = GDT_USER_DATA_SELECTOR;
-  state->fp.control = X87_DEFAULT_CONTROL;
-  state->fp.mxcsr = MXCSR_DEFAULT;
+  struct arch_fp_state *legacy = state->fp;
+  legacy->control = X87_DEFAULT_CONTROL;
+  legacy->mxcsr = MXCSR_DEFAULT;
+  return true;
+}
+
+void arch_user_state_destroy(struct arch_user_state *state)
+{
+  kfree(state->fp_storage);
+  state->fp_storage = state->fp = NULL;
+}
+
+void arch_user_state_inherit(struct arch_user_state *target,
+    const struct arch_user_state *creator)
+{
+  memcpy(target->fp, creator->fp, arch_fp_size());
 }
 
 void arch_user_save(struct arch_user_state *state)
 {
-  __asm__ volatile("fxsave64 %0" : "=m"(state->fp));
+  arch_fp_save(state->fp);
   __asm__ volatile("mov %%ds, %0" : "=rm"(state->ds));
   __asm__ volatile("mov %%es, %0" : "=rm"(state->es));
   __asm__ volatile("mov %%fs, %0" : "=rm"(state->fs));
@@ -74,7 +103,7 @@ void arch_user_save(struct arch_user_state *state)
 
 void arch_user_restore(const struct arch_user_state *state)
 {
-  __asm__ volatile("fxrstor64 %0" : : "m"(state->fp));
+  arch_fp_restore(state->fp);
   __asm__ volatile("mov %0, %%ds" : : "rm"(state->ds) : "memory");
   __asm__ volatile("mov %0, %%es" : : "rm"(state->es) : "memory");
   __asm__ volatile("mov %0, %%fs" : : "rm"(state->fs) : "memory");
