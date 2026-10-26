@@ -55,6 +55,11 @@ The 0.0.9 release merge gate is lifted; new consumers need bulk-capable kernels.
 A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
 C (general capability pipes) remains planned.
 
+[Controller support](controller-support.md): Edge-only wired input assigned to
+Codex delta (chronium, 2026-10-26); descriptor-checked dedicated decoder, native
+keyboard-style gamepad authority/focus and Pyxis SDL backend. Task 0 closes the
+actual-device contract before task 1. Ultimate 2 and generic HID are later.
+
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
