@@ -135,6 +135,11 @@ enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
 /* Protect one mapped page in a reservation or VM-owned allocation. */
 enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
                           unsigned permissions);
+/* IF=0. Shared kernel snapshots use only the short mapping-publication guard,
+ * not structural mutator admission: unrelated preparation cannot return BUSY.
+ * This scalar snapshot is not a mapping lease; caller retains its consumer's
+ * lifetime/exclusion proof for any later use. Private queries still require
+ * their existing exclusive or stable active-root ownership. */
 enum mm_result vm_query(struct vm_space *space, uintptr_t address,
                         struct page_translation *result);
 

@@ -84,6 +84,11 @@ size_t arch_page_unmap_run(struct arch_address_space *space, uintptr_t virtual,
                            size_t count, phys_addr_t *physical);
 enum mm_result arch_page_protect(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions);
+/* IF=0. General shared kernel mappings use a short allocation-free snapshot
+ * guard shared with ancestor/leaf publication. No structural-owner admission;
+ * callers retain the mapped consumer beyond this scalar snapshot. Private
+ * queries keep their exclusive/stable-root proof. Panic/debugger best-effort
+ * recursive inspection uses its separate path, without this normal guard. */
 enum mm_result arch_page_query(const struct arch_address_space *space,
                                uintptr_t virtual, struct page_translation *result);
 /* IF=0 on the CPU exclusively executing this private space. Checks a lower-half

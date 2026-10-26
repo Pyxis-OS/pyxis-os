@@ -1216,7 +1216,7 @@ enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
 enum mm_result vm_query(struct vm_space *space, uintptr_t address,
                         struct page_translation *result)
 {
-  require_kernel_owner(space);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!space || !space->head) {
     return MM_INVALID;
   }
