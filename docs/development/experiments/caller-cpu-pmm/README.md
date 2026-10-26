@@ -2,7 +2,7 @@
 
 Measured 2026-10-26 after [#1254](https://git.internal/PyxisOS/pyxis-os/pulls/1254)
 removed the CPU0 MEMORY dispatcher. This is task 2's required measurement and
-[decision input](../../../wip/bsp-removal.md#task-2-measured-allocation-decision-proposed),
+[decision input](../../../wip/bsp-removal.md#task-2-measured-allocation-decision-accepted-2026-10-26),
 not an allocator implementation or native result.
 
 ## Method and provenance
@@ -115,8 +115,9 @@ No scratch layout or recursive-walk experiment was performed here.
 The recommended first change is bounded transaction-owned frame batches, using
 the existing 64-frame VM work buffers. It can reduce per-frame lock traffic
 without introducing a hidden free pool, remote-free queue or new exhaustion
-policy. It does not promise to remove the larger zero/scratch cost. Approval is
-still required; no allocation or scratch behavior has changed.
+policy. It does not promise to remove the larger zero/scratch cost. Chronium accepted this scope on 2026-10-26; implementation follows separately.
+No allocation or scratch behavior changes in this measurement record. The later
+scratch/page-table task will separate zeroing from mapping/invlpg cost.
 
 The task 1 native packet is sealed at `/shared/present/bsp-removal/native/`:
 pre-task1 `742817b0` versus merged `c7028007`, identical archive, Remote-driven

@@ -2,7 +2,7 @@
 
 Decisions 1–3 accepted (chronium, 2026-10-26). Task 1 is merged in #1254;
 its hands-free native packet is prepared and awaits the orchestrator. Task 2
-measurement is complete; its allocation decision below awaits chronium. Later tasks raise decisions
+measurement is complete; decision 4 is accepted (chronium, 2026-10-26). Later tasks raise decisions
 when reached. XSAVE/AVX is merged and natively qualified; its qualification
 record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
 The accepted JIT grant remains after this milestone.
@@ -102,7 +102,7 @@ a way to reclaim cached frames under pressure. This does not drop the
 milestone's per-CPU allocation goal. Alternative: design those budgets and cache lifetime
 before task 1, expanding its scope while the actual PMM contention is unknown.
 
-## Task 2 measured allocation decision (proposed)
+## Task 2 measured allocation decision (accepted 2026-10-26)
 
 The [matched post-dispatcher measurement](../development/experiments/caller-cpu-pmm/README.md)
 uses three fresh nested-KVM boots each at 1/2/4 independent mutators, with
@@ -113,8 +113,8 @@ contention and is not the attribution baseline. All backing allocations/frees
 still enter the global PMM once per frame; sampled searches examine two words.
 No native PMM attribution or fragmented/pressure timing is claimed.
 
-**Decision 4, pending — default: use bounded caller-owned frame batches first,
-with no retained per-CPU free cache.** Add internal allocate/free vector helpers
+**Decision 4, accepted (chronium, 2026-10-26): use bounded caller-owned frame
+batches first, with no retained per-CPU free cache.** Add internal allocate/free vector helpers
 capped at the existing 64-frame VM run. Claim arbitrary free frames in first-fit
 order under one leaf-lock acquisition; release the lock before zeroing/mapping
 or pressure notification. Returned frames belong to that in-flight transaction
@@ -137,14 +137,17 @@ page-table work; it avoids new PMM code but leaves per-frame lock traffic.
 Alternative: retained per-CPU free-frame caches; they need a separate decision
 on budgets, refill/drain/pressure and cross-CPU return before implementation.
 The present measurements do not justify silently reserving such pools.
-Scratch layout/recursive walking and live-root invalidation remain separate;
+The later scratch/page-table task must attribute the larger measured zero/scratch
+interval separately to zeroing and temporary scratch mapping/invlpg before
+choosing an optimization. Scratch layout/recursive walking and live-root
+invalidation remain separate;
 this recommendation does not reverse the earlier recursive-walk preference or
 claim to finish all per-CPU allocation work. No allocator implementation begins
-until this decision is accepted.
+beyond this accepted scope without a further decision.
 
 ## Implementation sequence
 
-Task 1 is merged; task 2 is at its allocation decision. Each row is a delivery/review
+Task 1 is merged; task 2's bounded frame-batch implementation is authorized. Each row is a delivery/review
 boundary; later tasks raise their behavior, lifetime and policy decisions when
 reached. Task 2 begins with the explicit measure-then-decide point above.
 

@@ -151,8 +151,7 @@ ownership, frame allocation, acknowledged invalidation and non-centralized
 cleanup. The first-task execution/quiescence/allocator decisions are accepted
 (chronium, 2026-10-26). Task 1 is merged; its hands-free native packet awaits
 the orchestrator. Task 2 has measured the shared PMM after dispatcher removal
-and proposes bounded caller-owned frame batches; the allocation decision is
-pending chronium. No retained per-CPU cache is implemented.
+and bounded caller-owned frame batches are accepted (chronium, 2026-10-26). No retained per-CPU cache is implemented.
 
 ## Candidates for the next milestone
 
