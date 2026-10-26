@@ -1,8 +1,8 @@
 # Hosted program and port build flags
 
-Investigation for 0.0.10, assigned by chronium after the 0.0.9 tag
-(`c02a2bfa`). No SDK defaults have changed. Native runs are coordinated through
-the orchestrator; temporary build overrides establish the QEMU comparison first.
+Accepted for 0.0.10 (chronium, 2026-10-26), implementation assigned after the
+0.0.9 tag (`c02a2bfa`). The pre-decision QEMU comparison used temporary compiler
+overrides. Native runs are coordinated through the orchestrator.
 
 ## Inspected boundary
 
@@ -29,10 +29,10 @@ hazard. Keep those controls and the existing startup `-fno-builtin` exceptions.
 Kernel and compiler-rt flags are outside this userspace policy change.
 
 Mesa requests Meson's release build, but its inherited `c_args`/`cpp_args`
-contain a later `-O2`; that wins over release `-O3`. The proposed port fix gives
+contain a later `-O2`; that wins over release `-O3`. The accepted port fix gives
 Meson one deliberate optimization setting instead of contradictory flags.
 The repeated nested comparison supports hosted C, but has not shown an O3
-advantage. The proposed default is therefore explicit O2, with O3 retained as a
+advantage. The accepted default is explicit O2, with O3 retained as a
 measured comparison rather than assumed to be faster.
 
 ## Red-zone evidence
@@ -70,32 +70,42 @@ timed workload. Render samples use integer scaling or 1:1 output.
 
 The existing attended vela/Fedora SoH figures motivate this work; the Fedora
 scene was letterboxed and is not an exact performance baseline. Native A/B must
-use the same scene/save, resolution, cap and CPU-power policy on both Pyxis
-profiles. No private game assets or configuration enter the public proposal.
+use the same save bytes: delta's slot-A first-room fixture on Fedora and both
+Pyxis profiles, not merely similar scene presentation. Fedora uses SoH 9.3.1
+`f0599f9` and Mesa 26.2.5 softpipe; both systems use identical JSON settings:
+240-line internal canvas, 4:3, 1920x1048 output, 20 FPS cap and MSAA off, with
+CPU at full power. The packet records save/configuration hashes and the camera
+spot. Private assets remain under `/shared/oot`; no private game content enters
+the repository.
 
-## Proposed decisions
+## Accepted contract (chronium, 2026-10-26)
 
-1. **Hosted boundary — default:** hosted C for programs, ports and reusable SDK
+1. **Hosted boundary:** hosted C for programs, ports and reusable SDK
    libraries; `__STDC_HOSTED__` becomes 1 for those C consumers. Retain
    freestanding C for the whole libc implementation closure,
    crt0 and pre-TLS startup helpers, plus existing explicit no-builtin/strict
    rounding controls. C++ remains hosted. Synchronize Make, CMake and duplicated
    application flags without changing header order or other options.
-2. **Mesa optimization — default:** explicitly select O2 for the release profile,
+2. **Mesa optimization:** explicitly select O2 for the release profile,
    stripping inherited optimization options from the cross-file args rather
    than relying on their order. The nested matrix shows no O3 advantage;
    compare both natively before claiming otherwise. Retain upstream math policy
    and the generic SDK's O2; do not raise every program to O3.
-3. **Red zone — default:** retain the current SDK/compiler/Rust no-red-zone
+3. **Red zone:** retain the current SDK/compiler/Rust no-red-zone
    convention in this delivery. Explicitly enabling it needs its own ABI promise
    and runtime qualification; the normal-entry audit makes that plausible,
    but it is not implied by hosted C or by deleting a redundant option.
 
-## Delivery after acceptance
+## Delivery
 
 Userland SDK flag split first, ports' Mesa/Neovim adjustments second, then parent
 SDK export/pins/docs; signed dependency heads must contain their mains. Rebuild
-affected packages for 0.0.10; no runtime ABI change is proposed. No compiler
-container rebuild is needed for the proposed defaults. Repeat the selected comparisons after implementation and
+affected packages for 0.0.10; no runtime ABI change is intended. No compiler
+container rebuild is needed for the accepted defaults. Repeat the selected comparisons after implementation and
 prepare the coordinated vela packet, including the existing SoH private-packet
 workflow, before any native staging.
+
+- [ ] Userland: hosted SDK C flags and explicit libc/startup exceptions.
+- [ ] Ports: Mesa optimization authority and duplicated target C flags.
+- [ ] Parent integration: CMake, dependency pins, build references and QEMU checks.
+- [ ] Coordinated native matched comparison with the same private save/settings.
