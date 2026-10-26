@@ -8,10 +8,10 @@ program packages that record the ABI they need
 [release ABI](abi.md)), and the installed
 `packages` volume that programs read them from.
 
-There is one current form of each file and no version field: before a public
-release the formats change in place without migration, and anything else, such
-as data written by an earlier build, is refused as invalid like any damaged
-file. The host tool `tools/pxpkg.py`
+There is one current form of each file and no version field. The set reader
+also accepts the previous `{ id, version }` entries as originless during the
+0.0.10 transition; other earlier or malformed data is refused. The host tool
+`tools/pxpkg.py`
 writes and checks the repository; the native `pkg` bundle installs and manages
 selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
 tracks its delivery and qualification.
@@ -276,18 +276,24 @@ return { set = 7 }
 -- sets/7.lua
 return {
   packages = {
-    { id = "fonts-sample", version = "1.0.0-1" },
+    { id = "fonts-sample", version = "1.0.0-1", origin = "public",
+      origin_hash = "1e8cfe1964de98f1c62772171d0f16e777f6825ccfa8fdf8423c60018ca92b3e" },
   },
 }
 ```
 
 Each record has exactly its shown fields. `set` is an integer of at least 1, and
-`packages` is a plain array of `{ id, version }` tables following the name rules
-above, each ID once. `current` is at most 256 bytes. A missing `current` is the
-empty set, as on a new volume. Older `.previous` sidecars are ignored and
-removed by boot collection.
+`packages` is a plain array of package tables following the name rules above,
+each ID once. `origin` is the configured repository name; `origin_hash` is the
+lowercase SHA-256 of `pkg-origin-v1\nURL\nPOLICY\n`, where URL is the stored
+base URL including `/` and POLICY is `signed` or `unsigned`. The pair refuses
+silent name reuse after repository reconfiguration. Legacy `{ id, version }`
+entries load without an origin until reviewed migration. The example hash uses
+`https://packages.pyxis.nexus/public/` and `signed`. `current` is at most
+256 bytes. A missing `current` is the empty set, as on a new volume. Older
+`.previous` sidecars are ignored and removed by boot collection.
 
-Install and remove each publish a fresh number above all existing
+Install, update and remove each publish a fresh number above all existing
 records. Verified staged trees move to `store/ID/VERSION` with NO_REPLACE and
 are synchronized; a stored version that a set adds back must verify against the
 downloaded metadata and inventory before reuse. Published trees and set records
@@ -651,12 +657,13 @@ estimated, and there is no option to change the display.
 
 ### Review and recovery
 
-Install and remove acquire `.writer-lock` by exclusive directory
+Install, update and remove acquire `.writer-lock` by exclusive directory
 creation; a concurrent writer refuses immediately. Before switching, the client
 prints the proposed additions, selections and removals and requires an
 interactive console review with a `[y/N]` prompt. Only exactly `y` or `Y`
 accepts; empty input or any other answer cancels without switching the active
-set. There is no non-interactive confirmation flag. Archive sizes are printed
+set. `--yes` answers only this final switch prompt; it never chooses between
+repositories or approves a removal proposed by update. Archive sizes are printed
 before their fetches. Declining leaves any prepared trees inactive. Normal foreground
 interruption applies during preparation; the confirmed switch is guarded until
 its actual result settles.
