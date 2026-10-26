@@ -1,6 +1,6 @@
 # blurgtext
 
-The opt-in `blurgtext` 0.2.0 package runs CallumDev's upstream text-rendering demo over
+The opt-in `blurgtext` 0.2.1 package runs CallumDev's upstream text-rendering demo over
 SDL2/OSMesa softpipe. It retains the demo's text, layout, colours, styled spans,
 UTF-16 cursor, SVG emoji and CJK fallback sample. Escape exits.
 
@@ -20,10 +20,10 @@ accepted (chronium, 2026-10-24). It does not use Pyxis libfont in their place.
 The exact source archives, hashes, licences and ordered patches are in the
 [port recipe](../../ports/blurgtext/README.md). Reusable `freetype-dev` and
 `harfbuzz-dev` packages remain later work; their verified pins and build profile
-are recorded in the qualification record. The 0.2.0 release identifies the same
-commit already used by the first port; Raqm 0.11.0 now comes from canonical
-HOST-Oman/libraqm, with identical source bytes. This refresh reduces the Pyxis
-patches rather than claiming a different rendering-library revision.
+are recorded in the qualification record. Upstream 0.2.1 fixes the stock
+system-font cache-entry lifetime issue reported as #7. The dependency pins and
+three platform/build/demo patches are unchanged; no port-local core workaround
+is added.
 
 ## Display and grants
 
