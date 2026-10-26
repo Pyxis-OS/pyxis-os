@@ -18,7 +18,6 @@
 
 #define AP_STACK_BYTES (16 * 1024)
 #define AP_STARTUP_TIMER_PERIODS 600
-#define TLB_FLUSH_TIMEOUT_NS UINT64_C(1000000000)
 #define TLB_FLUSH_POLL_NS UINT64_C(1000000)
 #define CPUID_TOPOLOGY_COUNT_MASK 0xffffu
 #define CPUID_TOPOLOGY_SHIFT_MASK 0x1fu
@@ -303,20 +302,21 @@ static void request_flush(struct cpu_local *cpu, uint64_t generation)
    * a merely increasing number without the issue chain would be unsound. */
 }
 
-bool arch_kernel_flush_remote(void)
+bool arch_kernel_flush_remote(uint64_t deadline)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   KASSERT(cpus && cpu_count == cpu_capacity);
   KASSERT(cpu_current()->active_space == arch_kernel_space());
+  if (arch_monotonic_ns() >= deadline) {
+    cpu_restore_interrupts(flags);
+    return false;
+  }
   uint64_t generation = issue_flush_epoch();
   if (!generation) {
     cpu_restore_interrupts(flags);
     return false;
   }
-  uint64_t now = arch_monotonic_ns();
-  uint64_t deadline = TLB_FLUSH_TIMEOUT_NS > UINT64_MAX - now ? UINT64_MAX :
-    now + TLB_FLUSH_TIMEOUT_NS;
   /* Membership is fixed after startup. Publish all mailboxes before ringing
    * doorbells; each is permanent and may safely outlive a timed-out initiator. */
   for (size_t i = 0; i < cpu_count; ++i) {
@@ -330,7 +330,7 @@ bool arch_kernel_flush_remote(void)
 
   for (;;) {
     bool complete = true;
-    now = arch_monotonic_ns();
+    uint64_t now = arch_monotonic_ns();
     for (size_t i = 0; i < cpu_count; ++i) {
       struct cpu_local *cpu = cpus[i];
       if (atomic_load_explicit(&cpu->online, memory_order_acquire) &&

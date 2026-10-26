@@ -39,11 +39,11 @@ void arch_cpu_reschedule(size_t index);
 
 /* Retained kernel-root task, IF=1, after SMP startup, no held locks or user
  * mapping borrowers. Any CPU may initiate; callers can overlap. Flushes the
- * current root on every online CPU with a bounded monotonic wait and sleeping
- * polls. The caller must
+ * current root on every online CPU until the absolute monotonic DEADLINE,
+ * with sleeping polls. The caller must
  * exclude remote accesses/refills before entry and through subsequent unmap.
  * Does not change mappings; false does not authorize their retirement. */
-bool arch_kernel_flush_remote(void);
+bool arch_kernel_flush_remote(uint64_t deadline);
 /* Dedicated IPI entry, IF=0: consume this CPU's permanent epoch mailbox,
  * reload current CR3 and acknowledge. No pointers, locks, allocation or wake. */
 void arch_tlb_flush_interrupt(void);
