@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "org.pyxis.ruststdmain",
+  "entry": "bin/rust-std-main.pxe",
+  "commands": {"rust-std-main": "bin/rust-std-main.pxe"},
+  "resource_dirs": {},
+  "grants": [
+    {"name": "memory", "resource": "memory", "rights": ["manage"], "required": true},
+    {"name": "clock", "resource": "clock", "rights": ["read", "precise", "sleep"], "required": true},
+    {"name": "random", "resource": "random", "rights": ["read"], "required": true}
+  ]
+}

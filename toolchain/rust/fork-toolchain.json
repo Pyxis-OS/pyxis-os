@@ -1,5 +1,5 @@
 {
-  "rust_repository": "ssh://git@git.internal:2222/PyxisOS/pyxis-rust.git",
+  "rust_repository": "https://git.internal/PyxisOS/pyxis-rust.git",
   "rust_branch": "pyxis",
   "rust_base_commit": "48f4b05538b8eca412137042d9647a61e692c6b3",
   "host": "x86_64-unknown-linux-gnu",
@@ -43,12 +43,13 @@
     }
   ],
   "libc": {
-    "repository": "ssh://git@git.internal:2222/PyxisOS/pyxis-libc.git",
+    "repository": "https://git.internal/PyxisOS/pyxis-libc.git",
     "upstream_repository": "https://github.com/rust-lang/libc",
     "version": "0.2.191",
     "base_commit": "ccc2ff4aaab962f7fde7b8edda7379c045b1ca12",
     "crate_sha256": "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a",
-    "base_branch": "libc-0.2"
+    "base_branch": "libc-0.2",
+    "pyxis_commit": "a6aac31c87316e4a351d8e7185ad8898e545d22a"
   },
   "source_archives": [
     {

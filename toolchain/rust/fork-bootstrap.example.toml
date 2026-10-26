@@ -22,6 +22,8 @@ download-ci-llvm = true
 assertions = false
 
 [rust]
+# Cargo declares std as dylib+rlib; the static Pyxis target drops dylib.
+deny-warnings = false
 channel = "nightly"
 download-rustc = false
 lto = "off"
@@ -39,7 +41,7 @@ cxx = "/usr/bin/clang++"
 linker = "/usr/bin/clang"
 
 [target.x86_64-unknown-pyxis]
-no-std = true
+no-std = false
 cc = "/absolute/pyxis-cross/bin/x86_64-unknown-pyxis-clang"
 cxx = "/absolute/pyxis-cross/bin/x86_64-unknown-pyxis-clang++"
 ar = "/absolute/pyxis-cross/bin/llvm-ar"

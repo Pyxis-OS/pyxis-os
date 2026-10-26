@@ -3,7 +3,7 @@
 
 SOURCE PREFIX PREBUILT must be absolute. SOURCE uses upstream's build directory;
 PREBUILT is the pinned stage-1 installation, supplying its unchanged Cargo and
-distribution notices. Build host std/proc_macro and target core/alloc first.
+distribution notices. Build host std/proc_macro and target std/core/alloc first.
 """
 
 import argparse
@@ -51,7 +51,7 @@ def export(source, prefix, prebuilt):
     if any(prefix.is_relative_to(path) for path in (stage, source / "library", prebuilt)):
         raise ValueError("PREFIX must not be inside an input tree")
     for target, crates in ((fork["host"], ("std", "proc_macro")),
-                           (fork["target"], ("core", "alloc", "compiler_builtins"))):
+                           (fork["target"], ("std", "core", "alloc", "compiler_builtins"))):
         for crate in crates:
             if not list((stage / "lib/rustlib" / target / "lib").glob(f"lib{crate}-*.rlib")):
                 raise ValueError(f"Build {crate} for {target} before exporting")

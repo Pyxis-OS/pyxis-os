@@ -1,10 +1,12 @@
-# Rust core and alloc cross-toolchain
+# Rust cross-toolchains
 
-The opt-in Rust profile uses pinned `nightly-2026-10-24`, the native userspace
+The original prebuilt profile uses pinned `nightly-2026-10-24`, the native userspace
 SDK and Pyxis Clang/LLD. It supplies `core` + `alloc`, not `std`, a hosted Rust
 compiler or Unix compatibility. [Qualification](experiments/rust-core-alloc.md)
 records the hello, local-exec TLS and unchanged tiny-skia checksum checks.
-The [Rust plan](../wip/rust.md) keeps the accepted later std-fork direction.
+The [fork-built profile](#fork-built-compiler-and-built-in-target) below adds
+the first native std main. Its [milestone](../wip/rust-std.md) keeps worker,
+filesystem and first-port delivery separate.
 
 ## Host prefix and build
 
@@ -113,22 +115,43 @@ network/process adapters and Rust unwinding remain later std work.
 
 ## Fork-built compiler and built-in target
 
-Gate 1 of the [std milestone](../wip/rust-std.md) supplies a separate Linux-host
-compiler with built-in `x86_64-unknown-pyxis`, installed target core+alloc and
-host std/proc_macro for build scripts. It supplies no Pyxis std yet. The
-[qualification record](experiments/rust-std-toolchain.md) identifies the source,
-binaries and QEMU checks. The prebuilt stage-1 profile above remains available.
+The [std milestone](../wip/rust-std.md) uses a separate Linux-host compiler
+with built-in `x86_64-unknown-pyxis`, installed Pyxis std/core/alloc and host
+std/proc_macro for build scripts. Gate 2's compiler revision is
+`5e85f86de5f7dc45a485fa8a3eb376487923bc0b`. The target keeps `target_os="pyxis"`
+and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
+[first std main record](experiments/rust-std-main.md) separate their qualification
+and limits.
+The prebuilt stage-1 profile above remains separate and unchanged.
+
+Native libc declarations come from [libc #1](https://git.internal/PyxisOS/pyxis-libc/pulls/1)
+at `a6aac31c87316e4a351d8e7185ad8898e545d22a`, overlaid through exact HTTPS
+`[patch.crates-io]` entries in the Rust compiler workspace, library workspace
+and sample workspace, with their matching lockfiles. Keep this overlay in
+consumer workspaces; it does not change the closed crates.io proxy. The SDK
+uses [userland #384](https://git.internal/PyxisOS/pyxis-userland/pulls/384) at
+`14be162ecefc49dbdbc573bb6ef700dc21abb2ec` for owned all-TEXT capture and the
+end-of-TLS-drain cleanup hook. Rebuild the SDK and affected Rust libraries and
+programs when these native interfaces change; libc still owns startup and FS.
 
 [fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the base
 Rust revision, CI LLVM, the three upstream stage0 beta archives, backtrace source
-and later libc baseline. All fetches use its internal cache URLs and verify
-whole-file SHA-256 values. Preparation is offline by default and runs no downloaded
-code. It checks the source's stage0 metadata, backtrace gitlink and actual HEAD's
+and the native libc revision. Archive fetches use its internal cache URLs and
+verify whole-file SHA-256 values. Preparation is offline by default and runs no
+downloaded code. It checks the source's stage0 metadata, backtrace gitlink and actual HEAD's
 upstream LLVM freshness selection before writing bootstrap's ordinary cache layout:
 
 ```sh
 toolchain/prepare-rust-fork.py /absolute/pyxis-rust /absolute/rust-bootstrap-cache --fetch
 toolchain/prepare-rust-fork.py /absolute/pyxis-rust /absolute/rust-bootstrap-cache
+```
+
+On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
+
+```sh
+git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
+git -C /absolute/pyxis-rust fetch origin
+git -C /absolute/pyxis-rust checkout --detach 5e85f86de5f7dc45a485fa8a3eb376487923bc0b
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
@@ -157,6 +180,8 @@ unset RUSTC
 Use the native host C/C++ compiler for rustc; use the existing Pyxis compiler for
 target native objects and final links. The configuration uses Rust's CI LLVM,
 `download-rustc=false`, full bootstrap, no LTO, and no embedded target bitcode.
+Pyxis now requires `no-std=false`; the former `true` builds core+alloc only and
+cannot supply the first std main.
 On Linux with unprivileged user/network namespaces, the qualified build commands
 below deny all network access rather than relying on a downloader's fallback:
 
@@ -166,35 +191,64 @@ unshare --user --map-root-user --net python3 x.py build --stage 2 compiler/rustc
 unshare --user --map-root-user --net python3 x.py test --stage 2 \
   compiler/rustc_target --test-args x86_64_unknown_pyxis
 unshare --user --map-root-user --net python3 x.py build --stage 2 \
+  --set rust.deny-warnings=false \
   --target x86_64-unknown-linux-gnu,x86_64-unknown-pyxis library
 ```
 
 Unset inherited `RUSTC_BOOTSTRAP`, `RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS` before
 these commands. Upstream bootstrap manages its own stage flags; do not use a
 user `RUSTC_BOOTSTRAP` workaround. Build both library targets in the final command:
-bootstrap can recreate the compiler sysroot between invocations. `no-std=true`
-selects core+alloc only for Pyxis; Linux receives std and proc_macro for host tools.
+bootstrap can recreate the compiler sysroot between invocations. Do not use
+`--keep-stage` to skip the final library build before export: both host and Pyxis
+libraries must be built for the actual delivered compiler revision.
 
-Export outside the source/input trees into a fresh prefix, then build the same
-samples with the built-in target:
+Upstream std's Cargo manifest offers both `dylib` and `rlib`, while Pyxis is
+static-only. Rustc warns that it drops the unsupported dylib crate type. The
+example configuration and explicit `--set rust.deny-warnings=false` allow that
+known warning without turning it into a bootstrap failure. Warnings remain
+visible; inspect and resolve any other warning rather than adding warning
+suppression flags or treating unknown warnings as this exception.
+
+Export outside the source/input trees into a fresh prefix, then select the
+core+alloc samples or the first std main with the built-in target:
 
 ```sh
 toolchain/export-rust-fork.py /absolute/pyxis-rust /absolute/fork-prefix \
   /absolute/prebuilt-prefix
 toolchain/build-rust-samples.py /absolute/fork-prefix /absolute/sdk \
   /absolute/fork-samples /absolute/fork-work --fork --fetch
+toolchain/build-rust-samples.py /absolute/fork-prefix /absolute/sdk \
+  /absolute/fork-std-sample /absolute/fork-work --fork --std --fetch
 ```
 
 Omit `--fetch` after seeding the sample graph for a frozen build. Export verifies
-the clean source/compiler identity and required libraries, materializes the
-compiler libraries while excluding bootstrap's two recursive source links,
-copies library source once, and installs unchanged Cargo from its checked
+the clean source/compiler identity, host std/proc_macro and Pyxis
+std/core/alloc/compiler-builtins; a core+alloc-only fork sysroot is no longer
+exportable with this tool. It materializes the compiler libraries while excluding
+bootstrap's two recursive source links, copies library source once, and installs unchanged Cargo from its checked
 stage-1 archive. `share/pyxis-rust/fork-installation.json` records compiler/Cargo
 identities and file hashes; the sample builder verifies them and the SDK inputs.
 A prefix built against one SDK does not grant compatibility with another.
 
 Both profiles keep Pyxis Clang/LLD as the final linker. The built-in target
-matches the stage-1 JSON's ABI/code-generation settings; only tier metadata
-changes. `--fork` uses installed core+alloc, without a JSON-target or build-std
-flag. Standard operations, native libc bindings and hexyl remain later gates;
-build success is not a claim that those APIs work.
+retains the stage-1 JSON's ABI/code-generation settings. `--fork` uses installed
+libraries without a JSON-target or build-std flag. `--fork --std` builds only
+`rust-std-main.pxb` and its debug ELF/map, skipping the raster host reference.
+The bundle preserves source, the resolved libc fork and notices, lockfiles and
+compiler/SDK provenance through the existing packaging path.
+
+`rust-std-main` enters through ordinary `fn main() -> ExitCode`, using std's
+allocator and native adapters. Its default exercise covers owned args and
+TEXT snapshots, private TEXT and CAP exclusion, over-aligned allocation,
+byte-preserving native paths, randomized collections, clocks/sleep and an
+initial-thread TLS destructor marker. Separate `--clock-only`, `--entropy-only`,
+`--io`, `--panic` and `--allocation-failure` modes isolate grant, stream and
+failure checks. Its manifest requests memory/manage, clock/read+precise+sleep
+and random/read; streams remain caller-supplied. It requests no thread, network
+or filesystem-root authority. Missing grants must produce real failure;
+linking std adds no ambient authority.
+
+This is the gate-2 first-main profile, not completion of the std milestone.
+Gate 3 managed workers/TLS, gate 4 native files and gate 5 hexyl remain pending.
+Filesystem, child process and network operations remain unsupported here;
+source or compiler build success does not qualify those operations or workers.

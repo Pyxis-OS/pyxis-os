@@ -32,6 +32,17 @@ pools between BUSY attempts.
 Ordinary sibling return/exit drains language TLS destructors in reverse order,
 then up to four key passes, and reports its return value. Keys are generational;
 deletion invokes no callbacks. A key value is cleared before its callback.
+After the key passes, language destructors first registered by keys also run.
+`libc_thread_cleanup_register` installs one per-thread runtime cleanup callback;
+it runs last, after both language drains. Repeated registration of the same
+callback is accepted before cleanup starts; a different callback is refused.
+This final runtime callback must not register new destructor-bearing TLS or
+rearm keys: no further drainage follows. After a registered runtime cleanup,
+required language-destructor registration terminates rather than silently
+losing the callback. Programs without that hook keep their existing exit order. Forced stop,
+abort and `_Exit` still bypass user cleanup. The hook supplies no new authority
+and does not replace the language's process cleanup.
+
 Initializer thread exit resets active once objects for another attempt. Recursive
 thread exit during destructor drainage stops the process rather than claiming
 normal completion after abandoning remaining callbacks.
