@@ -32,6 +32,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/gamepad.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
 #include <kernel/pointer.h>
@@ -348,6 +349,11 @@ static struct space *space_alloc(const char *name, const char *title,
   space->keyboard = keyboard_create(space, focused);
   if (!space->keyboard) {
     panic("cannot allocate space keyboard");
+  }
+
+  space->gamepad = gamepad_create(space, focused);
+  if (!space->gamepad) {
+    panic("cannot allocate space gamepad");
   }
 
   space->terminal_pointer = terminal_pointer_create(space);
@@ -1432,6 +1438,7 @@ void space_display_changed(struct space *space, bool discard_input)
   atomic_fetch_add(&navigation_generation, 1);
   bool terminal_layer = space->display->presented && !space->display->visible;
   keyboard_set_layer(space->keyboard, terminal_layer, discard_input);
+  gamepad_set_layer(space->gamepad, terminal_layer);
   pointer_space_changed(space);
 }
 
@@ -1443,11 +1450,13 @@ static void switch_space(struct space *next)
   if (next != active_space) {
     volume_ui_cancel();
     keyboard_focus(active_space->keyboard, false);
+    gamepad_focus(active_space->gamepad, false);
     struct space *previous = active_space;
     active_space = next;
     ++selection_generation;
     atomic_fetch_add(&navigation_generation, 1);
     keyboard_focus(next->keyboard, true);
+    gamepad_focus(next->gamepad, true);
     pointer_space_changed(previous);
     pointer_space_changed(next);
   }

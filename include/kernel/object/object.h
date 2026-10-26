@@ -77,6 +77,7 @@ enum object_type {
   OBJECT_READINESS_SET = 75,
   OBJECT_PROCESS_INTERRUPT = 76,
   OBJECT_BULK_STORAGE = 77, /* Internal bulk data ownership, never a public grant. */
+  OBJECT_GAMEPAD = 79,
   OBJECT_BULK_GATE = 78, /* Internal process budget retained through data drain. */
   OBJECT_DESCRIPTION_STORAGE = 61, /* Internal immutable facets, no public grant. */
 };

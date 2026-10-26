@@ -6,6 +6,7 @@
 #include <kernel/bulk.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/gamepad.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/bluetooth_hci.h>
@@ -86,6 +87,7 @@ static void release_sessions(struct process *process)
   wifi_connection_process_exit(process);
   clipboard_process_exit(process);
   keyboard_process_exit(process);
+  gamepad_process_exit(process);
   pointer_process_exit(process);
   bluetooth_hci_process_exit(process);
   display_process_exit(process);

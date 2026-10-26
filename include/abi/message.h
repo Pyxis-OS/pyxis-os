@@ -73,6 +73,7 @@
 #define PROTOCOL_WIFI_AUTH UINT64_C(68)
 #define PROTOCOL_READINESS_SET UINT64_C(69)
 #define PROTOCOL_PROCESS_INTERRUPT UINT64_C(70)
+#define PROTOCOL_GAMEPAD UINT64_C(71)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

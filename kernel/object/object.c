@@ -24,6 +24,7 @@
 #include <abi/echo.h>
 #include <abi/net_config.h>
 #include <abi/keyboard.h>
+#include <abi/gamepad.h>
 #include <abi/pointer.h>
 #include <abi/audio.h>
 #include <abi/terminal_pointer.h>
@@ -135,6 +136,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_CLOCK;
   case OBJECT_KEYBOARD:
     return PROTOCOL_KEYBOARD;
+  case OBJECT_GAMEPAD:
+    return PROTOCOL_GAMEPAD;
   case OBJECT_POINTER:
     return PROTOCOL_POINTER;
   case OBJECT_AUDIO:
@@ -329,6 +332,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~THREAD_COMPLETION_RIGHT_WAIT);
   case OBJECT_KEYBOARD:
     return !(rights & ~KEYBOARD_RIGHT_INPUT);
+  case OBJECT_GAMEPAD:
+    return !(rights & ~GAMEPAD_RIGHT_INPUT);
   case OBJECT_POINTER:
     return !(rights & ~POINTER_RIGHT_INPUT);
   case OBJECT_AUDIO:

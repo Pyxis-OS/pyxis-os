@@ -7,7 +7,6 @@
 /* Embedded in retained adapters; registration/publication are BSP/IF=0 and
  * allocate nothing. Lost source backing remains retained with its adapter. */
 struct gamepad_source {
-  struct gamepad_source *next;
   struct gamepad_info info;
   struct gamepad_state physical;
   bool registered, live, valid;

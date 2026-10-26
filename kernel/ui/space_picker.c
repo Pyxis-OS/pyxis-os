@@ -6,6 +6,7 @@
 #include <kernel/fb/tty.h>
 #include <kernel/keyboard.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/gamepad.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
 #include <kernel/space.h>
@@ -42,6 +43,7 @@ void space_picker_open(struct space *space)
   ++visual_generation;
   volume_ui_cancel();
   keyboard_set_overlay(space->keyboard, true);
+  gamepad_set_overlay(space->gamepad, true);
   pointer_space_changed(space);
 }
 
@@ -57,6 +59,7 @@ void space_picker_cancel(void)
   /* Power takeover retains modal focus throughout the handoff. */
   if (!power_overlay_shown()) {
     keyboard_set_overlay(space->keyboard, false);
+    gamepad_set_overlay(space->gamepad, false);
   }
   pointer_space_changed(space);
 }
