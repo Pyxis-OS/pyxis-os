@@ -30,8 +30,8 @@ choice below remains open; this plan does not claim a completed release.
    set and boot selection unchanged. *(chronium, 2026-10-26)*
 3. **Stage, reboot, then switch.** `pkg upgrade` durably stages the entire
    compatible package set and the new release before activating the new boot
-   payload. It ends with `Upgrade staged. Reboot now? [Y/n]`. Declining leaves
-   the upgrade staged; reboot is still required. The running system continues
+   payload. It ends with `Upgrade staged; type reboot to finish`, without
+   receiving power authority or initiating a reboot. The running system continues
    to use the old `packages/current`. The verified first boot of the new
    release switches `packages/current` before package views or collectors
    start. Missing or ambiguous transition evidence enters core rescue before
@@ -49,6 +49,9 @@ choice below remains open; this plan does not claim a completed release.
    installer's Update to gain that record. Boot warns loudly when the record
    is absent or invalid, and `pkg` returns a specific refusal rather than
    obtaining ESP write authority. *(chronium, 2026-10-26)*
+   Until that activation-record task lands, Coexist Update refuses before any
+   target write with a clear message. Classic Update remains available.
+   *(chronium, 2026-10-26)*
 6. **Package updates and origins.** `pkg update` selects every installed
    package; `pkg update ID...` selects those IDs and required dependency changes,
    then validates the whole proposed set. An unchanged set reports `already up
@@ -80,7 +83,7 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   `packages/current` switch before installed consumers start. Qualify
   interruption boundaries and core-rescue refusal.
 - [ ] Integrate the set planner with `pkg upgrade` and 0.0.10 installer Update;
-  qualify the actual 0.0.9 migration and the reboot prompt.
+  qualify the actual 0.0.9 migration and the post-stage instruction.
 - [ ] Add Coexist activation evidence and specific boot/`pkg` diagnostics.
 - [ ] Settle the signing-floor source and qualify first repository contact.
 
@@ -101,7 +104,7 @@ earlier refused Update had synchronized system configuration on this disk but
 left its 0.0.9 boot selection and package set unchanged; the successful run
 therefore also checked a retry after that no-publication failure.
 
-The in-system `pkg upgrade` publication, its reboot action, uncertain boot
+The in-system `pkg upgrade` publication, uncertain boot
 evidence and Coexist activation record still need qualification or later-round
 work before this milestone is complete. The 0.0.10 release notes must tell
 0.0.9 users to use installer Update, because the 0.0.9 `pkg upgrade` client
@@ -112,6 +115,8 @@ cannot stage this transition.
 - **Signing-floor snapshot authority:** choose the trusted build-time source
   and schema of the shipped signed-index floor. A network response observed
   at build time is not itself a trusted floor.
+- **Reboot initiation:** keep a separate design open; this task gives `pkg` no
+  power grant and no mediated restart action.
 
 ## You should know
 
