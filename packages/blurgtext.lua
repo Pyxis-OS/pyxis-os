@@ -1,7 +1,7 @@
 -- Opt-in upstream demo and its complete native/static dependency notices.
 return {
   id = "blurgtext",
-  variant = "upstream-e11c19f",
+  variant = "0.2.0",
   kind = "program",
   depends = { { id = "fonts" } },
   commands = {

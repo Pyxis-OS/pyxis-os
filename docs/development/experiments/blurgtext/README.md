@@ -107,3 +107,59 @@ Private/raw evidence is retained under `/shared/present/blurgtext/final/`:
 launch arguments, serial/HTTP logs, package and backend-check captures, read-only
 GDB output, exact artifact hashes and the supplied reference comparison. The
 shareable full and content-only PNGs are in the retained screenshot collection.
+
+## 0.2.0 minimal-patch refresh, 2026-10-26
+
+The release page and tag archive identify `e11c19f4`, already used by the first
+port. Raqm `08ee1537` is canonical upstream 0.11.0: fetching its archive from
+HOST-Oman/libraqm yields the same hash and 84 source files as the old CallumDev
+URL. The source's old `.gitmodules` URL did not establish fork-specific code.
+The recipe now names canonical upstream. Other release pins already match:
+FreeType 2.15.0, HarfBuzz 15.0.0, SheenBidi 3.0.0, libunibreak 8.0,
+plutosvg 0.0.8 and PlutoVG 1.3.3; no dependency-code upgrade is claimed.
+
+Three patches remain: static/cross build, package-backed Pyxis font discovery,
+and minimum SDL2/OSMesa/font-path/GLAD demo integration. The backend uses the
+existing byte loader and face constructor without registering callback faces
+in the family table. Public loaders would change canonical style selection.
+Thus the callback cannot resize that table and does not need the old core
+cache-copy patch. The remaining stock-backend issue has a source-inspected
+upstream draft; no new reproduction program or runtime result is claimed.
+The core font manager and public header are unchanged. Demo startup checks,
+presentation checks, vsync fallback, added pacing and cleanup changes were
+removed, retaining upstream behavior. Notices and covered platform/build
+sources remain staged.
+
+A fresh SDK from parent base `09a19c94`, normal builder `3d69e83`, and the
+mirror-only recipe build pass. The unchanged SDL2/Mesa static prefixes came
+from the 0.0.9 packages: their ports/userland pins and public ABI match this
+base exactly. The QEMU code/image head is parent `a93625be`, ports `9632dd2`;
+subsequent changes add this qualification record only. The core startup/program
+archive is reused from release 0.0.9, with its same userland pin/public ABI,
+the freshly built parent kernel and this build's `os-release`. Only local live
+configuration and ordinary init scripts are overlaid; demo/fonts are not
+embedded. No native result is claimed by this refresh.
+
+KVM/q35, four CPUs, 3 GiB, Bochs display and VirtIO networking rendered an
+**800×632** framebuffer with **800×600 1:1 application content**. The ordinary
+package client installed and verified blurgtext 0.2.0 and its `fonts` dependency
+from a localhost-only, explicitly unsigned development repository. Bare
+`blurgtext` launch and Escape exit pass. Removing `fonts` while blurgtext remains
+installed refuses with the missing-dependency reason and leaves the set intact.
+Read-only post-exit GDB, with function calls disabled, finds all four CPUs in
+ordinary idle/sleep paths; no kernel panic or application fault was observed.
+
+The original demo text/layout/styles, UTF-16 cursor, SVG cat/cucumber, bread and
+CJK fallback all render. Roboto's reported measurement stays
+**90.203125 × 28**. Comparing lossless captures with the native pointer parked
+at the same lower-right position gives **zero differing pixels in the entire
+800×600 content** versus the previous capture; the native navigation-bar title
+is excluded. Images were not rescaled, retouched or composited. This is one
+fixed font/sample/profile, not broad font-engine or performance coverage.
+
+Raw source-identity/build/package/HTTP records, read-only GDB output, unedited
+captures, comparison details and the upstream draft stay under
+`/shared/present/blurgtext-0.2.0/`. The first host HTTP helper had already exited,
+so the initial package attempt reported a transport failure without changing
+the set; keeping the helper running resolved that fixture issue. No new port
+code or failure workaround was added for it.
