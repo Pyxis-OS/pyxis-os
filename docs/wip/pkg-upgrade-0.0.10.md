@@ -1,6 +1,6 @@
 # 0.0.10 package upgrades
 
-Status: **first decision round accepted (chronium, 2026-10-26); task 1 in review.**
+Status: **first and task-2 decisions accepted (chronium, 2026-10-26); task 2 in review.**
 This milestone changes the delivered [updater](pkg-upgrade.md). Later-round
 choices below remain open; this plan does not claim the new upgrade is built.
 
@@ -49,6 +49,15 @@ choices below remain open; this plan does not claim the new upgrade is built.
    installer's Update to gain that record. Boot warns loudly when the record
    is absent or invalid, and `pkg` returns a specific refusal rather than
    obtaining ESP write authority. *(chronium, 2026-10-26)*
+6. **Package updates and origins.** `pkg update` selects every installed
+   package; `pkg update ID...` selects those IDs and required dependency changes,
+   then validates the whole proposed set. An unchanged set reports `already up
+   to date` without publishing a new set. The recorded origin binds the
+   repository name, URL and signed/unsigned policy. A legacy entry offered by
+   exactly one configured source adopts it with `origin: NAME (only source)`
+   shown in the whole-plan review. Multiple possible sources need an explicit
+   console choice, batched by source; `--yes` cannot choose an ambiguous
+   origin. Proposed removals need individual approval. *(chronium, 2026-10-26)*
 
 The pending transition is proof of the next selection, not a second active
 selection or rollback binding. An old set may occupy space until the first
@@ -63,7 +72,7 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   recovery copies and the static rescue pair. Include the bounded,
   ownership-proven publication-time orphan sweep above. Update callers and
   reference docs together. Assigned to Daybreak.
-- [ ] Record origins and resolve a complete target set, including explicit
+- [x] Record origins and resolve a complete target set, including explicit
   review of legacy origins and removals.
 - [ ] Add durable pending transition evidence and the verified first-boot
   `packages/current` switch before installed consumers start. Qualify
@@ -75,8 +84,6 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
 
 ## Open decisions for later rounds
 
-- **Update-all spelling and no-op behavior:** choose the standalone command
-  spelling and its result when every installed version is already current.
 - **Signing-floor snapshot authority:** choose the trusted build-time source
   and schema of the shipped signed-index floor. A network response observed
   at build time is not itself a trusted floor.
