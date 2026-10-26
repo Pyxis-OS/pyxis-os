@@ -5,7 +5,7 @@ Codex alpha, with a single-run baseline before code. Root epochs and the
 concurrent acknowledgement engine are merged in #1269; its delayed-ACK check
 is recorded in #1271. Short shared query/publication guards are implemented
 separately. Structural-owner and caller integration remain pending, including
-the two concrete lifetime/firmware questions below. This follows
+the accepted lifetime/firmware integration rules below. This follows
 [caller-CPU MEMORY](../development/experiments/memory-caller-cpu/README.md) and
 [bounded frame batches](../development/experiments/frame-batches/README.md),
 now merged as tasks 1–2 of [BSP removal](bsp-removal.md).
@@ -233,10 +233,10 @@ scenarios/native fault tests. Raise those scopes separately when reached.
 Native work goes through the orchestrator after ordinary QEMU qualification.
 The task 1/2 A/B/C native packet has no task 3 implementation or instrumentation.
 
-## Caller integration: two decisions reached during implementation
+## Accepted caller integration rules (chronium, 2026-10-26)
 
-**Proposed, not implemented.** The source audit at main `d69b24c6` found two
-cases the general admission/timeout rule does not settle. Ordinary fallible
+**Accepted (chronium, 2026-10-26), implementation assigned.** The source audit
+at main `d69b24c6` found two concrete extensions to general admission/timeout. Ordinary fallible
 preparation already has the accepted answer: preserve BUSY through internal
 image/VM results to the native caller, instead of converting it to an invalid
 image or NO_MEMORY. No new public operation or grant is needed. Actor identity
@@ -258,7 +258,7 @@ batch discard, and temporary/cache/pool frees in
 descriptor would lose the only owner. Letting the ordinary one-second admission
 budget turn these void operations into apparent completion is also incorrect.
 
-**Default:** extend retained try/defer cleanup to these concrete items. Transfer
+**Accepted:** extend retained try/defer cleanup to these concrete items. Transfer
 the whole cleanup record, its backing and cleanup attribution to its existing
 BSP retirement owner; use the existing process-reaper task for items needing
 bounded, sleeping/interruptible work, not a new worker or a generic callback
@@ -271,11 +271,9 @@ entry intact and try later. Never claim a range was freed just because cleanup
 was queued. This is owner contention, not permission to retry an unconfirmed
 ACK retirement or reclaim quarantined storage on a late ACK.
 
-Consequence: cleanup/result observation and RAM retention can last longer than
-one second while another structural owner is busy. Alternative: keep each
-requesting actor parked with the whole record until admitted; that can stall
-presentation/other non-sleepable callers and still needs retained storage.
-Do not silently choose either lifetime.
+Cleanup/result observation and RAM retention can last longer than one second
+while another structural owner is busy. The whole cleanup record remains owned;
+task 4 moves heavy reclamation off the BSP without weakening joined completion.
 
 ### 9. Runtime firmware windows must not fail from unrelated owner contention
 
@@ -287,7 +285,7 @@ NPFS flushes, whose worker can itself need shared VM, creating an owner cycle.
 GPIO and late LPSS assignment also fill boot-reserved native windows after AP
 startup. Their fixed device owners and existing pin-on-failure policies stay.
 
-**Default:** make the ACPI/GPIO boot-reserved, never-reused windows explicit
+**Accepted:** make the ACPI/GPIO boot-reserved, never-reused windows explicit
 permanent mapping domains. Prepare their page-table ancestors before AP startup;
 seal the reservation against generic release/reuse. The current fixed firmware/
 native owner may fill fresh slots and publish their leaves under the short
@@ -306,12 +304,7 @@ operation is retried. The permanent-window exception does not bypass that full
 assignment scope or authorize arbitrary BAR writes.
 
 This is a narrow permanent-owner exception, like the separately owned,
-never-reused heap arena; it does not let general shared VM mutate concurrently
-without its owner. Alternative: pre-admit each safe AML/native work segment and
-defer it unchanged on contention, carefully releasing the owner before external
-worker waits. That couples firmware scheduling and power sequencing to the
-shared owner. Returning a new mapping failure on ordinary contention is not
-selected. No implementation of this exception before chronium decides.
+never-reused heap arena; general shared VM still requires its structural owner.
 
 ## What chronium can do after task 3
 
