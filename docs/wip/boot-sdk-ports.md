@@ -154,8 +154,8 @@ the orchestrator. Task 2 has measured the shared PMM after dispatcher removal
 and bounded caller-owned frame batches are accepted (chronium, 2026-10-26).
 Tasks 1–2 are merged; no retained per-CPU cache is implemented. The sealed
 hands-free native packet now compares A/B/C, including current-main batches.
-Task 3 [invalidation and shared kernel VM](vm-invalidation.md) is proposed, with
-decisions pending; no task 3 code is authorized yet.
+Task 3 [invalidation and shared kernel VM](vm-invalidation.md) decisions are
+accepted (chronium, 2026-10-26); implementation begins with a single-run baseline.
 
 ## Candidates for the next milestone
 

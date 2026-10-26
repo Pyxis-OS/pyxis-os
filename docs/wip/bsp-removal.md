@@ -3,7 +3,8 @@
 Decisions 1–3 accepted (chronium, 2026-10-26). Task 1 is merged in #1254;
 its hands-free native packet is prepared and awaits the orchestrator. Task 2
 measurement and bounded-batch implementation are merged in #1260/#1263.
-Task 3 is [proposed](vm-invalidation.md), with decisions 5–7 pending. Later tasks raise decisions
+Task 3 [decisions 5–7](vm-invalidation.md) are accepted (chronium, 2026-10-26);
+implementation starts with a single-run baseline. Later tasks raise decisions
 when reached. XSAVE/AVX is merged and natively qualified; its qualification
 record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
 The accepted JIT grant remains after this milestone.
@@ -153,7 +154,7 @@ Native batch qualification is still open; the task 1 packet remains unchanged.
 
 ## Implementation sequence
 
-Tasks 1–2 are merged; task 3 awaits its [decisions](vm-invalidation.md). Each row is a delivery/review
+Tasks 1–2 are merged; task 3's [decisions](vm-invalidation.md) are accepted (chronium, 2026-10-26). Each row is a delivery/review
 boundary; later tasks raise their behavior, lifetime and policy decisions when
 reached. Task 2 begins with the explicit measure-then-decide point above.
 

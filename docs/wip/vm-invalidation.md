@@ -1,6 +1,7 @@
 # BSP removal task 3: invalidation and shared kernel VM
 
-Proposal only (2026-10-26). Decisions 5–7 below await chronium. No kernel, ABI,
+Decisions 5–7 accepted (chronium, 2026-10-26). Implementation is assigned to
+Codex alpha, with a single-run baseline before code. No kernel, ABI,
 IPI, permission or failure-policy implementation is included. This follows
 [caller-CPU MEMORY](../development/experiments/memory-caller-cpu/README.md) and
 [bounded frame batches](../development/experiments/frame-batches/README.md),
@@ -46,7 +47,7 @@ waiting for acknowledgements.
 
 ## Decision 5 — private roots and the acknowledgement engine
 
-**Recommended default:** keep whole-process root/borrower drainage for private
+**Accepted (chronium, 2026-10-26):** keep whole-process root/borrower drainage for private
 mutations in this task. Add a non-reused translation generation and a live CPU
 residency mask to that existing process/VM transaction. Reserve a root's CPU bit
 before CR3 activation; publish departure only after kernel CR3 on the permanent
@@ -92,7 +93,7 @@ is not the recommended first delivery.
 
 ## Decision 6 — shared ownership, queries and safe admission
 
-**Recommended default:** one CPU-neutral logical structural owner for the
+**Accepted (chronium, 2026-10-26):** one CPU-neutral logical structural owner for the
 general kernel VM, with short guards for range metadata and mapping
 publication/query snapshots. Ownership is retained across preparation and
 bounded steps, not represented by a spinlock held across allocation, copying,
@@ -149,7 +150,7 @@ concurrency rewrite before their ownership is proven. A global spinlock around
 
 ## Decision 7 — timeout and uncertain completion
 
-**Recommended default:** preserve and generalize the current **confirm before
+**Accepted (chronium, 2026-10-26):** preserve and generalize the current **confirm before
 unmap/protect** sequence. Prepare and prevalidate first, then stop accesses and
 refills; keep old PTEs, page tables, frames and owned records intact while
 requesting the flush. Owner admission has a **one-second budget** before it
