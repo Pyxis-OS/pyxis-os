@@ -219,14 +219,57 @@ leading slash, preserve the documented empty-path no-op and concurrent creators.
 Existing final `.`/`..` require actual resolution. Failure may leave created
 parents; there is no transaction/rollback promise.
 
-**Next Rust std work item:** proper native remove_dir_all and fs::copy, needed
-by Cargo, tempfile cleanup and installers. They remain Unsupported only for
-this directory stage, not a long-term disabled profile. Recursive removal needs
-held-parent traversal/deletion without following links; copy must handle actual
-native authority and identity without self-truncation or fabricated permissions.
-Do not select the shared fallbacks incidentally: one reopens saved paths and the
-other writes before failing unsupported permission application. This next item
-still needs its own implementation assignment and just-in-time decisions.
+### Recursive removal and copy — accepted (chronium, 2026-10-26)
+
+Implementation is assigned; qualification is tracked in gate 4 below. These
+operations use narrow native libc helpers, not the shared path-reopening or
+permission-setting fallbacks.
+
+- Removal unlinks HOST symlinks without following them, including a symlink
+  operand. The native REMOVE gains exact SYMLINK support for HOST only; no link
+  opening, traversal or creation is added. Other special entries remain
+  Unsupported. A regular-file operand fails as not a directory.
+- Resolve through retained native parents with one captured cwd for relative
+  paths and one capture of each explicit root. Reject scheme roots and final
+  dot/dotdot, but add no named-cwd/ancestor ban or one-filesystem promise. HOST
+  bind-mounted contents can be emptied before final BUSY. A moved-away held
+  directory can still be emptied and a replacement empty directory removed by
+  the final name operation; this is not an identity-conditioned deletion.
+- The iterative traversal grows fallibly with actual memory/handle/name limits,
+  without a fixed depth or total-work cap. Collect bounded batches and reset
+  observation after own confirmed removals. Allow eight consecutive CHANGED
+  observation restarts without confirmed removal; the ninth returns EAGAIN.
+  Progress resets the count, so creators can prolong the operation. Initial
+  missing root returns NotFound; disappearance after admission is tolerated.
+  Final nonempty/busy errors return immediately.
+- Copy overwrites an existing retained FILE in place, preserving its identity
+  and effects on other hardlinks/held handles. Source READ and target WRITE
+  suffice for existing objects; absence uses exclusive CREATE. Reject known
+  aliases before resize with InvalidInput, unprovable distinctness with
+  Unsupported. Fresh exclusive creation proves a new object. Do not guess
+  from paths or metadata zeroes, reopen a competing creator or stage replacement.
+  The existing HOST bind-alias/cross-session identity exclusions remain.
+- Copy contents and length only: no grant readonly, mode, ownership, time or
+  other metadata propagation. Qualify Rust's public permission-copy sentence
+  for Pyxis. Completed regular provider FILE sources remain allowed through
+  read-only routes and real metadata/identity checks; source OPEN may already
+  do network I/O when a later target fails. Native-only targets refuse writer
+  OPEN/STAGE before effects. Streams without file metadata, symlink sources
+  and special objects fail; no hidden materializer or symlink following.
+- Copy the source's initial length with bounded scratch, ignoring later growth
+  and reporting UnexpectedEof on premature EOF. Holes can become allocated
+  zero bytes. Existing off_t/backend limits apply, without another size cap.
+  Concurrent changes can mix data; no snapshot or hole/offload promise.
+- First substantive failure stops new work, preserving partial effects. Never
+  replay an uncertain mutation, roll back or unlink a partial copy by pathname.
+  All helper-owned closes are checked: return a close failure after otherwise
+  successful work, preserve an earlier failure during remaining cleanup.
+  Public File/Dir destructor fatal-close policy remains unchanged. Neither
+  operation implicitly syncs or promises crash durability.
+
+These are proper native operations for Cargo, tempfile cleanup and installers,
+not a permanently disabled profile. The entire std profile still needs its
+separate close-out qualification; this task does not authorize later ports.
 
 References: [process environment](../interfaces/environment.md),
 [cwd and TEXT](../userland/process-state.md), [paths](../userland/paths.md),
