@@ -59,6 +59,13 @@
   on native objects; do not hand-roll capability calls in the port instead. Do
   not add kernel mechanisms only to satisfy POSIX semantics, such as POSIX-shaped
   thread syscalls. See [libc portability](docs/userland/libc-portability.md).
+- Our standard libraries grow, not our ports. When a port lacks a standard API
+  (libc, the C++ runtime such as `<filesystem>` or `<iostream>`, or another SDK
+  library), implement it there instead of working around it in the port. Port
+  patches carry only build changes, Pyxis platform code and the minimum a program
+  needs to run; no added defensive checks, logging, cleanup or error-handling
+  rewrites. Upstream bugs that don't affect Pyxis are reported, not patched; edit
+  an original patch rather than adding one that undoes it.
 - Keep configuration, authored data, draft values, benchmark parameters, machine
   properties and implementation choices distinct from architectural contracts.
   Before adding a validator or assertion, identify the deliberate contract that

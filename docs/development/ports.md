@@ -8,6 +8,24 @@ Recipes are trusted build code. They do not modify the SDK or resolve/install
 dependencies. Source pins, licenses, host/Pyxis dependencies, patch order and
 output names live in each recipe's metadata; `ports.lua` only lists recipes.
 
+## What a port patch may change
+
+Agreed 2026-10-26. Ports stay as close to upstream as possible, and the
+standard libraries grow instead of the ports:
+
+- **Allowed:** build-system changes, Pyxis platform code (backends, paths,
+  native objects) and the minimum a program or demo needs to build and run.
+- **Missing standard APIs** go into libc, the C++ runtime or the SDK library
+  that owns them, not into the port. A C++ program should find `<iostream>` and
+  `<filesystem>` like anywhere else.
+- **Not allowed:** defensive checks, allocation-failure guards, extra logging,
+  resource cleanup at exit, rewritten error handling, and behaviour changes
+  nobody asked for. Upstream behaviour stays unless Pyxis needs otherwise.
+- **Upstream bugs** that don't affect Pyxis are reported upstream in a short
+  issue (cause, file and line, tiny reproduction), not patched. Bugs that do
+  affect Pyxis get a minimal patch plus a report.
+- **Fix an earlier patch in place.** Never add a patch that undoes another one.
+
 ## Ports and native commands
 
 Agreed 2026-10-05. Ports bring familiar tools to Pyxis; they must not become
