@@ -1382,6 +1382,9 @@ enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical)
 {
   require_kernel_owner(&kernel_space);
   struct vm_range *range = range_containing(&kernel_space, base);
+  if (range && range->quarantined) {
+    return MM_BUSY;
+  }
   if (!range || range->state != RANGE_RESERVED) {
     return MM_INVALID;
   }
@@ -1395,8 +1398,13 @@ bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes)
     return true;
   }
   for (const struct vm_range *r = kernel_space.head; r; r = r->next) {
-    if (r->state != RANGE_RESERVED && r->state != RANGE_BACKED &&
-        r->state != RANGE_WINDOW && r->state != RANGE_RETIRED) {
+    /* Retirement may change BACKED to RETIRED without the logical owner.
+     * The owner still stabilizes this record's links and extent. */
+    registry_lock(&kernel_space);
+    bool mapped = r->state == RANGE_RESERVED || r->state == RANGE_BACKED ||
+        r->state == RANGE_WINDOW || r->state == RANGE_RETIRED;
+    registry_unlock(&kernel_space);
+    if (!mapped) {
       continue;
     }
     for (size_t page = 0; page < r->pages; ++page) {
