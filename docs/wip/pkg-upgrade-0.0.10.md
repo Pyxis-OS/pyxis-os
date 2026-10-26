@@ -1,8 +1,8 @@
 # 0.0.10 package upgrades
 
-Status: **first and task-2 decisions accepted (chronium, 2026-10-26); task 2 in review.**
-This milestone changes the delivered [updater](pkg-upgrade.md). Later-round
-choices below remain open; this plan does not claim the new upgrade is built.
+Status: **tasks 1–2 merged; task 3 ready for review (chronium, 2026-10-26).**
+This milestone changes the delivered [updater](pkg-upgrade.md). The signing-floor
+choice below remains open; this plan does not claim a completed release.
 
 ## Accepted contract
 
@@ -30,8 +30,8 @@ choices below remain open; this plan does not claim the new upgrade is built.
    set and boot selection unchanged. *(chronium, 2026-10-26)*
 3. **Stage, reboot, then switch.** `pkg upgrade` durably stages the entire
    compatible package set and the new release before activating the new boot
-   payload. It ends with `Upgrade staged. Reboot now? [Y/n]`. Declining leaves
-   the upgrade staged; reboot is still required. The running system continues
+   payload. It ends with `Upgrade staged; type reboot to finish`, without
+   receiving power authority or initiating a reboot. The running system continues
    to use the old `packages/current`. The verified first boot of the new
    release switches `packages/current` before package views or collectors
    start. Missing or ambiguous transition evidence enters core rescue before
@@ -49,14 +49,19 @@ choices below remain open; this plan does not claim the new upgrade is built.
    installer's Update to gain that record. Boot warns loudly when the record
    is absent or invalid, and `pkg` returns a specific refusal rather than
    obtaining ESP write authority. *(chronium, 2026-10-26)*
+   Until that activation-record task lands, Coexist Update refuses before any
+   target write with a clear message. Classic Update remains available.
+   *(chronium, 2026-10-26)*
 6. **Package updates and origins.** `pkg update` selects every installed
    package; `pkg update ID...` selects those IDs and required dependency changes,
    then validates the whole proposed set. An unchanged set reports `already up
    to date` without publishing a new set. The recorded origin binds the
    repository name, URL and signed/unsigned policy. A legacy entry offered by
-   exactly one configured source adopts it with `origin: NAME (only source)`
-   shown in the whole-plan review. Multiple possible sources need an explicit
-   console choice, batched by source; `--yes` cannot choose an ambiguous
+   exactly one configured source adopts it. The whole-plan review shows one
+   summary line, `N packages adopted from NAME (only source)`, per source;
+   individual lines remain for actual package changes or ambiguous origins.
+   Multiple possible sources need an explicit console choice, batched by
+   source; `--yes` cannot choose an ambiguous
    origin. Proposed removals need individual approval. *(chronium, 2026-10-26)*
 
 The pending transition is proof of the next selection, not a second active
@@ -74,25 +79,57 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   reference docs together. Assigned to Daybreak.
 - [x] Record origins and resolve a complete target set, including explicit
   review of legacy origins and removals.
-- [ ] Add durable pending transition evidence and the verified first-boot
+- [x] Add durable pending transition evidence and the verified first-boot
   `packages/current` switch before installed consumers start. Qualify
   interruption boundaries and core-rescue refusal.
-- [ ] Integrate the set planner with `pkg upgrade` and 0.0.10 installer Update;
-  qualify the actual 0.0.9 migration and the reboot prompt.
+- [x] Integrate the set planner with `pkg upgrade` and 0.0.10 installer Update;
+  qualify the actual 0.0.9 migration and the post-stage instruction.
 - [ ] Add Coexist activation evidence and specific boot/`pkg` diagnostics.
 - [ ] Settle the signing-floor source and qualify first repository contact.
+
+## Task 3 qualification
+
+At pyxis-os `a482367f` with pyxis-userland `68b8688b`, the full core image
+built and 4-vCPU QEMU ran on disposable 3 GiB disks. A released 0.0.9 image
+installed 38 packages; the migration fixture reduced its active set to one
+`shell` package and used a local repository built from the exact task-3 image.
+Classic Update displayed `1 package adopted from public (only source)`, staged
+set 3 while `current` remained set 2, and verified the new ESP attempt. The
+installed disk-only boot logged `verified package set 3 for this boot` and
+started the installed space; afterward `current` and `.boot-selection` named
+set 3, and `.upgrade-pending` was gone. An earlier refused Update had changed
+configuration without publishing boot selection, so this run also checked a
+retry from that no-publication state. The test covers one legacy-origin
+package at the target revision, not a 38-package target download.
+
+A second disposable disk had a foreign boot file and Linux partition. Coexist
+Install added a Pyxis pool, but selecting Coexist Update returned to the
+installer menu with the explicit refusal. The whole-disk SHA-256 was identical
+before and after the refused Update, and the foreign boot file was unchanged.
+On a scratch clone of the installed Classic disk, corrupting the retained
+boot-selection proof made boot-init enter core rescue before starting the
+installed space. These checks establish the refusal and negative proof path;
+they do not simulate power loss at every publication write.
+
+The in-system `pkg upgrade` staging path and its final instruction built at
+this revision but were not run against a signed release repository: the
+signing-floor source is still an open decision. Coexist activation records are
+also later work. The 0.0.10 release notes must tell 0.0.9 users to use installer
+Update, because the 0.0.9 `pkg upgrade` client cannot stage this transition.
 
 ## Open decisions for later rounds
 
 - **Signing-floor snapshot authority:** choose the trusted build-time source
   and schema of the shipped signed-index floor. A network response observed
   at build time is not itself a trusted floor.
+- **Reboot initiation:** keep a separate design open; this task gives `pkg` no
+  power grant and no mediated restart action.
 
 ## You should know
 
 `packages/current` is a live view: changing it during the old boot would show
-new-ABI packages to old-release processes. The first-boot gate is therefore a
-required later task, not part of retiring rollback interfaces. ESP and npfs
+new-ABI packages to old-release processes. Task 3 therefore switches it only
+after verified first-boot selection. ESP and npfs
 cannot commit atomically; the gate must refuse uncertain evidence rather than
 show a mixed system. Staging can temporarily occupy space for both sets. The
 standalone rescue pair is a recovery tool, not a previous-version selection.
