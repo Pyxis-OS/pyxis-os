@@ -3,7 +3,9 @@
 2026-10-25, gate 2 of the [std milestone](../../wip/rust-std.md).
 This is the first ordinary `fn main`, with native startup/args, owned TEXT,
 allocation, descriptor I/O, clocks/entropy, lexical paths and initial-thread
-TLS cleanup. Worker creation, FILE adapters and hexyl remain later gates.
+TLS cleanup. At this gate, worker creation, FILE adapters and hexyl were later
+work; the subsequent [hexyl record](rust-hexyl.md) qualifies read-only files and
+the first port without closing the worker/full-filesystem gates.
 
 ## Inputs and build
 
@@ -119,3 +121,10 @@ two additional frames after the observation; no leak or cache-cause claim.
 Raw image/configuration hashes, compiler receipts, serial/client completions,
 debugger captures and the local-console screenshot stay in
 `/shared/present/rust-std-gate2/`. No native/PXE machine is accessed.
+
+The post-0.0.9 rebase at `17171e74` rebuilds the SDK without changing native
+headers, startup, libraries or linker bytes. Both fork prefixes remain at their
+qualified source commits. Rebuilt ordinary-main samples repeat the main/TEXT/TLS,
+allocation, clocks/grants/overflow and stream/error checks on one/four CPUs with
+the rebuilt current-main kernel; see the [rebase record](rust-hexyl.md#post-release-rebase-2026-10-26).
+These are functional checks, not new performance samples.

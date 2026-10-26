@@ -284,6 +284,24 @@ caddy-package: sdk build/os-release
 	python3 tools/pxpkg.py pack --build build packages/caddy.lua "$(REPOSITORY)"
 	$(PUBLISH_REPOSITORY)
 
+# Optional Rust leaf program; neither Rust nor Hexyl enters ordinary image builds.
+.PHONY: hexyl-package
+ifneq ($(filter hexyl-package,$(MAKECMDGOALS)),)
+ifeq ($(REPOSITORY),)
+$(error Usage: make hexyl-package REPOSITORY=DIR RUST_PREFIX=ABSOLUTE_DIR)
+endif
+ifeq ($(RUST_PREFIX),)
+$(error Hexyl needs the native Rust std prefix: set RUST_PREFIX)
+endif
+ifneq ($(shell git status --porcelain --ignore-submodules=none),)
+$(error hexyl-package: the checkout has local changes, so its revision would not name these bytes)
+endif
+endif
+hexyl-package: sdk build/os-release
+	$(MAKE) -f scripts/ports.mk hexyl RUST_PREFIX="$(RUST_PREFIX)"
+	python3 tools/pxpkg.py pack --build build packages/hexyl.lua "$(REPOSITORY)"
+	$(PUBLISH_REPOSITORY)
+
 .PHONY: blurgtext-package
 ifneq ($(filter blurgtext-package,$(MAKECMDGOALS)),)
 ifeq ($(REPOSITORY),)

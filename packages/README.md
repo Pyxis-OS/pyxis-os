@@ -203,3 +203,15 @@ make caddy-package GO_PREFIX=/absolute/path/to/pyxis-go REPOSITORY=/absolute/pat
 The usual `REPOSITORY_NAME` publication/signing controls apply.
 See the [Caddy guide](../docs/userland/caddy.md) for the declared LISTEN authority,
 foreground configuration, supplied TLS and feature limits.
+
+## Hexyl byte viewer
+
+The optional native Rust port is outside the base and boot archive:
+
+```sh
+make hexyl-package RUST_PREFIX=/absolute/pyxis-rust-prefix REPOSITORY=/absolute/repository
+```
+
+Supply the qualified read-only-file std prefix and matching SDK; ordinary builds
+do not bootstrap Rust. See [Rust toolchains](../docs/development/rust-toolchain.md#optional-hexyl-package)
+for dependency provenance, character/colour options and the supported std profile.
