@@ -32,6 +32,9 @@
 #define XSTATE_AVX (1u << 2)
 #define XSTATE_SELECTED (XSTATE_X87 | XSTATE_SSE | XSTATE_AVX)
 #define XSTATE_SUPERVISOR (1u << 0)
+#define CPUID_FEATURE_XSAVEOPT (1u << 0)
+#define CPUID_FEATURE_XSAVEC (1u << 1)
+#define CPUID_FEATURE_XGETBV1 (1u << 2)
 #define FXSAVE_BYTES 512u
 #define XSAVE_HEADER_BYTES 64u
 #define XSAVE_ALIGNMENT 64u
@@ -88,6 +91,10 @@ void arch_fp_detect(void)
     return;
   }
   uint32_t maximum = ecx;
+  /* OSXSAVE also unmasks optional user state-management instructions. */
+  cpuid_state(CPUID_XSTATE, 1, &eax, &ebx, &ecx, &edx);
+  fp->save_features = eax &
+      (CPUID_FEATURE_XSAVEOPT | CPUID_FEATURE_XSAVEC | CPUID_FEATURE_XGETBV1);
   cpuid_state(CPUID_XSTATE, 2, &eax, &ebx, &ecx, &edx);
   if (!eax || ebx < FXSAVE_BYTES + XSAVE_HEADER_BYTES ||
       eax > UINT32_MAX - ebx || (ecx & XSTATE_SUPERVISOR) || edx) {
@@ -110,6 +117,7 @@ static bool compatible(const struct arch_fp_cpu *a, const struct arch_fp_cpu *b)
   return a->supported && b->supported && a->features1 == b->features1 &&
       a->features7 == b->features7 && a->features71 == b->features71 &&
       a->features71d == b->features71d && a->extended_features == b->extended_features &&
+      a->save_features == b->save_features &&
       a->ymm_offset == b->ymm_offset && a->ymm_size == b->ymm_size &&
       a->state_size == b->state_size;
 }

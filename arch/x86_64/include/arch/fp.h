@@ -6,6 +6,7 @@
 
 struct arch_fp_cpu {
   uint32_t features1, features7, features71, features71d, extended_features;
+  uint32_t save_features;
   uint32_t ymm_offset, ymm_size, state_size;
   bool supported;
   _Atomic bool configured;
