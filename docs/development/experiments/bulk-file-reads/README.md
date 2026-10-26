@@ -97,4 +97,24 @@ RAM-npfs, followed by a separately approved owned NVMe-npfs workspace. Reuse the
 same fixture and controls. Unsupported native backings refuse; libc/Go retain
 ordinary reads. Copies still exist, each live layer charges its owned buffer,
 provider private storage is ordinary process memory, and worker/device limits
-remain. No ABI-changing PR merges before the 0.0.9 tag.
+remain. The 0.0.9 tag (`c02a2bfa`) lifted the merge gate on 2026-10-26.
+
+
+## Post-0.0.9 rebase (2026-10-26)
+
+Rebased the foundation onto Pyxis `09a19c94` and userland onto `81ee85f`.
+The userland bulk head is `71e7baad`; its five patches are unchanged by the
+rebase. The foundation patches also replayed unchanged. Release-gate text was
+removed after the 0.0.9 tag, without adding a development ABI identity.
+
+The rebuilt kernel/focused SDK/runtime, httpfs and pkg passed with the same
+Clang 23 builder. The ABI check preserved every header line from both 0.0.8
+and 0.0.9. Rebuilt private probes passed 98 native/transport, 80 lifetime and
+22 process-retirement checks on four-vCPU nested KVM (`host,+invtsc`, q35,
+modern VirtIO storage/rng, 2 GiB per probe). An 8 GiB session on that kernel
+installed the 268 MiB/1242-file fixture through httpfs and RAM-npfs, verified
+the selected set, then refused an archive hash mismatch without changing the
+selection and verified it again. This was a correctness rerun; the historical
+matched timings above were not remeasured or relabelled as post-release data.
+Logs and artifact hashes are in the record's private evidence directory under
+`rebase-009/`. Native hardware qualification remains open.
