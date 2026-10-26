@@ -88,20 +88,20 @@ userspace red-zone convention. Measured prototype and decisions precede SDK defa
 [Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
 are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5
 [#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) has the owner-run Classic
-native gate and Classic normal-build activation approval. The action/Replay/
-pending-completion correction needs new QEMU qualification, refreshed-head CI
-and review. Explicit completion of existing committed pending records remains
-reachable for both layouts. Coexist remains manual-entry staging pending complete integrated
-Install/Update/completion QEMU qualification and a separate activation record;
-task 5 is not fully released. Later tasks need separate go-aheads.
+native gate; corrected action/completion and owned Coexist Install/Update have
+QEMU qualification. The current publication and package-set behavior is in
+[package upgrades](../userland/package-upgrades.md); native Coexist firmware
+and release-upgrade checks remain [open](https://git.internal/PyxisOS/pyxis-os/issues/1509).
+Later tasks need separate go-aheads.
 
 [NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
 [#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16). The
 [GRUB → Limine milestone](../userland/grub-limine-chainload.md) is complete:
 ThinkPad manual Coexist Install/Update and normal/rescue boots passed
 [native qualification](../development/experiments/grub-limine-native.md),
-2026-10-21. Automatic Coexist publication, vela and Limine-first migration remain
-separate gates; new native writes need their own approval.
+2026-10-21. Owned Coexist publication is now implemented and QEMU-qualified
+through [package upgrades](../userland/package-upgrades.md); vela's native
+firmware gate remains [open](https://git.internal/PyxisOS/pyxis-os/issues/1509).
 
 [Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
 Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
@@ -127,11 +127,11 @@ the Deck; its milestone stays on hold.
 
 [Packages and upgrades](packages.md): data and program packages, the installed
 command/SDK views, core archive and online Install are delivered. The
-[updater milestone](pkg-upgrade.md) records signed repositories and `pkg upgrade`
-with QEMU new/previous/rescue qualification; the native ThinkPad upgrade gate
-remains open. The [0.0.10 upgrade milestone](pkg-upgrade-0.0.10.md) records the
-accepted one-active-set, no-rollback plan. Tasks 1–2 are merged and task 3 is
-in qualification; the signing-floor decision remains open. Dynamic linking
+[0.0.10 package and release upgrades](../userland/package-upgrades.md) are
+implemented: whole-set updates, one active release, verified first-boot set
+selection, owned Classic/Coexist publication and reviewed signed-index floors.
+The release-day vela native gate remains [open](https://git.internal/PyxisOS/pyxis-os/issues/1509).
+The earlier [updater record](pkg-upgrade.md) is historical; dynamic linking
 and on-device source builds remain later work.
 
 [Wi-Fi](wifi.md): stages 1–4 complete; the [AX200 reference](../devices/ax200-wifi.md)

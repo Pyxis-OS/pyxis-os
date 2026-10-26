@@ -1,6 +1,6 @@
 # Packages and upgrades
 
-The [0.0.10 upgrade milestone](pkg-upgrade-0.0.10.md) supersedes the rollback
+The [0.0.10 upgrade reference](../userland/package-upgrades.md) supersedes the rollback
 and predecessor-retention portions of this historical task record.
 
 Status: **data and program packages implemented.** The owner requested this plan
