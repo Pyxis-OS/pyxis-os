@@ -110,7 +110,7 @@ misses earlier datagrams.
 
 Reverse sessions and log broadcasts are unauthenticated and unencrypted.
 They expose shell authority and kernel addresses on the trusted development
-LAN. [Technical debt](../technical-debt.md#kernel-log-retention-and-lan-visibility)
+LAN. [Technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1358)
 records disclosure, capacity and recovery revisit points. DASH serial-over-LAN
 stays parked because its setup is fragile; the
 [ThinkPad findings](../targets/t14-gen1-amd/notes.md#dash-management-controller-parked)

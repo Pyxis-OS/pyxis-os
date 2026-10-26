@@ -171,7 +171,7 @@ confirmed reset retires queue ownership; an unconfirmed reset leaves it
 unresolved. Runtime claims, DMA allocations and mappings remain retained in both
 cases. Failure during boot preparation releases resources only after reset and
 interrupt disabling have been confirmed. See the
-[accepted limits](../technical-debt.md#virtio-blk-failure-and-validation-limits).
+[accepted limits](https://git.internal/PyxisOS/pyxis-os/issues/1413).
 
 ## Manual debugger exercise
 
@@ -273,5 +273,5 @@ Together with the write/flush/restart exercise above and the
 [512-byte/4 KiB GPT checks](gpt.md#validation), this closes the foundation's
 ordinary-build, interactive-boot and debugger validation task. Earlier profile
 and block mutation checks were not repeated by this documentation-only closure.
-The [failure and durability limits](../technical-debt.md#virtio-blk-failure-and-validation-limits)
-and [GPT limits](../technical-debt.md#gpt-snapshot-and-profile-limits) still apply.
+The [failure and durability limits](https://git.internal/PyxisOS/pyxis-os/issues/1413)
+and [GPT limits](https://git.internal/PyxisOS/pyxis-os/issues/1414) still apply.

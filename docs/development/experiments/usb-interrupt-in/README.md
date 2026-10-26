@@ -118,6 +118,6 @@ no interrupt-probe symbols. The consumer branch is kept for review. `btusb` rebo
 and the owner's Bluetooth service stayed inactive and disabled. Native periodic transfer hardware, other
 speed and topology profiles, endpoint recovery and cancellation, forced overflow or STALL handling and
 sustained event-rate performance remain unqualified; the
-[retention/profile debt](../../../technical-debt.md#usb-interrupt-in-initial-profile-and-failure-retention)
+[retention/profile debt](https://git.internal/PyxisOS/pyxis-os/issues/1502)
 records consequence and revisit points. Task 3a completes the kernel mechanism; the HCI, firmware and scan
 work stays on unmerged probe branches.

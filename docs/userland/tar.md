@@ -49,7 +49,7 @@ opening/truncating its output, so unsupported/unreadable sources fail before
 that write. Output writes are not atomic. Source enumeration is live, not a
 filesystem-wide snapshot. Memory holds the archive or all source file contents
 plus bookkeeping, and creation traverses directories recursively. See
-[technical debt](../technical-debt.md#tar-archive-limits).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1409).
 
 ## Validation
 

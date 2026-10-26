@@ -41,7 +41,7 @@ by 4096 bytes, not a text variable or literal credential argument. Missing sourc
 rights remain denied: stock HTTPS is read-only and JSON roots omit REMOVE.
 The timeout starts anew on each OPEN/REMOVE (including WRITE staging), not at
 preparation. The endpoint retains the root's frozen trust; header-file credentials
-and per-root trust are an [interim design](../technical-debt.md#http-preparation-credentials-and-trust).
+and per-root trust are an [interim design](https://git.internal/PyxisOS/pyxis-os/issues/1452).
 See the [configured endpoint contract](../interfaces/http-transactions.md#configured-endpoints)
 and [command usage](../../userspace/http/README.md). Unsupported capability output
 fails without printing a URI/byte substitute.
@@ -312,11 +312,11 @@ The owner-native B8 A/B measured whole 1 MiB GET 13.743 → 13.113 ms
 (72.8 → 76.3 MiB/s) and POST 34.338 → 31.390 ms, with unchanged native/RAM controls.
 These qualify their recorded revisions, not every backing or future consumer.
 
-[Credential storage](../technical-debt.md#http-preparation-credentials-and-trust),
-[throughput](../technical-debt.md#http-provider-throughput),
-[responsiveness](../technical-debt.md#http-provider-responsiveness),
-[single-exchange admission](../technical-debt.md#http-shared-instance-admission) and
-[staging-worker cost](../technical-debt.md#http-staging-worker) remain limits.
+[Credential storage](https://git.internal/PyxisOS/pyxis-os/issues/1452),
+[throughput](https://git.internal/PyxisOS/pyxis-os/issues/1451),
+[responsiveness](https://git.internal/PyxisOS/pyxis-os/issues/1453),
+[single-exchange admission](https://git.internal/PyxisOS/pyxis-os/issues/1455) and
+[staging-worker cost](https://git.internal/PyxisOS/pyxis-os/issues/1486) remain limits.
 HTTP/2, SSE, compression, proxies and general credential storage are not supplied.
 Git negotiation, source hash verification and consumer-specific budgets belong
 to their consumers. General capability pipes remain in

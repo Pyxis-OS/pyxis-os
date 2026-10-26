@@ -128,9 +128,9 @@ interface. Exhaustion is reported. No independent kernel DHCP lease-expiry
 backstop, automatic inbound-listener recreation, IPv6, forwarding, bridging,
 NAT, split DNS or general route-table engine is added.
 
-[Lifecycle qualification debt](../technical-debt.md#multiple-interface-lifecycle-qualification)
+[Lifecycle qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1279)
 retains held-flow and deeper failure-path limits. Slow post-warm-reboot NCM
-readiness is [separately recorded](../technical-debt.md#usb-ncm-readiness-after-warm-reboot).
+readiness is [separately recorded](https://git.internal/PyxisOS/pyxis-os/issues/1280).
 Radio delivery remains in the [Wi-Fi milestone](../wip/wifi.md); this core provides its independent Ethernet
 management prerequisite without claiming radio traffic.
 

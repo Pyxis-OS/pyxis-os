@@ -83,7 +83,7 @@ FILE pushback/indicators unchanged. `fstat` is unaffected.
 
 Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
-atomic append guarantee; see [technical debt](../technical-debt.md#non-atomic-stdio-append).
+atomic append guarantee; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1370).
 
 ## Typed resources and transactions
 
@@ -207,7 +207,7 @@ bits. Other modes return -1/ENOTSUP before lookup, even when the file exists;
 invalid flags are rejected before examining that argument. No mode argument is
 read without O_CREAT. Existing native capability rights, backend creation policy
 and host restrictions remain authoritative. Virtio-fs still requests 0644.
-See the [temporary creation-mode policy](../technical-debt.md#public-open-creation-mode).
+See the [temporary creation-mode policy](https://git.internal/PyxisOS/pyxis-os/issues/1369).
 
 `unistd.h` declares `read`, `write`, `close`, `lseek`, `ftruncate`, `fsync`,
 `unlink`, `pread`, `pwrite`, `dup`, `dup2`, `access`, `rmdir` and `isatty`, and defines
@@ -453,7 +453,7 @@ returned before EOF, and EOF before any byte returns -1. Null arguments
 caller's pointer and capacity describe its current allocation, which it still
 owns. It reads through `fgetc`, so file and pipe input is fetched in blocks,
 while console input remains one native read per byte; see
-[console line input](../technical-debt.md#console-line-input).
+[console line input](https://git.internal/PyxisOS/pyxis-os/issues/1371).
 There is no `getdelim`.
 
 A successful zero-byte read for a nonempty request sets EOF. Merely reading
@@ -605,7 +605,7 @@ surviving native reference may remain until process exit and delay pipe peer
 closure. There is no hidden copy or retry list. Open rollback uses the same
 single-attempt release policy while preserving the open failure's errno. See
 [the close-failure contract](libc-portability.md#close-failure-and-cleanup)
-and [its cleanup limit](../technical-debt.md#unexpected-native-close-failures).
+and [its cleanup limit](https://git.internal/PyxisOS/pyxis-os/issues/1375).
 
 `printf`/`fprintf` and their va_list forms share the existing snprintf formatter
 and its supported conversions. Floating conversions `f/F/e/E/g/G/a/A` support

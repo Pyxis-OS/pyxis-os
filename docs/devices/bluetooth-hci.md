@@ -97,7 +97,7 @@ Accepted 2026-10-08: a previously disconnected handle cannot be reused during
 this controller lifetime. Known retired-link ACL is discarded while preserving
 the disconnect event. Independent event/ACL streams do not yet prove a safe
 reuse boundary; generation tags alone cannot do so. Connection/reconnect tasks
-must [qualify that boundary](../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary).
+must [qualify that boundary](https://git.internal/PyxisOS/pyxis-os/issues/1475).
 
 STALL, overflow and uncertain transfer retirement retain DMA. No task 2 pairing,
 bond, HID, pointer injection or automatic recovery is implemented. Real ACL and

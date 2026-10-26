@@ -464,7 +464,7 @@ the 0.967 ms payload. The remaining roughly 1.18 ms whole-GET cost is consistent
 with that serialization and local packet dispatch/copies; it is not an exclusive
 CPU attribution or proof that every remaining overhead is irreducible. Medians
 of phases need not sum. Provider per-READ round trips are no longer the large
-native regression. Retain the [network requirement and revisit point](../../technical-debt.md#http-provider-throughput).
+native regression. Retain the [network requirement and revisit point](https://git.internal/PyxisOS/pyxis-os/issues/1451).
 
 Owner confirmed Daybreak cleared the fast path and the earlier two Low findings
 were fixed. B6 is final for merge with this measured GET cost; no B7/B8/C9 work

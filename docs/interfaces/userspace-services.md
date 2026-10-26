@@ -168,13 +168,13 @@ trust and backing limits.
 
 Accepted limitations and their revisit points are recorded in technical debt:
 
-- [Process termination and Ctrl-C](../technical-debt.md#process-termination-and-ctrl-c).
-- [Endpoint cancellation and capacity](../technical-debt.md#endpoint-cancellation-and-capacity).
-- [Service startup failure before publication](../technical-debt.md#service-startup-failure-before-publication).
-- [Provider calls through synchronous file helpers](../technical-debt.md#provider-calls-through-synchronous-file-helpers).
-- [HTTP framing compatibility](../technical-debt.md#http-framing-compatibility).
-- [HTTP provider responsiveness](../technical-debt.md#http-provider-responsiveness).
-- [HTTPS trust and platform limits](../technical-debt.md#https-trust-and-platform-limits).
+- [Process termination and Ctrl-C](https://git.internal/PyxisOS/pyxis-os/issues/1360).
+- [Endpoint cancellation and capacity](https://git.internal/PyxisOS/pyxis-os/issues/1445).
+- [Service startup failure before publication](https://git.internal/PyxisOS/pyxis-os/issues/1446).
+- [Provider calls through synchronous file helpers](https://git.internal/PyxisOS/pyxis-os/issues/1447).
+- [HTTP framing compatibility](https://git.internal/PyxisOS/pyxis-os/issues/1448).
+- [HTTP provider responsiveness](https://git.internal/PyxisOS/pyxis-os/issues/1453).
+- [HTTPS trust and platform limits](https://git.internal/PyxisOS/pyxis-os/issues/1450).
 
 HTTP/HTTPS uses cooperative completion/TCP/TLS progress. Synchronous entropy
 waits and local work still delay control replies; see

@@ -207,7 +207,7 @@ controls, but on/off ratios remain 1.72–2.24× (one CPU: 1.73–1.82×). These
 sequential groups in separate boots are not randomized trials. No precise
 unprofiled speedup, scalability, host-storage cost or subtractable profiling
 cost follows from these differences. Full profiling still cannot partition
-normal latency; see [profiling debt](../technical-debt.md#host-file-profiling-perturbation).
+normal latency; see [profiling debt](https://git.internal/PyxisOS/pyxis-os/issues/1305).
 
 ## Provenance and validation
 
@@ -266,7 +266,7 @@ storage were not exercised by the correction.
 
 Additional resolution/coverage decisions and a final combined matched matrix
 including IPC/HTTP are independent future work, carried in
-[attribution debt](../technical-debt.md#io-baseline-attribution-and-coverage). Existing
+[attribution debt](https://git.internal/PyxisOS/pyxis-os/issues/1304). Existing
 correction-specific reruns remain valid evidence; they do not fill that matrix.
 A FILE notification change, normal-workload HOST phase attribution, host-side
 timing and any clock/counts-only design need separately agreed scope.
@@ -276,7 +276,7 @@ allocator concurrency, cross-space contention, attachment-cost studies,
 mixed-workload fairness and process CPU accounting were outside this milestone.
 CALL deadlines still do not bound RECEIVE, pipe or process waits. Unfinished
 receipts can still hold all sixteen records; see
-[endpoint cancellation/capacity](../technical-debt.md#endpoint-cancellation-and-capacity).
+[endpoint cancellation/capacity](https://git.internal/PyxisOS/pyxis-os/issues/1445).
 
 ### Everyday pipeline performance target
 

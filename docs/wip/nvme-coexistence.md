@@ -387,8 +387,8 @@ never touches Microsoft EFI files, MSR or NTFS. Only the explicit erase grant
 permits classic installation to destroy such a disk; that destructive effect
 must be visible before consent.
 
-The [owned ESP attempt cleanup limit](../technical-debt.md#owned-esp-attempt-cleanup)
-is accepted. Implement authority first, after the current-main baseline.
+Owned ESP attempt cleanup was an accepted limit at planning time and is now
+implemented by publication ([installer](../userland/installer.md))
 Alpha's qualified shared payload stager is merged in userland #272 / #880;
 executor integration consumes it without duplicating the publisher.
 

@@ -71,7 +71,7 @@ restarts the command; after three failed attempts the request is dropped without
 a message, because the lights are cosmetic. A later lock change tries again.
 
 USB keyboards do not get their lights updated yet; see
-[technical debt](../technical-debt.md#usb-keyboard-lock-lights).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1292).
 
 Space navigation, character mapping and userspace delivery belong to callers;
 the driver installs no bindings or consumer task.

@@ -204,7 +204,7 @@ still refuse capture, image loading or private allocations honestly.
 The 8 MiB eager stack is not a measured high-water bound for deep includes or
 C++ templates. Native wall proxies were about 4.29 s for Clang version,
 4.33 s for the small compile and 2.97 s for LLD, dominated by repeated USB image
-loading. [Loading/reuse debt](../technical-debt.md#hosted-tool-launch-loading)
+loading. [Loading/reuse debt](https://git.internal/PyxisOS/pyxis-os/issues/1384)
 is deferred. Samples, probe exclusions, failure checks and native evidence are
 in the [task 5 record](experiments/hosted-clang-task5/README.md).
 
@@ -267,7 +267,7 @@ an include, shutdown — ran from the staged bundle, in threaded and `-sync`
 modes, with `compile_flags.txt` and `compile_commands.json` relative flags found
 from outside the project root. No peak memory was measured.
 
-Limits (also in [technical debt](../technical-debt.md#clangd-without-a-preamble)):
+Limits (also in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1382)):
 no preamble, so every edit reparses its headers; each open file holds two 8 MiB
 eager thread stacks and the process allows 64 threads; there is no user config or
 cache directory, no `--check`, and no signal or process-ID features.
@@ -357,5 +357,5 @@ Writing the 280 MiB payload ran at about 0.9 MB/s, far below what the stick shou
 sustain; this is the write-side counterpart of
 [bounded read aggregation](../devices/usb-storage.md#bulk-read-aggregation) and
 is recorded under [later directions](../wip/later-os-directions.md#persistent-storage-and-installation).
-Selected-image reuse remains [technical debt](../technical-debt.md#hosted-tool-launch-loading).
+Selected-image reuse remains [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1384).
 

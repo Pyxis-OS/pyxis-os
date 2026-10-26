@@ -135,7 +135,7 @@ Early runs checked only the commit-limit message. One Chocolate Quake "with
 sound" run started after an unnoticed engine failure, so it opened no audio;
 it is excluded above. Later runners checked for any "engine unavailable until
 reboot" line. The guard bounds are unchanged, and this remains the
-[recorded QEMU limit](../../../technical-debt.md#hd-audio-sustained-eight-session-playback);
+[recorded QEMU limit](https://git.internal/PyxisOS/pyxis-os/issues/1391);
 it is not a native result.
 
 ## Debugger inspection
@@ -156,7 +156,7 @@ probe linked with `-Wl,--oformat=elf` from the same inputs, with
 ## Limits
 
 These are nested-VM timings and engine behaviour. Output latency is calculated,
-not measured, and its tuning is [deferred](../../../technical-debt.md#sdl-audio-latency)
+not measured, and its tuning is [deferred](https://git.internal/PyxisOS/pyxis-os/issues/1397)
 until the native check. Audible quality was not judged by listening; WAV files
 were checked for gaps and content only. Game recipes are unchanged, so ordinary
 images stay silent; a Chocolate Quake bundle with sound is a later follow-up.

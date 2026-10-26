@@ -146,6 +146,6 @@ for the internal AX200, including its effect on other storage on that controller
 STALL as a terminal stream failure with DMA backing and ring identity retained until reboot and no
 automatic recovery. The [accepted decisions](../../../devices/ax200-bluetooth.md#accepted-interrupt-in-decisions)
 supersede the proposals above and the limits are in
-[technical debt](../../../technical-debt.md#xhci-hardware-profile-and-runtime-retention). Task 3a was
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1464). Task 3a was
 authorized to implement shared kernel interrupt-IN support through private interfaces without a public
 ABI; task 3b stayed the unmerged HCI/controller-state probe, followed by firmware and scan probes.

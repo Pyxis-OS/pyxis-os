@@ -104,7 +104,7 @@ Values are ms; each cell holds the two repetitions, or both clients' range.
   further.
 
 This PR does not change the scratch layout; the
-[technical-debt entry](../../../technical-debt.md#scratch-slot-false-sharing)
+[technical-debt entry](https://git.internal/PyxisOS/pyxis-os/issues/1314)
 records the options.
 
 ## Correctness

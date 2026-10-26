@@ -133,4 +133,4 @@ Removal follows granted native directory reachability, without following
 symlinks; final operations remain name-based and can race external renames.
 Both stop at the first substantive error, preserve partial effects, check
 helper-owned closes and imply neither rollback nor sync. See the
-[mutation debt](../../technical-debt.md#rust-filesystem-mutation-limits).
+[mutation debt](https://git.internal/PyxisOS/pyxis-os/issues/1404).

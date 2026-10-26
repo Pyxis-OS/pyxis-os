@@ -45,7 +45,7 @@ so any existing viewer works and Pyxis needs no host-side client of its own.
    whole frames itself. A capture stream or shared pixels would avoid the copy,
    but Pyxis has no memory shared between processes yet (see
    [desktop graphics](desktop-graphics.md)). Presenter damage tracking would remove
-   the diff; the [capture debt](../technical-debt.md#screen-capture-memory-and-consistency-limits)
+   the diff; the [capture debt](https://git.internal/PyxisOS/pyxis-os/issues/1354)
    notes that a pending capture must then still force a full composition.
 4. **Authentication.** RFB's own VNC authentication is a DES challenge with an
    8-character password and is weak. A first slice would be LAN-only, like the

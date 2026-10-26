@@ -171,6 +171,6 @@ The preserved unconditional-notify control `a96f5634` reproduces that failure
 without GDB, using a byte-identical archive, menu and EFI loader. Neither the
 new guard nor debugger stops are necessary for it; the shared-path/fixture
 cause remains unassigned. No post-burst hash pass is claimed. This
-[qualification debt](../../../technical-debt.md#usb-ncm-qemu-post-burst-recovery)
+[qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1289)
 remains open. Raw comparisons are under `conditional-wake-qualification` beside
 the native captures; all owned jobs are stopped. No native rerun was performed.

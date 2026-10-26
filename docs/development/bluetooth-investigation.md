@@ -49,7 +49,7 @@ a controller after a cold boot.
 Task 4 records installed SFI/DDC aliases, sizes and hashes as host provenance,
 not a selected Pyxis pin. No firmware blob, mirror dependency or uploader was
 added. The owner accepted this warm verification for the investigation only;
-[cold upload and running-version policy](../technical-debt.md#bluetooth-cold-firmware-upload-and-running-version-policy)
+[cold upload and running-version policy](https://git.internal/PyxisOS/pyxis-os/issues/1501)
 remain open for a persistent stack.
 
 Task 5's complete name and HID/appearance fields satisfied the agreed scan

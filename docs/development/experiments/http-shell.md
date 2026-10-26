@@ -63,7 +63,7 @@ launches, coordinator, response validation and cleanup, not isolated worker CPU.
 Whole-POST differences cross zero; no reliable overall speedup or slowdown is
 established. Five empty pairs each contain 20 identical printf launches, with
 PREPARE/ABORT outside the marked interval; the repeatable added 3–5 ms motivates
-[revisiting direct WRITE plus reliable producer completion](../../technical-debt.md#http-staging-worker).
+[revisiting direct WRITE plus reliable producer completion](https://git.internal/PyxisOS/pyxis-os/issues/1486).
 Direct phase medians: prepare 52.630 ms, stage/flush 591.538 ms, commit 867.129 ms,
 response 4.480 ms, final status/close 0.910 ms. One separately marked worker run
 measured about 60/443/845/21 ms for prepare/stage/commit/response+drop; those

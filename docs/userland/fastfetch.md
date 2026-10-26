@@ -66,7 +66,7 @@ The port excludes automatic discovery, config/cache generation, dynamic refresh,
 image logos, Lua/JS formats, threads and executable/network helpers. Broader
 upstream help remains compiled in; excluded requests follow the documented
 unsupported diagnostics or upstream fallback behavior. See
-[remaining limits](../technical-debt.md#fastfetch-first-port-boundary).
+[remaining limits](https://git.internal/PyxisOS/pyxis-os/issues/1463).
 
 ## Native Disk observations
 

@@ -90,7 +90,7 @@ Raw identifiers, GPT/ESP diagnostic copies and helper logs stay private.
 The native power-off request ended with an unknown transport outcome, while
 chronium visually confirmed the ThinkPad was off. Remote EOF alone proves
 neither failure nor physical power-off; the
-[helper observation limit](../technical-debt.md#remote-power-request-observation)
+[helper observation limit](https://git.internal/PyxisOS/pyxis-os/issues/1322)
 remains. The reported copy rate is a single UI observation, not a matched NVMe
 throughput benchmark.
 

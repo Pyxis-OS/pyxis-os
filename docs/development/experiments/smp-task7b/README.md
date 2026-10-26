@@ -57,7 +57,7 @@ Every sample exited 0 with no failures. Values are medians with min–max ranges
 - **Compute:** four compute clients now use four CPUs. Before, two of them
   shared an AP.
 - **Page clients** also spread further, but they are still limited by the
-  [scratch-slot false sharing](../../../technical-debt.md#scratch-slot-false-sharing).
+  [scratch-slot false sharing](https://git.internal/PyxisOS/pyxis-os/issues/1314).
 - **Unloaded rows:** H and W alone differ slightly between the boots. Neither
   depends on the BSP being eligible.
 

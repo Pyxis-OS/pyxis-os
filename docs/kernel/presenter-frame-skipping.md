@@ -55,6 +55,6 @@ separately and is not fixed here.
 
 These compose/copy elapsed measurements are not total BSP CPU profiling.
 Runtime host resize and forced timeout/panic/wedged-writer paths are not newly
-qualified. [Dirty regions](../technical-debt.md#presenter-dirty-regions) and
+qualified. [Dirty regions](https://git.internal/PyxisOS/pyxis-os/issues/1340) and
 Renoir hardware cursor writes remain separate work; no new ABI or GPU writer
 allowlist is introduced.

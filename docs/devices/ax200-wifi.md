@@ -91,7 +91,7 @@ IRQ handling only acknowledges and wakes the owner. One explicit SSID/BSSID/chan
 profile uses Open System authentication and association. OPEN supplies no
 encryption; neither profile actively probes or roams. WPA2-Personal adds a private userspace RSN
 worker, hardware CCMP with host replay checks and same-target ordinary-loss
-recovery, with the [accepted qualification limits](../technical-debt.md#ax200-wpa2-qualification-limits).
+recovery, with the [accepted qualification limits](https://git.internal/PyxisOS/pyxis-os/issues/1285).
 Only legacy 20 MHz, non-QoS, nonaggregated and unfragmented traffic is supported.
 
 Live firmware LAR/MCC selects valid 2.4 GHz channels, including 12/13 when permitted;
@@ -167,12 +167,12 @@ held-link worker-death recovery remains unqualified.
 - Native GTK rekey, held-link worker-death recovery, independent over-air
   confidentiality/replay and firmware PN behavior remain unqualified, accepted
   for stage-4 closure (chronium, 2026-10-22); consequences and revisit points are
-  in [technical debt](../technical-debt.md#ax200-wpa2-qualification-limits).
+  in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1285).
 - Live hardware-rfkill transitions are unqualified on this ThinkPad
-  ([technical debt](../technical-debt.md#ax200-hardware-rfkill-qualification)).
+  ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1282)).
 - Native idle and BSP worker cost are unmeasured
-  ([technical debt](../technical-debt.md#wi-fi-idleworker-cost-baseline)).
+  ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1288)).
 - Native direct-control/observer/CUT edge cases, RF on 12/13 and quantitative
-  association/load costs remain [qualification follow-ups](../technical-debt.md#ax200-open-link-qualification-follow-ups).
+  association/load costs remain [qualification follow-ups](https://git.internal/PyxisOS/pyxis-os/issues/1284).
 - Link speed is unreported; payload correctness is not a throughput claim.
 - Simultaneous Bluetooth use and shared-radio coexistence are unchecked.

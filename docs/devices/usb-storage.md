@@ -129,7 +129,7 @@ and the [baseline](../development/experiments/usb-read-throughput.md) separate
 first launches from repetitions and instrumented attribution from ordinary
 timings. The native check of shared-worker responsiveness during a large read did
 not run: its second session never became ready, so it is **not qualified**
-([technical debt](../technical-debt.md#usb-read-aggregation-responsiveness)).
+([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1385)).
 Write-side throughput has not been investigated
 ([later directions](../wip/later-os-directions.md#persistent-storage-and-installation)).
 

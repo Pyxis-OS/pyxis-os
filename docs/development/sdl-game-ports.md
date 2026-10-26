@@ -62,19 +62,19 @@ In QEMU (nested KVM, 4 CPUs, 1280x800):
 On the ThinkPad (1920x1080, a larger picture than QEMU's), the SDL path cost
 about 2.0 ms per frame in Chocolate Quake and about 1.6 ms in Chocolate Doom.
 All three games played; Chocolate Quake tore visibly more than native Quake.
-The [native qualification](../technical-debt.md#sdl-game-ports-native-qualification)
+The [native qualification](https://git.internal/PyxisOS/pyxis-os/issues/1401)
 lists what was observed and what is still unchecked.
 
 ## Limits
 
 Remaining work is in technical debt:
-- [SDL2 port limits](../technical-debt.md#sdl2-port-limits): Chocolate Doom
+- [SDL2 port limits](https://git.internal/PyxisOS/pyxis-os/issues/1396): Chocolate Doom
   is silent, and no refresh rate;
-- [EDuke32 port limits](../technical-debt.md#eduke32-port-limits): the
+- [EDuke32 port limits](https://git.internal/PyxisOS/pyxis-os/issues/1400): the
   port-side libc gaps;
-- [libc compatibility gaps](../technical-debt.md#libc-compatibility-gaps): short
+- [libc compatibility gaps](https://git.internal/PyxisOS/pyxis-os/issues/1368): short
   reads from files;
-- [Quake port limits](../technical-debt.md#quake-port-limits).
+- [Quake port limits](https://git.internal/PyxisOS/pyxis-os/issues/1402).
 
 Sound and music, network play, EDuke32's OpenGL renderers and whether a
 Chocolate port replaces a native one are deferred in

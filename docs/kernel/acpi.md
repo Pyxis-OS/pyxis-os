@@ -325,7 +325,7 @@ VERSION is read only after a `_DSM` function 2 refresh, as Linux's
 EC query that also refreshes CCI (`_Q16`) and may arrive later. So while
 VERSION is zero, the client refreshes every 100 ms and also rereads after each
 notification. It waits up to 10 s, then parks. The ThinkPad parks this way;
-see [technical debt](../technical-debt.md#ucsi-client-limits).
+see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1325).
 
 **Sequence.** All work runs at the ACPI worker's top level, one command at a time:
 1. One PPM interface reset (PPM_RESET, never CONNECTOR_RESET), with a 10 s deadline.
@@ -341,7 +341,7 @@ This is the order of Linux's `ucsi_init()` (v6.19.10), which completes on vela
 (captured on Fedora 44, 2026-10-15), and of UCSI 1.2's example initialization
 flow (section 4.3). Linux's later SET_NOTIFICATION_ENABLE enables every
 notification the PPM supports; on vela that is `0xDA050000`. The client enables
-only the two it consumes; see [technical debt](../technical-debt.md#ucsi-client-limits).
+only the two it consumes; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1325).
 
 In vela's runs 3 and 4, without GET_CONNECTOR_CAPABILITY and with `_DSM`
 polling, the PPM never completed the command-only acknowledgement of connector
@@ -414,7 +414,7 @@ CCI, is not acknowledged; the client parks directly.
 Change are enabled. Nothing in Pyxis consumes the other required notifications
 (power operation mode, connector partner, power direction, battery charging
 status, error), so they stay off until something does; see
-[technical debt](../technical-debt.md#ucsi-client-limits).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1325).
 
 **Back-off (owner, 2026-10-15).** If more than 16 connector changes arrive within
 10 s, the client enters a back-off and handles at most one change per second,
@@ -785,8 +785,8 @@ data, so no new timing was taken.
 
 ## Limits
 
-These are recorded in [technical debt](../technical-debt.md#acpi-interpreter-host-limits)
-and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
+These are recorded in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1319)
+and [power-off limits](https://git.internal/PyxisOS/pyxis-os/issues/1321):
 
 - PCI configuration writes are refused.
 - The mapping window is never reused.
@@ -806,8 +806,8 @@ and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
   notifications and supports only UCSI 1.x over `_DSM`.
 
 The embedded controller and battery limits are in
-[technical debt](../technical-debt.md#embedded-controller-and-battery-limits),
-and the UCSI client's in [UCSI client limits](../technical-debt.md#ucsi-client-limits).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1324),
+and the UCSI client's in [UCSI client limits](https://git.internal/PyxisOS/pyxis-os/issues/1325).
 
 ### Read-only HID-I2C GPIO input
 

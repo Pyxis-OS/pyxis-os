@@ -58,4 +58,4 @@ on Arch Linux, completing the remaining hardware step.
 
 There is no GPT selection, automatic mounting or host writer. The source
 immutability requirement and host memory costs remain in
-[technical debt](../technical-debt.md).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4).

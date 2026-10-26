@@ -47,7 +47,7 @@ Tail does not follow files. `-f` and `-F` print `tail: -f is not supported: file
 cannot be followed` (with the letter given) and exit with status 1 before any
 output, even alongside other options and operands. Pyxis has no operation that
 waits for a file to grow, and a polling loop would not follow honestly. See
-[technical debt](../technical-debt.md#sbase-tail-follow-and-sort-limits).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1479).
 
 Tail reads with `read` and keeps only the tail in a growing buffer, so memory
 follows the retained text, not the input size. Headers go through stdio, which is
@@ -102,9 +102,9 @@ kernel interface or compiler change was needed.
   failure there is not reported.
 - Wc, tail and sort read stdin to EOF. The framebuffer console has no EOF
   operation, so use a file, redirect or pipeline; remote sessions deliver EOF.
-  See [console input completion](../technical-debt.md#console-input-completion).
+  See [console input completion](https://git.internal/PyxisOS/pyxis-os/issues/1362).
   Console stdin is also one native read per byte; see
-  [console line input](../technical-debt.md#console-line-input).
+  [console line input](https://git.internal/PyxisOS/pyxis-os/issues/1371).
 - There is no locale support. Word splitting, character classes and case folding
   use libutf's tables, which upstream generates from the Unicode character
   database.

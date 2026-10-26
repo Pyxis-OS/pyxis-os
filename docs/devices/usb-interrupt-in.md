@@ -116,4 +116,4 @@ malformed/unowned events still quarantine the controller. Halt, interrupt
 masking or disabled bus mastering alone do not permit recycling DMA. The
 immutable boot inventory remains an observation snapshot, not runtime transfer
 authority. Broader hotplug, recovery and reclamation limits
-remain in [technical debt](../technical-debt.md#usb-interrupt-in-initial-profile-and-failure-retention).
+remain in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1502).

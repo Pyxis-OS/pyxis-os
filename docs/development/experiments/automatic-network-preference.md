@@ -98,7 +98,7 @@ allocator observation, not evidence that interface state costs less memory.
 These controls are nested-host QEMU, not native NIC bandwidth. No native/PXE
 operation was performed during those controls. Physical rate changes and
 known-versus-unknown speed ranking with both paths usable remain unqualified;
-see [lifecycle debt](../../technical-debt.md#multiple-interface-lifecycle-qualification).
+see [lifecycle debt](https://git.internal/PyxisOS/pyxis-os/issues/1279).
 
 ## Native router-only round, 2026-10-20
 

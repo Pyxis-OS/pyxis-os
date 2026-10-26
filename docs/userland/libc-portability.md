@@ -236,7 +236,7 @@ path assumes single-byte lookahead and does not fully restore decoder stride.
 Malformed UTF-8 patterns are rejected (usually `REG_BADPAT`, or `REG_ERANGE` for
 an invalid range endpoint). Encountered invalid subject UTF-8 yields
 `REG_NOMATCH`, but validation is lazy: the engine may return before reading the
-whole subject. See [regex limits](../technical-debt.md#regex-character-classes-and-back-references).
+whole subject. See [regex limits](https://git.internal/PyxisOS/pyxis-os/issues/1296).
 vi and less use this interface for BRE search; vi also uses it for substitution.
 Their display and bounded-input limits remain in the respective port docs.
 
@@ -699,13 +699,13 @@ builds use the ports recipe above, not the probe's replacement headers.
 
 ## Remaining limits
 
-The [libc compatibility gaps](../technical-debt.md#libc-compatibility-gaps) record
-absent interfaces and their revisit points. [Console EOF](../technical-debt.md#console-input-completion),
-[creation mode](../technical-debt.md#public-open-creation-mode),
-[non-atomic append](../technical-debt.md#non-atomic-stdio-append),
-[uncertain native release](../technical-debt.md#unexpected-native-close-failures),
-[narrow file metadata](../technical-debt.md#narrow-libc-file-metadata) and
-[file alias side effects](../technical-debt.md#shell-redirection-side-effects-and-file-aliases)
+The [libc compatibility gaps](https://git.internal/PyxisOS/pyxis-os/issues/1368) record
+absent interfaces and their revisit points. [Console EOF](https://git.internal/PyxisOS/pyxis-os/issues/1362),
+[creation mode](https://git.internal/PyxisOS/pyxis-os/issues/1369),
+[non-atomic append](https://git.internal/PyxisOS/pyxis-os/issues/1370),
+[uncertain native release](https://git.internal/PyxisOS/pyxis-os/issues/1375),
+[narrow file metadata](https://git.internal/PyxisOS/pyxis-os/issues/1376) and
+[file alias side effects](https://git.internal/PyxisOS/pyxis-os/issues/1441)
 remain explicit limits. General process semantics, polling/nonblocking I/O,
 signals and cross-process shared offsets require separate design work; this
 milestone does not select a successor or promise full POSIX coverage.

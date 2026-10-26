@@ -115,7 +115,7 @@ guaranteed atomic write size, strict fairness, nonblocking mode or wait sets.
 File creation/truncation before a launch failure is not rolled back. Redirecting
 output onto input can destroy the input, including through aliases. Independent
 file positions do not provide descriptor-duplication semantics. These limits and
-revisit points are retained in [technical debt](../technical-debt.md#shell-redirection-side-effects-and-file-aliases).
+revisit points are retained in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1441).
 
 Completed HTTP GET uses [typed OPEN](../interfaces/http-transactions.md) and the
 provider's redirect/storage policy. Writable typed opens return generic

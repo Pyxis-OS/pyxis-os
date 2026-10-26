@@ -129,7 +129,7 @@ usual, from this PR's head or after merge, then in the Development space:
 
 Report the FPS values, whether sound was clean, any felt latency between
 action and sound (calculated worst case about 140–160 ms; tuning is
-[deferred](../../../technical-debt.md#sdl-audio-latency)), and any `hda:` lines.
+[deferred](https://git.internal/PyxisOS/pyxis-os/issues/1397)), and any `hda:` lines.
 
 ## Native results so far
 

@@ -48,7 +48,7 @@ session, started N background clients and waited for all of them.
   no longer waits for the BSP. Page clients barely slow each other: two took 1.15–1.25
   times one alone, and eight up to 1.5 times. In the nested VM the same pair took
   about 1.9 times one alone, so the
-  [scratch-slot false sharing](../../../technical-debt.md#scratch-slot-false-sharing)
+  [scratch-slot false sharing](https://git.internal/PyxisOS/pyxis-os/issues/1314)
   costs little on this machine.
 - **Feel under load.** While the check script's `--load 120` mode kept 11 compute and
   4 page clients running, the owner ran Quake's `timedemo demo1`, switched tabs

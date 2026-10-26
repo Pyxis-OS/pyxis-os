@@ -222,5 +222,5 @@ Blocked unrelated output still has no newly guaranteed cleanup time.
 
 See the [matched qualification record](../development/clipboard-first-delivery-qualification.md)
 for measured and manually checked revisions/configuration, and
-[initial delivery limits](../technical-debt.md#initial-clipboard-delivery-limits)
+[initial delivery limits](https://git.internal/PyxisOS/pyxis-os/issues/1395)
 for deferred consumers, fidelity and persistence work.

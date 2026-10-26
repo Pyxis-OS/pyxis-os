@@ -48,7 +48,7 @@ supplies no terminal input. See [keyboard routing](../devices/keyboard.md) and
 Quake, Doom, Mandelbrot and `mousetest` keep running while hidden or unselected.
 Focus describes input eligibility. Applications retain their own explicit
 pause or idle behavior. Unattended rendering still costs CPU and memory bandwidth;
-see [the resource-cost limitation](../technical-debt.md#unselected-graphical-applications).
+see [the resource-cost limitation](https://git.internal/PyxisOS/pyxis-os/issues/1349).
 
 Only the selected space's chosen surface is copied. Hidden graphics retains its
 backing without a new presenter lease or pixel copy; an already-snapshotted frame
@@ -88,7 +88,7 @@ live geometry and narrow tabs. These were nested-VM checks:
 
 The owner checked native behaviour on the ThinkPad on 2026-10-08; the result
 and the remaining source-only coverage limits are in
-[technical debt](../technical-debt.md#space-layer-qualification). The owner
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1336). The owner
 closed the milestone on 2026-10-08, before that native check. Build and
 filesystem CI passed on submitted kernel revision `f838b21`
 ([PR #512](https://git.internal/PyxisOS/pyxis-os/pulls/512), workflow #1182).

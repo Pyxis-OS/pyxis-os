@@ -37,7 +37,7 @@ reclamation, is implemented ([record](../development/experiments/bounded-teardow
 Its accepted decisions also stand: kernel workers keep fixed owner CPUs and
 never migrate or work-steal ([SMP](../kernel/smp.md#remaining-serial-services-and-limits));
 CPU 0 worker precedence is parked with a design
-([technical debt](../technical-debt.md#bsp-userspace-and-kernel-workers)). The
+([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1318)). The
 remaining ranking, highest first:
 
 1. Bound the other interrupts-off owner operations: launch and rollback, VM
@@ -69,12 +69,12 @@ substitute for shared-pointer worker callbacks.
 
 - **Scratch-slot walks.** Walk the active address space through the recursive
   mapping. This is a later optimization: natively the false sharing costs little
-  ([technical debt](../technical-debt.md#scratch-slot-false-sharing)).
+  ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1314)).
 - **BSP worker latency.** User tasks share the BSP with the kernel workers
-  ([technical debt](../technical-debt.md#bsp-userspace-and-kernel-workers)).
+  ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1318)).
   Revisit if presentation or input latency shows under load.
 - **PMM batching.** `vm_back()` and heap growth take the PMM lock once per frame
-  ([technical debt](../technical-debt.md#pmm-first-fit-search-under-its-lock)).
+  ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1311)).
 
 ## Not prerequisites
 

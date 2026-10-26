@@ -334,4 +334,4 @@ ahead of remotely accessible services. Writable virtio-fs is an independent
 candidate for persisting the existing edit/build/run workflow.
 
 See [networking](networking.md), [DNS](../userland/dns.md), [randomness](randomness.md),
-[technical debt](../technical-debt.md) and [why lwIP](lwip.md#why-lwip).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4) and [why lwIP](lwip.md#why-lwip).

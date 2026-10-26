@@ -103,12 +103,12 @@ image or this repository.
 ## Limits
 
 - Every edit, completion and signature help request reparses the file and its
-  headers, so latency grows with the includes ([clangd without a preamble](../technical-debt.md#clangd-without-a-preamble)).
+  headers, so latency grows with the includes ([clangd without a preamble](https://git.internal/PyxisOS/pyxis-os/issues/1382)).
 - clangd runs four workers because libc reports no processor count, has no user
   configuration or index cache, and has no background index
-  ([clangd on Pyxis limits](../technical-debt.md#clangd-on-pyxis-limits)).
+  ([clangd on Pyxis limits](https://git.internal/PyxisOS/pyxis-os/issues/1383)).
 - Server root views are an editor guard, not a read-only grant
-  ([Neovim language-server limits](../technical-debt.md#neovim-language-server-limits)).
+  ([Neovim language-server limits](https://git.internal/PyxisOS/pyxis-os/issues/1331)).
 - `Ctrl-]` closes a `pyxis-remote` session; use `:lua vim.lsp.buf.definition()`
   over Remote.
 - Nothing writes `compile_flags.txt` or `compile_commands.json`; this remains an

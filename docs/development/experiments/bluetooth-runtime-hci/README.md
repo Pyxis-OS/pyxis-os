@@ -15,7 +15,7 @@ the implementation; this record holds the measurements.
 Review exposed the independent-stream handle-reuse limit, and the owner accepted
 fail-closed reuse for task 2 on 2026-10-08: connection and reconnect tasks must
 qualify the retirement boundary before bonded reconnect is ready (see the
-[technical debt](../../../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary)).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1475)).
 The owning xHCI worker must not block on HCI completion or userspace operations.
 Cold upload, scan/connection policy, pairing, durable bonds and pointer injection are
 later tasks. The historical warm profile gives staged development evidence only, not

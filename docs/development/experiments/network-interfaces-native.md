@@ -156,7 +156,7 @@ Remote acquisition; it does not isolate NCM initialization. The owner reports
 this followed a warm Remote reboot, with the observation started about one
 minute later; the records contain no reboot timestamp to derive total latency.
 Together with `native-dns-usb-01`, this is the second observed post-warm-reboot
-readiness miss. It remains [readiness debt](../../technical-debt.md#usb-ncm-readiness-after-warm-reboot),
+readiness miss. It remains [readiness debt](https://git.internal/PyxisOS/pyxis-os/issues/1280),
 not evidence that physical unplug failed. Both attempts are retained.
 
 ## Evidence and remaining limits
@@ -175,6 +175,6 @@ optional absence, mixed addressing, scoped operations, data-carrier off/on with
 management preserved, configuration errors and ordinary cleanup snapshots.
 Retained flows across address/default/lease changes,
 exhaustive cancellation/fault/copyout interleavings and native stopped-debugger
-selection remain [explicit qualification limits](../../technical-debt.md#multiple-interface-lifecycle-qualification).
+selection remain [explicit qualification limits](https://git.internal/PyxisOS/pyxis-os/issues/1279).
 The owner-present unplug observation is now recorded above. Radio traffic
 remains Wi-Fi work, and USB NCM stopped/fatal transport remains unsupported.

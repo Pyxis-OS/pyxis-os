@@ -116,9 +116,9 @@ and hosted Clang through `sdk://`; the [drawing record](experiments/raylib/READM
 keeps nested costs and exact revisions. Chronium's ThinkPad drawing/input check
 ran at a capped 59.9 FPS; vela's 1920x1080 PXE output passed at 60/59.4 FPS for
 its tested canvases. Rare extreme-motion hiccups are an
-[accepted limit](../technical-debt.md#raylib-extreme-motion-hiccups), not a new
+[accepted limit](https://git.internal/PyxisOS/pyxis-os/issues/1347), not a new
 performance guarantee. Vela 2880x1800 and exclusive native CPU cost are unrun.
 Native audio on other hardware and device-loss behavior remain unqualified; the
-[qualification/backend follow-up](../technical-debt.md#raylib-native-audio-and-backend-follow-up)
+[qualification/backend follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1346)
 records when to revisit it. Additional raylib APIs require their own concrete
 consumer qualification. Native backends are not scheduled merely to replace SDL.

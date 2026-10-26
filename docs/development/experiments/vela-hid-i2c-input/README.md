@@ -243,7 +243,7 @@ CPU-cost or finger-velocity measurement.
 Owner accepts one limit for 0.0.6: a two-finger press with one finger in the
 bottom-left button zone selects primary. Distinguishing intentional two-finger
 secondary from a thumb-plus-finger drag is
-[deferred with an undecided candidate](../../../technical-debt.md#clickpad-tuning).
+[deferred with an undecided candidate](https://git.internal/PyxisOS/pyxis-os/issues/1493).
 
 Ordinary build, exact-head CI 2910 and final 4-CPU QEMU at 2880×1800/1280×800
 passed. In QEMU, one wheel event left received counts at 4/1 while age advanced

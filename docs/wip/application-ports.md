@@ -31,7 +31,7 @@ TF-PSA-Crypto libraries; SSH remains deferred.
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts. The [awk probe](#awk-probe) (2026-10-16) recommends onetrue-awk; three decisions are open. |
 | uniq | [Implemented sbase port](../userland/uniq.md), delivered as a program package with libc `getline`/`isblank` and validated against host upstream output. |
-| wc, tail, sort | [Implemented sbase ports](../userland/wc-tail-sort.md), delivered as a program package and validated against host upstream output. `tail -f` is refused, as Pyxis cannot wait for a file to grow; see [technical debt](../technical-debt.md#sbase-tail-follow-and-sort-limits). |
+| wc, tail, sort | [Implemented sbase ports](../userland/wc-tail-sort.md), delivered as a program package and validated against host upstream output. `tail -f` is refused, as Pyxis cannot wait for a file to grow; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1479). |
 | grep | [Implemented sbase port](../userland/grep.md) with `-r` over the native directory listing, delivered as a program package and validated against host upstream and GNU output. |
 | hexdump | Still undecided: port or implement natively. A pure byte filter can be a port; this is not a commitment to a complete Unix utility suite. |
 | Everyday gaps | Small missing commands and options noticed in use are collected in [everyday gaps](everyday-gaps.md) until they are scheduled. Implemented native commands are covered in [everyday commands](../userland/everyday-commands.md). |
@@ -104,7 +104,7 @@ Gaps for onetrue-awk at the probed revision:
 | --- | --- | --- |
 | `EDOM` in `errno.h`, `FOPEN_MAX` in `stdio.h`, `wctomb` | ISO C, absent from libc | Add to libc. `wctomb` mirrors the existing UTF-8 `mbtowc`; it serves printf `%c` |
 | `random`/`srandom` | POSIX | Add to libc. The `rand` alternative has `RAND_MAX` 32767, so awk `rand()` would have only 15 bits |
-| `freopen` | ISO C, [absent](../technical-debt.md#libc-compatibility-gaps) | Patch: used only to close a standard stream onto `/dev/null`; close it directly instead |
+| `freopen` | ISO C, [absent](https://git.internal/PyxisOS/pyxis-os/issues/1368) | Patch: used only to close a standard stream onto `/dev/null`; close it directly instead |
 | `fcntl(F_SETFD, FD_CLOEXEC)` | POSIX | Patch it out: launch passes explicit descriptors, so nothing is inherited |
 | `popen`, `pclose`, `system`, `<sys/wait.h>` | POSIX process execution | Refuse; decision 3 |
 | `environ` | POSIX | Read-only adapter for `ENVIRON`, see below |

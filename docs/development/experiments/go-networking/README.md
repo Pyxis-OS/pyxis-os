@@ -71,7 +71,7 @@ repeatable regression. Dynamic operation allocations and shared accounting add
 real work; redundant per-record/empty-queue clock reads were removed. No claim
 about sustained service throughput, fairness or large-population timer latency
 follows from these short transfers. Pinned lwIP still has interrupt-enabled full
-PCB-list walks; see [the limit](../../../technical-debt.md#tcp-vendor-traversal-cost).
+PCB-list walks; see [the limit](https://git.internal/PyxisOS/pyxis-os/issues/1498).
 
 Raw commands, manifests, source caller, hashes and captures remain in
 `/shared/present/go-net/`: `baseline/`, `native/`, `native-pressure/`,

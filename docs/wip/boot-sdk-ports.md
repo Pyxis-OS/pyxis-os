@@ -176,7 +176,7 @@ alphabetical.
    Go runtime and libc in one process.
 
 [Audio follow-ups](later-os-directions.md#audio): analog playback and SDL2/Quake
-adapters are delivered; [SDL latency tuning](../technical-debt.md#sdl-audio-latency) remains deferred.
+adapters are delivered; [SDL latency tuning](https://git.internal/PyxisOS/pyxis-os/issues/1397) remains deferred.
 
 [Claude on Pyxis](claude-on-pyxis.md): design accepted 2026-10-09; the Lua harness
 consumes the delivered [HTTP resources](../userland/http-fetch.md), with Hax later.
@@ -310,5 +310,5 @@ is parked after local users; it adds no tasks to current milestones.
 Rewrite the completed milestone document around the implemented behavior and
 useful interface/usage guidance, then move it from `docs/wip` to `docs` and update
 links. Remove the planning history and completed checklist; the original remains
-in Git history. Carry forward relevant deferred work into another WIP or
-technical-debt document. Do not retain a duplicate archive of the old plan.
+in Git history. Carry forward relevant deferred work into another WIP document
+or a `debt` issue. Do not retain a duplicate archive of the old plan.

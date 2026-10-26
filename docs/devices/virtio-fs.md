@@ -553,7 +553,7 @@ even after confirmed reset. Shared kernel mappings must remain stable while APs
 run; this slice does not add TLB shootdowns or reconnection. An idle disconnected
 daemon may not generate a guest-visible event; disconnection is otherwise detected
 through device status or a request deadline, not a heartbeat. See
-[the recorded lifetime tradeoff](../technical-debt.md#virtio-fs-runtime-resource-retention).
+[the recorded lifetime tradeoff](https://git.internal/PyxisOS/pyxis-os/issues/1411).
 
 ## Debugger inspection
 

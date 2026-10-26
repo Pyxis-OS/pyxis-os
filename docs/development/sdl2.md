@@ -3,7 +3,7 @@
 Pyxis carries upstream SDL 2.32.10 with a native backend, as a development
 library for graphical ports. Its first consumer is
 [DevilutionX](../userland/devilutionx.md), an opt-in build. Its
-[native ThinkPad qualification](../technical-debt.md#sdl2-and-devilutionx-native-qualification)
+[native ThinkPad qualification](https://git.internal/PyxisOS/pyxis-os/issues/1399)
 is recorded separately from the QEMU measurements below.
 
 The [recipe README](../../ports/sdl2/README.md) documents the backend file by
@@ -147,7 +147,7 @@ exercised by the QEMU gears example.
   nanoseconds, and `SDL_Delay` from `clock_sleep_for`.
 - **Paths.** `SDL_GetPrefPath(org, app)` creates and returns `home://APP/`; the
   organisation is not used. `SDL_GetBasePath` is unsupported, because programs
-  cannot find their [own location](../technical-debt.md#program-location).
+  cannot find their [own location](https://git.internal/PyxisOS/pyxis-os/issues/1378).
 
 Facilities Pyxis lacks report themselves as unsupported, as upstream does:
 
@@ -202,7 +202,7 @@ contract was accepted by the owner on 2026-10-13 ([threads task 9](../interfaces
   block without a pipe.
 - **Exit.** Join threads and call `SDL_Quit` before returning from `main`.
   A process exiting with live threads skips `atexit` handlers and stdio
-  flushing; see [technical debt](../technical-debt.md#process-exit-with-live-threads).
+  flushing; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1302).
 
 ## Audio
 
@@ -229,7 +229,7 @@ SDL gains callbacks, not real-time guarantees.
   writable and writes one buffer, so the native 80 ms queue stays near full.
   Calculated worst-case output latency, from the interface sizes and not
   measured, is about 140–160 ms including the hardware ring; tuning is
-  [deferred](../technical-debt.md#sdl-audio-latency).
+  [deferred](https://git.internal/PyxisOS/pyxis-os/issues/1397).
 - **Pause.** As upstream: the callback stops and SDL writes silence, so the
   session stays held and the thread still wakes every buffer.
 - **Underruns and failure.** A late or slow callback becomes native silence:
@@ -304,7 +304,7 @@ IPIs alone and 17.415 ms with per-CPU one-shot deadlines. Quake's ordinary
 72 Hz cap improved from 49.223 to 59.595 to 70.291 FPS. These nested-KVM runs
 changed only the kernel; HPET remains authoritative and nominal preemption
 stays at 120 Hz. Native qualification remains in
-[sleep wake granularity](../technical-debt.md#sleep-wake-granularity).
+[sleep wake granularity](https://git.internal/PyxisOS/pyxis-os/issues/1379).
 
 DevilutionX's frame rates in town, at 1280x768 on standard VGA, are in its
 [reference](../userland/devilutionx.md#measurements): 56.4–60.8 FPS with the
@@ -333,6 +333,6 @@ HDA guard trips seen during those runs.
 
 ## Limits
 
-The [SDL2 port limits](../technical-debt.md#sdl2-port-limits) and
-[DevilutionX port limits](../technical-debt.md#devilutionx-port-limits) entries
+The [SDL2 port limits](https://git.internal/PyxisOS/pyxis-os/issues/1396) and
+[DevilutionX port limits](https://git.internal/PyxisOS/pyxis-os/issues/1398) entries
 record what is missing and when to revisit it.

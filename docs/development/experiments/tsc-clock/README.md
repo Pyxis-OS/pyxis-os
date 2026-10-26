@@ -118,7 +118,7 @@ Owner-reported on the ThinkPad: two cold boots selected the TSC and calibrated
 2096.063 and 2096.064 MHz, within 12 ppm of Linux's refined 2,096.061 MHz; a clock
 read costs about 130 ns; and the 15-minute `date -u` check against a stopwatch held
 with no drift or step. The same batch's network results are in
-[technical debt](../../../technical-debt.md#tcp-throughput-limits). These are owner
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1437). These are owner
 numbers, not agent measurements, and the individual lines are not recorded here.
 
 ## Native steps for the owner

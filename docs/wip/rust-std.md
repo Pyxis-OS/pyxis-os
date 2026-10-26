@@ -386,7 +386,7 @@ the CP1047 table's EPL-1.0 text is retained in full.
 
 General upstream I/O behavior is retained: a persistent read error can loop,
 and include-mode final buffer-drop errors can go unreported. These limits are
-recorded in [technical debt](../technical-debt.md#hexyl-upstream-io-errors);
+recorded in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1405);
 no generic error-handling patch is carried in the port.
 
 The explicit qualified character profile is `--character-table=ascii`;

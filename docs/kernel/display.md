@@ -426,7 +426,7 @@ The [qualification and native batch record](../development/experiments/renoir-pr
 distinguishes CPU-issued prefix progress from WC visibility/display fetch.
 The audited register span is not an independently sized native BAR; the
 single-output geometry match is not decoded HUBP routing. These and pending
-native validation remain [technical debt](../technical-debt.md#native-renoir-presentation-qualification).
+native validation remain [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1341).
 
 ## Renoir flips
 
@@ -606,7 +606,7 @@ The next ordinary owner-run ThinkPad boot should check terminal sizing and
 Doom or Quake startup after the ABI changes. No such native check is claimed
 here. Full-frame idle presentation, peak old/new storage, unsupported devices
 and failure retention remain in
-[technical debt](../technical-debt.md#virtio-gpu-resize-limits-and-runtime-retention).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1350).
 
 Future physical GPU drivers, 3D, multi-monitor selection, damage tracking,
 compositing, scrollback and remote session resizing need their own bounded

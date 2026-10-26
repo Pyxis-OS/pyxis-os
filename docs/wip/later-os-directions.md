@@ -402,12 +402,12 @@ covers low display resolution.
 
 The [analog HDA engine](../devices/hda.md), [PCM sessions](../interfaces/audio.md)
 and [master/per-space volume](../userland/audio-volume.md) are complete; the
-[remaining limits](../technical-debt.md#hd-audio-volume-control) include media-key
+[remaining limits](https://git.internal/PyxisOS/pyxis-os/issues/1388) include media-key
 input and the later native regression.
 
 [SDL2 audio callbacks](../development/sdl2.md#audio) and the
 [Chocolate Quake sound bundle](../userland/chocolate-quake.md) are delivered;
-Chocolate Doom and EDuke32 sound, music and [SDL latency tuning](../technical-debt.md#sdl-audio-latency)
+Chocolate Doom and EDuke32 sound, music and [SDL latency tuning](https://git.internal/PyxisOS/pyxis-os/issues/1397)
 remain. Conversion and resampling belong in userspace. Recording, HDMI/DP, USB/dock
 and Bluetooth audio remain later directions.
 
@@ -466,7 +466,7 @@ Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
   hold off power operations while it writes.
 - **Power overlay.** Bounded output-lock waits in the presenter, so a stuck writer
   drops frames instead of stopping input (it changes ordinary presentation and
-  needs a decision; see [power overlay limits](../technical-debt.md#power-overlay-limits)),
+  needs a decision; see [power overlay limits](https://git.internal/PyxisOS/pyxis-os/issues/1323)),
   a warning that RAM volumes are lost on shutdown from a live image, and other
   system-overlay entries such as a lock screen or space switch, only with users
   and sessions.
@@ -515,7 +515,7 @@ Accepted by the owner on 2026-10-15 (PR #898) and implemented. The kernel's
 read-only `acpi_tables` root, its names, copies, withheld `MSDM` and the
 `acpi_tables = true` grant are described in [table export](../kernel/acpi.md#table-export)
 and [acpidump](../userland/acpidump.md); the uACPI reset and interrupts-off
-copy limits are in [technical debt](../technical-debt.md#acpi-table-export-limits).
+copy limits are in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1320).
 
 ## Persistent storage and installation
 

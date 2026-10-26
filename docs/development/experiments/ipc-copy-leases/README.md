@@ -129,4 +129,4 @@ done
 Set `run_dir` to a distinct directory per boot. Session handoff keeps the shell
 parked; no sleeps or trailing `exit` needed. Decode OUTPUT and verify all 100
 passes plus FINAL status/drain, as in [task 4](../threads-task4/README.md).
-The remaining CALL cost is recorded in [technical debt](../../../technical-debt.md#bsp-only-allocation-and-vm-mutation).
+The remaining CALL cost is recorded in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1310).

@@ -463,7 +463,7 @@ no direct LAUNCHER grant, including aliases, unnamed and bundle-selected grants.
 Refusal precedes redirects/provider startup; declared grants are never silently
 dropped. Publication failure terminates and waits for the leaf provider; success
 releases its observer. Use ordinary named bootstrap service startup for services
-that spawn children. See the [limitation and revisit point](../technical-debt.md#paired-service-captures-are-leaf-only).
+that spawn children. See the [limitation and revisit point](https://git.internal/PyxisOS/pyxis-os/issues/1489).
 
 Pipes between foreground pipeline stages carry file values (see
 [foreground pipelines](#foreground-pipelines)); other capability transport
@@ -1057,7 +1057,7 @@ cleanup or reboot. A captured private-work directory does not extend storage
 lifetime: group retirement clears/unlinks its contents. The script subgroup and
 session/background/service routing above are unchanged; no outside-group executor is introduced. See
 [bundle contexts](program-bundles.md#private-job-contexts) and the
-[cleanup limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+[cleanup limit](https://git.internal/PyxisOS/pyxis-os/issues/1329).
 
 When a bundle cannot start because a required grant is missing, or held with
 fewer rights, the shell names it:
@@ -1400,5 +1400,5 @@ fallback. General capability pipes remain C9.
 before side effects, with the replacement spelling. Use `reply=$(producer > $api)`
 and `cat $reply`; reading the retained reply performs no new GET. Quoted
 `"@name"` is a literal filename. The unquoted rejection is
-[transitional](../technical-debt.md#transitional-shell-name-rejection).
+[transitional](https://git.internal/PyxisOS/pyxis-os/issues/1440).
 `request` has no builtin meaning and uses ordinary command lookup.

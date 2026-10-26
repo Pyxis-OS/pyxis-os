@@ -236,7 +236,7 @@ UDP logging, Remote and native file transfers. This is qualified on the
 ThinkPad with the Steam Deck dock; the Deck itself and vela remain hardware
 checks. RTL8156 adapters are expected to offer an NCM configuration but still
 need descriptor/native confirmation. This does not cover a hang before network
-startup. [Fatal USB UDP and stopped-kernel GDB](../technical-debt.md#usb-network-emergency-transport)
+startup. [Fatal USB UDP and stopped-kernel GDB](https://git.internal/PyxisOS/pyxis-os/issues/1281)
 remain deferred; a dock-only Deck cannot yet rely on them.
 
 Firmware PXE uses its own driver and is independent of this task. The native
@@ -277,7 +277,7 @@ from those contacts. The kernel's pointer stays the mouse and touchpad source, a
 any contact-to-pointer translation is a userspace policy that an application or
 the desktop can replace. The [desktop direction](desktop-graphics.md) covers
 windows and the compositor; touch adds hit testing by contact, per-contact
-focus and an on-screen keyboard. [Technical debt](../technical-debt.md#pointer-gestures-and-alternative-transports)
+focus and an on-screen keyboard. [Technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1344)
 records that the pointer has no touch-contact API today.
 
 ## Owner decisions (2026-10-11)

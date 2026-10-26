@@ -8,7 +8,7 @@ Clang running on Pyxis, with threads, comes later.
 
 How to build a C++ program, and what the runtime does and does not provide, is
 in the [SDK's C++ section](sdk.md#c). The accepted
-[limits](../technical-debt.md#c-runtime-subset) are in technical debt.
+[limits](https://git.internal/PyxisOS/pyxis-os/issues/1387) are in technical debt.
 
 ## The pieces
 

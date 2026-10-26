@@ -206,7 +206,7 @@ provides a separate implementation cross-check, not code to copy.
 
 HMB remains disabled and writes remain off by default. HMB is optional for this
 command profile; its possible DRAM-less performance consequence is recorded as
-[debt](../../../technical-debt.md#nvme-host-memory-buffer).
+[debt](https://git.internal/PyxisOS/pyxis-os/issues/1488).
 
 ### Qualification plan
 

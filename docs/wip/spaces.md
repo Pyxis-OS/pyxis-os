@@ -132,7 +132,7 @@ Asterism is today's spaces plus:
 
 Names (owner, 2026-10-07):
 
-Owner direction (2026-10-12): surviving private `job_work` cleanup belongs with Continuum and its family, alongside [nested execution groups](nested-execution-groups.md), revisiting the [caller-failure RAM retention limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+Owner direction (2026-10-12): surviving private `job_work` cleanup belongs with Continuum and its family, alongside [nested execution groups](nested-execution-groups.md), revisiting the [caller-failure RAM retention limit](https://git.internal/PyxisOS/pyxis-os/issues/1329).
 
 - **Continuum** is the supervisor. It oversees both kinds of space below.
 - **A haven** is a space without a terminal, managed exclusively by Continuum:

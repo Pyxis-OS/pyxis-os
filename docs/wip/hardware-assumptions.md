@@ -25,7 +25,7 @@ or QEMU observation are explicitly **suspected**.
 The first Vela failures have already been fixed: framebuffer page rounding and
 addresses above 4 GiB, PIT-free local timer calibration, x2APIC handoff, distant
 xHCI extended capabilities, MSI fallback, and delayed root-port links. See
-[technical debt](../technical-debt.md#unchecked-hardware-assumptions). This
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1335). This
 audit did not reclassify those as open findings. The SystemCMOS handler now
 exists at `kernel/acpi/cmos.c:13-53`. Also, `arch/x86_64/io_apic.c:83-90,160-203`
 independently prepares the SCI route; the older statement in technical debt

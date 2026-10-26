@@ -53,7 +53,7 @@ records no end-of-tone pops across many runs after #628; the speaker never poppe
 gain captures, UI interactions and costs. The new native eight-session silent
 regression (`pcm 0 0 120` in eight spaces) was not run, and media keys remain
 undecoded. Remaining qualification and control limits are
-[debt](../technical-debt.md#hd-audio-volume-control).
+[debt](https://git.internal/PyxisOS/pyxis-os/issues/1388).
 
 Pointer scroll accumulates signed 120-unit detents per control/view. Viewport-up
 raises volume by 5%, viewport-down lowers it; horizontal is ignored. Reset, focus,

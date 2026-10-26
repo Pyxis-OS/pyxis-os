@@ -146,7 +146,7 @@ The linker always constructs
 and associated tables are ordinary loadable data. Preserve these bytes and
 linked addresses for runtime traceback, explicit panic and GC stack maps.
 Stripping external ELF symbols/DWARF with `-s -w` preserves them, as the host
-probe confirms. The [P2F optional-symbol direction](../technical-debt.md#backtraces-and-symbols)
+probe confirms. The [P2F optional-symbol direction](https://git.internal/PyxisOS/pyxis-os/issues/1337)
 remains useful for kernel fault reporting/debugging generally; Go does not need
 it merely to find its own functions.
 
@@ -1057,7 +1057,7 @@ Under current grant-all, this is the existing general endpoint/IPC constructor:
 a declaring program can create/export endpoints, not only completion receivers.
 It is not added to every Go bundle. At first-launch required/optional consent,
 make this a user-visible right and revisit whether a narrower completion-receiver
-constructor is needed. See [the authority cost](../technical-debt.md#declared-service-creation-under-grant-all).
+constructor is needed. See [the authority cost](https://git.internal/PyxisOS/pyxis-os/issues/1499).
 
 ### Go adapter delivery
 

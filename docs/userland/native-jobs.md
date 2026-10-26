@@ -253,7 +253,7 @@ optional; users invoke it normally. Ordinary children receive no implicit
 context, provisioning ancestor or descendant launcher in this capture profile.
 A surviving creator cleans after confirmed client/group retirement. Stranded
 named trees remain private until reboot under the accepted
-[cleanup limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+[cleanup limit](https://git.internal/PyxisOS/pyxis-os/issues/1329).
 Continuum supervision and nested groups remain parked; this leaf-job core adds
 no executor or broker.
 

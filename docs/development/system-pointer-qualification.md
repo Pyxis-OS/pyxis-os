@@ -4,7 +4,7 @@ Tasks 1–4 are merged. Task 5 closure and the default-cursor redraw are deliver
 for review in [#562](https://git.internal/PyxisOS/pyxis-os/pulls/562); its
 [closure record](#task-5-closure-and-cursor-redraw) reviews the matched QEMU
 evidence and partial owner-reported native checks. Remaining native coverage
-stays open in [technical debt](../technical-debt.md#native-system-pointer-qualification).
+stays open in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1342).
 
 Task 1 baseline was captured on 2026-10-08 before pointer code changes. Runtime
 source is main `9a88813`; documentation-only commit `1c27d28` records round-three
@@ -173,7 +173,7 @@ Same-size REPLACE identity changes, partial-alpha and maximum-size images,
 malformed/denied requests, queue overflow and allocation failures were reviewed
 in source, not separately exercised with synthetic probes or fault injection.
 Physical PS/2 behavior remains deferred under the accepted
-[native ThinkPad qualification debt](../technical-debt.md#native-system-pointer-qualification).
+[native ThinkPad qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1342).
 This task does not qualify lock/escape, terminal selection/controller queues,
 Quake/SDL2 migration or the VirtIO hardware cursor.
 
@@ -832,8 +832,8 @@ GTK/X11, relative PS/2 and stable 1:1 geometry are the qualified hardware path.
 Wayland warp, scaled/centered placement and other frontend colour/position
 callbacks are source-inspected limitations, not positive runtime qualification.
 See [frontend limits](qemu.md#hardware-pointer-frontend) and their
-[revisit point](../technical-debt.md#virtio-cursor-frontend-limits).
-[Native PS/2 qualification](../technical-debt.md#native-system-pointer-qualification)
+[revisit point](https://git.internal/PyxisOS/pyxis-os/issues/1348).
+[Native PS/2 qualification](https://git.internal/PyxisOS/pyxis-os/issues/1342)
 remains deferred to the owner's ThinkPad batch after Bluetooth investigation.
 At this task 4 checkpoint, milestone closure still required separate owner
 authorization; task 5 results are recorded below.
@@ -1047,7 +1047,7 @@ and manual `mux` launch produced the expected missing-authority diagnostic.
 
 Click-to-relock, cursor-visible layer changes, program image/hotspot/show/hide
 and warp, native cost samples and judgment of the new native arrow remain open
-in the exact [native qualification split](../technical-debt.md#native-system-pointer-qualification).
+in the exact [native qualification split](https://git.internal/PyxisOS/pyxis-os/issues/1342).
 These are owner reports, not agent-run native validation; boot 1's selection
 report is not upgraded to mux coverage. Native checks remain open even with
 QEMU milestone closure.
@@ -1056,7 +1056,7 @@ Clipboard export/publication/paste and encoding remain in the
 [clipboard proposal](../interfaces/clipboard.md#direction). Multi-source Bluetooth integration,
 USB HID, absolute-mode scrolling, broader host frontends, damage tracking,
 recovery and advanced selection remain separately scoped work; the references
-and [technical debt](../technical-debt.md#system-pointer-selection-and-input-limits)
+and [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1343)
 retain their consequences and revisit points. Local-only shareware data and game
 images were not republished for task 5. All task-owned QEMU/GDB processes are
 stopped. Final exact-head CI is reported on the task 5 PR; the owner merges it.

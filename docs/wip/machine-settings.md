@@ -30,7 +30,7 @@ is accepted. User settings would be a separate `home://` tree, not this store.
 
 Task 2's writer validates through the same shared schema, creates a temporary
 file beside the key, writes and syncs it, then renames it over the key. The
-[directory-sync limit](../technical-debt.md#atomic-save-limits) still applies:
+[directory-sync limit](https://git.internal/PyxisOS/pyxis-os/issues/1407) still applies:
 a crash can lose the new name or leave a temporary file, which readers ignore
 by opening exact key names. The writer emits one trailing LF.
 

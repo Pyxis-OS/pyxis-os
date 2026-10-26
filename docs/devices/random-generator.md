@@ -51,7 +51,7 @@ it under ChaCha's assumptions; buffered/future output remains exposed until an
 independent successful reseed. Caller/unconsumed-slot memory may still hold
 bytes. Whole-VM snapshots/clones can duplicate initialized state. Hardware trust,
 seed availability and native qualification remain
-[technical debt](../technical-debt.md#random-generator-trust-and-availability).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1469).
 
 The [qualification report](../development/experiments/random-generator/generator.md)
 records the full RFC vector observation, both natural reseed triggers, erasure,

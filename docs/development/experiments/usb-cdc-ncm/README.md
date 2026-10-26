@@ -490,7 +490,7 @@ binding: the adapter's FIFO filled and, by inference, its PAUSE frames stalled
 the switch. Pause frames were not captured. The fix drains every prepared
 transport and bounds provider backpressure; see
 [NCM receive](../../../devices/usb-cdc-ncm.md#retained-routes-and-recovery)
-and the remaining [technical debt](../../../technical-debt.md#usb-ncm-undrained-data-path).
+and the remaining [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1290).
 
 ### QEMU gadget check
 
@@ -515,7 +515,7 @@ After binding (stock profile), two runs leased DHCP after 68 and 19 seconds
 and answered 5/5 pings; a third run flooded before any lease and is
 discounted. Main leased in one of two runs (53 seconds) and also answered
 5/5. After a flood, both main and this change answer 0/5 pings: the existing
-[post-burst limit](../../../technical-debt.md#usb-ncm-qemu-post-burst-recovery),
+[post-burst limit](https://git.internal/PyxisOS/pyxis-os/issues/1289),
 not a change in behavior. The 50 ms stall drop never triggered (zero dropped
 frames, no log line) and remains source-reviewed. No PAUSE frames exist in
 this fixture; the native counter check waits for an isolated switch port.

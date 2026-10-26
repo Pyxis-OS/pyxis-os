@@ -109,7 +109,7 @@ On four CPUs:
   - `noquit`: the timer was left running and exit was forced. The handler did
     not run.
 
-  Both forced exits are the [recorded limit](../../../technical-debt.md#process-exit-with-live-threads).
+  Both forced exits are the [recorded limit](https://git.internal/PyxisOS/pyxis-os/issues/1302).
   `SDL_THREAD_PRIORITY_HIGH` returned -1 ("That operation is not supported")
   and `NORMAL` returned 0.
 

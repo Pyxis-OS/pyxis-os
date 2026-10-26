@@ -114,4 +114,4 @@ denies namespace management; its replacement attempt did not qualify global
 namespace replacement. CUT racing delivery during OPEN/PREPARE/HTTP COMMIT, held files across
 global service replacement, allocation-failure injection and hardware-specific
 native effects were not run. The accepted same-representation restriction has
-no FILE bridge; see [debt](../../../technical-debt.md#forwarder-retarget-representation).
+no FILE bridge; see [debt](https://git.internal/PyxisOS/pyxis-os/issues/1278).

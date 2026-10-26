@@ -58,11 +58,11 @@ interface or compiler change was needed.
   which fetches file and pipe input in blocks. The 36,009-byte `host://` input
   that took 20.4 s in the validation VM below before read-ahead took 0.04 s
   afterwards. Console stdin remains one native read per byte; see
-  [console line input](../technical-debt.md#console-line-input).
+  [console line input](https://git.internal/PyxisOS/pyxis-os/issues/1371).
 - The framebuffer console has no EOF operation, so uniq reading its stdin cannot
   finish; use a file, redirect or pipeline. Independent terminal sessions,
   including remote `END_INPUT`, do deliver EOF; Ctrl+D is an ordinary byte. See
-  [console input completion](../technical-debt.md#console-input-completion).
+  [console input completion](https://git.internal/PyxisOS/pyxis-os/issues/1362).
 - There is no locale support; comparison and field splitting use the C locale.
 - GCC reported a may-be-uninitialized warning for `loff` in upstream code. It
   was a false positive by inspection; Clang does not report it.

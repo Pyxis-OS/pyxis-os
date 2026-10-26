@@ -66,7 +66,7 @@ The kernel adds no frontend-specific switches. QEMU 10.2.2 also returns the
 cursor command's used descriptor without a response or fence: checked completion
 proves buffer consumption, without an independent acknowledgment of application.
 See [hardware qualification](system-pointer-qualification.md#task-4-hardware-qualification)
-and [frontend debt](../technical-debt.md#virtio-cursor-frontend-limits).
+and [frontend debt](https://git.internal/PyxisOS/pyxis-os/issues/1348).
 
 ## PCI passthrough
 

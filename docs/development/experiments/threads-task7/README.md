@@ -125,7 +125,7 @@ run measures costs, not a new hardware TLS/destructor inspection.
 The owner accepted the launch cost on 2026-10-12. Initial-thread static TLS,
 avoiding its guarded reservation while keeping siblings guarded, is a
 much-later follow-up for launch-heavy shell scripts or native builds. No
-optimization is assigned by this result; see [technical debt](../../../technical-debt.md#tls-bootstrap-launch-cost).
+optimization is assigned by this result; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1301).
 
 For the owner-native run, stage each exact head's matching kernel and initrd,
 then use the existing hands-free remote harness with these commands (launches

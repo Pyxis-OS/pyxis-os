@@ -105,7 +105,7 @@ final documentation-only closure does not change the native-tested code.
 
 Direct native CANCEL, setup deadline, read-only observer and initiating-root CUT,
 RF on 12/13 and quantitative Wi-Fi/associated wired-load costs remain
-[qualification debt](../../technical-debt.md#ax200-open-link-qualification-follow-ups).
+[qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1284).
 Hardware rfkill remains untestable with this ThinkPad's F8/Fn+F8. No matched
 post-code performance run was taken under the horse compiler-load hold; functional
 payload/counter success does not establish throughput or CPU cost. No jobs remain.

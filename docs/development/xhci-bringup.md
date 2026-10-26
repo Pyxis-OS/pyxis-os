@@ -99,7 +99,7 @@ All QEMU, GDB and private daemon processes were closed afterward.
 
 The follow-up to reviewed revision `5df2bd5` makes interrupt enable/disable write
 zero to IMAN.IP, preserving that W1C pending bit. The IRQ acknowledgement path is
-unchanged. The [qualification debt](../technical-debt.md#xhci-hardware-profile-and-runtime-retention)
+unchanged. The [qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1464)
 records missing USB 2 debounce/startup settling, idle polling cost, the asserted
 OS-owned request after handoff timeout and the bootstrap-base consistency check.
 Timing, firmware rollback and BAR mapping policies are unchanged.

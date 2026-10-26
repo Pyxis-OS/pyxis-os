@@ -4,7 +4,7 @@ Pyxis can inspect supported GPT FAT32 media, create files through the confined
 raw writer, and mount native read-only or read-write FILE/directory views. The
 shared freestanding engine lives in pyxis-fs; Caelum owns mounted state, native
 capabilities, physical-extent exclusion and BSP-worker I/O. The kernel parser's
-[accepted exposure](../technical-debt.md#fat32-parser-in-the-kernel) remains.
+[accepted exposure](https://git.internal/PyxisOS/pyxis-os/issues/1417) remains.
 The [native mount reference](fat32-mounts.md) defines operations, ownership,
 publication intervals, admission budgets and failure/clean-power ordering.
 
@@ -133,7 +133,7 @@ resizing. The one mounted repair is the bounded FAT2 mirror repair that a writab
 mount's first effective mutation performs ([mounts](fat32-mounts.md#native-mutations-and-publication-intervals)). FAT directory moves and wider
 Unicode mutation remain unsupported. Physical scratch-USB and owner-present
 native ESP qualification, unplug/torn-sector/power-loss behaviour remain pending;
-[deferred work](../technical-debt.md#fat32-geometry-and-hardware-qualification)
+[deferred work](https://git.internal/PyxisOS/pyxis-os/issues/1418)
 records their consequences and revisit points. The read-only ESP check below is
 scheduled by the owner; milestone closure neither performs nor authorizes it.
 

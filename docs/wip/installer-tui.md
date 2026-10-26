@@ -136,7 +136,7 @@ path, while local progress and errors use the install space's own output.
 Diagnostic failure disables that observer without affecting confirmed I/O;
 Review-output failure still prevents apply. No LOG write right or new kernel API
 is added. A general authority-scoped userspace log writer remains
-[technical debt](../technical-debt.md#userspace-kernel-log-writer).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1487).
 
 ## Configuration delta model
 
@@ -314,7 +314,7 @@ kernel configuration model is proposed.
      separate activation record before enabling owned configuration/menu publication.
    Native foreign-file preservation and power cuts remain unqualified. See the
    [qualification record](../development/experiments/installer-publication/README.md)
-   and [activation limits](../technical-debt.md#boot-publication-activation).
+   and [activation limits](https://git.internal/PyxisOS/pyxis-os/issues/1421).
    **After the authorized Classic scope the owner can:** plan and publish approved
    configuration changes while retaining existing owner bytes. Coexist activation
    is a separate remaining gate.
@@ -1176,4 +1176,4 @@ recorded separately.
 An interrupted Update may leave ESP FAT dirty and make pending completion
 unavailable until external repair. A follow-up must let Pyxis validate and clear
 recoverable dirty state under the owned writer with proven recovery. That is not
-implemented here; see [technical debt](../technical-debt.md#interrupted-update-dirty-fat-recovery).
+implemented here; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1420).

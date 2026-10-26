@@ -750,7 +750,7 @@ region with that span for metadata sizing, metadata placement and free-frame
 initialization, and warns once if usable RAM is excluded. RAM above the span is
 unused, including RAM displaced by MMIO holes on a 64 GB machine. The heap
 arena's existing capacity bound is unchanged; see the
-[coverage debt](../technical-debt.md#unchecked-hardware-assumptions).
+[coverage debt](https://git.internal/PyxisOS/pyxis-os/issues/1335).
 
 The heap, PMM, scratch mappings and RAM-file backing work on any CPU; private
 MEMORY mutations run on the calling CPU under the process transaction.
@@ -759,13 +759,13 @@ their BSP ownership.
 Moving a worker off the BSP is a later step; see the
 [follow-ups](../wip/scheduling-and-threads.md#serial-services-off-the-bsp).
 
-Accepted limits are recorded in [technical debt](../technical-debt.md):
+Accepted limits are recorded in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4):
 
-- [BSP userspace and kernel workers](../technical-debt.md#bsp-userspace-and-kernel-workers)
-- [scratch-slot false sharing](../technical-debt.md#scratch-slot-false-sharing)
-- [PMM first-fit search](../technical-debt.md#pmm-first-fit-search-under-its-lock)
-- [the never-reused heap arena](../technical-debt.md#never-reused-kernel-heap-arena)
-- [BSP-only allocation and VM mutation](../technical-debt.md#bsp-only-allocation-and-vm-mutation)
+- [BSP userspace and kernel workers](https://git.internal/PyxisOS/pyxis-os/issues/1318)
+- [scratch-slot false sharing](https://git.internal/PyxisOS/pyxis-os/issues/1314)
+- [PMM first-fit search](https://git.internal/PyxisOS/pyxis-os/issues/1311)
+- [the never-reused heap arena](https://git.internal/PyxisOS/pyxis-os/issues/1316)
+- [BSP-only allocation and VM mutation](https://git.internal/PyxisOS/pyxis-os/issues/1310)
 
 Placement is not topology-aware: SMT siblings count as separate CPUs.
 

@@ -172,7 +172,8 @@
 
 - Keep decisions outside chat: mark agreed choices, proposals and implemented
   behavior distinctly in the relevant milestone/subsystem docs. Record accepted
-  limitations in docs/technical-debt.md with their consequence and revisit point.
+  limitations as a `debt` issue in PyxisOS/pyxis-os with their consequence and
+  revisit point; keep user-visible limits in the subsystem doc.
   WIP ideas do not authorize code or placeholder APIs.
 - Keep README short and practical; no roadmap prose, directory trees, marketing
   language or emojis. Put interface invariants beside code and usage in docs.
@@ -180,7 +181,7 @@
   behavior, interfaces and limits; move it into the appropriate docs subject
   folder and update links. Remove completed worklists and superseded discussion;
   Git preserves history. Carry
-  relevant deferred work into WIP or technical debt without duplicate archives.
+  relevant deferred work into WIP or a `debt` issue without duplicate archives.
 - Keep documentation lean; Git preserves everything removed. Once the owner
   accepts a decision, the WIP document keeps the accepted contract and drops the
   alternatives, earlier rounds and review history. A finished task's working
@@ -189,9 +190,10 @@
   revisions, configuration, commands, measured results with ranges, and limits.
   Raw captures, logs, counter dumps and step-by-step session narration belong in
   the PR or stay local, not in the repository.
-- A technical-debt entry is a few lines: the limit, its consequence and when to
-  revisit it. Measurements and history live in the linked reference or record.
-  Delete an entry when its limit is resolved.
+- A `debt` issue is a few lines: the limit, its consequence and when to revisit
+  it, labelled with a subsystem and a kind (`limitation`, `follow-up` or
+  `native-check`). Measurements and history live in the linked reference or
+  record. Close the issue when its limit is resolved.
 - Before ending unfinished work or handing off to another thread, leave a concise
   recoverable status: branch/PR and dependency revisions, completed work, remaining
   steps or decisions, validation results and any active tool processes. Keep this

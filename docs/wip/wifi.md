@@ -4,7 +4,7 @@ Stages 1–4 are complete: AX200 resource/firmware closure, passive scanning,
 legacy open links and WPA2-Personal/CCMP with independent DHCP and verified data.
 Implemented behavior is in the [AX200 controller](../devices/ax200-wifi.md) and
 [native interface](../interfaces/wifi.md). The [WPA2 qualification record](../development/experiments/ax200-wpa2.md)
-separates delivered checks from the [accepted limits](../technical-debt.md#ax200-wpa2-qualification-limits).
+separates delivered checks from the [accepted limits](https://git.internal/PyxisOS/pyxis-os/issues/1285).
 The [multiple-interface core](../devices/network-interfaces.md) keeps wired
 management independent.
 
@@ -248,7 +248,7 @@ their own go and interface/ownership review before code:
    regulatory channels, independent wlan0 DHCP and verified payload. Native
    repeated links, owning aliases/final close, foreground cancellation and
    AP-loss/fresh explicit recovery pass; remaining native checks are
-   [recorded](../technical-debt.md#ax200-open-link-qualification-follow-ups).
+   [recorded](https://git.internal/PyxisOS/pyxis-os/issues/1284).
    Ethernet remains the default/DNS/management path.
    After this task the owner can: exchange verified traffic on the open test AP.
 4. [x] **AX200 WPA2-Personal.** [Implemented](../devices/ax200-wifi.md#wpa2-personal)

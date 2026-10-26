@@ -120,7 +120,7 @@ battery for native performance figures, and compare on AC.
 
 ## Limits
 
-- [Clang code generation and predefines](../technical-debt.md#clang-code-generation-and-predefines):
+- [Clang code generation and predefines](https://git.internal/PyxisOS/pyxis-os/issues/1386):
   the remaining heap and Quake differences, extra byte-sized read-modify-writes,
   and Clang's fast-type predefines, which differ from libc's `stdint.h`.
 - compiler-rt's `cpu_model` stays in the builtins archive. A program that uses

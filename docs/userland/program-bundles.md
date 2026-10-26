@@ -169,13 +169,13 @@ unsatisfied required request fails the whole admission. Preparation failures
 unwind unpublished storage and preserve source handles. A manifest request never
 synthesizes a grant: the program enumerates its actual startup resources and
 queries actual handle rights. See
-[temporary technical debt](../technical-debt.md#temporary-bundle-grant-policy).
+[temporary technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1480).
 
 A complete development revision is published before its search entry is
 made available, and a published development tree must not be mutated or deleted.
 Retained native handles keep backing alive but do not freeze a writable tree or
 form a snapshot; publisher discipline supplies revision immutability (see
-[technical debt](../technical-debt.md#published-development-bundle-revisions)).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1481)).
 App/resource handles delegated to a child keep backing after the launching
 process closes its own view. The manifest is launch policy, not a restriction on
 independently delegated FILE/launcher capabilities.
@@ -249,7 +249,7 @@ leaf retirement observation unchanged. A capture handoff does not extend private
 work storage lifetime: when its owning group retires, cleanup clears/unlinks the
 tree even if a recipient retained a directory capability. Do not use captured
 work directories as persistent results; existing client leaves have the same limit.
-See the accepted [caller-failure limit](../technical-debt.md#private-job-context-cleanup-after-caller-failure).
+See the accepted [caller-failure limit](https://git.internal/PyxisOS/pyxis-os/issues/1329).
 Grant-all-when-available remains the current manifest policy; future consent is
 still in the [bundle direction](../wip/program-bundles.md#future-consent-policy).
 
@@ -309,7 +309,7 @@ A bundle is a complete package tree entry beside plain programs, such as
 `DISTRIBUTION=full` archive also keeps them at its root. Each bundle carries
 port notes, provenance and application/linked-dependency notices in
 `app/metadata/` ([layout](system-layout.md#programs)). Installed Nvim runtime startup is substantially slower than from the
-archive ([technical debt](../technical-debt.md#installed-bundle-runtime-reads)).
+archive ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1429)).
 
 ## Qualification
 
@@ -330,7 +330,7 @@ the role privately, including aliases; ordinary children never inherit it
 implicitly. Missing required authority refuses. Lua and libuv bundle adapters
 follow this rule; an explicit resource selection still bounds available grants.
 Under grant-all this is the general IPC constructor, not only completion creation;
-see [the consent revisit point](../technical-debt.md#declared-service-creation-under-grant-all).
+see [the consent revisit point](https://git.internal/PyxisOS/pyxis-os/issues/1499).
 
 Provider launches can additionally declare `publication`/`call` from their held
 private setup caller. Publication requests zero resource rights and CALL
@@ -383,6 +383,6 @@ DIRECTORY rights are the native lookup/enumerate/read-files/write-files/create/
 remove/filesystem-info names. MOUNT rights are open-root/observe/write/retire/
 interval. DISKS supports enumerate/mount-read-only/mount-read-write, never raw
 open. Authority comes only from selected actual capabilities; current
-[deliver-all-available debt](../technical-debt.md#temporary-bundle-grant-policy)
+[deliver-all-available debt](https://git.internal/PyxisOS/pyxis-os/issues/1480)
 remains. The native parser in `lib/bundle.c` remains authoritative; the host packer
 validates the same declaration fields without claiming runtime availability.

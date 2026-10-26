@@ -40,7 +40,7 @@ source failure erases generator-owned state and stops nonempty admission until
 reboot; output budget remaining does not permit continued use. Already established
 TCP identities need no new seed, but initial TCP identity failure still disables
 new connections for that boot. See
-[trust and availability debt](../technical-debt.md#random-generator-trust-and-availability).
+[trust and availability debt](https://git.internal/PyxisOS/pyxis-os/issues/1469).
 
 ## Native interface
 

@@ -89,4 +89,4 @@ low-speed devices, Bluetooth and storage coexistence, LED output and the ASUS wh
 unqualified; low-speed scheduling and real high-speed hub and transaction-translator
 routing are source-reviewed only. QEMU supplies no composite or low-speed fixture, and
 its input dispatcher cannot establish independent physical holds across keyboards. See
-[technical debt](../../../technical-debt.md#usb-hid-native-coverage).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1291).

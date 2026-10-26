@@ -264,7 +264,7 @@ raw reads and the format library, reading COMMITTED journal images as an
 in-memory overlay without modifying the disk. The installer looks up regular
 root `SAFE_TO_WIPE` markers in every live volume. Rejected consent leaves the disk
 untouched. See the
-[accepted limits](../technical-debt.md#installer-authority-and-retained-pools).
+[accepted limits](https://git.internal/PyxisOS/pyxis-os/issues/1415).
 
 Disk capabilities authorize operations, not selection of a safe target. The raw
 kernel service does not check `SAFE_TO_WIPE`, authenticate contents or interpret

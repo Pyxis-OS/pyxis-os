@@ -21,7 +21,7 @@ by the owner on the ThinkPad at `9254f5c8` (2026-10-10): 3120 submitted and
 confirmed flips, no timeouts or failures, negligible perceived latency. Panic
 visibility was qualified natively the same day with a deliberate panic probe
 (below). Timeout recovery and unreported capture and input scenarios are not
-qualified; see [technical debt](../technical-debt.md#renoir-flip-backend-qualification).
+qualified; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1339).
 
 The owner also checked DevilutionX with flips on 2026-10-13: no tearing,
 60–70 fps reported by the game with at most 60 Hz presentation, and two audio

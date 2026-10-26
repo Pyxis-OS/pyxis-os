@@ -184,7 +184,7 @@ Range records of the kernel space come from a static array of 4096 entries
 (`VM_MAX_RANGES`), because early initialization cannot use the heap; each task
 stack and separately allocated DMA buffer takes one, and exhaustion returns
 `NO_MEMORY` (for example from task creation). Userspace spaces allocate their
-records from the heap. See [technical debt](../technical-debt.md#kernel-vm-range-record-array).
+records from the heap. See [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1317).
 
 Qualification and measured limits: [caller-CPU MEMORY](../development/experiments/memory-caller-cpu/README.md).
 

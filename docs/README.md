@@ -84,7 +84,7 @@ The [gallery](gallery/README.md) is the project's screenshot album.
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
 proposals, and [completed milestones](wip/completed.md) for finished ones. Files in [wip](wip/) describe unfinished work or design directions;
 they do not establish implemented behavior. Existing costs and revisit conditions
-belong in [technical debt](technical-debt.md).
+belong in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4).
 
 Follow [AGENTS.md](../AGENTS.md) for the collaboration workflow. When a milestone
 finishes, turn its WIP document into a reference in the appropriate subject folder

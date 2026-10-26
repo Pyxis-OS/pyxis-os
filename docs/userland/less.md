@@ -50,7 +50,7 @@ A missing named console grant fails explicitly. A downstream intermediate pager,
 stdout, receives no named input under the final-stage rule. The first stage's
 original console-input rule is preserved; drawing uses named output even if
 stdout was redirected. Read and terminal failures report failure; terminal input EOF
-ends the pager. See [technical debt](../technical-debt.md#less-pager-limits).
+ends the pager. See [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1408).
 
 ## Validation
 

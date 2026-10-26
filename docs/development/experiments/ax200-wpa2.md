@@ -2,7 +2,7 @@
 
 Stage 4 closes on 2026-10-22 with the [implemented controller/profile](../../devices/ax200-wifi.md#wpa2-personal),
 [native interface](../../interfaces/wifi.md#wpa2-auth-and-credential-boundary) and
-four [accepted qualification limits](../../technical-debt.md#ax200-wpa2-qualification-limits).
+four [accepted qualification limits](https://git.internal/PyxisOS/pyxis-os/issues/1285).
 These are observed native/QEMU/host results, not independent over-air proof.
 
 ## Configuration and baseline

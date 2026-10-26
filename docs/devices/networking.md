@@ -937,7 +937,7 @@ rebinding remains separate work.
 DNS queries, hostname ping and [native TCP listeners/streams](tcp.md) are implemented.
 Remote-terminal application protocols have their own [reference](../userland/remote-terminal.md).
 ICMP errors and generic UDP ephemeral-port selection are
-tracked in [technical debt](../technical-debt.md#udp-icmp-errors-and-ephemeral-selection).
+tracked in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1439).
 Keep the [users/authority checkpoint](../wip/users-and-authority.md) ahead of broader
 remotely accessible services. [Network domains](../wip/later-os-directions.md#device-ownership-and-network-domains),
 Retawq and userspace HTTP/HTTPS scheme providers remain future work.

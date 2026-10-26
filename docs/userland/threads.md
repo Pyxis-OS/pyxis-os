@@ -64,7 +64,7 @@ Libc runs process exit handlers, `.fini_array` and stdio shutdown only from the
 initial thread after collection (a detached thread still running counts as live);
 otherwise exit forces process teardown without
 user callbacks or stdio flushing; a native exit-handler primitive is recorded as
-[technical debt](../technical-debt.md#process-exit-with-live-threads). FS remains valid throughout orderly finalizers. Native forced
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1302). FS remains valid throughout orderly finalizers. Native forced
 stop/fault never runs user destructors. Last native THREAD_EXIT without an earlier
 process result remains PROCESS_EXITED/status 0, as specified by the native ABI.
 

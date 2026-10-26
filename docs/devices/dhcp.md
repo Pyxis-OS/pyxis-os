@@ -86,7 +86,7 @@ before closing endpoints. Unexpected maintainer failure or indefinite scheduling
 stall has no independent kernel lease-expiry backstop, and its last report can
 become stale. New programs receive the selected numeric DNS text together with a
 permitted scoped `dns_udp` grant; existing programs keep their startup choice.
-See [technical debt](../technical-debt.md#dhcp-maintainer-and-client-limits).
+See [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1438).
 
 The [DHCP qualification record](../development/dhcp-qualification.md) describes
 measured historical coverage and native lifecycle limits at its listed revisions.

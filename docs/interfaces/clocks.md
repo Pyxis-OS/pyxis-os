@@ -66,7 +66,7 @@ atomic floor even without a stable-TSC flag; no `invtsc` requirement is added.
 Native TSC's finite boot agreement check does not prove future cross-CPU order.
 Runtime source switching, a watchdog, a userspace counter mapping, suspend/resume
 and guest migration are not implemented or qualified; the
-[clock-source debt](../technical-debt.md#wall-clock-time-and-clock-source-performance)
+[clock-source debt](https://git.internal/PyxisOS/pyxis-os/issues/1380)
 records progress, ordering and HPET extension limits.
 
 ## Qualification

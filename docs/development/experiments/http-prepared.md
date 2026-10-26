@@ -77,7 +77,7 @@ OPEN is unchanged. Buffered payload reads add about 2.6 ms/MiB, roughly
 (14.3 → 17.2 ms, about 70 → 58 MiB/s). Source inspection attributes the extra
 work to cooperative readiness, BSP and timers when no READ is queued at TRY;
 this is not a measured per-function profile. The owner accepted the cost on
-2026-10-12, with the [throughput obligation and revisit points](../../technical-debt.md#http-provider-throughput).
+2026-10-12, with the [throughput obligation and revisit points](https://git.internal/PyxisOS/pyxis-os/issues/1451).
 The approximately 220 MiB/s buffered-read ceiling exceeds the current native TCP
 reference (70.5 MiB/s send, 85 MiB/s receive, 2026-10-09); expecting larger
 HTTP downloads to remain network-bound is an inference, not a measured result

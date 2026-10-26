@@ -70,7 +70,7 @@ SET_SEL and SET_ISOCH_DELAY remain omitted from this EP0-only inspection slice.
 The USB 3 enumeration specification requires them; complete inventory does not
 claim full enumeration conformance. Actual latency accounting belongs with power
 management/non-control scheduling, rather than fabricated zero values. See
-[technical debt](../technical-debt.md#usb-descriptor-bounds-and-per-port-preparation).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1465).
 
 Roots are inspected first, followed by an iterative breadth-first hub walk.
 USB requests remain in core; xHCI owns routing, Slot commands, speed identities,
@@ -174,7 +174,7 @@ Storage discovery remains descriptive: runtime enumeration may read descriptors
 but never probes BOT, registers raw block devices or reattaches pools. Bluetooth
 runtime binding and USB 3 HID profiles are also excluded. A displaced storage
 handle remains unavailable even if the same media returns. See
-[remaining recovery limits](../technical-debt.md#usb-switch-subtree-removal) and the
+[remaining recovery limits](https://git.internal/PyxisOS/pyxis-os/issues/1293) and the
 [qualification record](../development/experiments/usb-hub-recovery/README.md).
 
 Budgets and deadlines are implementation choices, not machine topology. Existing

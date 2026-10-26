@@ -207,6 +207,6 @@ replay exists. The provider alone may resend a frozen POST body for an explicit
 307/308 redirect. TLS servers, SSH, certificate issuance, mutual TLS, automatic
 trust updates and fully interruptible provider progress require separate scope. Platform trust, revocation, numeric HTTPS
 identity and deadline limits are recorded in
-[technical debt](../technical-debt.md#https-trust-and-platform-limits).
-The existing [startup reporting limitation](../technical-debt.md#service-startup-failure-before-publication)
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1450).
+The existing [startup reporting limitation](https://git.internal/PyxisOS/pyxis-os/issues/1446)
 still applies when a provider exits before reporting setup outcome.

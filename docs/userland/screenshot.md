@@ -11,7 +11,7 @@ Live Development and Remote and installed `pyxis` receive CAPTURE under the
 [`screenshot = true` boot policy](init.md#boot-configuration). Read-only and the
 built-in rescue space do not. Any command holding that grant can observe the
 whole local screen, independently of the shown space's authority. The
-[LAN visibility debt](../technical-debt.md#kernel-log-retention-and-lan-visibility)
+[LAN visibility debt](https://git.internal/PyxisOS/pyxis-os/issues/1358)
 records the consequence for the unauthenticated Remote terminal.
 
 ## Print Screen

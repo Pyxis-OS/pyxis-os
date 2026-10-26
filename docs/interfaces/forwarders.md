@@ -58,7 +58,7 @@ native to native or exported to exported. Native/exported switches return
 WRONG_TYPE without changing the target, even for matching FILE protocols.
 Their current invocation envelopes and transport masks differ; no FILE bridge
 is provided in this slice. Resource and transport ceilings remain fixed. The
-[debt entry](../technical-debt.md#forwarder-retarget-representation)
+[debt entry](https://git.internal/PyxisOS/pyxis-os/issues/1278)
 records the consequence and revisit point.
 
 Ordinary COPY, launch and IPC preserve an existing revocation lineage.

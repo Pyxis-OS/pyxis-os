@@ -76,7 +76,7 @@ existing driver-specific deadline and caller-detachment behavior. Runtime
 failure retains rings, payloads and bookkeeping until reboot, including after
 confirmed reset. Boot cleanup may release unpublished storage or storage whose
 device reset has been confirmed. See the existing
-[runtime retention tradeoff](../technical-debt.md#virtio-fs-runtime-resource-retention).
+[runtime retention tradeoff](https://git.internal/PyxisOS/pyxis-os/issues/1411).
 
 ## Current consumers and validation limits
 

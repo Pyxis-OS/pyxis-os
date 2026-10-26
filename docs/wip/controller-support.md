@@ -313,7 +313,7 @@ simultaneous stick/button/trigger input, keyboard button plus pad stick, and
 right-stick camera/C-button inputs. Removal/replug updates the running game's
 device list, creates a new SDL instance and resumes input with saved mappings.
 Normal process shutdown is checked; upstream handle retention is recorded in
-[technical debt](../technical-debt.md#lus-controller-reference-retention).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1274).
 
 The main settings menu still opens with Escape. Its existing controller-nav
 setting permits navigation/closing while visible; pad-only opening from hidden

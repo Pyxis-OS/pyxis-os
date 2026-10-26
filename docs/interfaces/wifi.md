@@ -2,7 +2,7 @@
 
 OPEN and WPA2-Personal/CCMP behavior is implemented. Native checks and their
 limits are recorded in the [WPA2 qualification record](../development/experiments/ax200-wpa2.md)
-and [technical debt](../technical-debt.md#ax200-wpa2-qualification-limits).
+and [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1285).
 
 The native AX200 implementation is opt-in (`wifi.ax200=1`, image option
 `WIFI_AX200=1`). It prepares firmware/DMA once at boot on a dedicated BSP
@@ -233,7 +233,7 @@ boot; it does not reconnect or replay automatically. WPA2 ordinary AP loss keeps
 the owning lease and retries the same BSSID/channel with fresh authentication;
 channel changes require a new explicit profile. Native evidence and unrun edge cases
 are in the [stage-3 record](../development/experiments/ax200-open-ap.md) and
-[qualification debt](../technical-debt.md#ax200-open-link-qualification-follow-ups).
+[qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1284).
 
 ## Station/data limits
 

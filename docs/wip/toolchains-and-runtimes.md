@@ -71,7 +71,7 @@ that it builds unchanged.
 
 Completed 2026-10-08: [C++ in userspace](../development/cxx-userspace.md).
 Cross-compiled C++ programs run with libc++, libc++abi and libunwind from the
-SDK, and fmt is the first C++ port. Its [accepted limits](../technical-debt.md#c-runtime-subset)
+SDK, and fmt is the first C++ port. Its [accepted limits](https://git.internal/PyxisOS/pyxis-os/issues/1387)
 name threads, localization and `<cmath>` as the next runtime additions, each
 when a selected port such as DevilutionX or the Clang hosting milestone needs it.
 

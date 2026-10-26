@@ -6,7 +6,7 @@ repeatable end-to-end gain from larger commands, against about 11 MiB more
 backing per controller. The slow writes wait on the device during the data and
 status phases, and roughly 15,200 small 4 KiB WRITEs per run remain at every
 command size; that small-write pattern is the open lead, recorded in
-[technical debt](../../technical-debt.md#usb-stick-write-throughput).
+[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1467).
 
 Owner decision accepted 2026-10-14 in [#824](https://git.internal/PyxisOS/pyxis-os/pulls/824):
 try SuperSpeed BOT commands up to 1 MiB before another diagnostic build, retain

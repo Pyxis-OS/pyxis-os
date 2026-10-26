@@ -82,7 +82,7 @@ its own monotonicity, synchronization and virtualization contract), and a perman
 explicit ABI/reporting availability semantics, since zero duration fields must never masquerade as
 measurements. No permanent counts-only mode was accepted, future comparisons must use profile-off timings, and
 normal-workload phase attribution remains unresolved
-([technical debt](../../../technical-debt.md#host-file-profiling-perturbation)).
+([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1305)).
 
 ## Reproduction contract
 
