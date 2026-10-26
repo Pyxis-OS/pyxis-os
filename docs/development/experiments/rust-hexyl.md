@@ -141,7 +141,7 @@ is retained in `/shared/present/rust-rebase-20261026/`.
 
 ## Platform-only patch set (chronium, 2026-10-26)
 
-Ports `3a056f50` removes patch 0002 entirely. The two remaining patches are
+Ports `deff7c1b` removes patch 0002 entirely. The two remaining patches are
 platform integration: standard NotSeekable in place of an unsupported direct
 libc dependency, and the native terminal_size backend. The local locked
 terminal_size entry selects that backend at the same checksum-pinned version,
