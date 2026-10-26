@@ -272,6 +272,27 @@ phys_addr_t pmm_alloc_below(size_t pages, phys_addr_t maximum)
   return physical;
 }
 
+size_t pmm_alloc_frames(phys_addr_t *frames, size_t count)
+{
+  KASSERT(unavailable_bitmap && frames && count && count <= PMM_FRAME_BATCH_MAX);
+  spin_lock(&pmm_lock);
+  size_t allocated = 0;
+  for (; allocated < count; ++allocated) {
+    phys_addr_t physical = take_run_locked(1, frame_count);
+    if (!physical) {
+      break;
+    }
+    frames[allocated] = physical;
+  }
+  bool pressure = allocated < count || stats.free_frames < stats.total_frames / 16;
+  spin_unlock(&pmm_lock);
+
+  if (pressure) {
+    mm_pressure_notify();
+  }
+  return allocated;
+}
+
 void pmm_free(phys_addr_t physical, size_t pages)
 {
   size_t first = physical / PAGE_SIZE;
@@ -298,6 +319,43 @@ void pmm_free(phys_addr_t physical, size_t pages)
 
   stats.free_frames += pages;
   stats.allocated_frames -= pages;
+  spin_unlock(&pmm_lock);
+}
+
+void pmm_free_frames(const phys_addr_t *frames, size_t count)
+{
+  KASSERT(unavailable_bitmap && frames && count && count <= PMM_FRAME_BATCH_MAX);
+  /* The vector is private to this caller. Check its shape/duplicates outside
+   * the leaf lock; allocation bits are validated together under the lock. */
+  for (size_t i = 0; i < count; ++i) {
+    phys_addr_t physical = frames[i];
+    if (!physical || (physical & (PAGE_SIZE - 1)) ||
+        physical / PAGE_SIZE >= frame_count) {
+      panic("PMM: invalid free frame 0x%lx", physical);
+    }
+    for (size_t j = 0; j < i; ++j) {
+      if (physical == frames[j]) {
+        panic("PMM: duplicate free frame 0x%lx", physical);
+      }
+    }
+  }
+
+  spin_lock(&pmm_lock);
+  for (size_t i = 0; i < count; ++i) {
+    size_t frame = frames[i] / PAGE_SIZE;
+    if (!bit_get(allocatable_bitmap, frame) || !bit_get(unavailable_bitmap, frame)) {
+      panic("PMM: reserved or already-free frame 0x%lx", frames[i]);
+    }
+  }
+  for (size_t i = 0; i < count; ++i) {
+    size_t frame = frames[i] / PAGE_SIZE;
+    bit_set(unavailable_bitmap, frame, false);
+    if (frame < first_candidate) {
+      first_candidate = frame;
+    }
+  }
+  stats.free_frames += count;
+  stats.allocated_frames -= count;
   spin_unlock(&pmm_lock);
 }
 
