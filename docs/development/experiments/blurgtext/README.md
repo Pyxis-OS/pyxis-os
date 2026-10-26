@@ -163,3 +163,60 @@ captures, comparison details and the upstream draft stay under
 so the initial package attempt reported a transport failure without changing
 the set; keeping the helper running resolved that fixture issue. No new port
 code or failure workaround was added for it.
+
+## 0.2.1 font-query fix, 2026-10-26
+
+Upstream tag **0.2.1** identifies `bfbb3df576d2df55451df7621d7e7b506dfae8fe`.
+The cached release page, tag archive PAX commit and commit archive agree; both
+archives contain identical file trees. All four direct gitlinks and PlutoVG's
+nested gitlink match 0.2.0, as do the bundled FreeType/HarfBuzz release hashes.
+The three platform patches apply unchanged with zero fuzz. Upstream moves the
+font-cache entry copy before a system-font callback that can grow its hash table,
+fixing [issue #7](https://github.com/CallumDev/blurgtext/issues/7). The Pyxis
+backend already avoided that table mutation path; no local core patch is added.
+
+The existing isolated Fontconfig reproduction was rebuilt on the Linux Codex
+host against unpatched upstream 0.2.1 with ASan/UBSan, the same source program
+and private one-face Roboto configuration. Eight missing-family aliases and a
+subsequent bold lookup return normally: **exit 0, no sanitizer diagnostic**.
+The retained 0.2.0 record reports the corresponding heap-use-after-free. This is
+one stock-backend host reproduction, not native-backend or general lifetime,
+thread-safety or hostile-font qualification.
+
+The QEMU code/package revision is parent `54b76c7e2da9`, ports `443dc904`;
+subsequent parent changes add this record and update the user guide only.
+A fresh SDK from userland `6cd1cf57`, Mesa, both SDL2 profiles and blurgtext were
+built with the existing `3d69e83` compiler image. No dependency binary prefix was
+reused. The disposable builder needed its ordinary Meson/Python/flex/bison and
+Kconfiglib host tools installed; no compiler image was rebuilt or published.
+
+The guest uses the current kernel and build's `os-release` with the released
+0.0.9 core programs (userland `81ee85f9`), under the kernel's declared 0.0.9 ABI.
+Only local live configuration/init scripts and the transient font-query program
+are overlaid. The demo and fonts are not in the boot archive. The unchanged
+released `fonts` data package is reused without rebuilding or changing its bytes.
+The core fixture reports an unavailable screenshot-saver command because that
+optional program is absent; QMP provides the actual unedited captures.
+
+KVM/q35, four CPUs, 3 GiB, Bochs **800×632** and VirtIO networking:
+
+- Native `pkg` installs blurgtext 0.2.1 and fonts from a localhost-only, explicitly
+  unsigned development repository; host archive checks and native `pkg verify`
+  pass for both packages and the selected command index.
+- The retained one-off font query program passes actual styles, generic/direct/
+  case-insensitive families, missing-family aliases/cache growth, synthetic CJK
+  bold without canonical Regular pollution, reciprocal coverage fallback, a
+  missing scalar and destruction. It is not shipped or added as a test.
+- Bare `blurgtext` displays the original strings, layout, spans, UTF-16 cursor,
+  SVG cat/cucumber, bread and CJK fallback. Roboto stays **90.203125 × 28**.
+  The lossless **800×600** content has **zero differing pixels** from the 0.2.0
+  capture, with the actual pointer parked at the same lower-right edge. The
+  native navigation bar is excluded; no scaling, retouching or compositing.
+- Escape returns to the prompt. Read-only GDB with inferior calls disabled finds
+  all four CPUs in ordinary idle/sleep paths after exit, then detaches normally.
+
+Raw source/tag/build/package records, host repro logs, unedited captures, pixel
+comparison and read-only debugger output are retained under
+`/shared/present/blurgtext-0.2.1/`; the selected screenshot is also retained in the
+owner's screenshot collection. QEMU and the HTTP helper were stopped. No native
+hardware, benchmark or broader security/font-profile claim follows.
