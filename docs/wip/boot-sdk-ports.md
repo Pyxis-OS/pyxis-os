@@ -139,14 +139,14 @@ installed ThinkPad is open.
 
 ## Planned next kernel milestone
 
-**Remove BSP-owned allocation and VM mutation** (chronium, 2026-10-22). Starts
-after the milestones in flight finish, before any new track. Process page tables
-and VM metadata are still mutated only on the BSP, and frame allocation and
-cleanup funnel through its executor and reaper (see [SMP](../kernel/smp.md#memory-and-output-boundaries)
-and [memory](../kernel/memory.md)). The direction: per-address-space mutation on
-the caller's CPU, per-CPU frame allocation, IPI shootdown for shared mappings,
-and cleanup that does not route through one CPU. A proposal comes first; nothing
-here authorizes code.
+[Remove BSP-owned allocation and VM mutation](bsp-removal.md): proposal assigned
+to Codex alpha (chronium, 2026-10-26), after merged/native-qualified XSAVE/AVX
+and before the JIT kernel task. Caller-CPU transactions, per-address-space
+ownership, frame allocation, acknowledged invalidation and non-centralized
+cleanup. The first-task execution/quiescence/allocator decisions are accepted
+(chronium, 2026-10-26); task 1 starts with a matched baseline. Task 2 starts by
+measuring the shared PMM path after dispatcher removal and bringing the frame
+allocation decision to chronium.
 
 ## Candidates for the next milestone
 
