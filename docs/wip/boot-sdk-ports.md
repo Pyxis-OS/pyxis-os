@@ -126,9 +126,9 @@ command/SDK views, core archive and online Install are delivered. The
 [updater milestone](pkg-upgrade.md) records signed repositories and `pkg upgrade`
 with QEMU new/previous/rescue qualification; the native ThinkPad upgrade gate
 remains open. The [0.0.10 upgrade milestone](pkg-upgrade-0.0.10.md) records the
-accepted one-active-set, no-rollback plan; task 1 is assigned, and later
-command/signing-floor decisions remain open. Dynamic linking and on-device
-source builds remain later work.
+accepted one-active-set, no-rollback plan. Tasks 1–2 are merged and task 3 is
+in qualification; the signing-floor decision remains open. Dynamic linking
+and on-device source builds remain later work.
 
 [Wi-Fi](wifi.md): stages 1–4 complete; the [AX200 reference](../devices/ax200-wifi.md)
 covers firmware, passive scan, legacy open and WPA2-CCMP links with independent

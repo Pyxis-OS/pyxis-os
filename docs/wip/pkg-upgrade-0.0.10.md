@@ -1,8 +1,8 @@
 # 0.0.10 package upgrades
 
-Status: **first and task-2 decisions accepted (chronium, 2026-10-26); task 2 in review.**
-This milestone changes the delivered [updater](pkg-upgrade.md). Later-round
-choices below remain open; this plan does not claim the new upgrade is built.
+Status: **tasks 1–2 merged; task 3 in qualification (chronium, 2026-10-26).**
+This milestone changes the delivered [updater](pkg-upgrade.md). The signing-floor
+choice below remains open; this plan does not claim a completed release.
 
 ## Accepted contract
 
@@ -54,9 +54,11 @@ choices below remain open; this plan does not claim the new upgrade is built.
    then validates the whole proposed set. An unchanged set reports `already up
    to date` without publishing a new set. The recorded origin binds the
    repository name, URL and signed/unsigned policy. A legacy entry offered by
-   exactly one configured source adopts it with `origin: NAME (only source)`
-   shown in the whole-plan review. Multiple possible sources need an explicit
-   console choice, batched by source; `--yes` cannot choose an ambiguous
+   exactly one configured source adopts it. The whole-plan review shows one
+   summary line, `N packages adopted from NAME (only source)`, per source;
+   individual lines remain for actual package changes or ambiguous origins.
+   Multiple possible sources need an explicit console choice, batched by
+   source; `--yes` cannot choose an ambiguous
    origin. Proposed removals need individual approval. *(chronium, 2026-10-26)*
 
 The pending transition is proof of the next selection, not a second active
@@ -81,6 +83,29 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   qualify the actual 0.0.9 migration and the reboot prompt.
 - [ ] Add Coexist activation evidence and specific boot/`pkg` diagnostics.
 - [ ] Settle the signing-floor source and qualify first repository contact.
+
+## Task 3 qualification to date
+
+On a disposable 3 GiB QEMU disk, a Classic Install from the task-3 image
+published the boot/package identity and booted into its installed shell. A
+released 0.0.9 image installed 38 packages on another disposable disk; for a
+small local migration fixture, its package set was explicitly reduced to
+`shell` and its single repository was redirected to the matching task-3 build.
+The 0.0.10 installer Update reviewed the target, staged set 3 while `current`
+remained set 2, published a new ESP attempt, and reported verified activation.
+The installed boot then logged `verified package set 3 for this boot`, reached
+the shell, changed `current` to set 3, published a matching `.boot-selection`
+and removed `.upgrade-pending`. This checks the 0.0.9 migration path with one
+legacy-origin package, not a 38-package download at the target revision. An
+earlier refused Update had synchronized system configuration on this disk but
+left its 0.0.9 boot selection and package set unchanged; the successful run
+therefore also checked a retry after that no-publication failure.
+
+The in-system `pkg upgrade` publication, its reboot action, uncertain boot
+evidence and Coexist activation record still need qualification or later-round
+work before this milestone is complete. The 0.0.10 release notes must tell
+0.0.9 users to use installer Update, because the 0.0.9 `pkg upgrade` client
+cannot stage this transition.
 
 ## Open decisions for later rounds
 
