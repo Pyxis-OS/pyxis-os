@@ -2,6 +2,7 @@
 #define USB_HID_H
 
 #include <kernel/input.h>
+#include <kernel/gamepad.h>
 #include "host.h"
 #include "settings.h"
 #include "hid_report.h"
@@ -26,6 +27,7 @@ struct usb_hid_interface {
 
 struct usb_hid_binding {
   struct input_source source;
+  struct gamepad_source gamepad;
   struct usb_host_device *host;
   struct usb_hid_interface interfaces[USB_HID_ENDPOINTS_PER_DEVICE];
   struct usb_hid_interface candidates[USB_HID_MOUSE_CANDIDATES];
@@ -36,18 +38,19 @@ struct usb_hid_binding {
   enum usb_result result;
   unsigned stage, interface, initial_observations, candidate_count, candidate, layout;
   uint8_t configuration;
-  uint16_t vendor, product;
+  uint16_t vendor, product, version;
   bool initial_keys[KEY_COUNT];
   unsigned initial_buttons;
   bool ticket_active, claimed, active, lost, retirement_pending;
 };
 
 /* The core validates the complete configuration before selecting its first
- * eligible keyboard/mouse configuration. Report admission follows configuration;
+ * eligible keyboard/mouse or dedicated Edge configuration. Report admission follows configuration;
  * a generic HID candidate does not establish that a mouse is supported.
  * Existing class owners win. All admission storage is retained in the record. */
 void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuration,
-                    size_t bytes, enum usb_speed speed, uint16_t vendor, uint16_t product);
+                    size_t bytes, enum usb_speed speed, uint16_t vendor, uint16_t product,
+                    uint16_t version);
 enum usb_result usb_hid_begin(struct usb_hid_binding *binding,
                               struct usb_host_device *device, uint64_t deadline);
 /* One setup step or nonblocking EP0 collection per owning worker pass. */

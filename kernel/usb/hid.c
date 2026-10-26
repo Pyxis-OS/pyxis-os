@@ -6,6 +6,7 @@
 #include <kernel/task.h>
 #include <kernel/boot/options.h>
 #include "hid.h"
+#include "edge.h"
 
 #define USB_CONFIGURATION_BYTES 9
 #define USB_DESCRIPTOR_INTERFACE 4
@@ -16,6 +17,8 @@
 #define USB_SUBCLASS_BOOT 1
 #define USB_PROTOCOL_KEYBOARD 1
 #define USB_PROTOCOL_MOUSE 2
+/* Internal profile marker; the Edge's bInterfaceProtocol is zero. */
+#define USB_PROTOCOL_EDGE 3
 #define USB_ENDPOINT_IN 0x80
 #define USB_ENDPOINT_INTERRUPT 3
 #define USB_ENDPOINT_TYPE_MASK 3
@@ -49,7 +52,7 @@
 #define USB_HID_MOUSE_SAMPLE_BYTES 16
 
 enum hid_stage {
-  HID_CONFIGURATION, HID_KEYBOARD_DESCRIPTOR, HID_MOUSE_DESCRIPTOR, HID_ENDPOINTS,
+  HID_CONFIGURATION, HID_KEYBOARD_DESCRIPTOR, HID_MOUSE_DESCRIPTOR, HID_EDGE_DESCRIPTOR, HID_ENDPOINTS,
   HID_PROTOCOL, HID_PROTOCOL_READBACK, HID_FEATURE_READ, HID_FEATURE_WRITE, HID_FEATURE_CONFIRM,
   HID_IDLE, HID_INITIAL, HID_START, HID_FINISHED,
 };
@@ -137,6 +140,17 @@ static void select_interface(struct usb_hid_binding *candidate,
   if (!interface->protocol || inputs != 1 || !interface->descriptor_bytes) {
     return;
   }
+  if (interface->protocol == USB_PROTOCOL_EDGE) {
+    if (interface->number == USB_EDGE_INTERFACE &&
+        interface->endpoint.address == USB_EDGE_ENDPOINT &&
+        interface->endpoint.packet == USB_EDGE_REPORT_BYTES &&
+        interface->endpoint.interval == USB_EDGE_INTERVAL && !interface->endpoint.transactions &&
+        interface->descriptor_bytes == USB_EDGE_DESCRIPTOR_BYTES &&
+        !candidate->interfaces[0].protocol) {
+      candidate->interfaces[0] = *interface;
+    }
+    return;
+  }
   if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
     if (!candidate->interfaces[0].protocol) {
       candidate->interfaces[0] = *interface;
@@ -147,7 +161,8 @@ static void select_interface(struct usb_hid_binding *candidate,
 }
 
 void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuration,
-                    size_t bytes, enum usb_speed speed, uint16_t vendor, uint16_t product)
+                    size_t bytes, enum usb_speed speed, uint16_t vendor, uint16_t product,
+                    uint16_t version)
 {
   if (binding->configuration || (speed != USB_SPEED_LOW && speed != USB_SPEED_FULL &&
       speed != USB_SPEED_HIGH)) {
@@ -156,6 +171,8 @@ void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuratio
   binding->configuration = configuration[5];
   binding->vendor = vendor;
   binding->product = product;
+  binding->version = version;
+  bool edge = vendor == USB_EDGE_VENDOR && product == USB_EDGE_PRODUCT;
   struct usb_hid_interface interface = {0};
   unsigned inputs = 0;
   for (size_t offset = USB_CONFIGURATION_BYTES; offset < bytes; offset += configuration[offset]) {
@@ -166,11 +183,13 @@ void usb_hid_select(struct usb_hid_binding *binding, const uint8_t *configuratio
       inputs = 0;
       bool boot = part[6] == USB_SUBCLASS_BOOT;
       if (!part[3] && part[5] == USB_CLASS_HID &&
+          (!edge || (part[2] == USB_EDGE_INTERFACE && !part[6] && !part[7])) &&
           ((boot && (part[7] == USB_PROTOCOL_KEYBOARD || part[7] == USB_PROTOCOL_MOUSE)) ||
            (!part[6] && !part[7]))) {
         interface.number = part[2];
         interface.boot = boot;
-        interface.protocol = boot ? part[7] : USB_PROTOCOL_MOUSE;
+        interface.protocol = edge && !boot ? USB_PROTOCOL_EDGE :
+          boot ? part[7] : USB_PROTOCOL_MOUSE;
       }
     } else if (interface.protocol && part[1] == USB_DESCRIPTOR_HID && part[0] >= 9 &&
                part[5] && part[0] == 6 + 3 * part[5]) {
@@ -244,7 +263,11 @@ void usb_hid_lost(struct usb_hid_binding *binding)
   }
   uint64_t flags = cpu_save_interrupts();
   if (binding->active) {
-    input_source_lost(&binding->source);
+    if (binding->interfaces[0].protocol == USB_PROTOCOL_EDGE) {
+      gamepad_source_lost(&binding->gamepad);
+    } else {
+      input_source_lost(&binding->source);
+    }
   }
   binding->active = false;
   binding->lost = true;
@@ -365,7 +388,7 @@ static struct usb_setup bind_request(const struct usb_hid_binding *binding)
     .index = interface->number,
   };
   switch (binding->stage) {
-  case HID_KEYBOARD_DESCRIPTOR:
+  case HID_KEYBOARD_DESCRIPTOR: case HID_EDGE_DESCRIPTOR:
     setup.request_type = USB_REQUEST_INTERFACE_IN;
     setup.request = USB_REQUEST_GET_DESCRIPTOR;
     setup.value = USB_DESCRIPTOR_REPORT << 8;
@@ -515,17 +538,26 @@ static enum usb_result start_binding(struct usb_hid_binding *binding)
   }
   uint64_t flags = cpu_save_interrupts();
   const struct usb_hid_interface *mouse = &binding->interfaces[1];
-  if (mouse->protocol) {
-    input_source_pointer_configure(&binding->source, INPUT_POINTER_MOUSE,
-        POINTER_SCROLL_UNITS_PER_DETENT, mouse->report_protocol ? binding->mouse.pan_multiplier : 1,
-        POINTER_SCROLL_UNITS_PER_DETENT, mouse->report_protocol ? binding->mouse.wheel_multiplier : 1);
-  }
-  input_source_attach(&binding->source, binding->interfaces[0].protocol != 0, mouse->protocol != 0);
-  if (binding->interfaces[0].protocol) {
-    input_source_initial_keyboard(&binding->source, binding->initial_keys);
-  }
-  if (mouse->protocol) {
-    input_source_initial_pointer(&binding->source, binding->initial_buttons);
+  bool edge = binding->interfaces[0].protocol == USB_PROTOCOL_EDGE;
+  if (edge) {
+    if (!gamepad_source_attach(&binding->gamepad, binding->vendor, binding->product,
+        binding->version)) {
+      cpu_restore_interrupts(flags);
+      return bind_failed(binding, USB_UNSUPPORTED);
+    }
+  } else {
+    if (mouse->protocol) {
+      input_source_pointer_configure(&binding->source, INPUT_POINTER_MOUSE,
+          POINTER_SCROLL_UNITS_PER_DETENT, mouse->report_protocol ? binding->mouse.pan_multiplier : 1,
+          POINTER_SCROLL_UNITS_PER_DETENT, mouse->report_protocol ? binding->mouse.wheel_multiplier : 1);
+    }
+    input_source_attach(&binding->source, binding->interfaces[0].protocol != 0, mouse->protocol != 0);
+    if (binding->interfaces[0].protocol) {
+      input_source_initial_keyboard(&binding->source, binding->initial_keys);
+    }
+    if (mouse->protocol) {
+      input_source_initial_pointer(&binding->source, binding->initial_buttons);
+    }
   }
   binding->active = true;
   cpu_restore_interrupts(flags);
@@ -540,6 +572,10 @@ static enum usb_result start_binding(struct usb_hid_binding *binding)
   }
   binding->result = USB_OK;
   binding->stage = HID_FINISHED;
+  if (edge) {
+    kdebug("usb HID: DualSense Edge USB source attached\n");
+    return USB_OK;
+  }
   describe_binding(binding);
   kdebug("usb HID: %s%s%s source attached\n",
          binding->interfaces[0].protocol ? "boot keyboard" : "",
@@ -660,6 +696,11 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
       return USB_BUSY;
     }
   }
+  if (binding->stage == HID_EDGE_DESCRIPTOR &&
+      binding->interfaces[0].protocol != USB_PROTOCOL_EDGE) {
+    next_stage(binding);
+    return USB_BUSY;
+  }
   if (binding->stage == HID_ENDPOINTS) {
     if (binding->interface == USB_HID_ENDPOINTS_PER_DEVICE) {
       next_stage(binding);
@@ -697,6 +738,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
              binding->stage == HID_INITIAL) {
     while (binding->interface < USB_HID_ENDPOINTS_PER_DEVICE &&
            (!binding->interfaces[binding->interface].protocol ||
+            binding->interfaces[binding->interface].protocol == USB_PROTOCOL_EDGE ||
             (binding->stage == HID_PROTOCOL && !binding->interfaces[binding->interface].boot) ||
             (binding->stage == HID_PROTOCOL_READBACK &&
              (!binding->interfaces[binding->interface].boot ||
@@ -768,6 +810,14 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
     interface->qemu_keyboard = completion.result == USB_OK &&
       completion.bytes == sizeof(qemu_keyboard_descriptor) &&
       !memcmp(binding->control, qemu_keyboard_descriptor, sizeof(qemu_keyboard_descriptor));
+    next_stage(binding);
+    break;
+  case HID_EDGE_DESCRIPTOR:
+    describe_descriptor(binding, interface, &completion);
+    if (completion.result != USB_OK || completion.bytes != interface->descriptor_bytes ||
+        !usb_edge_descriptor(binding->control, completion.bytes)) {
+      return bind_failed(binding, USB_UNSUPPORTED);
+    }
     next_stage(binding);
     break;
   case HID_MOUSE_DESCRIPTOR: {
@@ -1019,7 +1069,19 @@ void usb_hid_collect(struct usb_hid_binding *binding)
         return;
       }
       bool keys[KEY_COUNT], unresolved;
-      if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
+      if (interface->protocol == USB_PROTOCOL_EDGE) {
+        struct gamepad_state state;
+        if (!usb_edge_decode(binding->control, completion.bytes, &state)) {
+          if (malformed_report(binding, interface, completion.bytes, false)) {
+            return;
+          }
+          continue;
+        }
+        interface->malformed_consecutive = 0;
+        uint64_t flags = cpu_save_interrupts();
+        gamepad_source_report(&binding->gamepad, &state);
+        cpu_restore_interrupts(flags);
+      } else if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
         if (!keyboard_snapshot(binding->control, completion.bytes, keys, &unresolved)) {
           if (malformed_report(binding, interface, completion.bytes, false)) {
             return;
