@@ -120,7 +120,8 @@ The [std milestone](../wip/rust-std.md) uses a separate Linux-host compiler
 with built-in `x86_64-unknown-pyxis`, installed Pyxis std/core/alloc and host
 std/proc_macro for build scripts. Gate 2's compiler revision is
 `5e85f86de5f7dc45a485fa8a3eb376487923bc0b`; hexyl adds the read-only File
-backend at `a5c9a1815816cddb77f5c58238adf549e618b3a4`.
+backend at `a5c9a1815816cddb77f5c58238adf549e618b3a4`. Managed workers
+are added at `f08e6f816abf6396aa4547fe11ff0f214a951384`.
 The target keeps `target_os="pyxis"`
 and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
 [first std main record](experiments/rust-std-main.md) separate their qualification
@@ -130,7 +131,9 @@ The prebuilt stage-1 profile above remains separate and unchanged.
 Native libc declarations come from [libc #1](https://git.internal/PyxisOS/pyxis-libc/pulls/1)
 at `a6aac31c87316e4a351d8e7185ad8898e545d22a`, with read-only file
 bindings added by [libc #2](https://git.internal/PyxisOS/pyxis-libc/pulls/2)
-at `417acae00d4e21abf1a668c8dc71361bfa03d3aa`, overlaid through exact HTTPS
+at `417acae00d4e21abf1a668c8dc71361bfa03d3aa`. Managed-worker declarations
+come from [libc #3](https://git.internal/PyxisOS/pyxis-libc/pulls/3) at
+`bdaad80e28d7dc793f034460787c94dea622f588`, overlaid through exact HTTPS
 `[patch.crates-io]` entries in the Rust compiler workspace, library workspace
 and sample workspace, with their matching lockfiles. Keep this overlay in
 consumer workspaces that import libc; it does not change the closed crates.io proxy. The SDK
@@ -156,7 +159,7 @@ On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
 ```sh
 git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
 git -C /absolute/pyxis-rust fetch origin
-git -C /absolute/pyxis-rust checkout --detach a5c9a1815816cddb77f5c58238adf549e618b3a4
+git -C /absolute/pyxis-rust checkout --detach f08e6f816abf6396aa4547fe11ff0f214a951384
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
@@ -257,8 +260,16 @@ existing `app://` grant. Missing grants must produce real failure;
 linking std adds no ambient authority.
 
 The read-only profile additionally supports native File open/read/seek/clone,
-regular-file length and reported metadata. Gate 3 managed workers/TLS and the
-remaining gate 4 file operations are pending. Writable opens, enumeration,
+regular-file length and reported metadata. The worker-enabled prefix also supplies
+managed spawn/join/detach, scoped threads, channels and contended synchronization
+through existing libc threads and native parking. See the
+[worker record](experiments/rust-std-workers.md). Request `threads/manage` and
+`memory/manage` for creation, plus clock rights for timed operations. Default
+worker stacks are 1 MiB, explicit requests round up within the 8 MiB ceiling,
+and real record/backing failures remain errors. Panic aborts the process; join
+workers before orderly main return. `yield_now` is a weak CPU hint without a
+forced reschedule or fairness promise, and `available_parallelism` remains
+Unsupported. Gate 4 file operations are still pending. Writable opens, enumeration,
 namespace mutation, child processes and network operations remain unsupported;
 hexyl delivery does not complete the std milestone.
 

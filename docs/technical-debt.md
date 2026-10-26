@@ -1713,6 +1713,17 @@ Saves are Quake's trusted text format, and shareware and retail data share `home
 QuakeC strings outside the hunk use a 512-entry table whose overflow stops the game with an error. Revisit when a second data set matters.
 Config, saves and screenshots follow the [atomic-save limits](#atomic-save-limits); demos are still recorded in place.
 
+## Rust worker scheduling observations
+
+The [native std profile](wip/rust-std.md#worker-yield--accepted-chronium-2026-10-26)
+uses the accepted weak CPU-hint `yield_now`: it does not force a reschedule or
+promise fairness, so polling contention can consume a timeslice. Blocking
+primitives use real address waits. `available_parallelism` returns Unsupported
+because online CPU count does not describe the caller's effective eligibility;
+a consumer may therefore need an explicit worker count. Revisit a native yield
+only with a concrete workload, and expose truthful effective eligibility before
+replacing that error. This gate adds neither scheduler controls nor a fake count.
+
 ## Hexyl upstream I/O errors
 
 The optional hexyl 0.17.0 port retains its upstream read loop: persistent input

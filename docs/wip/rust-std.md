@@ -224,6 +224,19 @@ that handle would report read-only even where a separate writable open succeeds.
 Chronium requested that this consequence be reviewed, not silently accepted.
 No permission behavior changes in the worker gate.
 
+### Managed-worker delivery
+
+[Libc #3](https://git.internal/PyxisOS/pyxis-libc/pulls/3) at `bdaad80e`
+adds the existing managed lifecycle declarations. [Rust #4](https://git.internal/PyxisOS/pyxis-rust/pulls/4)
+at `f08e6f816` implements the worker adapter; [Pyxis #1250](https://git.internal/PyxisOS/pyxis-os/pulls/1250)
+selects its libc overlay and records the [qualification](../development/experiments/rust-std-workers.md).
+Userland remains `6cd1cf57`: no new C helper, kernel operation, ABI or grant.
+Spawn transfers startup state once; join consumes the managed observer, and
+JoinHandle drop detaches through libc. Names and ThreadId are Rust metadata;
+no native OS identity or scheduler control is invented. Contended synchronization,
+channels and TLS/key/runtime cleanup are qualified on one and four QEMU CPUs.
+Writable files and directory mutation remain the next separate gate.
+
 ## Hexyl admission
 
 Accepted pin: [v0.17.0](https://github.com/sharkdp/hexyl/tree/v0.17.0), commit
@@ -284,7 +297,7 @@ Installed std metadata does not promise every std API or crate works.
    before using it in filesystem adapters. Qualify missing grants and teardown.
    **After this task chronium can:** run an ordinary Rust main using strings,
    collections, arguments, environment, output and clocks under explicit grants.
-3. [ ] **Threads/TLS.** Implement synchronization, spawn/join/detach, parking,
+3. [x] **Threads/TLS.** Implement synchronization, spawn/join/detach, parking,
    scoped threads and destructor/per-thread cleanup ordering, publishing required
    libc helpers first. Qualify exhaustion and no lost wakeups, including TLS
    initialized during key cleanup. Record panic-abort and live-worker exit limits.
