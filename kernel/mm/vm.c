@@ -5,6 +5,12 @@
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
+#include <kernel/mm/kernel_owner.h>
+#include <kernel/object/object.h>
+#include <kernel/object/execution_group.h>
+#include <kernel/process.h>
+#include <kernel/spinlock.h>
+#include <kernel/task.h>
 #include <kernel/panic.h>
 #include <kernel/user/address_wait.h>
 #include <stdatomic.h>
@@ -15,6 +21,8 @@ enum range_state {
   RANGE_RESERVED,
   RANGE_BACKED,
   RANGE_SPARSE,
+  RANGE_WINDOW,
+  RANGE_RETIRED,
 };
 
 /* Metadata and token work never scale with an unused reservation span. */
@@ -35,6 +43,9 @@ struct vm_range {
   uint64_t *wait_tokens; /* Private owned suffix; zero entries are ineligible. */
   struct vm_extent *extents;
   bool sparse_withdrawn; /* Retired-space destruction only. */
+  bool quarantined; /* An unconfirmed shared retirement: never clear/reuse. */
+  struct execution_group *retirement_group;
+  struct vm_range *retirement_next;
   enum range_state state;
   struct vm_range *prev, *next;
 };
@@ -54,14 +65,29 @@ _Static_assert(BACKING_RUN_PAGES <= PMM_FRAME_BATCH_MAX, "bounded PMM frame run"
 static struct vm_space kernel_space;
 /* Any-CPU reservation; never reused, even after failed provisional backing. */
 static atomic_uint_fast64_t next_wait_token = 1;
+/* Kernel range links/counters and retained cleanup queue. No allocation/wait
+ * under this guard; structural exclusion belongs to the logical owner. */
+static struct spinlock registry_guard;
+static struct vm_range *retired_first, *retired_last;
 
-/* The general kernel area stays with the BSP. Its ranges are reused, and
- * changing a reused mapping that another CPU may hold would need a remote TLB
- * shootdown. Heap growth maps its own arena instead. */
 static void require_kernel_owner(const struct vm_space *space)
 {
   if (space == &kernel_space) {
-    KASSERT(arch_cpu_index() == 0);
+    KASSERT(vm_kernel_owner_held());
+  }
+}
+
+static void registry_lock(const struct vm_space *space)
+{
+  if (space == &kernel_space) {
+    spin_lock(&registry_guard);
+  }
+}
+
+static void registry_unlock(const struct vm_space *space)
+{
+  if (space == &kernel_space) {
+    spin_unlock(&registry_guard);
   }
 }
 
@@ -184,6 +210,7 @@ static void merge_next(struct vm_space *space, struct vm_range *range)
 
 static void release_range(struct vm_space *space, struct vm_range *range)
 {
+  KASSERT(!range->quarantined && !range->retirement_group && !range->retirement_next);
   range->state = RANGE_FREE;
   range->backed_pages = 0;
   KASSERT(!range->wait_tokens);
@@ -272,10 +299,9 @@ static enum mm_result split_free_range(struct vm_space *space,
   return MM_OK;
 }
 
-enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment,
+static enum mm_result reserve_range(struct vm_space *space, size_t bytes, size_t alignment,
                           uintptr_t *result)
 {
-  require_kernel_owner(space);
   if (!result) {
     return MM_INVALID;
   }
@@ -309,9 +335,8 @@ enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment
   return MM_NO_MEMORY;
 }
 
-enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes)
+static enum mm_result reserve_at(struct vm_space *space, uintptr_t base, size_t bytes)
 {
-  require_kernel_owner(space);
   size_t pages;
   if (!space || !space->head || (base & (PAGE_SIZE - 1)) ||
       !page_count(bytes, &pages)) {
@@ -339,6 +364,25 @@ enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t byte
   return MM_INVALID;
 }
 
+enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment,
+    uintptr_t *result)
+{
+  require_kernel_owner(space);
+  registry_lock(space);
+  enum mm_result status = reserve_range(space, bytes, alignment, result);
+  registry_unlock(space);
+  return status;
+}
+
+enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes)
+{
+  require_kernel_owner(space);
+  registry_lock(space);
+  enum mm_result status = reserve_at(space, base, bytes);
+  registry_unlock(space);
+  return status;
+}
+
 static enum mm_result require_unmapped(struct vm_space *space,
                                        const struct vm_range *range)
 {
@@ -349,6 +393,9 @@ enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
 {
   require_kernel_owner(space);
   struct vm_range *range = find_range(space, base, bytes);
+  if (range && range->quarantined) {
+    return MM_BUSY;
+  }
   if (!range || range->state != RANGE_RESERVED) {
     return MM_INVALID;
   }
@@ -358,7 +405,9 @@ enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
     return status;
   }
 
+  registry_lock(space);
   release_range(space, range);
+  registry_unlock(space);
   return MM_OK;
 }
 
@@ -390,12 +439,6 @@ static void drop_wait_tokens(struct vm_space *space, struct vm_range *range)
   }
 }
 
-static void retire_backing(struct vm_space *space, struct vm_range *range)
-{
-  drop_wait_tokens(space, range);
-  free_backing(space, backing_base(range), range->backed_pages);
-}
-
 enum mm_result vm_back_begin(struct vm_space *space, uintptr_t base, size_t bytes,
                              unsigned permissions, struct vm_backing *backing)
 {
@@ -403,6 +446,9 @@ enum mm_result vm_back_begin(struct vm_space *space, uintptr_t base, size_t byte
   *backing = (struct vm_backing){0};
   size_t pages;
   struct vm_range *range = range_containing(space, base);
+  if (range && range->quarantined) {
+    return MM_BUSY;
+  }
   if (!range || range->state != RANGE_RESERVED ||
       !page_count(bytes, &pages) ||
       pages != range->pages - (base - range->base) / PAGE_SIZE ||
@@ -497,9 +543,11 @@ bool vm_back_step(struct vm_space *space, struct vm_backing *backing, size_t bud
           backing->tokens[i] = backing->first_token ? backing->first_token + i : 0;
         }
       }
+      registry_lock(space);
       range->wait_tokens = backing->tokens;
       range->backed_pages = backing->pages;
       range->state = RANGE_BACKED;
+      registry_unlock(space);
       backing->tokens = NULL;
       return true;
     }
@@ -567,14 +615,217 @@ enum mm_result vm_alloc_at(struct vm_space *space, uintptr_t base, size_t bytes,
 
 enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes)
 {
+  struct vm_reclaim reclaim;
+  enum mm_result status = vm_free_begin(space, base, bytes, &reclaim);
+  if (status == MM_OK) {
+    KASSERT(vm_free_step(&reclaim, SIZE_MAX));
+  }
+  return status;
+}
+
+enum mm_result vm_free_begin(struct vm_space *space, uintptr_t base, size_t bytes,
+    struct vm_reclaim *reclaim)
+{
   require_kernel_owner(space);
+  *reclaim = (struct vm_reclaim){0};
   struct vm_range *range = find_range(space, base, bytes);
+  if (range && (range->quarantined || range->state == RANGE_RETIRED)) {
+    return MM_BUSY;
+  }
   if (!range || range->state != RANGE_BACKED) {
     return MM_INVALID;
   }
+  *reclaim = (struct vm_reclaim){.range = range, .space = space};
+  return MM_OK;
+}
 
-  retire_backing(space, range);
+bool vm_free_step(struct vm_reclaim *reclaim, size_t budget)
+{
+  KASSERT(reclaim && reclaim->range && budget);
+  struct vm_space *space = reclaim->space;
+  require_kernel_owner(space);
+  struct vm_range *range = reclaim->range;
+  KASSERT(!range->quarantined &&
+      (range->state == RANGE_BACKED || range->state == RANGE_RETIRED));
+  /* Private wait withdrawal is done before any unmap; kernel allocations have
+   * no user wait tokens. The logical owner remains retained across steps. */
+  drop_wait_tokens(space, range);
+  size_t pages = range->backed_pages < budget ? range->backed_pages : budget;
+  if (pages) {
+    free_backing(space, backing_base(range), pages);
+    registry_lock(space);
+    range->backed_pages -= pages;
+    registry_unlock(space);
+  }
+  if (range->backed_pages) {
+    return false;
+  }
+  registry_lock(space);
   release_range(space, range);
+  registry_unlock(space);
+  *reclaim = (struct vm_reclaim){0};
+  return true;
+}
+
+void vm_kernel_retire(uintptr_t base, size_t bytes)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  if (!vm_kernel_runtime()) {
+    KASSERT(vm_free(&kernel_space, base, bytes) == MM_OK);
+    return;
+  }
+  uintptr_t current_stack = (uintptr_t)&base;
+  KASSERT(current_stack < base || current_stack - base >= bytes);
+  struct execution_group *group = object_cleanup_defer();
+  registry_lock(&kernel_space);
+  struct vm_range *range = find_range(&kernel_space, base, bytes);
+  KASSERT(range && range->state == RANGE_BACKED && !range->quarantined &&
+      !range->retirement_group && !range->retirement_next);
+  range->state = RANGE_RETIRED;
+  range->retirement_group = group;
+  if (retired_last) {
+    retired_last->retirement_next = range;
+  } else {
+    retired_first = range;
+  }
+  retired_last = range;
+  registry_unlock(&kernel_space);
+  process_cleanup_notify();
+}
+
+bool vm_kernel_retire_pending(void)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  registry_lock(&kernel_space);
+  bool pending = retired_first != NULL;
+  registry_unlock(&kernel_space);
+  return pending;
+}
+
+void vm_kernel_reap(void)
+{
+  KASSERT(cpu_interrupts_enabled());
+  uint64_t check_flags = cpu_save_interrupts();
+  bool pending = vm_kernel_retire_pending();
+  cpu_restore_interrupts(check_flags);
+  if (!pending) {
+    return;
+  }
+  struct vm_kernel_owner owner = {0};
+  vm_kernel_owner_cleanup(&owner);
+  for (;;) {
+    uint64_t flags = cpu_save_interrupts();
+    registry_lock(&kernel_space);
+    struct vm_range *range = retired_first;
+    if (range) {
+      retired_first = range->retirement_next;
+      if (!retired_first) {
+        retired_last = NULL;
+      }
+      range->retirement_next = NULL;
+    }
+    registry_unlock(&kernel_space);
+    if (!range) {
+      vm_kernel_owner_release(&owner);
+      cpu_restore_interrupts(flags);
+      return;
+    }
+    KASSERT(range->state == RANGE_RETIRED && !range->quarantined);
+    struct execution_group *group = range->retirement_group;
+    range->retirement_group = NULL;
+    struct vm_reclaim reclaim = {.range = range, .space = &kernel_space};
+    for (;;) {
+      bool done = vm_free_step(&reclaim, BACKING_RUN_PAGES);
+      cpu_restore_interrupts(flags);
+      if (done) {
+        break;
+      }
+      kernel_task_yield_if_runnable();
+      flags = cpu_save_interrupts();
+    }
+    if (group) {
+      flags = cpu_save_interrupts();
+      execution_group_cleanup_end(group);
+      cpu_restore_interrupts(flags);
+    }
+    kernel_task_yield_if_runnable();
+  }
+}
+
+void vm_kernel_quarantine(uintptr_t base, size_t bytes)
+{
+  require_kernel_owner(&kernel_space);
+  registry_lock(&kernel_space);
+  struct vm_range *range = find_range(&kernel_space, base, bytes);
+  KASSERT(range && (range->state == RANGE_BACKED || range->state == RANGE_RESERVED));
+  range->quarantined = true;
+  registry_unlock(&kernel_space);
+}
+
+enum mm_result vm_kernel_window_prepare(size_t bytes, size_t alignment,
+    struct vm_kernel_window *window)
+{
+  KASSERT(!vm_kernel_runtime() && arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  if (!window || window->base || !bytes || (bytes & (PAGE_SIZE - 1))) {
+    return MM_INVALID;
+  }
+  uintptr_t base;
+  enum mm_result status = vm_reserve(&kernel_space, bytes, alignment, &base);
+  if (status != MM_OK) {
+    return status;
+  }
+  status = arch_kernel_prepare_range(base, bytes);
+  if (status != MM_OK) {
+    KASSERT(vm_release(&kernel_space, base, bytes) == MM_OK);
+    return status;
+  }
+  registry_lock(&kernel_space);
+  struct vm_range *range = find_range(&kernel_space, base, bytes);
+  KASSERT(range && range->state == RANGE_RESERVED);
+  range->state = RANGE_WINDOW;
+  registry_unlock(&kernel_space);
+  *window = (struct vm_kernel_window){.base = base, .bytes = bytes};
+  return MM_OK;
+}
+
+enum mm_result vm_kernel_window_map(struct vm_kernel_window *window,
+    phys_addr_t physical, size_t bytes, bool mmio, uintptr_t *address)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  if (!address) {
+    return MM_INVALID;
+  }
+  *address = 0;
+  if (!window || !window->base || !bytes || (bytes & (PAGE_SIZE - 1)) ||
+      (physical & (PAGE_SIZE - 1)) || window->used > window->bytes ||
+      bytes > window->bytes - window->used || bytes - 1 > UINT64_MAX - physical) {
+    return MM_INVALID;
+  }
+  registry_lock(&kernel_space);
+  struct vm_range *range = find_range(&kernel_space, window->base, window->bytes);
+  bool sealed = range && range->state == RANGE_WINDOW;
+  registry_unlock(&kernel_space);
+  KASSERT(sealed);
+  uintptr_t base = window->base + window->used;
+  window->used += bytes;
+  size_t mapped = 0;
+  enum mm_result status = MM_OK;
+  for (; mapped < bytes; mapped += PAGE_SIZE) {
+    status = arch_kernel_map_prepared(base + mapped, physical + mapped, mmio);
+    if (status != MM_OK) {
+      break;
+    }
+  }
+  if (status != MM_OK) {
+    while (mapped) {
+      mapped -= PAGE_SIZE;
+      phys_addr_t removed;
+      KASSERT(arch_kernel_unmap_prepared(base + mapped, &removed) == MM_OK);
+      KASSERT(removed == physical + mapped);
+    }
+    return status;
+  }
+  *address = base;
   return MM_OK;
 }
 
@@ -900,9 +1151,8 @@ enum mm_result vm_sparse_finish(struct vm_sparse_update *update)
   return status;
 }
 
-struct vm_stats vm_get_stats(const struct vm_space *space)
+static struct vm_stats space_stats(const struct vm_space *space)
 {
-  require_kernel_owner(space);
   struct vm_stats stats = {0};
   if (!space) {
     return stats;
@@ -921,13 +1171,23 @@ struct vm_stats vm_get_stats(const struct vm_space *space)
       stats.metadata_bytes += sizeof(*extent) + extent->token_capacity * sizeof(uint64_t);
     }
     if (range->state == RANGE_RESERVED || range->state == RANGE_BACKED ||
-        range->state == RANGE_SPARSE) {
+        range->state == RANGE_SPARSE || range->state == RANGE_WINDOW ||
+        range->state == RANGE_RETIRED) {
       stats.reserved_pages += range->pages;
     }
-    if (range->state == RANGE_BACKED || range->state == RANGE_SPARSE) {
+    if (range->state == RANGE_BACKED || range->state == RANGE_SPARSE ||
+        range->state == RANGE_RETIRED) {
       stats.backed_pages += range->backed_pages;
     }
   }
+  return stats;
+}
+
+struct vm_stats vm_get_stats(const struct vm_space *space)
+{
+  registry_lock(space);
+  struct vm_stats stats = space_stats(space);
+  registry_unlock(space);
   return stats;
 }
 
@@ -1095,6 +1355,9 @@ enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physic
 {
   require_kernel_owner(space);
   struct vm_range *range = range_containing(space, base);
+  if (range && range->quarantined) {
+    return MM_BUSY;
+  }
   if (!range || range->state != RANGE_RESERVED ||
       !permissions_valid(space, permissions)) {
     return MM_INVALID;
@@ -1106,6 +1369,9 @@ enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical)
 {
   require_kernel_owner(&kernel_space);
   struct vm_range *range = range_containing(&kernel_space, base);
+  if (range && range->quarantined) {
+    return MM_BUSY;
+  }
   if (!range || range->state != RANGE_RESERVED) {
     return MM_INVALID;
   }
@@ -1129,7 +1395,8 @@ bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes)
     return true;
   }
   for (const struct vm_range *r = kernel_space.head; r; r = r->next) {
-    if (r->state != RANGE_RESERVED && r->state != RANGE_BACKED) {
+    if (r->state != RANGE_RESERVED && r->state != RANGE_BACKED &&
+        r->state != RANGE_WINDOW && r->state != RANGE_RETIRED) {
       continue;
     }
     for (size_t page = 0; page < r->pages; ++page) {
@@ -1148,6 +1415,9 @@ enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
 {
   require_kernel_owner(space);
   struct vm_range *range = range_containing(space, base);
+  if (range && range->quarantined) {
+    return MM_BUSY;
+  }
   if (!range || range->state != RANGE_RESERVED) {
     return MM_INVALID;
   }
@@ -1183,6 +1453,9 @@ enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
 {
   require_kernel_owner(space);
   struct vm_range *range = range_containing(space, base);
+  if (range && range->quarantined) {
+    return MM_BUSY;
+  }
   if (!range || (range->state != RANGE_RESERVED && range->state != RANGE_BACKED &&
       range->state != RANGE_SPARSE) ||
       !permissions_valid(space, permissions)) {
