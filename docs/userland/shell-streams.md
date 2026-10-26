@@ -5,6 +5,10 @@ console, FILE, PIPE or STREAM capabilities. The shell supplies file redirection 
 foreground pipelines, and `cat` and `head` consume the selected streams without
 knowing their backing. The shell-streams milestone is complete.
 
+The following examples use `boot://share/hello.txt` from a `DISTRIBUTION=full`
+development image. The default core archive omits it; use another readable
+text file there.
+
 ```text
 cat boot://share/hello.txt > home://copy.txt
 cat < home://copy.txt | head -n 2

@@ -15,8 +15,9 @@ second; expensive views may render more slowly. Once rendering is complete and
 no controls are held, it waits for input or resize, including while unfocused.
 The renderer checks events every eight rows so Escape and focus changes do not
 need to wait for a complete frame. Zoom is bounded to widths of 1e-12 through 16
-in the complex plane. The normal image and SDK contain the application and the
-native display, keyboard and clock helpers.
+in the complex plane. The optional `mandelbrot` package supplies the application;
+the full development image also includes it. The SDK supplies native display,
+keyboard and clock helpers.
 
 Quake, Doom and `mousetest` also keep updating while graphics is hidden or their
 space is unselected. Quake and Doom game time advances without input focus;

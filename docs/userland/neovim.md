@@ -120,7 +120,8 @@ reboot, with no archive fallback. The LSP configuration stays off until
 vim.lsp.enable('clangd')
 ```
 
-A short commented example, `boot://share/examples/nvim/init.lua`, enables clangd,
+A short commented example in `DISTRIBUTION=full` development images,
+`boot://share/examples/nvim/init.lua`, enables clangd,
 turns on completion as you type for servers that offer it, and maps `Ctrl-Space`
 to open the menu by hand. Nothing loads it automatically; copy it into place:
 
@@ -129,6 +130,10 @@ mkdir home://.config
 mkdir home://.config/nvim
 cp boot://share/examples/nvim/init.lua home://.config/nvim/init.lua
 ```
+
+The default core archive does not include this example. On an installed system,
+create `home://.config/nvim/init.lua` with the enable call
+above, adding the completion settings below as needed.
 
 For a bundle elsewhere, override the command with `vim.lsp.config` before
 enabling. `cmd` replaces the whole list, so repeat the flags:

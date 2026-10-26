@@ -19,23 +19,23 @@ TF-PSA-Crypto libraries; SSH remains deferred.
 | Candidate | Intended use and initial investigation |
 | --- | --- |
 | POSIX regex | Implemented in [libc](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion), with BRE/ERE, UTF-8 decoding and ASCII-only classes/folding. vi, less and grep use it; sed and awk remain later candidates. |
-| fastfetch | [Implemented native port](../userland/fastfetch.md), packaged in the normal image with native system information, the Pyxis ASCII logo, text/JSON and explicit JSONC configuration. |
+| fastfetch | [Implemented native port](../userland/fastfetch.md), delivered as a program package with native system information, the Pyxis ASCII logo, text/JSON and explicit JSONC configuration. |
 | zlib | [Implemented development library](../development/ports.md#zlib-development-library), first consumed by [screenshot PNG output](../userland/screenshot.md). Jar files and BusyBox `gzip`/`unzip` remain later consumers. |
 | libpng | [Implemented development library](../development/ports.md#libpng-development-library), with explicit zlib input and screenshot RGB8 write qualification; target decoding, viewers and drawing tools remain later work. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. [Implemented](../development/sdl2.md) on 2026-10-08, with DevilutionX as its first consumer. |
-| vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and BRE search/substitution. |
-| Links | [Implemented Links 2.30 port](../userland/links.md), packaged in the normal image as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
+| vi | [Implemented BusyBox vi port](../userland/vi.md), included in the core archive as the first modal editor before Neovim, with libc `ftruncate` and BRE search/substitution. |
+| Links | [Implemented Links 2.30 port](../userland/links.md), delivered as a program package as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
 | less | [Implemented BusyBox pager](../userland/less.md) for files and pipelines, with BRE search/highlighting and libterm console input independent of stdin. |
 | tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](in-pyxis-development.md), with whole-archive validation and regular files/directories only. |
 | ncursesw | [Accepted terminal UI milestone](terminal-ui.md): native raw access, `TERM=pyxis` terminfo and hexcurse first, followed by chronium’s candidate list. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts. The [awk probe](#awk-probe) (2026-10-16) recommends onetrue-awk; three decisions are open. |
-| uniq | [Implemented sbase port](../userland/uniq.md), packaged in the normal image with libc `getline`/`isblank` and validated against host upstream output. |
-| wc, tail, sort | [Implemented sbase ports](../userland/wc-tail-sort.md), packaged in the normal image and validated against host upstream output. `tail -f` is refused, as Pyxis cannot wait for a file to grow; see [technical debt](../technical-debt.md#sbase-tail-follow-and-sort-limits). |
-| grep | [Implemented sbase port](../userland/grep.md) with `-r` over the native directory listing, packaged in the normal image and validated against host upstream and GNU output. |
+| uniq | [Implemented sbase port](../userland/uniq.md), delivered as a program package with libc `getline`/`isblank` and validated against host upstream output. |
+| wc, tail, sort | [Implemented sbase ports](../userland/wc-tail-sort.md), delivered as a program package and validated against host upstream output. `tail -f` is refused, as Pyxis cannot wait for a file to grow; see [technical debt](../technical-debt.md#sbase-tail-follow-and-sort-limits). |
+| grep | [Implemented sbase port](../userland/grep.md) with `-r` over the native directory listing, delivered as a program package and validated against host upstream and GNU output. |
 | hexdump | Still undecided: port or implement natively. A pure byte filter can be a port; this is not a commitment to a complete Unix utility suite. |
 | Everyday gaps | Small missing commands and options noticed in use are collected in [everyday gaps](everyday-gaps.md) until they are scheduled. Implemented native commands are covered in [everyday commands](../userland/everyday-commands.md). |
-| jq | [Implemented jq 1.7.1 port](../userland/jq.md), packaged in the normal image, without Oniguruma (regular-expression builtins fail with jq's own message). It reads files, scheme paths and stdin, and needed libc math, `signal.h`, `dirname` and `strptime` additions. |
+| jq | [Implemented jq 1.7.1 port](../userland/jq.md), delivered as a program package, without Oniguruma (regular-expression builtins fail with jq's own message). It reads files, scheme paths and stdin, and needed libc math, `signal.h`, `dirname` and `strptime` additions. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
 | vis | Low priority (chronium, 2026-10-22). <https://github.com/martanne/vis>: a vi-like editor with sam structural regular expressions and Lua scripting. To explore: its terminal UI layer (libtermkey/curses) on libterm, Lua (ports has 5.1 and 5.4), and its external-command filtering (`\|`, `<`, `>`), which assumes fork/exec and pipes. No commitment. |
 

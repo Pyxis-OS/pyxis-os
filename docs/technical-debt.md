@@ -2411,8 +2411,8 @@ release or support workflows need that distinction, after agreeing which inputs 
 
 ## Fastfetch first-port boundary
 
-The [implemented port](userland/fastfetch.md) uses explicit native-URI JSON/JSONC configs, one-shot text or JSON output and eleven selected modules, and is packaged in
-the normal image. Automatic config discovery, config and cache writes, dynamic refresh, image logos, Lua and executable or network helpers are excluded, so upstream
+The [implemented port](userland/fastfetch.md) uses explicit native-URI JSON/JSONC configs, one-shot text or JSON output and eleven selected modules, and is delivered as
+the `fastfetch` program package. Automatic config discovery, config and cache writes, dynamic refresh, image logos, Lua and executable or network helpers are excluded, so upstream
 configs may meet unsupported diagnostics or fallback behavior and the port adds no strict option validator. Narrow terminals keep upstream layout so lines may wrap
 (use `--logo none` or shorter formats). Disk reports only explicitly selected native roots with observation authority; shared-pool capacity is labeled separately, usage,
 totals, quotas and percentages stay unavailable until the filesystem observation contract defines them, and bindings or volumes sharing a pool ID repeat its capacity, so

@@ -5,7 +5,7 @@ file inventory and the archive, as accepted for
 [packages slice 1](../wip/packages.md#slice-1-data-packages) and extended with
 program packages that record the ABI they need
 ([stage 2](../wip/packages.md#binding-a-build-to-a-system) and the
-[package ABI](../wip/packages.md#the-abi-identifier)), and the installed
+[release ABI](abi.md)), and the installed
 `packages` volume that programs read them from.
 
 There is one current form of each file and no version field: before a public
@@ -16,8 +16,10 @@ writes and checks the repository; the native `pkg` bundle installs and manages
 selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
 tracks its delivery and qualification.
 
-There are no signatures. Every file here is untrusted input that only SHA-256
-ties together: it catches truncation and corruption, not a hostile repository.
+[Signed indexes](#signed-indexes) authenticate the repository index and bind
+package archives through their sizes and SHA-256 hashes. All files remain
+untrusted parser input. Explicitly configured unsigned development repositories
+have corruption detection through those hashes, without repository authentication.
 
 ## Literal data
 

@@ -6,9 +6,11 @@ the third LLVM milestone, and needs its own proposal before any work starts.
 
 ## Direction
 
-Until Pyxis has program packages (the native `pkg` client installs data packages
-only; see [packages](packages.md)), an installed system builds its
-software from source, as Gentoo does:
+The original 2026-10-08 direction treated source builds as an interim before
+binary program packages. That premise is superseded: the native `pkg` client
+installs program and development packages, and installed `bin://` is their live
+command view ([system layout](../userland/system-layout.md)). Running maintained
+build recipes on Pyxis remains a separate, unscheduled direction:
 
 - **Installed as binaries:** the kernel, the boot archive's rescue set, the
   headers and SDK, and the toolchain and build tools needed to build everything
@@ -16,10 +18,9 @@ software from source, as Gentoo does:
 - **Built on Pyxis:** the ports and every userland program outside the rescue
   set, from the same pinned sources and recipes the host build uses today.
 
-This trades build time for a system that builds itself. It is interim: binary
-program packages can come later, and they are cached outputs of the same recipes, so the
-on-device builder becomes the build side of the eventual package manager rather
-than throwaway work.
+This would trade build time for a system that builds itself. Its outputs could
+feed the existing package manager; binary packages are already available and
+do not depend on an on-device builder.
 
 ## Why it fits
 
@@ -27,10 +28,10 @@ than throwaway work.
   commit, or an archive and SHA-256), applies ordered patches and runs a small Lua
   build file. The [ports runner](../development/ports.md#building-and-packaging)
   runs on the host today; Lua already runs on Pyxis.
-- **The layout already separates the two halves.** An installed archive keeps
-  only the [rescue set](../userland/system-layout.md#programs) in `boot://`;
-  every other program lives in `bin://`, one directory per kernel revision.
-  Source builds would produce that directory instead of the installer copying it.
+- **The layout separates the two halves.** The default core archive keeps
+  the [rescue set](../userland/system-layout.md#programs) in `boot://`;
+  other programs are packages projected into installed `bin://`. A source builder
+  would need to produce verified package inputs rather than revision directories.
 - **Builds suit capabilities.** A build can receive its source and build
   directories, the SDK read-only, and network access only while fetching. The
   host recipes already build offline after fetching, for example with CMake's
@@ -62,8 +63,10 @@ than throwaway work.
   commit or SHA-256 and publish a source only after complete transfer.
   Archives with checksums are easier than Git on Pyxis, but archives a mirror
   generates from Git commits may not be byte-stable, which a SHA-256 pin needs.
-  [Git on Pyxis](../userland/git.md) records the decision (chronium, 2026-10-22) to use
-  go-git for source fetching, which waits on the Go file and network tasks.
+  [Git on Pyxis](../userland/git.md) now supplies the go-git-based HTTPS
+  clone/push/pull and local workflow, with recorded QEMU qualification. Its
+  restricted symlink profile and command surface remain distinct from adapting
+  recipe fetching and its source-authority policy.
 - **Running recipes.** [Native command execution](../userland/native-jobs.md)
   supplies argv launch, selected streams, capture/deadlines, pipelines and actual
   result/cleanup for Lua and the ports runner, replacing its host
@@ -73,9 +76,10 @@ than throwaway work.
   children require [nested execution groups](nested-execution-groups.md), a parked
   required direction. Running real ports recipes on Pyxis depends on that gate.
   No POSIX shell is implied.
-- **Writing `bin://`.** Today only the installer writes it, and spaces receive it
-  read-only. A builder needs a staged directory, verification and a switch, like
-  [system updates](../userland/system-updates.md), with new authority to do so.
+- **Publishing build outputs.** Installed `bin://` is a read-only package command
+  view, not a directory for a builder to write. A builder needs explicit staging
+  and publication authority. How it feeds the existing verified package/set
+  mechanism still needs a proposal.
 - **Build space and speed.** Build directories belong in `tmp://`, which is RAM,
   with only results written to the pool. `make -j` runs separate processes, which
   Pyxis already spreads across CPUs; a single compiler process has one thread.
@@ -112,11 +116,12 @@ an option only if a Pyxis machine needs sources away from the home LAN.
 
 ## Updates
 
-System updates keep the binary path for the kernel, rescue set, SDK and
-toolchain. Programs then rebuild against the new SDK: fetch the pinned recipes
-for the new revision, rebuild what changed, and switch only after every build
-succeeds. The program revision always matches the installed SDK and kernel
-revision, and builds never follow upstream branches on their own.
+The original direction rebuilt programs for every kernel revision. The current
+[package ABI model](pkg-upgrade.md#decided) instead names supported release ABIs;
+development builds remain bound to their exact build. A future source-builder
+proposal must define when to rebuild against a changed SDK and how verified
+outputs enter the package set. Recipes must retain exact source pins rather
+than following upstream branches.
 
 ## Possible order
 
@@ -125,15 +130,15 @@ revision, and builds never follow upstream branches on their own.
 3. Run the ports runner inside Pyxis, then build userland's programs with its
    Makefiles.
 4. Ninja or CMake, for the CMake-based ports.
-5. A toolchain volume, staged `bin://` builds, and rebuilding on update.
+5. Package build-output staging, publication and rebuild policy on update.
 
 ## Open questions
 
-- What the installer offers before the first build finishes: a system with only
-  the rescue set, or optional prebuilt programs as a cache.
-- Whether the toolchain volume follows the kernel revision like `bin`.
-- Which authority may write `bin://`, and how a failed or interrupted build
-  rolls back.
+- Whether a source-built distribution changes the existing online base-package
+  Install workflow, and what remains usable before its first build finishes.
+- How toolchain and SDK package versions constrain source-built outputs.
+- Which authority publishes verified outputs to the package set, and how a
+  failed or interrupted build rolls back.
 - How build failures, logs and partial results are reported to the user.
 - Whether some large ports stay binary, and how that interacts with licences
   such as DevilutionX's.

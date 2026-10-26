@@ -31,14 +31,15 @@ See [gdb.md](../development/gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-`make initrd` packages the selected [init](../userland/init.md), shell, cat, ls, mkdir,
-[Kilo and its license](../development/ports.md), and a
-sample text file into `build/initrd.cpio`; `make image` includes that uncompressed `newc` archive as the
+`make initrd` packages the default `DISTRIBUTION=core` rescue set and installer
+files into `build/initrd.cpio`; `DISTRIBUTION=full` includes the complete
+development staging trees. See [system layout](../userland/system-layout.md).
+`make image` includes that uncompressed `newc` archive as the
 sole Limine module. A boot-time [tree builder](../../include/kernel/fs/initrd_tree.h)
 exposes its entries as read-only directory/file objects without extracting file
-contents or adding a block device. The text asset is `share/hello.txt`.
+contents or adding a block device. The full image includes `share/hello.txt`.
 
-The image packages the endpoint client and server examples. From the shell,
+The full image packages the endpoint client and server examples. From the shell,
 `session boot://server.pxe` launches a server and two clients with explicit
 startup grants; `--wide` exercises full-size payloads and four attachments,
 and `--abandon` demonstrates receipt closure. See [endpoints](../interfaces/endpoints.md).
@@ -153,9 +154,10 @@ malloc or constructors. Startup separately supplies an owned caller-only
 `THREAD_RIGHT_SET_FS` handle, closed after binding; this grants no MANAGE, CREATE,
 EXIT or parking authority. Runtime keys and language destructors are described
 in the [SDK](../development/sdk.md#static-tls-and-runtime-keys). The selected
-[libc thread profile](../userland/threads.md) provides joinable C11/pthread
-workers and synchronized shared runtime state. Detach, cancellation,
-process-shared synchronization and dynamic TLS remain unsupported.
+[libc thread profile](../userland/threads.md#creation-and-collection) provides
+joinable and detached C11/pthread workers, bounded deferred collection and
+synchronized shared runtime state. Cancellation, process-shared synchronization
+and dynamic TLS remain unsupported.
 
 
 ## cat

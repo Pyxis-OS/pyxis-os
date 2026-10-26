@@ -60,7 +60,8 @@ after the [host setup](docs/development/thinkpad-nic-passthrough.md#host-setup).
 `LOG_CONSOLE_LEVEL` sets the `log.level` boot option for what serial and the
 Caelum tab show (default `info`). `log` in a shell reads every compiled level.
 
-The first tab is Caelum's live kernel log. Boot selects Development once its
+The first tab is Caelum's live kernel log. In full development images, boot
+selects Development once its
 first content is ready, or Pyxis on installed systems, unless a physical key
 press or pointer click cancels the switch. Super+Left returns to Caelum;
 Super+Right from Development selects Multiplexer, then Read-only, then Remote,
@@ -70,8 +71,9 @@ do not fit. Every CPU count gets the same spaces. Boot init creates them from
 the [boot configuration](docs/userland/init.md#boot-configuration), and the init
 scripts hand off to sessions.
 
-The shell starts at `home://`: RAM-backed on live boots and kept on the npfs pool
-on installed systems. `tmp://` is always RAM-backed. `boot://`
+With a configured home root, the shell starts at `home://`: RAM-backed on full
+live boots and kept on the npfs pool on installed systems. Rescue uses `tmp://`,
+which is always RAM-backed. `boot://`
 contains the read-only boot archive; installed systems run ordinary programs from
 `bin://`, which live boots bind to the archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
@@ -99,8 +101,9 @@ and cleanup, and runs preemptible kernel tasks; user syscall paths remain
 non-preemptible. See [SMP ownership](docs/kernel/smp.md), [userspace](docs/kernel/userspace.md)
 and [memory](docs/kernel/memory.md). Low-level allocation contracts live in
 [PMM](include/kernel/mm/pmm.h), [VM](include/kernel/mm/vm.h) and
-[heap](include/kernel/mm/heap.h) headers. Concurrent shared mapping mutation and AVX
-remain outside the current implementation. Pyxis runs natively on its first
+[heap](include/kernel/mm/heap.h) headers. Concurrent shared mapping mutation
+remains outside the current implementation. The [XSAVE/AVX profile](docs/wip/xsave-avx.md)
+is enabled on compatible CPUs, with legacy FXSAVE retained otherwise. Pyxis runs natively on its first
 hardware target, the [ThinkPad T14 Gen 1 AMD](docs/targets/t14-gen1-amd/notes.md#native-status),
 including networking and USB installation. It also boots on the
 [IdeaPad Slim 5 16IPH11](docs/targets/ideapad-slim5-16iph11/notes.md), its first Intel

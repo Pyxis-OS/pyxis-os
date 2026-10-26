@@ -79,4 +79,4 @@ QEMU.
 
 The [recipe README](../../ports/chocolate-quake/README.md) lists the source pin
 and patches. Chocolate Quake is distributed under GPL-3; its licence, SDL2's and
-the port notice ship in `boot://share/licenses/chocolate-quake/`.
+the port notice ship in `pkg://quake/licenses/chocolate-quake/`.

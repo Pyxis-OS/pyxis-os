@@ -169,8 +169,9 @@ Remaining limits and consumers:
 - The native SEND4096 completion regression found in task 5 is still followed up;
   the owner's rerun is pending in its record. Stack qualification is separate
   evidence ([program loading](../kernel/program-loading.md)).
-- Detach, cancellation, robust or process-shared objects and scheduling promises
-  are not offered. Detached threads need a bounded collection contract first.
+- Libc supports detached workers with [bounded deferred collection](../userland/threads.md#creation-and-collection).
+  Cancellation, robust or process-shared objects and scheduling promises remain
+  outside the profile.
 - Consumer adapters need their own assignments: the libuv pool for
   [Neovim jobs](../wip/later-os-directions.md#neovim-follow-ups), the
   [Hax harness](../wip/claude-on-pyxis.md#track-2-hax-inventory-after-the-lua-harness) (timed conditions, drainers and a

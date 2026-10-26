@@ -3,9 +3,11 @@
 Trusted boot configuration defines ordered logical interfaces before spaces and
 session owners start. Explicit names identify configured roles; automatic wired
 names use the initial controller inventory. `lo` is predefined, Ethernet uses
-`ethN`, and Wi-Fi uses `wlanN`. A Wi-Fi definition can remain unbound: this control cut supplies no
-radio backend, association or authenticated readiness. See the
-[multiple-interface reference](network-interfaces.md) for qualification.
+`ethN`, and Wi-Fi uses `wlanN`. A Wi-Fi definition can remain unbound until a
+configured radio backend binds it. The opt-in [AX200 backend](ax200-wifi.md)
+supports one legacy 2.4 GHz OPEN or WPA2-Personal/CCMP link through the separate
+[Wi-Fi interface](../interfaces/wifi.md). Defining a name grants no radio rights.
+See the [multiple-interface reference](network-interfaces.md) for qualification.
 
 The stock [network profile](networking.md#boot-configuration-and-use) enables
 `wired = { auto = true, exclude = {} }` with an empty explicit interface list.
@@ -136,7 +138,7 @@ NCM rates come from the device's ConnectionSpeedChange notification (upstream is
 host TX, downstream host RX), including a speed notification preceding link-up.
 RTL8111H decodes 10/100/1000 Mb/s from its current PHY status byte. Down/lost links
 clear rate validity. VirtIO without negotiated-rate support and the current
-scan-only AX200 backend report unknown. USB bus speed and advertised capabilities
+AX200 backend report unknown. USB bus speed and advertised capabilities
 are never substituted. [Qualification](../development/experiments/automatic-network-preference.md)
 separates synthetic observations from native gigabit tie/fallback checks;
 unequal-rate native preference remains unqualified.

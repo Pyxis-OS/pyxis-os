@@ -89,9 +89,11 @@ survive later CLOSE. Ordinary CALL/readiness references remain storage-only.
 A process starts with one initial user task. Only a holder of the optional
 `threads` resource can add native siblings, which share this table; ordinary
 application launches omit it. The selected [libc thread profile](../userland/threads.md)
-provides joinable C11/pthread siblings, per-thread `errno`, static local-exec
-language TLS and synchronized shared runtime state. Detach, cancellation and
-process-shared synchronization remain unsupported; the
+provides joinable and detached C11/pthread siblings, per-thread `errno`, static
+local-exec language TLS and synchronized shared runtime state. Completed detached
+workers are collected during create/join and orderly exit, within the profile's
+bounded runtime records. Cancellation and process-shared synchronization remain
+unsupported; the
 [SDK TLS contract](../development/sdk.md#static-tls-and-runtime-keys) excludes
 dynamic modules and other TLS models.
 Growth and installation use the shared-table

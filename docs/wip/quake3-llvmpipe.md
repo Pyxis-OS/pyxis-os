@@ -1,8 +1,11 @@
 # Quake 3, OpenArena, Mesa llvmpipe and a JIT grant
 
-Status: tasks 1–3 merged; task 4 implements ioquake3/OpenArena and is in
-QEMU/package and separate source-download qualification. Native game checks
-remain unrun.
+Status: tasks 1–4 are implemented and QEMU-qualified, including installed
+OpenArena and local corresponding-source publication. The
+[qualification record](../development/experiments/ioquake3-softpipe.md) also
+records an attended Vela timedemo and listening observation; broader native/audio
+qualification and public recipient access remain separate. llvmpipe and the JIT
+grant remain future work.
 Remaining direction and decisions follow. The
 softpipe delivery is in the [0.0.9 release notes](../releases.md#009-2026-10-25);
 llvmpipe follows the JIT grant, in the next kernel push after it. Its sources are
@@ -357,23 +360,21 @@ The port carries `src/gallium/frontends/osmesa/osmesa.c` and its target from
 caller supplies. Task 2 built that frontend against Mesa 26.2.5 and rendered a
 triangle in QEMU; see the [implemented profile](../development/mesa.md).
 
-With OSMesa the SDL glue is concrete. The SDL2 port currently builds without
-OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
-`SDL_pyxisopengl.c` beside `ports/sdl2/pyxis/SDL_pyxisvideo.c`:
+Task 3 implemented the OSMesa glue in `ports/sdl2/pyxis/SDL_pyxisopengl.c`.
+Ordinary `libSDL2.a` remains free of Mesa; the opt-in `libSDL2-osmesa.a` provides
+[SDL OpenGL](../development/sdl2.md#opengl-through-osmesa):
 
 - `SDL_GL_LoadLibrary` binds to the statically linked Mesa (there are no shared
   objects), and `SDL_GL_GetProcAddress` resolves through `OSMesaGetProcAddress`
   (ioquake3 loads all its GL entry points that way,
   `code/sdl/sdl_glimp.c:269`).
-- `SDL_GL_CreateContext` creates an OSMesa context with an SDL-owned logical
-  pixel buffer, `SDL_GL_MakeCurrent` attaches that buffer, and
-  `SDL_GL_SwapWindow` runs the existing present path (copy into the held
-  display slot, submit). OSMesa's default row order is bottom-up, so the glue
-  sets its Y-up storage option or flips on present, and picks a BGRA format to
-  match the slot.
+- `SDL_GL_CreateContext` creates an OSMesa context with front/back attachments,
+  and `SDL_GL_MakeCurrent` binds it. `SDL_GL_SwapWindow` finishes rendering,
+  exchanges the buffers and reads the front into SDL's retained top-down BGRA
+  canvas before copying/scaling into the held display slot and submitting it.
 - Context attributes (`SDL_GL_SetAttribute`) that OSMesa cannot honour fail
-  honestly (multisample, stereo, ES profile, core profile above what llvmpipe
-  offers), instead of reporting success.
+  honestly (multisample, stereo, ES profile and unsupported context
+  flags/precision), instead of reporting success.
 - Output resolution follows the raylib rule: an application-selected logical
   canvas, aspect-fit scaled into the display content area, because the window is
   always the whole content area and a software rasterizer's cost scales with
@@ -400,8 +401,9 @@ OpenGL (`docs/development/sdl2.md`, "OpenGL and Vulkan are not built"). Add a
 Implemented interfaces and limits are in [SDL OpenGL](../development/sdl2.md#opengl-through-osmesa)
 and [Mesa buffering](../development/mesa.md#front-and-back-buffers); the
 [qualification record](../development/experiments/sdl2-osmesa.md) separates
-QEMU evidence from remaining native/conformance work. Task 4 starts after task 3
-merges; no JIT or compiler-fork change belongs to task 3.
+QEMU evidence from remaining native/conformance work. The later
+[task 4 record](../development/experiments/ioquake3-softpipe.md) covers the
+installed game and partial native checks. Neither task adds JIT authority.
 
 ### Libc and POSIX gaps
 
@@ -705,11 +707,16 @@ the pin, and a git mirror preserves it.
 ## Limits and open questions
 
 - The static softpipe/OSMesa profile and LLVM development prefix are built and
-  checked in QEMU. SDL2 OpenGL and OpenArena menu/map playback are checked in QEMU;
-  public OpenArena packaging, native rendering and llvmpipe remain unqualified.
+  checked in QEMU. SDL2 OpenGL, OpenArena menu/map playback, installed-package
+  checks and local source/publication checks pass. The
+  [Vela comparison](../development/experiments/ioquake3-softpipe.md#vela-native-hwp-comparison-2026-10-25)
+  records a native timedemo and listening observation, without a repeated sample
+  range or closure of broader audio qualification. Public upload/recipient access,
+  llvmpipe and JIT remain unqualified.
 - The kernel design for the `jit` transitions waits for the BSP-removal
   proposal; the contract above is stated in terms of its postconditions so it
   survives that change.
-- llvmpipe without AVX is slower than the same machine allows; whether to enable
-  XSAVE is a measured follow-up, not assumed.
+- The [XSAVE/AVX profile](xsave-avx.md) is delivered separately. Its availability
+  does not qualify llvmpipe or establish which vector features a future JIT
+  selects; record those with the renderer measurements.
 - Privately, the Steam data is unread, and the retail QVM claim is unchecked.

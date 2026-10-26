@@ -218,6 +218,9 @@ Native result (chronium, 2026-10-21): on vela, an installed system (0.0.7a), the
 installed (version `nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014`)
 the built `font-min` ran and drew.
 
+The current `boot://share/examples/font-min.c` copy is included only in
+`DISTRIBUTION=full` development images; the default core archive omits it.
+
 ## Limits
 
 - Fonts must be trusted; the parser is not hardened (see above).

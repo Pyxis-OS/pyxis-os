@@ -71,7 +71,10 @@ are serialised. Focus loss releases held input while rendering continues.
 The asset-free [gears example](../../ports/sdl2/manual/gears/README.md) uses the
 ordinary double-buffer default and draws its renderer name. Animation, input,
 focus, logical/output resize and thread handoff are QEMU-qualified in the
-[task 3 record](experiments/sdl2-osmesa.md); native rendering remains unqualified.
+[task 3 record](experiments/sdl2-osmesa.md). The later
+[OpenArena record](experiments/ioquake3-softpipe.md#vela-native-hwp-comparison-2026-10-25)
+covers a Vela native timedemo; it does not qualify every context/input feature
+exercised by the QEMU gears example.
 
 ## The backend
 

@@ -1,26 +1,33 @@
 # Shell
 
-`make userspace` builds the SDK, shell and core utilities. Normal boot runs the
-default [init script](init.md) and [session launcher](session-configuration.md),
-which by default start separate shells in the Development and Read-only spaces,
-with shared `home://` as their working directory. Boot starts on Caelum's tab;
-use Super+Right to select Development before typing. The normal initrd contains init,
-shell, ls, tree, cat, echo, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
-home is initially empty. On live boots it is RAM and its contents disappear on
-reboot; installed systems keep it in the pool's `home` volume.
+`make userspace` builds the SDK, shell and core utilities. The default
+`DISTRIBUTION=core` archive contains the [rescue set](../../boot/rescue.list)
+and installer files. Installed boots use the pool's configured spaces and
+installed packages. The rescue entry starts the built-in rescue space.
+See [system layout](system-layout.md) and [init](init.md).
 
-A first walkthrough:
+`DISTRIBUTION=full` additionally includes the development programs, examples and
+live configuration. Its default [session launcher](session-configuration.md)
+starts shells in Development and Read-only, sharing `home://`. Boot starts on
+Caelum's tab; use Super+Right to select Development. Live `home://` is RAM and
+disappears on reboot; installed systems keep it in the pool's `home` volume.
+
+A first walkthrough uses the volatile `tmp://` root, available in rescue too:
 
 ```text
 ls boot://
-cat boot://share/hello.txt
-mkdir notes
+echo hello > tmp://hello.txt
+cat tmp://hello.txt
+mkdir tmp://notes
+cd tmp://
 cd notes
 ls
-cd boot://share
+cd tmp://
 cat hello.txt
 exit
 ```
+
+Later examples use writable `home://`; in rescue, use `tmp://` instead.
 
 On ordinary exit, process cleanup logs completion in Caelum and releases the shell's
 resources. Its space, tab, framebuffer contents and shared filesystem trees
@@ -175,7 +182,7 @@ The local shell, a [multiplexer](multiplexer.md) pane and the
 
 TEXT and capability expansion, command-output capture and `;`/`&&`/`||` use the
 [typed-value rules](#typed-values-and-command-sequences) below; there is no word
-splitting, and the only [wildcards](#wildcards) are `*` and `[...]` typed in the
+splitting, and the only [wildcards](#wildcards) are `*` typed in the
 command line itself. Unquoted `<`, `>` and `2>` select redirection; `|` connects
 foreground external commands. Unsupported operator combinations are errors.
 Interactive input treats `#` literally; scripts support whole-line comments.
@@ -505,7 +512,7 @@ with `httpfs --https --ca-bundle URI`. See [HTTPS startup](http-fetch.md).
 Foreground external commands accept `< file`, `> file`, `>> file`, `2> file` and `2>> file`. For example:
 
 ```text
-cat boot://share/hello.txt > home://copy.txt
+echo hello > home://copy.txt
 cat < home://copy.txt
 cat missing 2> home://errors.txt
 cat home://errors.txt
@@ -651,7 +658,7 @@ EOF/error or 4 KiB; byte output forwards each available read.
 For example:
 
 ```text
-cat boot://share/hello.txt | head -n 2
+echo hello | head -n 2
 cat boot://ls.pxe | head -c 16 > home://prefix
 head -c 0 home://copy.txt
 ```
@@ -668,7 +675,7 @@ Ctrl+D does not close either input stream.
 Connect two through eight external commands with `|`:
 
 ```text
-cat boot://share/hello.txt | cat > home://copy.txt
+echo hello | cat > home://copy.txt
 cat < home://copy.txt | cat | cat
 cat missing 2> home://errors.txt | cat > home://empty.txt
 ```

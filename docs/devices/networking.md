@@ -3,10 +3,11 @@
 The kernel has one system-wide BSP network worker and retained logical interface
 contexts. `lo` is predefined; trusted boot configuration defines ordered `ethN`
 and `wlanN` names and binds supported Ethernet controllers through trusted boot
-policy. Class and hardware driver are separate. A logical Wi-Fi definition does not imply a usable
-radio, association or authenticated packet path; the current control surface adds
-no Wi-Fi backend or tunnel API. Interfaces, addresses and routes remain shared
-across spaces.
+policy. Class and hardware driver are separate. A logical Wi-Fi definition does
+not itself grant radio authority. The opt-in [AX200 backend](ax200-wifi.md)
+supports one legacy 2.4 GHz OPEN or WPA2-Personal/CCMP link through the
+[Wi-Fi interface](../interfaces/wifi.md), with independent addressing and DHCP.
+Interfaces, addresses and routes remain shared across spaces. There is no tunnel API.
 
 The implementation is in `kernel/net`, with kernel interfaces in
 `include/kernel/net`. Native Ethernet, ARP, IPv4, ICMP and UDP share the worker;
@@ -557,8 +558,9 @@ eligible candidates with `prefer = {"MAC", ...}`, then ascending controller ID.
 A controller selected twice or an ambiguous explicit selector is refused.
 Optional absent entries remain defined and unbound; they can be bound later,
 without replacing an existing association. One absent interface does not hold up
-a working peer's client or the local shell. A Wi-Fi definition can remain
-unbound because no radio backend is supplied by this cut.
+a working peer's client or the local shell. A Wi-Fi definition remains unbound
+until a configured, enabled radio backend binds it; ordinary spaces receive no
+radio rights unless explicitly configured.
 
 `dhcp = true` excludes static `address`, `prefix` and `gateway`. Static addresses
 use four decimal octets, prefixes 1..32 and an optional gateway; validation checks

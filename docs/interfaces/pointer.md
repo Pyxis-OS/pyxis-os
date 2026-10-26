@@ -30,7 +30,8 @@ Readiness is advisory and consumes nothing. To write your own program, start fro
 the [pointer-min example](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/examples/pointer-min/main.c):
 it acquires display, keyboard and pointer, drains events after a `wait_many`,
 follows geometry changes and releases everything, in one commented file. The
-image ships it as `boot://share/examples/pointer-min.c`; the
+`DISTRIBUTION=full` development image ships it as
+`boot://share/examples/pointer-min.c`; the default core archive omits it. The
 [edit/build/run walkthrough](../development/edit-build-run.md#try-the-pointer-example)
 compiles it with hosted Clang. [Mousetest](../userland/mousetest.md) adds lock, warp,
 images and scroll, and waits on pointer/keyboard READABLE and display RESIZED

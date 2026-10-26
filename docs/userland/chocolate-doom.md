@@ -51,7 +51,8 @@ measured the SDL path at about 2.5 times native Doom's time per frame in QEMU.
 ## Boundaries
 
 - **Left out of the build:**
-  - sound and music: no SDL2_mixer, and the SDL2 port has no audio;
+  - sound and music: SDL2_mixer is disabled in this game build; SDL2 itself
+    supports PCM output;
   - network play: no SDL2_net;
   - PNG screenshots, which are PCX instead;
   - `chocolate-setup`, and the Heretic, Hexen and Strife programs.
@@ -60,4 +61,4 @@ measured the SDL path at about 2.5 times native Doom's time per frame in QEMU.
 
 The [recipe README](../../ports/chocolate-doom/README.md) lists the source pin
 and patches. Chocolate Doom is GPL-2.0-or-later; its licence, SDL2's and the
-port notice ship in `boot://share/licenses/chocolate-doom/`.
+port notice ship in `pkg://doom/licenses/chocolate-doom/`.

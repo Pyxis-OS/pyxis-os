@@ -1,12 +1,15 @@
 # Ship of Harkinian on Pyxis
 
 Investigation and task plan accepted; implementation authorised in order
-(chronium, 2026-10-24). Tasks 1–5 are qualified; later tasks continue automatically,
+(chronium, 2026-10-24). Tasks 1–6 are complete; later tasks continue automatically,
 with a stop for new material behaviour, authority or lifetime decisions.
 Goal: Ocarina of Time through SoH, first on Mesa softpipe with keyboard input.
 A slow first frame is acceptable; neither llvmpipe/JIT nor gamepad drivers are
-prerequisites. Private host extraction and the public native LUS slice are qualified; the
-private game reaches its title/menu; gameplay, audio and persistence remain unqualified.
+prerequisites. Private host extraction and the public native LUS slice are qualified.
+[Task 6](../development/experiments/soh-gameplay.md) records gameplay, audio and
+persistence checks, plus partial attended Vela qualification. The native
+save/reload used RAM home within one boot; reboot durability and native resource
+measurements remain unqualified, and sound had audible gaps at low softpipe FPS.
 
 ## Sources and distribution boundary
 

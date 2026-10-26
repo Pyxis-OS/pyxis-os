@@ -98,8 +98,9 @@ blocked on hardware semantics, not on evidence;
 [Rust](rust.md): stage 1 core+alloc/tiny-skia delivered in
 [#1224](https://git.internal/PyxisOS/pyxis-os/pulls/1224).
 [Rust std](rust-std.md): stage-2 implementation assigned to Codex epsilon
-(chronium, 2026-10-25); forked cross-toolchain, first native std profile and
-hexyl admission accepted. Hosted Rust remains later.
+(chronium, 2026-10-25); fork compiler, std main and the read-only-file hexyl
+subset are delivered with recorded QEMU qualification. Full std profile, Rust
+workers and native hardware qualification remain open; hosted Rust remains later.
 
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
 epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue
@@ -111,13 +112,11 @@ the owner's run on the ThinkPad's RTL8156BG.
 task 5, GPIO interrupt delivery, needs its own go. Layers remain reusable for
 the Deck; its milestone stays on hold.
 
-[Packages and upgrades](packages.md): owner-requested plan (2026-10-18), three
-decisions accepted; data packages first, then program packages per release,
-native links and dynamic linking. Slice 1, data packages, is complete
-(2026-10-20) for 0.0.7: all tasks merged and every qualification gate passed.
-Stage 2 starts with the game packages after 0.0.7; their
-[proposal](packages.md#stage-2-game-packages-proposal-2026-10-20) has all three
-decisions accepted (owner, 2026-10-20).
+[Packages and upgrades](packages.md): data and program packages, the installed
+command/SDK views, core archive and online Install are delivered. The
+[updater milestone](pkg-upgrade.md) records signed repositories and `pkg upgrade`
+with QEMU new/previous/rescue qualification; the native ThinkPad upgrade gate
+remains open. Dynamic linking and on-device source builds remain later work.
 
 [Wi-Fi](wifi.md): stages 1–4 complete; the [AX200 reference](../devices/ax200-wifi.md)
 covers firmware, passive scan, legacy open and WPA2-CCMP links with independent
@@ -199,16 +198,19 @@ prerequisites and result are clear.
 [Application port candidates](application-ports.md), including SDL2/GrafX2,
 Peanut-GB, Chocolate Duke3D, DevilutionX and a wasm3 investigation.
 
-[Ship of Harkinian](ship-of-harkinian.md): investigation and proposed reusable
-ImGui/library closure, private host-extracted assets and first keyboard/softpipe run.
+[Ship of Harkinian](ship-of-harkinian.md): tasks 1–6 deliver reusable libraries,
+private extraction, first frame and QEMU keyboard gameplay/audio/save checks.
+Partial vela play/save/reload/quit passed; native resource qualification remains
+open, and the same-boot RAM save check does not establish reboot durability.
 
 [Bluetooth mouse](bluetooth-mouse.md): accepted kernel HCI and userspace stack
 direction with explicit Secure Connections enrollment and cold/native closure;
 tasks 1 to 3 are complete (#545, #552, #564).
 
-[Building software on Pyxis](source-builds.md): after hosted Clang, ports and
-non-rescue userland build from source on the installed system until a package
-manager exists.
+[Building software on Pyxis](source-builds.md): a separate future workflow for
+running maintained recipes on the installed system and producing package
+outputs. Binary program packages and Git already exist; native recipe execution
+and build-output publication still need their own proposal.
 
 [Capabilities and providers](capabilities-and-providers.md): the capability model,
 settled with the owner on 2026-10-14: typed capabilities instead of URI spellings,

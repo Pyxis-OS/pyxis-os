@@ -1,11 +1,17 @@
 # Packages and upgrades
 
-Status: **planned, owner-requested 2026-10-18; the three [decisions](#decisions)
-were accepted the same day.** The owner direction and the accepted decisions are
-settled. The rest of the [Proposal](#proposal) and the [Staged plan](#staged-plan)
-remain proposals, refined per slice. [Slice 1](#slice-1-data-packages)'s three
-decisions and task list were also accepted that day; each task still starts with
-a short proposal of its open details.
+Status: **data and program packages implemented.** The owner requested this plan
+on 2026-10-18 and accepted its three [decisions](#decisions) that day.
+[Slice 1](#slice-1-data-packages) is complete; program packages, the core archive
+and online Install are delivered in [package upgrades](pkg-upgrade.md#step-2-programs-out-of-the-archive-implemented).
+`pkg upgrade` has recorded QEMU qualification; its native ThinkPad upgrade gate
+remains open. Dynamic linking and building packages on Pyxis remain later work.
+
+The original problem, owner direction, proposal and staged plan below preserve
+the earlier design context. Their revision-bound programs, unsigned repositories
+and reboot-switched package sets are superseded by the
+[ABI/core/updater decisions](pkg-upgrade.md) and the current
+[package formats](../interfaces/packages.md).
 
 **Superseded in part (chronium, 2026-10-22):** packages are read as
 `pkg://ID`, not `ID://` or `"package"` directory grants, and bundles list theirs
@@ -13,6 +19,9 @@ in `"packages"` ([the `sdk://` view](sdk-view.md), task 2c-1). The `ID://`
 roots, `package_roots` and `"package"` grants described below are history.
 
 ## Problem
+
+Historical motivation, measured on 2026-10-18; not the current archive or
+installed layout.
 
 - **The ESP is full.** The personal boot archive is about 215 MB, and the
   installer's ESP is 512 MiB ([installer](../userland/installer.md)). `stick-deploy`
@@ -43,16 +52,19 @@ roots, `package_roots` and `"package"` grants described below are history.
 | --- | --- | --- |
 | Bundles | A `.pxb` is a directory with `manifest.json` and `app/`; the manifest names entries, a stack, grants and read-only `resource_dirs` roots. A DIRECTORY grant may name a `source` and a `root` alias; only trusted configuration or shell mount ownership makes a source exist. | [program bundles](../userland/program-bundles.md) |
 | Program lookup | Held command-directory lists with live package projections and owned selections, used by the shell, Lua and libuv; no implicit boot, cwd or development-catalog search. | [command lists](../interfaces/command-search.md) |
-| Update | Offline, from live media: copy programs to `bin/REVISION`, sync, verify against a SHA-256 inventory, write a verified revision manifest, then rewrite fixed ESP paths. Keeps the new and previous revisions. | [system updates](../userland/system-updates.md) |
-| Boot archive | Boot init, configuration, the rescue set and shared data: firmware, `sdk/`, `share/` game data and fonts, assembled by `boot/initrd.lua`. | [system layout](../userland/system-layout.md) |
+| Update | From live media, publish the kernel and archive through the shared boot publisher, retaining previous and rescue entries. Installed packages and owner configuration remain on the pool; programs use the live package command view rather than new `bin/REVISION` directories. | [system updates](../userland/system-updates.md) |
+| Boot archive | The default `core` distribution contains boot init, the rescue set, firmware and installer inputs. SDK assets, fonts and games are packages. `full` retains the development staging trees; optional personal builds are separate. | [system layout](../userland/system-layout.md) |
 | npfs | `RENAME` is atomic within one mount; callers explicitly sync to make it durable (COMMITTED). A file may replace a file; a directory may replace only an empty directory. Regular-file hard links exist within one npfs volume; no symbolic links. | [directories](../interfaces/directories.md#atomic-rename-and-directory-moves), [npfs format](../../fs/docs/npfs-format.md) |
-| Links | Lookup never follows a symbolic link; only host shares contain them, and they fail with LINK_NOT_FOLLOWED (libc `ELOOP`). An earlier Git export default also rejected symlinks. | [directories](../interfaces/directories.md), [libc](../userland/libc-portability.md#name-limits-and-symbolic-links), [Git](../userland/git.md) |
+| Links | Native symbolic-link creation/following is unavailable. Git uses `core.symlinks=false`, preserving link blobs as regular files containing their targets; native links are not a prerequisite for that profile. | [directories](../interfaces/directories.md), [libc](../userland/libc-portability.md#name-limits-and-symbolic-links), [Git](../userland/git.md) |
 | HTTP | Responses are completed, re-readable snapshots. RAM backing defaults to 64 MiB per provider; large bodies need private npfs backing. One 30 s deadline by default, explicit longer values allowed; no resume; one exchange at a time. | [HTTP transactions](../interfaces/http-transactions.md) |
 | Download cache | `repo.internal` proxies release downloads for host builds; nothing on Pyxis uses it. | [ports](../development/ports.md) |
 | Toolchain delivery | Task 4 replaces manual payload publication with the `clang-hosted` package and its declared command exports. | [hosted tools](../development/hosted-tools.md#pool-and-authority) |
 | Executables | P1F is fixed-address with no symbols, loaded by the kernel image loader. The only written P2F idea is an undecided P1F superset with an optional symbol table, for backtraces. Nothing defines exported symbols, P1D or P2D. New formats go through the launcher and loader path. | [P1F](../../include/pxe/p1f.h), [backtraces](../technical-debt.md#backtraces-and-symbols), [subsystems](subsystems-per-space.md) |
 
 ## Owner direction (2026-10-18)
+
+Historical direction. The ABI, signing, archive and updater contracts are now
+defined by [package upgrades](pkg-upgrade.md); dynamic linking remains future work.
 
 - Plan a package manager and updater. Ready-built binary packages first; building
   from source later, once Git and make or CMake exist on Pyxis.
@@ -66,8 +78,8 @@ roots, `package_roots` and `"package"` grants described below are history.
 - Names, proposed with the owner's agreement: `.pxe` executables and `.pxl`
   libraries (renamed from `.pxo`, which would read like a compiler object), with
   versioned `.pxl.REVISION` files reached through stable names.
-- Real native links are a prerequisite for those stable names; they also unlock
-  Git and other tools.
+- Real native links are a prerequisite for those stable library names. Git's
+  delivered restricted profile does not require native symbolic links.
 - Order: (1) data packages: game data, fonts, toolchain payloads; (2) program
   packages still tied to a system release, rebuilt per release but delivered as
   packages; (3) a dynamic linking milestone that unties programs from kernel
@@ -77,6 +89,9 @@ roots, `package_roots` and `"package"` grants described below are history.
   ESP view being built in installer task 5 (#797).
 
 ## Proposal
+
+Historical proposal, refined by the slices below and superseded where noted at
+the top. It does not override the current format or updater reference.
 
 ### Packages and repositories
 
@@ -88,7 +103,9 @@ archive per version. Any HTTP server can serve it.
 
 - **Integrity, recommended:** SHA-256 for each archive in the index and each file
   in its manifest, as Update already does for programs. This catches truncation
-  and corruption. It does not authenticate anyone; signatures stay out.
+  and corruption. The original unsigned-only proposal is superseded by
+  [signed indexes](../interfaces/packages.md#signed-indexes); unsigned development
+  repositories require an explicit configuration opt-in.
 - **Archives:** plain USTAR tar, which Pyxis `tar` reads and the payload producer
   already writes. Not the parked `.pxa` ZIP, which stays a stored-launch format.
   No compression in slice 1.
@@ -145,10 +162,13 @@ a public one.
 
 ### The boot archive
 
-Licensed game data never enters the archive: it is packaged only, from the
-owner's local inputs. The archive keeps boot init, configuration, the rescue set,
-firmware and `sdk/`. Live and tester boots use a volatile packages pool and a
-configured network repository (owner direction, 2026-10-19; task-4 details below).
+Licensed game data is packaged from the owner's local inputs. The default core
+archive keeps boot init, the rescue set, firmware and installer inputs; SDK
+assets and game data come from packages. Installed configuration lives on the
+pool. The full development distribution and optional personal builds are
+separate from that default. The volatile live-package workflow below records
+the earlier slice-1 design; see [system layout](../userland/system-layout.md)
+for the current distributions.
 
 **Game packages (owner design, 2026-10-20):** games become whole packages, program
 plus data, named after the game: `doom` and `quake`. The separate `doom-data` and
@@ -193,8 +213,12 @@ drop-in replacement.
 
 #### Upgrader: `pkg upgrade` (accepted direction, owner, 2026-10-20)
 
-Scheduled after 0.0.7, as part of [stage 2](#staged-plan) alongside the game
-packages. Not implemented.
+This subsection preserves the 2026-10-20 design. Its reboot-switched package
+sets and placeholder verifier were superseded by [package upgrades](pkg-upgrade.md).
+The current upgrader uses signed release indexes and the shared boot publisher;
+QEMU upgrade/new/previous/rescue boots are qualified, while the native ThinkPad
+upgrade check remains open. The paragraphs and accepted decisions below are
+historical, not the implemented updater contract.
 
 `pkg upgrade` updates the running installed system in place. A release package,
 for example `pyxis-system@VERSION`, carries the kernel ELF and the boot archive
@@ -268,7 +292,7 @@ and ports.
   invariant requires; the kernel keeps loading P1F, including the loader itself.
 - **ABI names:** a system library's ABI name is what packages record in
   `abi`, and the system's list grows and shrinks by the
-  [ABI list rule](#the-abi-identifier).
+  [release-ABI policy](pkg-upgrade.md#decided).
 - **Toolchain and SDK:** LLD writes the new formats; position-independent builds
   of libc, libpyxis, libterm, libfont and libc++; relocation kinds; a TLS model
   beyond today's static local-exec; library naming and versions; the SDK exports
@@ -668,7 +692,7 @@ in stage 2.
 - [x] Orchestrator verified the active service at `192.168.0.213:5245`, public
   index HTTP 200, the personal index and write refusal (PUT HTTP 403).
 
-The public tree currently offers `fonts` at
+The 2026-10-21 public tree offered `fonts` at
 `nerd3.5.1-plexsans1.1.0-plexserif2.0.0-noto2.015-notomono2.014` (published
 2026-10-21; the earlier `nerd3.5.1-plexsans1.1.0-plexserif2.0.0` stays beside it);
 the personal tree offers `doom-data`
@@ -693,7 +717,11 @@ The earlier manual payload was never packed.
   [adds no concurrency](../interfaces/http-transactions.md)). It changes the
   provider interface, so it needs its own design and owner decision first.
 
-- **Public package mirror (parked, not scheduled; owner idea, 2026-10-19):**
+- **Public package mirror (historical owner idea, 2026-10-19):**
+  the implemented signing/Worker machinery is recorded in
+  [package upgrades](pkg-upgrade.md#step-3-the-updater). The original options
+  and prerequisites below describe the pre-signing design, not current client
+  trust or proof that any particular deployment is live:
   the repository is static files (`index.lua` plus archives), so it can be
   served from object storage behind Cloudflare with no server code: Cloudflare
   R2 (small free storage tier, no egress fees), or a Backblaze B2 bucket behind
@@ -715,21 +743,19 @@ The earlier manual payload was never packed.
   made with the same signing key and tooling as the packages. An ISO is built from
   the same tagged revision as that release's packages. The
   [website](website.md) links the current one. Not decided: download bandwidth and
-  caching for the ISO on the mirror host. Owner action: before signing exists,
-  chronium issues a new intermediate signing certificate from his homelab root CA;
-  the private keys stay with chronium and agents never handle them. This signing
+  caching for the ISO on the mirror host. Signing and image-generation machinery
+  are now implemented; [signing operations](../../packages/signing/README.md)
+  remain chronium's, and the private keys stay with chronium. This signing
   chain is separate from the public TLS certificate of `pkg.pyxis.nexus`; see
   [certificates](website.md#certificates).
 
 ## Stage 2: game packages (proposal, 2026-10-20)
 
-**Status: proposal; all three [decisions](#stage-2-decisions) accepted (owner,
-2026-10-20).** It turns the owner's [game-package design](#the-boot-archive)
-into formats and tasks, as the first stage 2 work. Nothing merges before 0.0.7
-is tagged. The decisions are settled; the rest is the proposed shape and can
-change in review. `pkg upgrade`
-([accepted direction](#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20))
-comes next and builds on the `abi` binding and recorded origins below.
+**Historical proposal; all three [decisions](#stage-2-decisions) accepted (owner,
+2026-10-20).** Game packages and their command exports were implemented. This
+section records their original revision-bound design; the release-ABI model,
+program packages and updater now follow [package upgrades](pkg-upgrade.md).
+Retained examples below describe the earlier format, not today's ABI policy.
 
 ### Binding a build to a system
 
