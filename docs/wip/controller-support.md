@@ -181,8 +181,10 @@ block; preserve current source and DMA/retirement ownership rules.
 ## Work order
 
 - [ ] **0. Evidence and native contract.** Finish the labeled Edge input capture,
-  confirm ordinary USB input needs no vendor initialization, settle explicit
+  settle explicit
   state/operation layouts and bounds, and record the evidence/remaining limits.
+  Linux-bound capture does not prove initialization needs on Pyxis; verify the
+  standard input path in task 1 and stop before any new vendor sequence.
 - [ ] **1. Edge native input.** Dedicated descriptor-checked decoder, retained
   gamepad source, object/focus/readiness/lifetime, SDK exports and userland
   wrappers/default forwarding/bundle recognition. A hand-run native viewer
