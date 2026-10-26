@@ -114,7 +114,10 @@ and refill exclusion**, including cached pointers, render leases and device
 ownership where applicable. The VM owner does not discover all C pointers or
 make a GPU/DMA operation complete. Retain the existing TTY/presenter proof;
 new users must supply an equally explicit ownership handoff. Never classify an
-old range as unpublished merely because its current owner is the BSP.
+old range as unpublished merely because its current owner is the BSP. Permanent
+scheduler stacks, executing stacks, CPU/IPI records, kernel text and the heap
+arena are not generic retirement targets; mutation and acknowledgement code
+must remain mapped independently of the range being changed.
 
 Integrate admission at audited outer boundaries before state publication:
 
