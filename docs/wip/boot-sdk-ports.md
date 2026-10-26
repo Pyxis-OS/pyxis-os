@@ -124,6 +124,10 @@ covers firmware, passive scan, legacy open and WPA2-CCMP links with independent
 DHCP/verified data and recorded qualification limits. Next: vela RTL8922AE, then
 WPA3. AX200 5 GHz and the Deck remain deferred.
 
+[XSAVE/AVX](xsave-avx.md): assigned to Codex alpha (chronium, 2026-10-26),
+with the three state, CPU-compatibility and eager-ownership defaults accepted.
+Kernel delivery precedes the BSP-removal proposal and llvmpipe JIT grant.
+
 ## Open
 
 [Developing inside Pyxis](in-pyxis-development.md): the extra-spaces check on the
