@@ -64,8 +64,11 @@ remain until process exit and reuse vacant slots.
 Go safe points provide cooperative preemption. A call-free loop can indefinitely
 delay another goroutine or GC. Hardware faults terminate the process; explicit
 panic/recover works. Only amd64/v1 without cgo, external linking, PIE or dynamic
-dependencies is supported. Kernel x87/SSE preservation does not imply AVX or
-FSGSBASE usability; the target gates those assumptions.
+dependencies is supported. Qualified kernels preserve x87/SSE/AVX;
+CPUID.OSXSAVE and XGETBV gate Go's
+optional AVX/AVX2 and SHA paths. A fallback boot retains the legacy feature
+limits. This does not change the supported Go build baseline or enable FSGSBASE.
+See [FP ownership](../kernel/userspace.md#floating-point).
 
 Runtime diagnostics use blocking writes to the supplied console, pipe or FILE,
 including under debuglock. Native calls carry up to 4096 bytes (4080 data bytes

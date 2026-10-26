@@ -410,13 +410,25 @@ double` uses the 80-bit x87 format in 16-byte ABI storage. The compiler and SDK
 enable this by default, with no red zone. Kernel code, including libraries built
 into the kernel, must retain `-mgeneral-regs-only`.
 
-Each task owns an aligned FXSAVE64 area. Initial process tasks start with empty
-x87 registers, zero XMM registers, x87 control word `0x037f` and MXCSR `0x1f80`: round to nearest,
-masked FP exceptions, and no flush-to-zero/denormals-are-zero mode. Native
-siblings inherit the creator's saved FP state, including exception flags. Preemption
-and blocking save this state; dispatch restores it before returning to the task.
-Syscalls preserve it even when they park. AVX/XSAVE state is not supported;
-do not compile for a newer CPU baseline or enable AVX.
+Each user task owns a kernel FP area until actual retirement or failed
+preparation. CPUs with compatible XSAVE/AVX support and state layout use eager
+standard XSAVE64/XRSTOR64 with XCR0 `0x7` (x87/SSE/AVX). The selected area size
+comes from CPUID; storage is 64-byte aligned. Every online CPU participates
+before userspace starts. Unsupported or incompatible profiles warn once and
+retain FXSAVE64 system-wide with OSXSAVE clear. AVX-512 and other components
+remain disabled. The compiler baseline stays x86-64; optional instructions still
+need CPUID and XGETBV checks.
+
+Initial tasks start with empty x87 registers, zero XMM registers (and zero YMM
+upper halves under XSAVE), x87 control word `0x037f` and MXCSR `0x1f80`: round
+to nearest, masked FP exceptions, and no flush-to-zero/denormals-are-zero mode. Native siblings inherit their creator's
+complete saved FP state, including exception flags and YMM upper halves.
+Preemption and blocking save it; dispatch restores it before returning to the
+task. Nonswitching syscalls leave it untouched. Kernel code remains non-FP/SIMD;
+no lazy ownership or user signal frame is involved. State-allocation failure
+uses the existing process/thread NO_MEMORY paths. Built-in GDB and fault reports
+retain their existing FP-register limitations. See the
+[XSAVE delivery record](../wip/xsave-avx.md).
 
 Compiler-rt builtins provide compiler arithmetic/conversion helpers. This does not
 provide a full libm. The libc conversion/scaling subset is described

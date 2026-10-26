@@ -332,16 +332,13 @@ container is not affected.
   [system information](../interfaces/system-information.md) CPU count is a
   natural libc extension on a native object; until then, set `LP_NUM_THREADS`
   explicitly from the program.
-- **AVX is off.** Userspace state is FXSAVE only: the kernel clears `CR4.OSXSAVE`
-  (`arch/x86_64/user.c:50-51`). Mesa enables `+avx` only when CPUID, OSXSAVE and
-  `xgetbv` agree (`src/util/u_cpu_detect.c:894-896`), so llvmpipe on Pyxis would
-  generate SSE code, with four-wide vectors where AVX2 gives eight. Both target
-  CPUs report AVX2 in their recorded inventories
-  ([ThinkPad](../targets/t14-gen1-amd/thinkpad-inventory-docked.txt),
-  [vela](../targets/ideapad-slim5-16iph11/ideapad-inventory.txt)). Enabling
-  XSAVE is a separate kernel change to context-switch state and is not part of
-  this proposal; the measurement should report llvmpipe's chosen CPU features so
-  the cost is visible before anyone decides.
+- **AVX depends on the qualified kernel profile.** The separate
+  [XSAVE/AVX task](xsave-avx.md) enables x87/SSE/AVX on compatible CPUs and
+  otherwise retains legacy FXSAVE. Mesa still requires CPUID, OSXSAVE and
+  `xgetbv` agreement (`src/util/u_cpu_detect.c:894-896`); record llvmpipe's
+  actual chosen features, not just hardware AVX2 support. This kernel work
+  adds no JIT authority. Chronium's sequencing (2026-10-26) is XSAVE/AVX,
+  then the BSP-removal proposal, then the accepted JIT grant.
 - **Code model.** LLVM's x86-64 JIT defaults to the large code model
   (`llvm/lib/Target/X86/X86TargetMachine.cpp:180-181`), so generated code can
   call libc and Mesa without being placed near them.
