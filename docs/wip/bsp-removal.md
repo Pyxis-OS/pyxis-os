@@ -3,8 +3,8 @@
 Decisions 1–3 accepted (chronium, 2026-10-26). Task 1 is merged in #1254;
 its hands-free native packet is prepared and awaits the orchestrator. Task 2
 measurement and bounded-batch implementation are merged in #1260/#1263.
-Task 3 [decisions 5–7](vm-invalidation.md) are accepted (chronium, 2026-10-26);
-implementation starts with a single-run baseline. Later tasks raise decisions
+Task 3 [decisions 5–9](vm-invalidation.md) are accepted (chronium, 2026-10-26);
+shared-owner integration and QEMU qualification are in #1500 for review. Later tasks raise decisions
 when reached. XSAVE/AVX is merged and natively qualified; its qualification
 record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
 The accepted JIT grant remains after this milestone.
@@ -41,7 +41,7 @@ the post-task1 measurement and remaining work are recorded below.
 | Shared kernel VM | Reused ranges require remote exclusion, not just a page-table lock. The existing helper is a BSP-initiated, one-generation all-CPU flush after callers stop refills. [SMP contract](../kernel/smp.md#memory-and-output-boundaries). | An any-CPU owner/invalidation protocol, with old backing retained until actual access and translation retirement are proved. Do not turn the current singleton into concurrent private shootdown by dropping its BSP assertion. |
 
 The old native MEMORY comparison measured about 1.6–4.2 µs added per mutation
-([record](../development/experiments/threads-task4/README.md)). That is historical
+([record](../development/experiments/threads-task 4/README.md)). That is historical
 evidence, not today's baseline or a predicted gain. Bounded teardown reduced long
 interrupt-off stalls but retained CPU0 ownership; this proposal does not undo it.
 
@@ -162,7 +162,7 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 | --- | --- | --- |
 | 1. Private MEMORY on its caller CPU | Per-space owner proof, stable queries, counters/identities and pin synchronization; kernel-root continuations; all existing ordinary/guarded/sparse MEMORY operations. Preserve the BSP clients' use of the same gate. Check real AP execution, unrelated processes mutating concurrently, same-process competition, parked I/O and stop/unwind. | Run memory-heavy processes on APs without CPU0 servicing their MEMORY bodies; sibling quiescence still applies. |
 | 2. Frame allocation on each CPU | First measure PMM lock/search/zero/map costs with the routing bottleneck gone and bring chronium the decision whether to move frame allocation out. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
-| 3. Invalidation and shared kernel VM | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
+| 3. Invalidation and shared kernel VM (implemented, #1500 review) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
 | 4. Preparation and reclamation | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
 | 5. Remaining VM consumers and JIT gate | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Start the separately accepted JIT kernel task as a consumer of the common VM transaction, rather than add a BSP-only JIT service. |
 

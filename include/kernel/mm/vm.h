@@ -44,7 +44,8 @@ struct vm_stats {
 
 void vm_init(void);
 struct vm_space *vm_kernel_space(void);
-/* BSP kernel task, IF=1, after SMP startup, no output/queue/allocator locks.
+/* Retained kernel-root actor, IF=1, structural owner held after SMP startup,
+ * no output/queue/allocator locks.
  * Caller must first stop every remote access to the retiring shared ranges,
  * including cached pointers, and prevent refills until unmap. Ranges remain
  * mapped and their frames owned throughout the wait. Success permits vm_free
@@ -66,8 +67,7 @@ bool vm_free_step(struct vm_reclaim *reclaim, size_t budget);
 /* Requires an initialized heap. New spaces share kernel mappings and start
  * with an empty user area. Failure sets *result to NULL. Allocation, queries
  * and mutation require IF=0 and exclusive ownership; no VM operations from
- * fault handlers. The kernel space still asserts BSP ownership for its reused
- * ranges. Published private changes require the process mutation token after
+ * fault handlers. Kernel mutation requires its CPU-neutral structural owner. Published private changes require the process mutation token after
  * acknowledged root departure and borrower drainage, on its recorded owner CPU.
  * Unpublished loading and drained retirement remain BSP-owned in this slice;
  * resumption reloads CR3. No generic remote/live-root mutation is authorized. */
@@ -97,8 +97,8 @@ bool vm_space_release_step(struct vm_space *space, size_t budget);
  * Shared kernel mappings must remain stable while another CPU uses them.
  * Publishing a new task and retiring an old one provide the required local
  * TLB flushes for task stacks. Other retirement requires explicit quiescence
- * and vm_kernel_flush_remote(); concurrent remote mapping changes remain
- * unsupported. */
+ * and vm_kernel_flush_remote() under the structural owner before effects.
+ * Exclude remote accesses/refills until all mapping changes complete. */
 enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment,
                           uintptr_t *result);
 enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes);
@@ -168,7 +168,7 @@ enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physic
 enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical);
 /* Boot-only driver-owned scanout page, RW/NX/WC; caller excludes aliases. */
 enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical);
-/* BSP IF=0, before publication: scan all kernel VM ranges for physical aliases. */
+/* Structural owner, IF=0, before publication: scan kernel ranges for aliases. */
 bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes);
 enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
                         phys_addr_t *physical);
