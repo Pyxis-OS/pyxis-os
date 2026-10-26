@@ -16,8 +16,10 @@ writes and checks the repository; the native `pkg` bundle installs and manages
 selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
 tracks its delivery and qualification.
 
-There are no signatures. Every file here is untrusted input that only SHA-256
-ties together: it catches truncation and corruption, not a hostile repository.
+[Signed indexes](#signed-indexes) authenticate the repository index and bind
+package archives through their sizes and SHA-256 hashes. All files remain
+untrusted parser input. Explicitly configured unsigned development repositories
+have corruption detection through those hashes, without repository authentication.
 
 ## Literal data
 
