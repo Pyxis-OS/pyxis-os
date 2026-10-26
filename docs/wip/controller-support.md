@@ -23,8 +23,8 @@ start-to-end game usability.
    in the Pyxis backend. No dummy-driver alias, Linux/HIDAPI impersonation,
    database rewrite or application-specific core behavior is authorized.
 
-The owner explicitly authorized the milestone docs PR, then task 0 closure,
-then task 1. Later tasks remain separately assigned. A new material behavior,
+The owner authorized task 2 after task 1 merged and the Vela check passed
+(chronium, 2026-10-26), with task 3 following it. Later tasks remain separately assigned. A new material behavior,
 authority, lifetime or policy decision stops the affected work for discussion.
 
 ## Scope and existing boundaries
@@ -234,19 +234,20 @@ block; preserve current source and DMA/retirement ownership rules.
   source establish the Edge profile and fixed native layouts. The owner waived
   the long capture; task 1 retains the brief native correspondence and standard
   input-path check, with no exhaustive trigger-stop qualification.
-- [ ] **1. Edge native input.** Dedicated descriptor-checked decoder, retained
+- [x] **1. Edge native input.** Dedicated descriptor-checked decoder, retained
   gamepad source, object/focus/readiness/lifetime, SDK exports and userland
   wrappers/default forwarding/bundle recognition. The brief Vela visualizer
   check plugs the Edge into vela, presses a few buttons and moves the sticks
   for about a minute; no exhaustive control/trigger-stop matrix. Local checks
   cover the ordinary launch path, empty startup, presentation and clean exit;
-  authority/lifetime/reset paths also receive source review. This task stays
-  open until that brief owner-attended native check. Deliver dependency
+  authority/lifetime/reset paths also receive source review. The owner-attended Vela check passed, including
+  connected-at-boot (chronium, 2026-10-26). Deliver dependency
   PRs before the parent pin; update this task here, not in the milestone index.
-- [ ] **2. Pyxis SDL backend.** Named native driver, real USB identity, verified
+- [x] **2. Pyxis SDL backend.** Named native driver, real USB identity, verified
   automatic GameController mapping, lifecycle/reset handling and blocked event
   wakeup in both SDL profiles. Validate raw and mapped axes/buttons/hat in a
-  hand-run viewer; unsupported effects fail explicitly. Separate assignment.
+  hand-run viewer; the backend refuses real output requests. SDL core retains
+  upstream cached-LED and zero-rumble shortcuts (chronium, 2026-10-26).
 - [ ] **3. Edge in LUS/SoH.** Remove native controller-init/default-map exclusions,
   declare bundle input, and use the existing controller manager/settings UI.
   Verify fresh and existing keyboard-only configs, editable bindings without
@@ -258,7 +259,7 @@ block; preserve current source and DMA/retirement ownership rules.
   can qualify simultaneous devices if available; Ultimate 2 is not a gate here.
 
 The native interface and visualizer are described in the
-[gamepad reference](../interfaces/gamepad.md). Task 1 implementation is prepared in
+[gamepad reference](../interfaces/gamepad.md). Task 1 was delivered in
 [#1258](https://git.internal/PyxisOS/pyxis-os/pulls/1258), with
 [userland #390](https://git.internal/PyxisOS/pyxis-userland/pulls/390) first.
 Fresh kernel, SDK, full ports/userland and image builds passed. QEMU (q35/KVM,
@@ -267,11 +268,30 @@ resolution, the normal `gamepadtest` launch, rendered empty state and Escape.
 Native vela check (chronium, 2026-10-26): all directly exercised buttons
 and triggers worked, including physical trigger stops. Paddles were
 remapped in the onboard profile and their independent bits remain unqualified;
-that limitation is accepted. Connected-at-boot failed until unplug/replug.
-The checkbox stays open for one connected-at-boot confirmation after the
-USB 2 reset/address recovery correction. All six stick/trigger report axes are
+that limitation is accepted. Connected-at-boot passed after the USB 2
+reset/address recovery correction; chronium confirmed everything works
+(2026-10-26). Both PRs are merged and task 1 is complete. All six stick/trigger
+report axes are
 unsigned eight-bit values (0–255), not values truncated by Pyxis; this does not
 establish the controller's internal ADC resolution.
+
+## Task 2 implementation and qualification
+
+The Pyxis SDL joystick backend and asset-free manual viewer are implemented.
+Both ordinary and OSMesa archives build, and a hand-run QEMU viewer checks raw
+and automatically mapped six-axis/19-button/hat input. The ordinary profile
+also passes empty startup, hotplug/removal, distinct SDL instances after replug,
+focus rearming and missing-grant refusal. The OSMesa check uses its software
+window surface, not an OpenGL context. Input reports are external synthetic
+valid Edge packets; this is not a second physical qualification or latency test.
+SDL's existing 1 ms attached-device and 3 second enumeration polling caps remain;
+native gamepad readiness participates in the video wait with no new thread.
+
+SDL core remains registration-only. Its upstream repeated-LED cache and
+zero-rumble success shortcuts are retained (chronium, 2026-10-26). The Pyxis
+backend reports zero output capabilities and returns Unsupported for real
+output requests; no LED, rumble or sensor implementation is added. Task 2 is
+complete; task 3 uses LUS/SoH's existing controller manager and settings UI.
 
 ## Validation and limits
 
@@ -290,4 +310,5 @@ Gamepad authority follows keyboard defaults. Focus return can resume a held
 stick or trigger; held buttons/hat need a fresh action. Existing finite USB
 record retention/quarantine limits remain. This plan introduces a typed input
 session and fresh attachment identity, not raw HID authority. The native control check above qualifies
-the exercised input; connected-at-boot confirmation remains outstanding.
+the exercised input, including connected-at-boot. Independent remapped paddles
+remain unqualified; generic HID and output remain outside this milestone.
