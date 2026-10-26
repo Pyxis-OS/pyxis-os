@@ -14,6 +14,7 @@
 struct console_object;
 struct display_object;
 struct keyboard_object;
+struct gamepad_object;
 struct pointer_object;
 struct audio_object;
 struct clipboard_space;
@@ -29,6 +30,7 @@ struct space
   struct framebuffer *fb;
   struct tty *tty;
   struct keyboard_object *keyboard; /* Space retains the initial reference. */
+  struct gamepad_object *gamepad; /* Space retains the initial reference. */
   struct pointer_object *pointer; /* Space retains the initial reference. */
   struct audio_object *audio; /* Space retains the initial reference. */
   struct pointer_object *terminal_pointer; /* Separate outer-terminal control. */

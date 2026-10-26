@@ -16,6 +16,7 @@
 #include <kernel/object/echo.h>
 #include <kernel/object/net_config.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/gamepad.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/bluetooth_hci.h>
@@ -339,6 +340,12 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return keyboard_call((struct keyboard_object *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_GAMEPAD:
+    if (header.protocol != PROTOCOL_GAMEPAD) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return gamepad_call((struct gamepad_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
   case OBJECT_POINTER:
   case OBJECT_TERMINAL_POINTER:

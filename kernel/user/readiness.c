@@ -12,6 +12,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/gamepad.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/pipe.h>
@@ -187,6 +188,10 @@ bool readiness_service(struct bsp_request **active_list)
         break;
       case OBJECT_KEYBOARD:
         interest->ready = keyboard_ready((struct keyboard_object *)interest->object,
+            request->caller);
+        break;
+      case OBJECT_GAMEPAD:
+        interest->ready = gamepad_ready((struct gamepad_object *)interest->object,
             request->caller);
         break;
       case OBJECT_AUDIO:

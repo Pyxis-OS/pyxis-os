@@ -16,6 +16,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/gamepad.h>
 #include <kernel/object/audio.h>
 #include <kernel/object/pointer.h>
 #include <kernel/object/pipe.h>
@@ -179,6 +180,15 @@ enum call_status readiness_interest_authority(const struct kernel_object *object
       return CALL_DENIED;
     }
     required = KEYBOARD_RIGHT_INPUT;
+  } else if (object->type == OBJECT_GAMEPAD) {
+    if (events != WAIT_READABLE) {
+      return CALL_BAD_REQUEST;
+    }
+    struct gamepad_object *gamepad = (struct gamepad_object *)object;
+    if (gamepad->space != caller->space || !gamepad_owned(gamepad, caller)) {
+      return CALL_DENIED;
+    }
+    required = GAMEPAD_RIGHT_INPUT;
   } else if (object->type == OBJECT_AUDIO) {
     if (events != WAIT_WRITABLE) {
       return CALL_BAD_REQUEST;

@@ -11,6 +11,7 @@
 #include <kernel/keyboard.h>
 #include <kernel/memory.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/gamepad.h>
 #include <kernel/panic.h>
 #include <kernel/pointer.h>
 #include <kernel/space.h>
@@ -137,6 +138,7 @@ void power_overlay_open(struct space *space)
   status_text[0] = '\0';
   volume_ui_cancel();
   keyboard_set_overlay(space->keyboard, true);
+  gamepad_set_overlay(space->gamepad, true);
   /* Now unfocused: relative lock is revoked with a fresh-activation
    * requirement, drags end and hovered surfaces see LEAVE. */
   pointer_space_changed(space);
@@ -149,6 +151,7 @@ static void close_overlay(void)
   ++visual_generation;
   focus_space = NULL;
   keyboard_set_overlay(space->keyboard, false);
+  gamepad_set_overlay(space->gamepad, false);
   pointer_space_changed(space);
 }
 

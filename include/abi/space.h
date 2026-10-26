@@ -86,6 +86,8 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
  * A malformed request, a duplicate name or a launch request rejected before
  * loading creates nothing. A failure while preparing the child after the
  * space exists leaves it without CPUs and shows the failure on its tab. */
+/* The first process also receives its space's gamepad (INPUT), alongside the
+ * default keyboard grant; ordinary launchers forward it by the same policy. */
 struct space_create_request {
   struct message_header header;
   uint64_t name, name_length;

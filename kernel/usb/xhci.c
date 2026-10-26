@@ -2312,6 +2312,16 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
       wait_activity(controller, task_deadline_after_ms(USB_WORKER_POLL_MS));
       status = observe_port(controller, i);
     }
+    if (port->major == XHCI_PROTOCOL_USB_2 && root_port_live(status) &&
+        !(status & XHCI_PORT_CONNECT_CHANGE)) {
+      if (usb_host_delay(controller, USB_RESET_RECOVERY_MS, deadline) != USB_OK) {
+        if (!controller->failure) {
+          controller->failure = "USB 2 root-port reset recovery failed";
+        }
+        return false;
+      }
+      status = observe_port(controller, i);
+    }
     if (!(status & XHCI_PORT_CONNECTED) || (status & XHCI_PORT_CONNECT_CHANGE)) {
       port->state = PORT_REMOVED;
       continue;
@@ -2680,6 +2690,10 @@ enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadli
   controller->command.admission = false;
   if (result == USB_OK) {
     device->addressed = true;
+    /* AddressDevice completion does not include the USB 2 recovery interval. */
+    if (!usb_speed_is_enhanced(device->link.speed)) {
+      result = usb_host_delay(controller, USB_ADDRESS_RECOVERY_MS, deadline);
+    }
   }
   return result;
 }
@@ -3103,6 +3117,13 @@ enum usb_result usb_host_topology_attach_root(struct usb_host_controller *contro
       return USB_IO;
     }
     wait_activity(controller, task_deadline_after_ms(USB_WORKER_POLL_MS));
+    status = observe_port(controller, port_index);
+  }
+  if (port->major == XHCI_PROTOCOL_USB_2 && root_port_live(status)) {
+    enum usb_result recovery = usb_host_delay(controller, USB_RESET_RECOVERY_MS, deadline);
+    if (recovery != USB_OK) {
+      return recovery;
+    }
     status = observe_port(controller, port_index);
   }
   if (!(status & XHCI_PORT_CONNECTED) || (status & XHCI_PORT_OVER_CURRENT) ||

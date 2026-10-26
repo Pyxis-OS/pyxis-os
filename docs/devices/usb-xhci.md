@@ -129,6 +129,13 @@ including on controllers without port power control. A physical USB 3 link can
 still be initializing after controller reset and miss reservation for this boot.
 See [qualification limits](../technical-debt.md#xhci-hardware-profile-and-runtime-retention).
 
+USB 2 root reset completion is followed by at least 10 ms of recovery before
+addressing. Address Device completion is followed by at least 2 ms before the
+next request, as required by USB 2.0 sections 9.2.6.2–9.2.6.3. Boot and runtime
+admission enforce these waits explicitly; incidental worker scheduling is not
+a recovery guarantee. The waits retain the existing deadline and drain progress.
+External hubs share the same reset recovery minimum.
+
 For each supported enabled port, Enable Slot uses its advertised Slot Type and
 retains the checked returned slot ID with that port. Address Device then publishes
 its output context in DCBAA and configures EP0. Output contexts belong to hardware;

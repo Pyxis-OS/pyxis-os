@@ -109,25 +109,53 @@ Input `01` has 504 payload bits. Wire byte offsets below include its ID:
 | 10 bits 3–7 and 11 | Thirteen vendor bits, page `ff00`, usage `21` |
 | 12–63 | 52 vendor bytes, page `ff00`, usage `22` |
 
-Pinned SDL 2.32.10 source (`5d249570393f7a37e037abf22cd6012a4cc56a71`,
-`src/joystick/hidapi/SDL_hidapi_ps5.c`) provides independent source evidence
-for complete USB report `01` of 64 bytes: first four axes are sticks, last two
-are triggers; the hat is clockwise from up; button byte 10 includes Edge
-function/paddle bits. This is a profile hypothesis grounded in source, not a
-measurement of chronium's live unit. The descriptor alone does not name vendor
-bits, prove an observed neutral value or show trigger-stop behavior. The SDL
-source also handles zero analog trigger values with asserted digital trigger
-bits, which must be checked against this Edge rather than guessed away.
+The descriptor and two pinned upstream sources establish the input-only profile:
+[SDL 2.32.10](https://github.com/libsdl-org/SDL/blob/5d249570393f7a37e037abf22cd6012a4cc56a71/src/joystick/hidapi/SDL_hidapi_ps5.c)
+(`5d249570393f7a37e037abf22cd6012a4cc56a71`) and
+[Linux stable v6.12.1 hid-playstation](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/hid/hid-playstation.c?id=d390303b28dabbb91b2d32016a4f72da478733b9)
+(`d390303b28dabbb91b2d32016a4f72da478733b9`). Unmodified sources, licences
+and file hashes are retained under `/shared/present/controller-support/sources/`.
+The Linux file has SHA-256
+`51973e6db85bb914d4186fa0fffc14d2a754f28123cc48994189a3d55ddf8bed`
+and SPDX `GPL-2.0-or-later`; it is reference evidence, not code vendored into
+Pyxis or a build dependency.
 
-Task 0 still needs labeled live input reports, actual lengths, neutral/range
-observations and the physical button/profile correspondence. The requested
-capture is read-only with Linux's driver bound: idle, independent stick/trigger
-sweeps (all trigger-stop positions), hat directions, individual buttons including
-Fn/paddles, and releases. No output/feature request, ioctl, grab or unbind is
-needed. Task 1 starts after this gate closes; descriptor evidence is not native
-Pyxis or QEMU qualification.
+Both sources decode the complete USB report `01` at 64 bytes. Bytes 1–4 are
+left X/Y and right X/Y; bytes 5–6 are left/right analog triggers. The hat is
+clockwise from up. The native button assignments are:
 
-## Native contract to finalize in task 0
+| Wire location | Native buttons, in ascending bit order |
+| --- | --- |
+| 8 bits 4–7 | Square, Cross, Circle, Triangle |
+| 9 bits 0–7 | L1, R1, L2, R2, Create, Options, L3, R3 |
+| 10 bits 0–2 | PS, touchpad click, microphone mute |
+| 10 bits 4–7 | Left function, right function, left paddle, right paddle |
+
+Linux explicitly names touchpad click at byte 10 bit 1 and microphone mute at
+bit 2. SDL's internal `MISC1`/`PS5_TOUCHPAD` labels at those positions must not
+be copied as physical names. SDL supplies the Edge function/paddle masks; the
+captured descriptor declares those positions as vendor bits. Byte 10 bit 3 and
+all other vendor data are ignored.
+
+SDL first reads a 64-byte USB report before its feature/output setup; Linux
+also treats USB `01` as the full report. This supports trying the standard
+input path without vendor activation. The horse capture had Linux's driver
+bound, so it does not prove Pyxis initialization needs. Task 1 must confirm
+reports after ordinary USB configuration alone and stop for discussion before
+adding any vendor sequence.
+
+Task 0 is closed on this descriptor and source evidence (chronium, 2026-10-26).
+The owner explicitly skipped the long labeled input capture. Physical control
+correspondence and live report behavior remain a brief, owner-attended Vela
+check in task 1: plug in and exercise both sticks, both triggers, the D-pad and
+all buttons in the native visualizer, taking roughly one minute. This does not
+qualify every trigger-stop position, firmware profile or observed axis range.
+SDL synthesizes a full analog trigger value when the analog byte is zero and
+the digital trigger bit is set; the native ABI instead preserves both raw
+values independently. No trigger synthesis or exhaustive trigger-stop
+qualification is part of this milestone's input-only contract.
+
+## Native contract fixed in task 0
 
 Use one typed per-space `gamepad` object with INPUT authority. Every default
 keyboard grant/forwarding path gains gamepad alongside it: first-process
@@ -156,8 +184,29 @@ The session covers separate per-device snapshots and a bounded catalog.
 Operations provide acquire/release, catalog/info, state read and accepted-state
 recovery. One level-triggered READABLE interest covers input, focus/reset and
 attachment changes; readiness neither acquires nor reserves input. No periodic
-SDL polling thread is needed. Exact ABI layouts and finite capacities must be
-written down before implementation, against the confirmed Edge state fields.
+SDL polling thread is needed. The initial implementation admits at most eight
+live attachments; this is a finite implementation bound, not a hardware limit.
+
+The SDK exports `abi/gamepad.h`. `gamepad_state` is 12 bytes: a 32-bit mask of
+19 named buttons in the table's order, six raw unsigned bytes (left X/Y, right
+X/Y, left/right trigger), one hat byte and one zero reserved byte. Axes remain
+0–255 with no kernel calibration, deadzone, inversion or trigger synthesis;
+buttons L2/R2 remain independent of the analog trigger bytes. Hat values are
+0–7 clockwise from up, with every other wire value normalized to neutral 8.
+A 48-byte event carries attachment ID, sequence, catalog generation, type,
+FOCUSED/VALID flags and accepted state. A 64-byte info record carries attachment
+ID, VID/PID/bcdDevice, profile and a trusted 48-byte name. The 80-byte catalog
+holds generation, count and eight attachment IDs; reserved fields are zero.
+
+Operations are ACQUIRE, READ, RELEASE, CATALOG, INFO and STATE. ACQUIRE,
+RELEASE and CATALOG are header-only; READ uses a 24-byte request whose flags
+select blocking (zero) or POLL (TIMED_OUT when empty). INFO and STATE use a
+24-byte request selecting attachment ID. STATE returns an event-shaped
+accepted snapshot; its VALID flag determines whether state can be consumed.
+Acquisition queues RESET. RESET uses attachment zero and requires catalog/state
+recovery. Event types also include INPUT, ATTACHED, REMOVED, FOCUS_GAINED and
+FOCUS_LOST. Catalog generation changes on attachment/removal; callers repeat
+enumeration if it changes while collecting records. Gone IDs return NOT_FOUND.
 
 Publish a full state only after a complete admitted input report. Require ID
 `01` and exactly 64 bytes; no mouse-style short-payload extension or trailers.
@@ -172,6 +221,7 @@ Unfocused queries do not expose the hidden physical stream.
 
 Preserve discrete transitions or report an explicit RESET. Continuous state may
 coalesce only for the same attachment/focus and unchanged discrete state.
+The initial queue holds 64 events; its size is an implementation choice.
 Overflow discards unreliable pending input and requires catalog/state recovery;
 it cannot silently lose a button edge. Removal invalidates the device before
 publishing disappearance. No precise timestamp or every-report delivery promise
@@ -180,16 +230,18 @@ block; preserve current source and DMA/retirement ownership rules.
 
 ## Work order
 
-- [ ] **0. Evidence and native contract.** Finish the labeled Edge input capture,
-  settle explicit
-  state/operation layouts and bounds, and record the evidence/remaining limits.
-  Linux-bound capture does not prove initialization needs on Pyxis; verify the
-  standard input path in task 1 and stop before any new vendor sequence.
+- [x] **0. Evidence and native contract.** Captured descriptor and pinned SDL/Linux
+  source establish the Edge profile and fixed native layouts. The owner waived
+  the long capture; task 1 retains the brief native correspondence and standard
+  input-path check, with no exhaustive trigger-stop qualification.
 - [ ] **1. Edge native input.** Dedicated descriptor-checked decoder, retained
   gamepad source, object/focus/readiness/lifetime, SDK exports and userland
-  wrappers/default forwarding/bundle recognition. A hand-run native viewer
-  validates real controls, missing grant/competing ownership, empty startup,
-  focus, held-input rearming and reconnect with a fresh ID. Deliver dependency
+  wrappers/default forwarding/bundle recognition. The brief Vela visualizer
+  check plugs the Edge into vela, presses a few buttons and moves the sticks
+  for about a minute; no exhaustive control/trigger-stop matrix. Local checks
+  cover the ordinary launch path, empty startup, presentation and clean exit;
+  authority/lifetime/reset paths also receive source review. This task stays
+  open until that brief owner-attended native check. Deliver dependency
   PRs before the parent pin; update this task here, not in the milestone index.
 - [ ] **2. Pyxis SDL backend.** Named native driver, real USB identity, verified
   automatic GameController mapping, lifecycle/reset handling and blocked event
@@ -205,12 +257,29 @@ block; preserve current source and DMA/retirement ownership rules.
   separate start-to-end game usability once rendering permits it. A second Edge
   can qualify simultaneous devices if available; Ultimate 2 is not a gate here.
 
+The native interface and visualizer are described in the
+[gamepad reference](../interfaces/gamepad.md). Task 1 implementation is prepared in
+[#1258](https://git.internal/PyxisOS/pyxis-os/pulls/1258), with
+[userland #390](https://git.internal/PyxisOS/pyxis-userland/pulls/390) first.
+Fresh kernel, SDK, full ports/userland and image builds passed. QEMU (q35/KVM,
+four CPUs, Bochs 1024x768, empty xHCI) passed empty acquisition, fonts package
+resolution, the normal `gamepadtest` launch, rendered empty state and Escape.
+Native vela check (chronium, 2026-10-26): all directly exercised buttons
+and triggers worked, including physical trigger stops. Paddles were
+remapped in the onboard profile and their independent bits remain unqualified;
+that limitation is accepted. Connected-at-boot failed until unplug/replug.
+The checkbox stays open for one connected-at-boot confirmation after the
+USB 2 reset/address recovery correction. All six stick/trigger report axes are
+unsigned eight-bit values (0–255), not values truncated by Pyxis; this does not
+establish the controller's internal ADC resolution.
+
 ## Validation and limits
 
 Documentation changes need link/anchor review and `git diff --check`, not a
 boot. Implementation uses ordinary builds, interactive QEMU and debugger
-inspection. Real Edge passthrough requires owner coordination on the physical
-host; a no-pad QEMU boot proves neither report decoding nor native hardware.
+inspection. The brief native Vela check requires owner coordination; no
+physical-pad QEMU matrix is a gate. A no-pad QEMU boot proves neither report decoding nor native
+hardware.
 Do not add a generic USB-host launcher, tests, fault injection or CI automation.
 Capture completion status, requested/actual length and source identity for real
 failures; disappearing input alone does not establish a controller freeze.
@@ -220,5 +289,5 @@ failures; disappearing input alone does not establish a controller freeze.
 Gamepad authority follows keyboard defaults. Focus return can resume a held
 stick or trigger; held buttons/hat need a fresh action. Existing finite USB
 record retention/quarantine limits remain. This plan introduces a typed input
-session and fresh attachment identity, not raw HID authority. No controller
-implementation or Pyxis/QEMU/native qualification is claimed by this document.
+session and fresh attachment identity, not raw HID authority. The native control check above qualifies
+the exercised input; connected-at-boot confirmation remains outstanding.

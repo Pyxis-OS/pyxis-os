@@ -13,6 +13,7 @@
 #include <kernel/object/display.h>
 #include <kernel/object/file.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/gamepad.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/forwarder.h>
 #include <kernel/object/pointer.h>
@@ -129,7 +130,7 @@ enum capability_result launcher_batch_reserve(struct launch_preparation *group, 
 }
 
 /* Kernel-added resources for a new space's first process. */
-#define SPACE_DEVICE_RESOURCES 11
+#define SPACE_DEVICE_RESOURCES 12
 
 /* BSP, IF=0. Installs the new space's devices in CHILD and points STARTUP at
  * an owned resource array that appends them, plus console streams. */
@@ -137,7 +138,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
     struct process_startup *startup, struct process_environment_entry **owned)
 {
   struct kernel_object *console = &space->console->object;
-  handle_t input, output, keyboard, pointer, display, audio, control;
+  handle_t input, output, keyboard, gamepad, pointer, display, audio, control;
   handle_t terminal_pointer = HANDLE_INVALID, saver = HANDLE_INVALID;
   handle_t local_clipboard = HANDLE_INVALID, shared_clipboard = HANDLE_INVALID;
   handle_t streams[3];
@@ -161,6 +162,10 @@ static enum call_status install_space_devices(struct process *child, struct spac
   if (result == CAP_OK) {
     result = capability_install(&child->capabilities, &space->keyboard->object,
         KEYBOARD_RIGHT_INPUT, 0, &keyboard);
+  }
+  if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, &space->gamepad->object,
+        GAMEPAD_RIGHT_INPUT, 0, &gamepad);
   }
   if (result == CAP_OK) {
     result = capability_install(&child->capabilities, &space->pointer->object,
@@ -219,6 +224,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
   entries[count++] = (struct process_environment_entry){"input", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, input, 0};
   entries[count++] = (struct process_environment_entry){"output", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, output, 0};
   entries[count++] = (struct process_environment_entry){"keyboard", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, keyboard, 0};
+  entries[count++] = (struct process_environment_entry){"gamepad", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, gamepad, 0};
   entries[count++] = (struct process_environment_entry){"pointer", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, pointer, 0};
   entries[count++] = (struct process_environment_entry){"display", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, display, 0};
   entries[count++] = (struct process_environment_entry){"audio", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, audio, 0};

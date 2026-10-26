@@ -165,6 +165,7 @@ struct usb_device_record {
   enum usb_result network_result, last_result;
   struct system_info_usb_device info;
   enum usb_speed speed;
+  uint16_t version;
   const char *detail;
   uint8_t hub_configuration;
   struct usb_interrupt_endpoint hub_endpoint;
@@ -715,6 +716,7 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
   }
   device->info.vendor_id = read16(description + 8);
   device->info.product_id = read16(description + 10);
+  device->version = read16(description + 12);
   device->info.device_class = description[4];
   device->info.device_subclass = description[5];
   device->info.device_protocol = description[6];
@@ -771,7 +773,7 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
       device->storage.host = device->host;
       usb_bot_select(&device->storage, device->owner->descriptors, total, device->speed);
       usb_hid_select(&device->hid, device->owner->descriptors, total, device->speed,
-                      device->info.vendor_id, device->info.product_id);
+                      device->info.vendor_id, device->info.product_id, device->version);
       if (usb_bluetooth_ax200(device->info.vendor_id, device->info.product_id) &&
           device->info.configuration_count == 1) {
         usb_bluetooth_select(&device->bluetooth, device->owner->descriptors, total);
@@ -1259,7 +1261,7 @@ static enum usb_speed hub_reset_port(struct usb_device_record *hub, unsigned por
   } while ((status & USB_HUB_PORT_RESET) || !(status & USB_HUB_PORT_ENABLE) ||
            !(change & USB_HUB_CHANGE_RESET));
   if (!hub_acknowledge(hub, port, change, deadline) ||
-      !hub_sleep(hub, USB_HUB_RESET_RECOVERY_MS, deadline) ||
+      !hub_sleep(hub, USB_RESET_RECOVERY_MS, deadline) ||
       !hub_port_status(hub, port, &status, &change, deadline) ||
       !hub_port_connected(hub, status, change) || !(status & USB_HUB_PORT_ENABLE)) {
     return USB_SPEED_UNKNOWN;
@@ -3260,6 +3262,7 @@ static bool runtime_descriptor_step(struct usb_discovery *discovery)
     }
     device->info.vendor_id = read16(description + 8);
     device->info.product_id = read16(description + 10);
+    device->version = read16(description + 12);
     device->info.device_class = description[4];
     device->info.device_subclass = description[5];
     device->info.device_protocol = description[6];
@@ -3294,7 +3297,7 @@ static bool runtime_descriptor_step(struct usb_discovery *discovery)
     usb_ncm_wire_select(&device->ncm, description, setup.length, device->speed);
     usb_bot_select(&device->storage, description, setup.length, device->speed);
     usb_hid_select(&device->hid, description, setup.length, device->speed,
-                    device->info.vendor_id, device->info.product_id);
+                    device->info.vendor_id, device->info.product_id, device->version);
     if (++runtime->configuration_index < device->info.configuration_count) {
       runtime->stage = USB_RUNTIME_CONFIGURATION_PREFIX;
     } else if (device->info.flags & SYSTEM_INFO_USB_DEVICE_HUB) {

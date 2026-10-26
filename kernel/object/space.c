@@ -162,7 +162,7 @@ static enum call_status copy_text(uint64_t address, uint64_t length, size_t max,
 static bool reserved_resource(const char *name)
 {
   static const char *const reserved[] = {
-    "input", "output", "stdin", "stdout", "stderr", "keyboard", "pointer", "display", "audio", "space",
+    "input", "output", "stdin", "stdout", "stderr", "keyboard", "gamepad", "pointer", "display", "audio", "space",
     "terminal_pointer", "clipboard_local", "clipboard_shared", "screenshot_saver",
   };
   size_t length = strlen(name);
