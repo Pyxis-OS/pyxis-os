@@ -1,5 +1,8 @@
 # Packages and upgrades
 
+The [0.0.10 upgrade milestone](pkg-upgrade-0.0.10.md) supersedes the rollback
+and predecessor-retention portions of this historical task record.
+
 Status: **data and program packages implemented.** The owner requested this plan
 on 2026-10-18 and accepted its three [decisions](#decisions) that day.
 [Slice 1](#slice-1-data-packages) is complete; program packages, the core archive

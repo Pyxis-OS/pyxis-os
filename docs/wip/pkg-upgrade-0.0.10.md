@@ -1,6 +1,6 @@
 # 0.0.10 package upgrades
 
-Status: **first decision round accepted (chronium, 2026-10-26); task 1 assigned.**
+Status: **first decision round accepted (chronium, 2026-10-26); task 1 in review.**
 This milestone changes the delivered [updater](pkg-upgrade.md). Later-round
 choices below remain open; this plan does not claim the new upgrade is built.
 
@@ -12,6 +12,14 @@ choices below remain open; this plan does not claim the new upgrade is built.
    it does not roll the operating system back. Keep the independent static
    rescue pair and the publisher's copies needed to diagnose or complete an
    interrupted publication. *(chronium, 2026-10-26)*
+   The committed current record has no cleanup binding. At the next
+   `pkg upgrade` or installer Update publication, the publisher removes
+   unreferenced Pyxis-created payload attempts under `EFI/pyxis/`, after
+   proving their canonical names, ownership records and payload bytes.
+   It excludes the committed current attempt and the fixed static rescue
+   pair. It never sweeps Fedora, Limine or `EFI/BOOT`; uncertain ownership
+   refuses rather than guessing. This is publication-time work, not a boot
+   scan or a manual cleanup procedure. *(chronium, 2026-10-26)*
 2. **Whole-set resolution.** Resolve every installed package for the target
    release from its recorded repository origin. Existing entries without an
    origin need a reviewed source choice; a matching ID alone does not prove
@@ -49,11 +57,12 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
 
 ## Work
 
-- [ ] **Task 1 — retire rollback interfaces:** remove the previous boot role,
+- [x] **Task 1 — retire rollback interfaces:** remove the previous boot role,
   boot-record binding and old payload retention; remove `pkg rollback`, the
   `.previous` set sidecar and predecessor-based collection. Keep publication
-  recovery copies and the static rescue pair. Update callers and reference
-  docs together. Assigned to Daybreak.
+  recovery copies and the static rescue pair. Include the bounded,
+  ownership-proven publication-time orphan sweep above. Update callers and
+  reference docs together. Assigned to Daybreak.
 - [ ] Record origins and resolve a complete target set, including explicit
   review of legacy origins and removals.
 - [ ] Add durable pending transition evidence and the verified first-boot
@@ -80,3 +89,8 @@ required later task, not part of retiring rollback interfaces. ESP and npfs
 cannot commit atomically; the gate must refuse uncertain evidence rather than
 show a mixed system. Staging can temporarily occupy space for both sets. The
 standalone rescue pair is a recovery tool, not a previous-version selection.
+An interrupted payload cleanup may leave an empty unmarked attempt directory;
+it contains no boot bytes and the next publication leaves the ambiguous empty
+name untouched. A nonempty attempt without valid ownership proof refuses the
+cleanup without guessing. The sweep runs after confirmed activation, so its
+failure is reported as incomplete cleanup of an already selected release.

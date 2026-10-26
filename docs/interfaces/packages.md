@@ -260,7 +260,6 @@ explicit writable directory authority:
 ```text
 store/ID/VERSION/     package.lua, package.files and tree/, as in the archive
 sets/N.lua           immutable set record, N from 1
-sets/N.previous      immutable predecessor record for N
 sets/N.commands      verified immutable command projection for N
 current              the active set's number
 current.new          an unpublished replacement pointer during a switch
@@ -280,34 +279,30 @@ return {
     { id = "fonts-sample", version = "1.0.0-1" },
   },
 }
-
--- sets/7.previous
-return { previous = 6 }
 ```
 
 Each record has exactly its shown fields. `set` is an integer of at least 1, and
 `packages` is a plain array of `{ id, version }` tables following the name rules
 above, each ID once. `current` is at most 256 bytes. A missing `current` is the
-empty set, as on a new volume. `previous` is a nonnegative integer smaller than
-the new set number; zero names the initial empty set. A nonzero predecessor
-names an existing set when published. Only the active set's sidecar determines
-retention; historical sidecars may name history already collected.
+empty set, as on a new volume. Older `.previous` sidecars are ignored and
+removed by boot collection.
 
-Install, remove and rollback each publish a fresh number above all existing
+Install and remove each publish a fresh number above all existing
 records. Verified staged trees move to `store/ID/VERSION` with NO_REPLACE and
 are synchronized; a stored version that a set adds back must verify against the
 downloaded metadata and inventory before reuse. Published trees and set records
 are never rewritten, so a member carried over unchanged from the current set is
-not hashed again: install, remove and rollback read its stored manifest and
-check its identity, ABI and dependencies, never its content. Only added or
+not hashed again: install and remove read its stored manifest and check its
+identity, ABI and dependencies, never its content. Only added or
 changed members are verified. npfs keeps no content checksums, so damage to a
 carried-over tree, from the medium or from a write through a read-write
 `packages` root, passes into new sets unnoticed until `pkg verify`, which
-hashes every member. Launches never hashed trees either. The client validates declared command targets and rejects duplicate exported
-names across the proposed set, then writes, verifies and syncs its command
-projection alongside the set and predecessor records. Only after these names
-are synchronized does it write and sync `current.new`, renames it over `current`, and syncs
-the volume directory. See [persistent mutation durability](filesystem-mutations.md#native-persistent-backing).
+hashes every member. Launches never hash trees either. The client validates
+declared command targets and rejects duplicate exported names across the
+proposed set, then writes, verifies and syncs its command projection alongside
+the set record. Only after these names are synchronized does it write and sync
+`current.new`, rename it over `current`, and sync the volume directory. See
+[persistent mutation durability](filesystem-mutations.md#native-persistent-backing).
 A switch or final sync failure reports activation as uncertain and retains the
 writer lock and old/new evidence for recovery. An unpublished `current.new` or
 set record is never automatically activated.
@@ -385,9 +380,9 @@ management authority and the writer lock, verifies the active packages and
 creates only its missing indexes, `sets/N.commands` or `sets/N.sdk`; a set
 published before `sdk://` gains its sdk index this way. It neither switches `current` nor advances
 retention. An existing index, including a damaged one, refuses replacement;
-recovery uses an explicitly verified set through rollback. `pkg verify` checks
+recovery requires repair or reinstall through rescue. `pkg verify` checks
 that the index exactly matches regenerated verified declarations. The boot-only
-collector recognizes projections and retains the active/predecessor records.
+collector recognizes projections and retains the active record.
 
 Consumers can hold a [native package-command view](command-search.md#live-package-command-directories)
 without receiving the store root or management authority. Capture selects one
@@ -490,8 +485,8 @@ are described below.
 
 After mounting the volume, boot init checks `current` and its set record. A
 damaged one never stops boot: boot init prints one line naming the problem, and
-every lookup then fails with the same cause until `pkg rollback SET` names a valid
-set. There is no automatic fallback to an older set.
+every lookup then fails with the same cause until repaired. There is no
+automatic fallback to an older set.
 
 ## Package client
 
@@ -500,7 +495,6 @@ pkg status
 pkg list [--available]
 pkg [--timeout SECONDS] install [REPO/]ID[@VERSION]...
 pkg remove ID...
-pkg rollback [SET]
 pkg verify
 pkg reindex
 pkg unlock
@@ -520,9 +514,7 @@ versions or absent dependencies. A dependency by ID alone keeps the installed
 version, or takes the last build offered for this system when the ID is absent,
 so installing or upgrading one member never conflicts with it. Remove refuses a
 set that breaks a remaining package's dependencies, naming both packages: while
-`base` is installed its members stay, and removing `base` first lets them go. Rollback verifies the target's members that differ from
-the current set and publishes a fresh set containing its entries, so the
-rollback itself can be reversed.
+`base` is installed its members stay, and removing `base` first lets them go.
 No package code or install scripts execute.
 
 **Choosing a repository.** `REPO/ID` and `REPO/ID@VERSION` look only in the
@@ -559,7 +551,7 @@ is not offered: `list --available` omits it and ends with
 `N builds for other systems hidden`, and installing it refuses as not available
 for this system, counting that ID's hidden builds. Before verifying anything,
 `pkg` reads every stored manifest in the set it would keep, so `install`,
-`remove`, `rollback` and `verify` refuse a set with stale builds once, naming
+`remove` and `verify` refuse a set with stale builds once, naming
 all of them and one command of each kind that clears them together:
 
 ```text
@@ -583,7 +575,7 @@ the executable name does not constrain independently delegated authority.
 The client declares optional HTTP and HTTPS
 [GET-only provider grants](../userland/program-bundles.md#explicit-provider-grants).
 Missing provider authority refuses network commands; local status, verification,
-removal and rollback need no network. Missing management authority refuses
+removal needs no network. Missing management authority refuses
 mutations. Package consumers receive no raw disk, mount-control or provider
 backing authority.
 
@@ -659,7 +651,7 @@ estimated, and there is no option to change the display.
 
 ### Review and recovery
 
-Install, remove and rollback acquire `.writer-lock` by exclusive directory
+Install and remove acquire `.writer-lock` by exclusive directory
 creation; a concurrent writer refuses immediately. Before switching, the client
 prints the proposed additions, selections and removals and requires an
 interactive console review with a `[y/N]` prompt. Only exactly `y` or `Y`
@@ -669,14 +661,8 @@ before their fetches. Declining leaves any prepared trees inactive. Normal foreg
 interruption applies during preparation; the confirmed switch is guarded until
 its actual result settles.
 
-Bare `rollback` reads the active set's predecessor. Damaged current/predecessor
-metadata requires explicit `rollback SET`, and the selected set is fully
-verified before activation, since nothing is carried over from an unreadable
-current set. A failed rollback or a command that cannot load the active selection lists
-candidate record names. If the prior selection
-is unreadable, the verified recovery target becomes the new predecessor, with
-an explicit notice that the prior selection is unavailable. A missing `current`
-retains its ordinary empty-set meaning.
+A damaged active selection refuses mutation and needs repair or reinstall
+through rescue. A missing `current` retains its ordinary empty-set meaning.
 
 After an interrupted writer has stopped, `pkg unlock` reports staging entries
 and explicitly clears an abandoned lock. It leaves staging contents inactive
@@ -686,11 +672,11 @@ maintenance leaves the lock for this explicit recovery.
 ### Boot collection
 
 Trusted init collects only before providers or package consumers start, without
-network access. It retains the active set, its predecessor, both records'
-sidecars and every store version either set references. It deletes other set
-records, unreferenced store versions and abandoned staging entries. Missing or
+network access. It retains the active set and every store version it references.
+It deletes other set records, unreferenced store versions and abandoned staging
+entries. Missing or
 damaged retention evidence skips package collection; it never selects another
-set. Historical predecessors are not followed recursively.
+set. Legacy predecessor sidecars are deleted without reading their contents.
 
 Previous boots' private HTTP backing entries are cleaned independently before
 package retention checks. Maintenance has a shared five-second budget checked

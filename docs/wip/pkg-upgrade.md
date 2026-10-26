@@ -1,5 +1,8 @@
 # ABI model, core archive and updater
 
+The [0.0.10 upgrade milestone](pkg-upgrade-0.0.10.md) replaces this delivered
+updater's previous-version boot entry, package predecessor and rollback policy.
+
 Status: **ABI/core/program-package implementation delivered; updater
 QEMU-qualified, native upgrade gate open.** This design for chronium
 (2026-10-22) replaces the earlier
