@@ -125,7 +125,8 @@ static void apply_selected(void)
 void arch_fp_ap_wait(void)
 {
   while (!atomic_load_explicit(&selected, memory_order_acquire)) {
-    __asm__ volatile("pause");
+    /* The bootstrap periodic timer is active, as in the scheduler's boot wait. */
+    cpu_wait_interrupt();
   }
   apply_selected();
 }
