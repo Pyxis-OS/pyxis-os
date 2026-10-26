@@ -163,3 +163,25 @@ stacks on timeout, rehearsing checkpoint handling without VFIO first. A new
 exclusive VFIO window goes through the orchestrator; never resume the failed
 invocation or reuse its consumed result directories. BB/RF programming,
 calibration, power enforcement and scan remain unqualified. Both PRs stay draft.
+
+
+### Checkpoint controller rehearsal
+
+The fresh packet is under `vfio-mac-checkpoints/`, preserving `vfio-mac/` and
+its consumed results. Two local q35/KVM guests (Linux 6.19.10, four vCPUs,
+no VFIO or network device) exercise synthetic module-phase and symbol-phase
+timeouts. In each case the controller records all four PCs/registers,
+GDB backtraces and one raw stack page per vCPU after QMP confirms a halt,
+then retires the guest without sending an interface-up token or resuming it.
+These PCs/backtraces have no kernel debug symbols: raw data is retained, but
+successful unwinding is not claimed. The rehearsal does not test the frozen
+7.2.10 module probe, the four real entry guards or any Realtek hardware.
+
+The actual comparator still requires the exact reviewed 7.2.10 kernel,
+modules, firmware and guard ownership before its one link-up release.
+Module-begin/done and symbol-walk-begin/done markers distinguish the old
+ambiguous checkpoint failure; bounded-memory awk validates the four unique,
+nonzero symbols and their modules. Timeout capture precedes checked retirement;
+there is no resume/retry permission. Raw stacks stay private on vela. The next
+hardware window is this one fresh Linux diagnostic invocation, not a new
+Pyxis calibration or passive-scan request.
