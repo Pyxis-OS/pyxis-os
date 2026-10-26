@@ -2,8 +2,9 @@
 
 Task 3 foundation, 2026-10-26. Implements part of the
 [accepted invalidation design](../../../wip/vm-invalidation.md); shared kernel
-VM ownership and its caller conversions are still pending. This foundation
-keeps the general kernel VM's BSP assertion and private whole-process drainage.
+VM ownership and its caller conversions follow in the shared-owner section
+below. The initial foundation kept the general kernel VM's BSP assertion and
+private whole-process drainage.
 It adds no ABI, grant, boot option or production diagnostic.
 
 Every process receives a non-reused root incarnation, with a local generation
@@ -31,7 +32,7 @@ After foundation: `2d4dd5a1`. Clang 23 builder
 the one-CPU configuration confines Remote children to CPU 0, the four-CPU
 configuration to CPU 1. All command lines, configuration/archive/kernel hashes,
 probe outputs and build logs are retained at
-`/shared/present/bsp-removal/task3/`.
+`/shared/present/bsp-removal/task 3/`.
 
 One completed run per configuration before and after: eager allocation/release,
 zeroing, sparse/self-unmap, context pins and unwind, sibling quiescence, parked
@@ -73,7 +74,7 @@ initiators is two and both complete. The fixture changes no PTE, drops no IPI
 and suppresses/delays no acknowledgement. It is not merged, added to the ABI,
 or placed in a native packet. Production sources were restored and rebuilt.
 The patch, source, ELF hash, configuration, scripts and final passing record are
-under `task3/concurrent/ordinary-two-initiators-gdb-final/` and its parent.
+under `task 3/concurrent/ordinary-two-initiators-gdb-final/` and its parent.
 Earlier collector/GDB setup failures are recorded separately in `evidence.json`.
 
 Read-only GDB hardware breakpoints establish on CPU 1:
@@ -90,12 +91,10 @@ processes were joined and stopped.
 
 ## Remaining qualification
 
-Shared structural ownership, stable concurrent queries, safe scheduler
-admission, retained uncertainty, actual shared range reuse/permissions and
-consumer exclusion are not delivered by this foundation. The separately
-authorized delayed-ACK check below covers the existing retained-resize consumer;
-it does not qualify the pending structural-owner integration. Native task 1/2
-results do not qualify task 3.
+The foundation alone does not deliver shared structural ownership or range
+reuse/permission integration. Those checks are recorded in the shared-owner
+section below; the separately authorized delayed-ACK check covers the existing
+retained-resize consumer. Native task 1/2 results do not qualify task 3.
 
 ## Delayed acknowledgement: production-kernel QEMU pass
 
@@ -144,7 +143,7 @@ The observed KVM clock floor after timeout exceeds the captured absolute
 deadline. Host/GDB stop intervals are not treated as target performance data.
 The source/ELF, host commands, QEMU command line, GDB script/transcript, full
 page/bitmap checks and snapshots are retained under
-`/shared/present/bsp-removal/task3/delayed-ack/gdb-paused-vcpu/` and its parent,
+`/shared/present/bsp-removal/task 3/delayed-ack/gdb-paused-vcpu/` and its parent,
 with a hash inventory. Only this prose is committed; no raw log, image or
 test code. All owned QEMU/GDB/Remote helpers are stopped and joined.
 
@@ -172,7 +171,7 @@ stop/resize collector. A separate private fixture on CPUs 1/2 also completes 32
 queries of each actor's retained kernel stack and 32 concurrent invalidations
 per CPU, with overlap 2. The scalar snapshot is not a lease; the actor retains
 its stack throughout. The same GDB departure/re-entry checks pass. Evidence is
-under `/shared/present/bsp-removal/task3/shared-query-fixture/` and baseline
+under `/shared/present/bsp-removal/task 3/shared-query-fixture/` and baseline
 labels `query-guard-1cpu` / `query-guard-preallocated-4cpu`. No failure injected,
 no production diagnostic/test operation, all sources restored and guests stopped.
 
@@ -184,3 +183,75 @@ ordinary run each at one/four CPUs passes the same memory/Go/stop/resize
 collector (`owner-query-current-1cpu` / `owner-query-current-4cpu`). The four-CPU
 run uses the already documented preallocated-RAM configuration. No new timing
 comparison or shared structural-owner qualification is claimed.
+
+## Shared-owner integration
+
+#1500 implements actor-owned general kernel VM transactions, retained cleanup
+and sealed firmware windows. Production source `29687ba6` is rebased on main
+`2df220a3`; no dependency pin, public ABI, grant, production fixture or default
+log output is added. Build and single ordinary one-/four-CPU runs use the
+configuration above, with preallocated guest RAM. The collector passes eager,
+sparse, unwind, pin, parked-I/O, Go parallel/retiring-thread, stopped-child and
+VirtIO-resize checks. Evidence: `baseline/owner-final-{1,4}cpu/` under the same
+shared task 3 directory. The earlier query-only checkpoint is the before sample:
+
+| Single nested run | Small | Large | Long control |
+| --- | ---: | ---: | ---: |
+| Query-only before, 1 CPU | 2.966 ms | 4.912 ms | 59.301 ms |
+| Integrated, 1 CPU | 3.260 ms | 13.679 ms | 66.511 ms |
+| Query-only before, 4 CPUs | 2.540 ms | 4.218 ms | 59.079 ms |
+| Integrated, 4 CPUs | 3.011 ms | 5.713 ms | 76.700 ms |
+
+These shared-host single samples are correctness controls, not an isolated
+performance comparison: intervening main changes are present, and allocation
+service varies. An earlier integrated four-CPU run recorded 6.101/30.509/89.004 ms;
+all numbers are retained, not selected for a gain. The final four-CPU long
+control's allocation service is 71.183 ms versus 55.559 ms before; release service
+is 2.185 ms versus 2.253 ms. The remaining time increase is not isolated to this
+change and no native speedup or absence of regression is claimed. Later
+scratch/preparation work must attribute zeroing versus scratch mapping/invlpg;
+this task does not expand into that optimization.
+
+A private, unmerged fixture (`owner-shared-fixture/`) exercises real kernel-root
+continuations on CPUs 1 and 2, gated until both spaces and Remote have started:
+
+- CPU 1 retains the structural owner while CPU 2 queries and reads a retained
+  shared allocation and completes private allocation/query/free under its own
+  drained process token. CPU 2's shared admission expires unchanged at 1 s.
+- CPU 2 transfers its whole local allocation to the existing reaper while CPU 1
+  still owns general VM. The mapping remains present until ownership becomes
+  available; CPU 1 later observes actual unmapping, not just queue acceptance.
+- After CPU 2 ends all pointer accesses/refills, CPU 1 confirms the all-CPU flush
+  before each transition, changes W/NX to R/X and back, checks effective PTE
+  permissions, executes a known return value, then reuses the same VA and checks
+  zeroed backing and a distinct pattern.
+- Separate disposable children receive fixture-prepared private mappings. An
+  R/X page executes before a write faults with protection-write-user error 0x7;
+  a W/NX page faults at instruction fetch with error 0x15. Remote observes both
+  FAULTED results, and ordinary workloads plus display resize still pass.
+
+Fixture code, patch, ELF/config hashes, fault results and source restoration
+are retained locally. No new executable MEMORY authority is exposed. Source is
+restored and the production ELF rebuilt after fixture construction. The existing
+ordinary collector supplies stopped-child and provisional-pin unwind coverage;
+parent batch-pin and cleanup-token ordering additionally received source review,
+not a claim that every deferred-cleanup contention schedule was exercised.
+
+Source review caught missing delayed-boot admission and runtime LPSS worker
+creation. Boot-init now retains outer admission after USB discovery waits; LPSS
+prepares its existing worker before scheduling and only wakes it after complete
+endpoint publication. QEMU does not qualify real LPSS assignment or native GPIO.
+An earlier integration run also hit an owner-query IF assertion during VirtIO
+resize; the scalar owner query now preserves caller IF and the final resize
+checks pass. Its serial traceback remains with the failed first-run record.
+No screenshot was captured before that helper stopped the guest.
+
+Existing process/device completion boundaries stay intact: unleased frames
+released under a held owner reclaim before process completion; presenter-held
+frames retain their existing lease lifetime. Deferred group cleanup tokens end
+after actual reclamation. Private eager free, unpublished process destruction,
+and overall scheduler/object cleanup batches still have IF=0 tails; task 4 owns
+heavy placement/bounding. See [debt #1514](https://git.internal/PyxisOS/pyxis-os/issues/1514).
+The earlier delayed-ACK check remains the scoped production failure-path evidence;
+it is not re-labelled as a new native or full shared-owner timeout test. All
+owned QEMU/Remote helpers are stopped and joined; no native/PXE run was made.
