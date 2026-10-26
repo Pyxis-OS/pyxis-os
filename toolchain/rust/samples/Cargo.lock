@@ -29,7 +29,7 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 [[package]]
 name = "libc"
 version = "0.2.191"
-source = "git+https://git.internal/PyxisOS/pyxis-libc.git?rev=bdaad80e28d7dc793f034460787c94dea622f588#bdaad80e28d7dc793f034460787c94dea622f588"
+source = "git+https://git.internal/PyxisOS/pyxis-libc.git?rev=94498eae9e79ef076eded365fcd9625f17f63377#94498eae9e79ef076eded365fcd9625f17f63377"
 
 [[package]]
 name = "libm"

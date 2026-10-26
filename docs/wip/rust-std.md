@@ -194,8 +194,8 @@ held-directory lookup helper. First-profile `DirEntry::metadata` is Unsupported
 until it can operate against a retained authorized directory; reopening a saved
 relative path after cwd changes is not an implementation. Enumeration errors
 such as concurrent-change EAGAIN are errors, not EOF. Infallible permission
-queries without a truthful native meaning follow decision 2, rather than invent
-a writable/readonly bit. These are explicit first-profile limits.
+queries use the authority contract below; missing native facts remain explicit
+errors rather than invented permission bits. These are explicit first-profile limits.
 
 References: [process environment](../interfaces/environment.md),
 [cwd and TEXT](../userland/process-state.md), [paths](../userland/paths.md),
@@ -213,16 +213,38 @@ managed stacks, FS ownership, TLS/runtime cleanup order and panic-abort contract
 `available_parallelism` remains Unsupported until effective caller eligibility
 can be reported truthfully; online CPU count is not substituted.
 
-### Permission query review point (chronium, 2026-10-26)
+### Native writable files — accepted (chronium, 2026-10-26)
 
-The file task must implement `Permissions::readonly()` without terminating for
-missing Unix mode bits. For metadata from a held File, the accepted direction
-is its actual held write rights. **Path metadata remains a decision for that
-task:** compare rights held by the transient metadata handle with rights
-obtainable for the path. Today's `stat` usually opens READ only, so blindly using
-that handle would report read-only even where a separate writable open succeeds.
-Chronium requested that this consequence be reviewed, not silently accepted.
-No permission behavior changes in the worker gate.
+`File::metadata().permissions().readonly()` reports the actual held grant's
+FILE write right. `fs::metadata(path)` reports authority obtainable through that
+captured path: FILE write for files, CREATE or REMOVE for directories. A
+directory's WRITE_FILES right alone does not permit namespace mutation. Resolve
+once and retain the native object while reading its metadata and rights; do not
+combine a separate access probe with stat. The two queries can legitimately
+differ when a read-only File was opened through a writable directory. Unknown
+provider authority returns Unsupported from path metadata, without a writable
+OPEN probe. `Permissions::set_readonly` changes the local value only;
+`set_permissions` remains Unsupported and never grants authority.
+
+Writable File opens use native FILE routes only. Refuse provider/transaction
+writers before OPEN, STAGE, create or truncate; keep existing provider reads.
+Native files are unbuffered at this layer, so `File::flush` has no pending data;
+`sync_all` and `sync_data` use the backend's real sync operation. Preserve short
+progress, checked close failures and actual metadata validity. Directory
+iteration and namespace mutation remain a separate task.
+
+Append returns Unsupported in one Rust option-validation guard before lookup
+or effects. Replace that guard when the separately assigned native atomic-append
+operation exists; seek-to-end followed by write is not atomic append. This does
+not disable libc's existing non-atomic append behavior or change provider
+transaction contracts.
+
+The writable slice is delivered by [userland #388](https://git.internal/PyxisOS/pyxis-userland/pulls/388),
+[libc #4](https://git.internal/PyxisOS/pyxis-libc/pulls/4),
+[Rust #5](https://git.internal/PyxisOS/pyxis-rust/pulls/5) and
+[Pyxis #1257](https://git.internal/PyxisOS/pyxis-os/pulls/1257).
+The [record](../development/experiments/rust-native-files.md) separates functional
+qualification, backing and noisy nested timing; no native run is claimed.
 
 ### Managed-worker delivery
 
@@ -249,10 +271,10 @@ stdio, TEXT and LazyLock, without workers, networking or child creation.
 The Rust backend preserves original path bytes on lookup, owned descriptors and
 shared cloned cursors. Regular files report their actual length; pipes and
 consoles do not acquire a synthetic seekable length. Only reported mtimes are
-exposed. Metadata Debug says permissions are unreported; infallible permission
-queries follow decision 2. Writable opens refuse Unsupported before lookup or
-side effects. Directory iteration, namespace mutation, file locks and the rest
-of gate 4 remain undelivered.
+exposed. Hexyl originally qualified the read-only backend; the native writable-file
+task extends the shared std backend under the authority contract above.
+Directory iteration, namespace mutation, file locks and the rest of gate 4
+remain undelivered.
 
 Two platform patches replace the direct libc ESPIPE dependency with
 NotSeekable and add a native supplied-console backend to terminal_size. Its rustix dependency applies
@@ -305,6 +327,9 @@ Installed std metadata does not promise every std API or crate works.
    state, channels, synchronization and deadlines.
 4. [ ] **Native files.** Add the selected fs subset and retained ownership over
    supplied roots/streams; preserve metadata validity and Unsupported boundaries.
+   - [x] Native writable FILE opens, writes/resize/sync and authority metadata
+     (accepted 2026-10-26); see the [qualification](../development/experiments/rust-native-files.md).
+   - [ ] Directory enumeration and namespace mutation (separate assignment).
    **After this task chronium can:** read, write, seek, sync and enumerate granted
    files from std without an ambient filesystem or process launch mechanism.
 5. [x] **Hexyl.** Pin/patch/build/package hexyl with the read-only File subset;
