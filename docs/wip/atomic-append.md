@@ -94,7 +94,7 @@ Do not silently adopt that change or an independent-cursor overwrite policy.
 
 ## Ordered tasks
 
-- [ ] Capture before-code QEMU costs with existing tools, single runs unless a
+- [x] Capture before-code QEMU costs with existing tools, single runs unless a
   close result drives a decision; record matched revisions/configuration and
   commands below. No attended repeated sampling.
 - [ ] Native APPEND, canonical RAM/npfs/FAT/capture serialization, required-support
@@ -119,15 +119,46 @@ shim or alternate non-atomic append surface remains after migration.
 
 ## Measurements
 
-Before-code run is being prepared on `e13b8f35`, builder
-`pyxis-llvm23.1.3-3d69e83`, QEMU/KVM with four vCPUs and 3 GiB RAM. Use existing
-`iobench write` at 4,080 and 64-byte chunks on RAM-npfs and a disposable disk
-npfs pool, plus an existing Lua interpreter's `io.open(..., 'a')`/write loop
-timed with its native monotonic clock. Record loop flush policy and output
-verification; no new benchmark program or infrastructure. After runs use the
-same image profile, tools, scratch layout and commands. Raw material stays in
-`/shared/present/atomic-append/baseline/`. Numbers are added when measured; none
-are claimed yet. Native validation later is one quick hands-free run.
+Before-code run: source `e13b8f35` (plan commit `e18516a2` changes docs only),
+userland `4060486d`, ports `4f2e8aeb`, fs `f3f22b6e`; builder
+`pyxis-llvm23.1.3-3d69e83`. QEMU/KVM q35, host CPU, four vCPUs, 3 GiB RAM,
+960×752 VirtIO display, unprofiled. RAM-npfs uses the live sparse pool; disk npfs
+uses a disposable 128 MiB pool with 8 MiB journal over VirtIO block. Neither
+timed path includes SYNC: these measure cached/native mutation costs, not media
+durability. Host load at boot was 0.75/1.09/2.69; nested timing is not native.
+
+| Workload | RAM-npfs before | Disk npfs before |
+| --- | ---: | ---: |
+| iobench 1 MiB, 4,080-byte WRITE chunks (258 calls) | 6.905 ms; 144.824 MiB/s | 6.983 ms; 143.207 MiB/s |
+| iobench 1 MiB, 64-byte WRITE chunks (16,384 calls) | 305.390 ms; 3.274 MiB/s | 338.981 ms; 2.950 MiB/s |
+| Lua stdio `w`, 8,192 × 64-byte line + explicit flush | 166.154 ms | 158.862 ms |
+| Lua stdio `a`, same loop (current SIZE+WRITE) | 304.126 ms | 318.062 ms |
+
+Single timed sample per cell, not a median/range estimate. iobench performs its
+one built-in warmup first; Lua has no warmup. All outputs were verified; no short
+writes occurred in iobench. The Lua clock surrounds the write/flush loop, excludes
+open/close and verification, and uses `pyxis.monotonic_ns()`; each line is 63 `L`
+bytes plus newline. This append baseline measures the emulation being replaced,
+not atomic append. Existing iobench checks its generated 1 MiB fixture; Lua checks
+the complete repeated-line contents after closing.
+
+Commands, with a fresh output name for each invocation:
+
+```text
+boot://iobench.pxe write ROOT/write-4080.bin --buffer 4080 --rounds 1
+boot://iobench.pxe write ROOT/write-64.bin --buffer 64 --rounds 1
+boot://append-lua.pxb boot://append-bench.lua ROOT/ w
+boot://append-lua.pxb boot://append-bench.lua ROOT/ a
+```
+
+`ROOT/` stands for `ramlog://` or `disklog://`; the helper script is only the Lua
+loop above, using existing interpreter/native clock APIs. The interpreter was
+rebuilt from the current pinned recipe against the fresh SDK; unchanged iobench
+and bootstrap programs use the same userland pin from the earlier qualified
+public archive. Raw commands/output, source/configuration and image provenance
+are in `/shared/present/atomic-append/baseline/`. After runs must use the same
+profile, scratch layout and workloads. Native validation later is one quick
+hands-free run; no native append result is claimed here.
 
 ## You should know
 
