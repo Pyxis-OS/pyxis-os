@@ -202,6 +202,28 @@ References: [process environment](../interfaces/environment.md),
 [native threads/TLS](../interfaces/threads.md), [libc threads](../userland/threads.md),
 [libc profile](../userland/libc-portability.md), [loading](../kernel/program-loading.md).
 
+### Worker yield — accepted (chronium, 2026-10-26)
+
+For this native profile, `std::thread::yield_now` is a weak processor hint under
+preemptive scheduling, matching the C++ adapter. It does not force a reschedule
+or promise fairness. Channels may use it during bounded contention backoff;
+blocking synchronization still uses native address waits. This adds no scheduler
+operation or clock-grant requirement. Worker delivery retains the existing
+managed stacks, FS ownership, TLS/runtime cleanup order and panic-abort contract.
+`available_parallelism` remains Unsupported until effective caller eligibility
+can be reported truthfully; online CPU count is not substituted.
+
+### Permission query review point (chronium, 2026-10-26)
+
+The file task must implement `Permissions::readonly()` without terminating for
+missing Unix mode bits. For metadata from a held File, the accepted direction
+is its actual held write rights. **Path metadata remains a decision for that
+task:** compare rights held by the transient metadata handle with rights
+obtainable for the path. Today's `stat` usually opens READ only, so blindly using
+that handle would report read-only even where a separate writable open succeeds.
+Chronium requested that this consequence be reviewed, not silently accepted.
+No permission behavior changes in the worker gate.
+
 ## Hexyl admission
 
 Accepted pin: [v0.17.0](https://github.com/sharkdp/hexyl/tree/v0.17.0), commit
