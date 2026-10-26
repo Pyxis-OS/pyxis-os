@@ -123,6 +123,10 @@ std/proc_macro for build scripts. Gate 2's compiler revision is
 backend at `a5c9a1815816cddb77f5c58238adf549e618b3a4`. Managed workers
 are added at `f08e6f816abf6396aa4547fe11ff0f214a951384`; native writable files
 and authority metadata use `7bb492df8d26d97a2bc37c7b225c29cd6626cf00`.
+Native directory enumeration/mutation is added at
+`4be8bb57d5f5b8cc6a959f0e9cb25f4671868504`; its
+[qualification](experiments/rust-directories.md) covers retained-parent entries,
+checked recursive creation and the native-only mutation boundary.
 The target keeps `target_os="pyxis"`
 and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
 [first std main record](experiments/rust-std-main.md) separate their qualification
@@ -136,7 +140,9 @@ at `417acae00d4e21abf1a668c8dc71361bfa03d3aa`. Managed-worker declarations
 come from [libc #3](https://git.internal/PyxisOS/pyxis-libc/pulls/3) at
 `bdaad80e28d7dc793f034460787c94dea622f588`; native file helpers use
 [libc #4](https://git.internal/PyxisOS/pyxis-libc/pulls/4) at
-`94498eae9e79ef076eded365fcd9625f17f63377`, overlaid through exact HTTPS
+`94498eae9e79ef076eded365fcd9625f17f63377`, followed by native directory bindings
+[libc #5](https://git.internal/PyxisOS/pyxis-libc/pulls/5) at
+`bd180991f68ff9533a7921d88ab9c326bb9c5a0f`, overlaid through exact HTTPS
 `[patch.crates-io]` entries in the Rust compiler workspace, library workspace
 and sample workspace, with their matching lockfiles. Keep this overlay in
 consumer workspaces that import libc; it does not change the closed crates.io proxy. The SDK
@@ -145,7 +151,9 @@ uses [userland #384](https://git.internal/PyxisOS/pyxis-userland/pulls/384) at
 end-of-TLS-drain cleanup hook. Rebuild the SDK and affected Rust libraries and
 programs when these native interfaces change; libc still owns startup and FS. Native writable files and coherent authority
 metadata require [userland #388](https://git.internal/PyxisOS/pyxis-userland/pulls/388)
-at `e80f50f87b33733aca70efd7903063e3edb85690`.
+at `e80f50f87b33733aca70efd7903063e3edb85690`. Native directory helpers require
+[userland #392](https://git.internal/PyxisOS/pyxis-userland/pulls/392) at
+`156924a0c74aa6968ca67c3ef7312c9152d9a42d`.
 
 [fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the base
 Rust revision, CI LLVM, the three upstream stage0 beta archives, backtrace source
@@ -164,7 +172,7 @@ On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
 ```sh
 git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
 git -C /absolute/pyxis-rust fetch origin
-git -C /absolute/pyxis-rust checkout --detach 7bb492df8d26d97a2bc37c7b225c29cd6626cf00
+git -C /absolute/pyxis-rust checkout --detach 4be8bb57d5f5b8cc6a959f0e9cb25f4671868504
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
