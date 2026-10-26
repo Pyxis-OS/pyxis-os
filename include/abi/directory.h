@@ -42,11 +42,12 @@
 #define DIRECTORY_KIND_ANY UINT64_C(0)
 #define DIRECTORY_KIND_FILE UINT64_C(1)
 #define DIRECTORY_KIND_DIRECTORY UINT64_C(2)
-/* LOOKUP/CREATE still request FILE or DIRECTORY. SYMLINK is also an exact
- * REMOVE kind on HOST; it unlinks the name without following the link. */
+/* Enumeration only: LOOKUP/CREATE still request FILE or DIRECTORY. */
 #define DIRECTORY_KIND_UNKNOWN UINT64_C(3)
 #define DIRECTORY_KIND_SYMLINK UINT64_C(4)
 #define DIRECTORY_KIND_OTHER UINT64_C(5)
+/* REMOVE additionally accepts exact SYMLINK on HOST only, unlinking the name
+ * without following it. LOOKUP/CREATE still request FILE or DIRECTORY. */
 
 /* Opaque, scoped to the directory being enumerated. Start with both fields
  * zero. No shared enumeration position exists in a handle or object. */
