@@ -28,8 +28,8 @@ refusal never authorizes an ESP rebuild.
 
 First choose **Install**, **Update**, **Replay a printed plan** or **Cancel**. Only Install then asks for
 **Coexist**, **Classic** or **Cancel**. Coexist preserves existing partitions,
-appends a pool in a reviewed gap and stages immutable ESP payloads with a manual
-boot entry; see [NVMe coexistence](../wip/nvme-coexistence.md). Classic provides
+appends a pool in a reviewed gap and publishes an owned Limine menu and UEFI
+boot option; see [NVMe coexistence](../wip/nvme-coexistence.md). Classic provides
 the whole-disk Install and existing ESP-rebuild recovery below. Update discovers
 recognized installations read-only and infers their layout; it never asks for a
 layout. The selected disk GUID and ESP/pool entries are rechecked by the child,
@@ -46,12 +46,11 @@ allows editing it. Typed words remain for destructive confirmations (`wipe`,
 `append`, `update`, `complete` and the explicit scratch publisher’s `confirm`); a mismatch re-prompts and Ctrl+C cancels. Native input loss
 or I/O failure is reported, rather than retried as a user mistake.
 
-Normal builds enable owned ESP publication for Classic. Coexist retains
-immutable staging with a manual boot entry; its owned record/menu activation
-awaits separate qualification and approval. The ThinkPad's manual Coexist Install/Update route is
-[natively qualified](../development/experiments/grub-limine-native.md) through
-[Fedora GRUB → Limine](grub-limine-chainload.md). Other native write scopes still
-need separate approval; this does not activate the Coexist publisher.
+Normal builds enable owned ESP publication for Classic and Coexist. The older
+ThinkPad manual chainload route was [natively qualified](../development/experiments/grub-limine-native.md),
+but the owned Coexist route has only disposable OVMF qualification. It leaves
+foreign bootloader files and configuration untouched. Other native write scopes
+still need separate approval.
 
 Install/Update refuses on battery below 40% or unreadable reported battery state.
 AC permits any charge, and a machine with no battery may proceed. The same gate
@@ -63,7 +62,8 @@ Coexistence Review requires a supported clean FAT32 ESP. FAT12/FAT16 and
 unknown capacity refuse; supported small FAT32 ESPs are assessed by checked free
 clusters against the fresh attempt's payloads, record and directory allowance.
 Insufficient space refuses before GPT append or pool writes. Previous attempts
-give no credit and are never removed automatically. The observation is
+give no credit; proven unreferenced Pyxis attempts are swept only after confirmed
+publication. The observation is
 revalidated before effects, not reserved against all later exhaustion.
 
 Choose **Install**, **Classic**, then a consent path
@@ -230,10 +230,12 @@ baseline costs, measurements, inspected behavior and qualification limits.
 
 ## Boot publication
 
-This integrated publication path is enabled for Classic. Coexist continues to
-stage immutable payloads and print its manual entry, without publishing a boot
-record or changing the menu. Full Coexist Install/Update/completion QEMU
-qualification and a separate activation record are required before enabling it.
+This integrated publication path is enabled for Classic and Coexist. Coexist
+also provisions the pinned `EFI/pyxis/BOOTX64.EFI` loader and registers a
+structured `Pyxis OS` firmware option after the record and menu verify.
+Review offers moving it to the front of BootOrder, defaulting to preserving
+foreign order. Unrecorded Coexist installations use Update to acquire this
+owned publication; an existing ambiguous menu refuses rather than being adopted.
 
 Review shows the proposed boot attempt, recovery
 and capacity. The ESP holds no configuration: Install writes the initial
@@ -257,8 +259,8 @@ states qualify. This reuses the existing attempt and record; it creates no new
 Update. There is no automatic retry, rollback or repair. Malformed records and
 ambiguous states still require manual disposition. The same explicit
 completion is reachable for existing committed pending Coexist records, under
-the same full proof checks and layout-confined authority. This does not enable
-new Coexist publication or create another attempt.
+the same full proof checks and layout-confined authority. It creates no new
+attempt.
 
 ### Interrupted Update
 
@@ -296,8 +298,9 @@ payload hashes prove ownership. Ambiguous nonempty attempts refuse cleanup;
 empty unmarked directories are left alone.
 The pinned recovery pair and fallback are reverified and never replaced by
 normal publication. Capacity includes retained recovery and fresh staging,
-without credit for cleanup. Update preserves the boot manager and firmware
-entries; it changes only confirmed Pyxis-owned menu spans. The
+without credit for cleanup. Classic Update preserves firmware entries;
+Coexist Update verifies its owned firmware option. Both change only confirmed
+Pyxis-owned menu spans. The
 [publication reference](../../userspace/installer/PUBLICATION.md) describes
 ordering and failure limits.
 
@@ -401,7 +404,8 @@ directs you to run the installer again and choose **Any disk (may erase data)**.
 live image again first; the same consent vetoes still apply. There is no automatic
 retry, rollback or repair. V1 uses existing writable disk drivers and supports logical
 sector sizes 512 and 4096, matching kernel GPT discovery/rescan. It adds no general FAT driver or
-firmware-variable updater. See the
+general firmware-variable updater. The owned Coexist workflow has a typed,
+boot-option-scoped UEFI grant. See the
 [validation record](../development/experiments/native-filesystem-task4.3/README.md)
 and [remaining limits](../technical-debt.md#installer-inspection-and-recovery-limits).
 Merged-main [QEMU end-to-end qualification](../development/experiments/native-filesystem-task5/README.md)
