@@ -283,7 +283,7 @@ enum virtio_fs_result virtio_fs_node_put(struct virtio_fs_node *node)
   return result;
 }
 
-enum virtio_fs_result virtio_fs_lookup(struct virtio_fs_node *parent,
+static enum virtio_fs_result lookup_node(struct virtio_fs_node *parent,
     const char *name, size_t length, struct virtio_fs_node *node)
 {
   KASSERT(parent->references && !node->references);
@@ -314,6 +314,16 @@ enum virtio_fs_result virtio_fs_lookup(struct virtio_fs_node *parent,
     .session = session, .id = entry.node_id, .generation = entry.generation,
     .kind = mode_kind(entry.attr.mode), .references = 1, .lookup_owned = true,
   };
+  return VIRTIO_FS_OK;
+}
+
+enum virtio_fs_result virtio_fs_lookup(struct virtio_fs_node *parent,
+    const char *name, size_t length, struct virtio_fs_node *node)
+{
+  enum virtio_fs_result result = lookup_node(parent, name, length, node);
+  if (result != VIRTIO_FS_OK) {
+    return result;
+  }
   if (node->kind != VIRTIO_FS_FILE && node->kind != VIRTIO_FS_DIRECTORY) {
     enum virtio_fs_result refused = node->kind == VIRTIO_FS_SYMLINK ?
       VIRTIO_FS_LINK_NOT_FOLLOWED : VIRTIO_FS_UNSUPPORTED;
@@ -321,6 +331,22 @@ enum virtio_fs_result virtio_fs_lookup(struct virtio_fs_node *parent,
     return result == VIRTIO_FS_OK ? refused : result;
   }
   return VIRTIO_FS_OK;
+}
+
+enum virtio_fs_result virtio_fs_child_kind(struct virtio_fs_node *parent,
+    const char *name, size_t length, enum virtio_fs_kind *kind)
+{
+  struct virtio_fs_node child = {0};
+  enum virtio_fs_result result = lookup_node(parent, name, length, &child);
+  if (result != VIRTIO_FS_OK) {
+    return result;
+  }
+  enum virtio_fs_kind observed = child.kind;
+  result = virtio_fs_node_put(&child);
+  if (result == VIRTIO_FS_OK) {
+    *kind = observed;
+  }
+  return result;
 }
 
 enum virtio_fs_result virtio_fs_getattr(struct virtio_fs_node *node,

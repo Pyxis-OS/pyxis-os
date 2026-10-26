@@ -874,8 +874,11 @@ static struct syscall_result remove_child(struct directory_object *directory, ui
     const struct directory_remove_request *request)
 {
   if (request->kind != DIRECTORY_KIND_ANY && request->kind != DIRECTORY_KIND_FILE &&
-      request->kind != DIRECTORY_KIND_DIRECTORY) {
+      request->kind != DIRECTORY_KIND_DIRECTORY && request->kind != DIRECTORY_KIND_SYMLINK) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (request->kind == DIRECTORY_KIND_SYMLINK && directory->backing != DIRECTORY_HOST) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if ((directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) &&
       request->name_length > NPFS_NAME_MAX) {

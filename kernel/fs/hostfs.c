@@ -538,7 +538,9 @@ static enum virtio_fs_result lookup_kind(struct hostfs_node *parent,
 static enum call_status remove_child(struct hostfs_request *request)
 {
   enum virtio_fs_kind kind;
-  enum virtio_fs_result result = lookup_kind(request->node, request->name, request->count, &kind);
+  enum virtio_fs_result result = request->kind == DIRECTORY_KIND_SYMLINK ?
+      virtio_fs_child_kind(&request->node->node, request->name, request->count, &kind) :
+      lookup_kind(request->node, request->name, request->count, &kind);
   if (result != VIRTIO_FS_OK) {
     return call_result(result);
   }
