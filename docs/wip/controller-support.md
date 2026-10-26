@@ -256,6 +256,10 @@ block; preserve current source and DMA/retirement ownership rules.
   separate start-to-end game usability once rendering permits it. A second Edge
   can qualify simultaneous devices if available; Ultimate 2 is not a gate here.
 
+The native interface and visualizer are described in the
+[gamepad reference](../interfaces/gamepad.md). Task 1 implementation is prepared;
+its checkbox remains open until the brief owner-attended vela check.
+
 ## Validation and limits
 
 Documentation changes need link/anchor review and `git diff --check`, not a
