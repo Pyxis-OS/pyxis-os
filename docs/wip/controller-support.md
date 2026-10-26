@@ -243,10 +243,11 @@ block; preserve current source and DMA/retirement ownership rules.
   authority/lifetime/reset paths also receive source review. The owner-attended Vela check passed, including
   connected-at-boot (chronium, 2026-10-26). Deliver dependency
   PRs before the parent pin; update this task here, not in the milestone index.
-- [ ] **2. Pyxis SDL backend.** Named native driver, real USB identity, verified
+- [x] **2. Pyxis SDL backend.** Named native driver, real USB identity, verified
   automatic GameController mapping, lifecycle/reset handling and blocked event
   wakeup in both SDL profiles. Validate raw and mapped axes/buttons/hat in a
-  hand-run viewer; unsupported effects fail explicitly. Separate assignment.
+  hand-run viewer; the backend refuses real output requests. SDL core retains
+  upstream cached-LED and zero-rumble shortcuts (chronium, 2026-10-26).
 - [ ] **3. Edge in LUS/SoH.** Remove native controller-init/default-map exclusions,
   declare bundle input, and use the existing controller manager/settings UI.
   Verify fresh and existing keyboard-only configs, editable bindings without
@@ -274,7 +275,7 @@ report axes are
 unsigned eight-bit values (0–255), not values truncated by Pyxis; this does not
 establish the controller's internal ADC resolution.
 
-## Task 2 implementation and pending decision
+## Task 2 implementation and qualification
 
 The Pyxis SDL joystick backend and asset-free manual viewer are implemented.
 Both ordinary and OSMesa archives build, and a hand-run QEMU viewer checks raw
@@ -286,17 +287,11 @@ valid Edge packets; this is not a second physical qualification or latency test.
 SDL's existing 1 ms attached-device and 3 second enumeration polling caps remain;
 native gamepad readiness participates in the video wait with no new thread.
 
-A new decision is pending before task 2 closure: SDL core caches even a refused
-LED value and returns success for its immediate repetition; it also succeeds
-without calling the backend for already-zero rumble. QEMU confirmed LED return
-−1 followed by 0 through GameController for the same device/request. Backend
-capabilities are zero and invoked effect callbacks refuse correctly. The
-accepted registration-only core allowance does not authorize fixing these
-shortcuts. Proposed: guarded Pyxis-only capability checks before the success
-shortcuts in `SDL_JoystickSetLED`, `SDL_JoystickRumble` and
-`SDL_JoystickRumbleTriggers`. No such behavior patch has been applied. The
-alternative is an explicit accepted/documented exception for upstream shortcuts.
-Task 2 stays unchecked and task 3 waits for this decision.
+SDL core remains registration-only. Its upstream repeated-LED cache and
+zero-rumble success shortcuts are retained (chronium, 2026-10-26). The Pyxis
+backend reports zero output capabilities and returns Unsupported for real
+output requests; no LED, rumble or sensor implementation is added. Task 2 is
+complete; task 3 uses LUS/SoH's existing controller manager and settings UI.
 
 ## Validation and limits
 
