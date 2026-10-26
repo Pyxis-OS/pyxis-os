@@ -164,7 +164,8 @@ backing work before releasing the borrowed data storage.
   precede parent pins; no placeholder interfaces or compatibility readers.
 - [x] Pkg consumer and QEMU qualification, with implemented behavior in FILE,
   endpoint/completion and provider references.
-- [ ] Native live RAM-npfs and separately approved owned NVMe-npfs qualification.
+- [x] Native live RAM-npfs functional qualification on vela (chronium, 2026-10-26).
+- [ ] Separately approved owned NVMe-npfs native qualification.
 
 ## Qualification
 
@@ -185,9 +186,9 @@ actual retirement and that output storage is untouched after return. Preserve
 ordinary small FILE/endpoint/completion behavior and worker fairness; no new
 long interrupt-off or locked copy interval is acceptable.
 
-The orchestrator schedules vela HWP checks: repeat the same live RAM-npfs
-268 MiB/1242-file pkg VERIFY/EXTRACT/verify phases, then a separately approved
-installed NVMe-npfs check using an owned test workspace and existing grants.
+The live RAM-npfs functional check is recorded below. The remaining native
+check needs a separately approved installed NVMe-npfs workspace and existing
+grants, using the same 268 MiB/1242-file fixture.
 NVMe gets the same request batching; physical reads, cache state and device
 limits still apply. Reuse the existing target memory/FILE scan/read+hash
 controls; separate native target timers from host Remote phase arrivals.
@@ -216,4 +217,15 @@ new CI workflow or default-boot diagnostic is added.
 
 The [matched QEMU record](../development/experiments/bulk-file-reads/README.md)
 contains the A/B/A/B package results, controls and measurement limits. All four
-archive/member/extraction/selected-set checks passed; native results remain open.
+archive/member/extraction/selected-set checks passed; the native RAM result is
+recorded below and native NVMe-npfs remains open.
+
+
+## Native live RAM-npfs (2026-10-26)
+
+Chronium's vela run passed the A/B/A/B archive, 1242-member extraction and
+selected-set checks on the XSAVE packet's shared kernel/runtime/provider.
+Host-observed install spans were A 12.654/12.403 s and B 7.836/7.843 s,
+from first output to typed completion; these are not target CPU/read timings.
+[Native record](../development/experiments/bulk-file-reads/README.md#native-vela-2026-10-26).
+Installed NVMe-npfs and the separate memory/FILE scan controls were not run.

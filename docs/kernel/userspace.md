@@ -428,7 +428,7 @@ task. Nonswitching syscalls leave it untouched. Kernel code remains non-FP/SIMD;
 no lazy ownership or user signal frame is involved. State-allocation failure
 uses the existing process/thread NO_MEMORY paths. Built-in GDB and fault reports
 retain their existing FP-register limitations. See the
-[XSAVE delivery record](../wip/xsave-avx.md).
+[XSAVE reference](xsave-avx.md).
 
 Compiler-rt builtins provide compiler arithmetic/conversion helpers. This does not
 provide a full libm. The libc conversion/scaling subset is described

@@ -92,9 +92,8 @@ with exactly 1,048,576 bytes charged to its process gate. Probe sources, raw log
 collector output and results remain in
 `/shared/present/bulk-file-reads/qualification/`; no probe/framework is merged.
 
-Native qualification remains open: orchestrator-scheduled vela HWP live
-RAM-npfs, followed by a separately approved owned NVMe-npfs workspace. Reuse the
-same fixture and controls. Unsupported native backings refuse; libc/Go retain
+Native live RAM-npfs passed in the run below. Separately approved owned
+NVMe-npfs qualification remains open. Reuse the same fixture and controls. Unsupported native backings refuse; libc/Go retain
 ordinary reads. Copies still exist, each live layer charges its owned buffer,
 provider private storage is ordinary process memory, and worker/device limits
 remain. The 0.0.9 tag (`c02a2bfa`) lifted the merge gate on 2026-10-26.
@@ -117,4 +116,34 @@ the selected set, then refused an archive hash mismatch without changing the
 selection and verified it again. This was a correctness rerun; the historical
 matched timings above were not remeasured or relabelled as post-release data.
 Logs and artifact hashes are in the record's private evidence directory under
-`rebase-009/`. Native hardware qualification remains open.
+`rebase-009/`. Native live RAM-npfs passed below; native NVMe-npfs remains open.
+
+
+## Native vela (2026-10-26)
+
+Chronium ran the sealed XSAVE packet on vela: kernel source `23be575c`,
+submitted as `1605b216` in #1246, userland `71e7baad`; Intel HWP applied on
+16 CPUs. Kernel/runtime, httpfs, SHA engine, grants and fixture were shared by
+A and B. A is ordinary-read pkg, B its explicit bulk-read replacement.
+The live package and HTTP backing is RAM-npfs; this is not an NVMe measurement.
+The fixture remains 281,031,168 bytes and 1242 synthetic files; fresh
+`a1/b1/a2/b2` identities made each extraction real. Every install passed the
+archive/member checks and 1242-file extraction, and its selected-set verification
+passed with exit status zero.
+
+| Run | Client | Host-observed install span, s |
+| --- | --- | ---: |
+| A1 | ordinary READ | 12.654 |
+| B1 | bulk READ | 7.836 |
+| A2 | ordinary READ | 12.403 |
+| B2 | bulk READ | 7.843 |
+
+Spans run from the first Remote output event to typed command completion.
+They include repository/fetch/verification/extraction/publication work plus
+transport and scheduling; they are neither target-clock timings nor isolated
+bulk-read costs. No memory/FILE scan control, per-phase CPU profile, new request
+count measurement or AC-state capture accompanied this run. No native switching
+performance claim follows from the XSAVE functional pass in the same window.
+Raw output and host events remain private at
+`/shared/present/xsave-avx/native/results-20261026T102237/`.
+Native owned NVMe-npfs remains unqualified.

@@ -279,3 +279,8 @@ gain; see the [remaining native regression](../technical-debt.md#hd-audio-volume
 
 [xfer pipelining](../development/experiments/xfer-pipelining/README.md),
 2026-10-10 (#600): native runs follow its measurements and native steps.
+
+[XSAVE/AVX](../kernel/xsave-avx.md), 2026-10-26: qualified boot-wide x87/SSE/AVX,
+eager owned task state, legacy fallback and full sibling inheritance; QEMU and
+chronium-run vela/ThinkPad checks passed. Extended debugger registers and
+AVX-512 remain deferred.
