@@ -50,7 +50,9 @@ podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-3d69e83
 The opt-in [Rust cross profile](../docs/development/rust-toolchain.md) installs a
 pinned host nightly separately and links ordinary ELF objects with this SDK and
 Clang/LLD. It adds no Rust dependency to normal images or this compiler build.
-Native std and a fork-built toolchain remain a later milestone.
+The [std milestone](../docs/wip/rust-std.md#qualified-delivery) now records the
+fork-built compiler, std main and read-only-file hexyl subset. Workers, the full
+std profile and native hardware qualification remain open.
 
 ## Native hosted payloads
 

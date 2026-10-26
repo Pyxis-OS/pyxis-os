@@ -285,17 +285,17 @@ it runs before the SDK is complete.
 
 ## Guest SDK
 
-`make image` also packages a target-only SDK at `boot://sdk`: shared headers in
-`usr/include`, startup and runtime archives in `usr/lib`, with library licenses
-and toolchain source provenance. Its manifest adds the ports revision/dirty
-state to the exported SDK record. `usr/lib/libfont.a` is not a default library;
-link it with `-lfont`. There is no separate guest ABI version.
+The `pyxis-dev` package exposes the target SDK through the installed
+[`sdk://` view](../interfaces/packages.md#reaching-package-files): public headers,
+startup/runtime archives, `pyxis.ld`, `pyxis.pc`, licences and toolchain source
+provenance. `libfont.a` is not a default library; link it with `-lfont`.
+There is no separate guest ABI version.
 
-Since TCC's retirement nothing in the image reads it: hosted Clang carries its
-own sysroot. The same SDK, with `pyxis.ld` and `pyxis.pc`, is the `pyxis-dev`
-package of the [`sdk://` view](../interfaces/packages.md#reaching-package-files);
-`boot://sdk` leaves the archive in task 3 ([decision 54](../wip/sdk-view.md)). The guest receives no compiler or linker
-executables, Clang private headers, SDK linker script or C++ runtime and headers.
+The default core archive carries no `boot://sdk`. Full development images retain
+a target-only archive copy for development; normal hosted Clang uses `sdk://`.
+Compiler/linker executables and private Clang resources come from the separate
+`clang-hosted` package, while C++ headers/runtime come from `libcxx-dev`; see
+[library development packages](library-dev-packages.md).
 
 ## Runtime build phase
 
