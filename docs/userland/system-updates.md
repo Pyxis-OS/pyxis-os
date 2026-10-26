@@ -5,8 +5,8 @@ Boot the newer live image, select **Install Pyxis** in Limine, then choose
 first prepares the pool's volumes and configuration, then stages immutable boot
 payloads, the kernel and the core archive as built, and publishes reviewed configuration and owned
 boot entries. Normal builds enable this publication and installed configuration
-loading for Classic. Coexist keeps immutable staging and manual boot entries;
-owned configuration/menu activation remains separately gated. No prior `config` use is required for an update without owner edits. It preserves
+loading for Classic and Coexist. Coexist also verifies its owned Limine loader
+and UEFI boot option after publication. No prior `config` use is required for an update without owner edits. It preserves
 the GPT, partition identities and bounds, and every existing volume, including
 `system://` and `home://`
 data. It uses the
@@ -138,8 +138,8 @@ now. chronium chose no compatibility path (2026-10-23).
 ## Replacement and verification
 
 The boot record, menu activation and independent recovery sequence below is
-the Classic path. Coexist retains the manual-entry staging path described above;
-its unqualified integrated publisher is not enabled by the normal-build default.
+shared by Classic and Coexist. Coexist adds a pinned loader and structured
+firmware registration after verified publication.
 
 Review freezes the target identity, the boot record and menu bytes and the
 recovery evidence. An initial exclusive checked interval revalidates consumed
@@ -214,8 +214,7 @@ record, payload, menu and artifact states, reusing the attempt and committed
 readiness/retention generation. It neither creates a new attempt nor starts a new
 Update. Prepared/malformed or ambiguous states still require manual disposition.
 Existing committed pending Coexist records use the same explicit completion
-path and proof checks with their own confined authority. This does not enable
-new Coexist publication.
+path and proof checks with their own confined authority.
 
 An interrupted Update can leave ESP FAT marked dirty. Pyxis then refuses writable
 admission, leaving Update completion unavailable until external filesystem repair,
@@ -249,6 +248,8 @@ native gate on vela. That gate covers clean Install, installed loading,
 same-revision Classic Update and rescue through the prior UI; foreign-file
 preservation was not checked on the freshly wiped native medium. The action-list,
 Replay and reachable pending-completion corrections have separate QEMU records;
-the old native pass does not qualify that UI or Coexist activation.
+the old native pass does not qualify that UI or Coexist activation. Owned Coexist
+Install and Update have disposable OVMF checks, not a native firmware-variable
+qualification.
 QEMU cut results do not qualify native power cuts, torn sectors or devices ignoring
 FLUSH.

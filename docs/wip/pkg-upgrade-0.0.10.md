@@ -1,6 +1,6 @@
 # 0.0.10 package upgrades
 
-Status: **tasks 1–2 merged; task 3 ready for review (chronium, 2026-10-26).**
+Status: **tasks 1–3 merged; owned Coexist publication in review (2026-10-26).**
 This milestone changes the delivered [updater](pkg-upgrade.md). The signing-floor
 choice below remains open; this plan does not claim a completed release.
 
@@ -43,15 +43,27 @@ choice below remains open; this plan does not claim a completed release.
    Do not build a 0.0.9-compatible bridge `pkg`. Release notes must say that
    0.0.9 `pkg upgrade` cannot perform this transition. *(chronium,
    2026-10-26)*
-5. **Coexist provenance.** A reviewed Coexist Install/Update writes the
-   activation record and prints one manual boot entry; it never edits a
-   foreign boot menu. An existing unrecorded Coexist installation needs the
-   installer's Update to gain that record. Boot warns loudly when the record
-   is absent or invalid, and `pkg` returns a specific refusal rather than
-   obtaining ESP write authority. *(chronium, 2026-10-26)*
-   Until that activation-record task lands, Coexist Update refuses before any
-   target write with a clear message. Classic Update remains available.
+5. **Owned Coexist boot.** A reviewed Coexist Install/Update publishes Pyxis's
+   pinned Limine at `EFI/pyxis/BOOTX64.EFI`, normal and static rescue entries,
+   and a Classic-style committed activation record. It registers one `Pyxis OS`
+   UEFI boot option for that stable file after verified publication. The option
+   is appended to `BootOrder` without changing the relative order of existing
+   options. Installer review asks whether to move Pyxis first; the default is
+   no. No Fedora GRUB chainload, manual entry, per-attempt selector, or foreign
+   bootloader configuration write is part of the path. Ambiguous ownership or
+   firmware registration refuses rather than guessing or blindly retrying.
+   An existing unrecorded Coexist installation needs the installer's Update to
+   gain the owned loader, option and record. Boot warns loudly when evidence is
+   absent or invalid; `pkg` returns a specific refusal rather than obtaining
+   ESP write authority. Conflicting evidence enters rescue.
    *(chronium, 2026-10-26)*
+   Firmware variable access requires a typed UEFI grant. Any holder may request
+   the grant's bounded, structured `Boot####`/`BootOrder` writes; the installer
+   and other trusted tools receive it through normal grant configuration, and
+   ordinary programs do not. Runtime firmware calls are serialized under a
+   lock from any CPU, without a CPU 0 ownership requirement. A failed or
+   uncertain registration is reported as incomplete and is not automatically
+   retried. *(chronium, 2026-10-26)*
 6. **Package updates and origins.** `pkg update` selects every installed
    package; `pkg update ID...` selects those IDs and required dependency changes,
    then validates the whole proposed set. An unchanged set reports `already up
@@ -84,7 +96,12 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   interruption boundaries and core-rescue refusal.
 - [x] Integrate the set planner with `pkg upgrade` and 0.0.10 installer Update;
   qualify the actual 0.0.9 migration and the post-stage instruction.
-- [ ] Add Coexist activation evidence and specific boot/`pkg` diagnostics.
+- [x] Add kernel UEFI runtime support and the typed, boot-option-scoped grant;
+  qualify bounded firmware variable operations in OVMF.
+- [x] Publish the owned Coexist Limine/config/record, register its firmware
+  option after verification, and add boot/`pkg` diagnostics. Qualify Install,
+  unrecorded Update and representative refusal boundaries on disposable OVMF
+  images. Native firmware and power-cut qualification remain open.
 - [ ] Settle the signing-floor source and qualify first repository contact.
 
 ## Task 3 qualification
@@ -111,11 +128,37 @@ boot-selection proof made boot-init enter core rescue before starting the
 installed space. These checks establish the refusal and negative proof path;
 they do not simulate power loss at every publication write.
 
-The in-system `pkg upgrade` staging path and its final instruction built at
+At the task-3 revision, the in-system `pkg upgrade` staging path and its final instruction built at
 this revision but were not run against a signed release repository: the
-signing-floor source is still an open decision. Coexist activation records are
-also later work. The 0.0.10 release notes must tell 0.0.9 users to use installer
+signing-floor source is still an open decision. The 0.0.10 release notes must tell 0.0.9 users to use installer
 Update, because the 0.0.9 `pkg upgrade` client cannot stage this transition.
+
+## Owned Coexist qualification
+
+At pyxis-os `223556b2` with pyxis-userland `b6fbf16`, a 4-vCPU KVM/OVMF
+QEMU run on a disposable 4 GiB GPT disk installed beside a 512 MiB FAT32 ESP
+containing `EFI/fedora/untouched.txt`. Review offered the BootOrder choice
+(default: retain foreign order); Apply created pool partition 2, published
+`EFI/pyxis/BOOTX64.EFI`, the normal/rescue menu and committed record, then
+read back its `Pyxis OS` firmware option. A second run updated that installation,
+staged a complete two-package set from a local synthetic repository and verified
+the record, menu and firmware entry. Disk-only OVMF boot loaded that option and
+Limine; boot-init logged `verified package set 2 for this boot` before starting
+the installed space. Both extracted ESPs passed `fsck.fat -n`, and the Fedora
+file remained unchanged.
+
+For the unrecorded-Update route, a disposable clone had the owned loader,
+record and menu removed while retaining the pool and payloads. A prior
+publication recovery copy had to be removed as well: without its record that
+copy is ambiguous, and Review correctly refused before writing. The resulting
+unrecorded clone accepted Update, staged set 3 and verified the newly published
+record, menu and firmware entry; `fsck.fat -n` passed and the Fedora file was
+unchanged. A separate clone with a changed `boot/limine/limine.conf` was refused
+at discovery; its whole-disk SHA-256 was identical before and after. This is a
+synthetic migration fixture, not a released 0.0.9 image.
+OVMF does not qualify native UEFI variable behavior, firmware that ignores
+flushes, or every interrupted write boundary. The move-first BootOrder choice
+was inspected in code but was not exercised in QEMU.
 
 ## Open decisions for later rounds
 

@@ -32,6 +32,11 @@ static volatile struct limine_efi_memmap_request efi_memory_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
+static volatile struct limine_efi_system_table_request efi_system_table_request = {
+  .id = LIMINE_EFI_SYSTEM_TABLE_REQUEST_ID,
+};
+
+__attribute__((used, section(".limine_requests")))
 static volatile struct limine_hhdm_request hhdm_request = {
   .id = LIMINE_HHDM_REQUEST_ID,
 };
@@ -85,6 +90,94 @@ static volatile uint64_t requests_end[] = LIMINE_REQUESTS_END_MARKER;
 
 static struct boot_info boot;
 
+struct efi_table_header {
+  uint64_t signature;
+  uint32_t revision, size, crc32, reserved;
+};
+
+struct efi_system_table_prefix {
+  struct efi_table_header header;
+  uint64_t vendor;
+  uint32_t firmware_revision, padding;
+  uint64_t console_in_handle, console_in;
+  uint64_t console_out_handle, console_out;
+  uint64_t error_handle, error;
+  uint64_t runtime_services;
+};
+
+struct efi_runtime_table_prefix {
+  struct efi_table_header header;
+  uint64_t get_time, set_time, get_wakeup_time, set_wakeup_time;
+  uint64_t set_virtual_map, convert_pointer, get_variable;
+  uint64_t get_next_variable_name, set_variable;
+};
+
+#define EFI_SYSTEM_TABLE_SIGNATURE UINT64_C(0x5453595320494249)
+#define EFI_RUNTIME_TABLE_SIGNATURE UINT64_C(0x56524553544e5552)
+
+_Static_assert(offsetof(struct efi_system_table_prefix, runtime_services) == 88,
+    "EFI system table layout");
+_Static_assert(offsetof(struct efi_runtime_table_prefix, set_virtual_map) == 56 &&
+    offsetof(struct efi_runtime_table_prefix, get_variable) == 72 &&
+    offsetof(struct efi_runtime_table_prefix, set_variable) == 88,
+    "EFI runtime table layout");
+
+static bool efi_hhdm_pointer(const void *pointer, size_t bytes, uint64_t *physical)
+{
+  uintptr_t address = (uintptr_t)pointer;
+  if (!pointer || address < boot.bootstrap_direct_offset ||
+      bytes > UINTPTR_MAX - address) {
+    return false;
+  }
+  uint64_t base = address - boot.bootstrap_direct_offset;
+  for (size_t i = 0; i < boot.region_count; ++i) {
+    const struct boot_region *region = &boot.regions[i];
+    if (region->type == BOOT_FIRMWARE && base >= region->base &&
+        bytes <= region->length && base - region->base <= region->length - bytes) {
+      *physical = base;
+      return true;
+    }
+  }
+  return false;
+}
+
+static void copy_efi_runtime_table(void)
+{
+  const struct limine_efi_system_table_response *response =
+      efi_system_table_request.response;
+  uint64_t system_physical, runtime_physical;
+  if (!boot.efi_map_valid || !response ||
+      !efi_hhdm_pointer(response->address, sizeof(struct efi_system_table_prefix),
+          &system_physical)) {
+    return;
+  }
+  struct efi_system_table_prefix system;
+  memcpy(&system, response->address, sizeof(system));
+  if (system.header.signature != EFI_SYSTEM_TABLE_SIGNATURE ||
+      system.header.size < sizeof(system) ||
+      system.runtime_services > UINT64_MAX - boot.bootstrap_direct_offset) {
+    return;
+  }
+  const void *runtime = (const void *)(uintptr_t)(
+      system.runtime_services + boot.bootstrap_direct_offset);
+  if (!efi_hhdm_pointer(runtime, sizeof(struct efi_runtime_table_prefix),
+      &runtime_physical)) {
+    return;
+  }
+  struct efi_runtime_table_prefix table;
+  memcpy(&table, runtime, sizeof(table));
+  if (table.header.signature != EFI_RUNTIME_TABLE_SIGNATURE ||
+      table.header.size < sizeof(table) || !table.set_virtual_map ||
+      !table.get_variable || !table.set_variable) {
+    return;
+  }
+  boot.efi_system_table_physical = system_physical;
+  boot.efi_runtime_table_physical = runtime_physical;
+  boot.efi_set_virtual_map_physical = table.set_virtual_map;
+  boot.efi_get_variable_physical = table.get_variable;
+  boot.efi_set_variable_physical = table.set_variable;
+}
+
 static void copy_efi_memory_map(void)
 {
   const struct limine_efi_memmap_response *map = efi_memory_request.response;
@@ -96,7 +189,8 @@ static void copy_efi_memory_map(void)
       map->desc_size < sizeof(struct efi_descriptor) || !map->memmap_size ||
       map->memmap_size % map->desc_size ||
       map->memmap_size > UINTPTR_MAX - (uintptr_t)map->memmap ||
-      map->memmap_size / map->desc_size > BOOT_MAX_REGIONS) {
+      map->memmap_size / map->desc_size > BOOT_MAX_REGIONS ||
+      map->memmap_size > BOOT_EFI_MAP_BYTES) {
     return;
   }
   size_t count = map->memmap_size / map->desc_size;
@@ -114,6 +208,10 @@ static void copy_efi_memory_map(void)
     };
   }
   boot.efi_region_count = count;
+  memcpy(boot.efi_map_words, map->memmap, map->memmap_size);
+  boot.efi_map_size = map->memmap_size;
+  boot.efi_descriptor_size = map->desc_size;
+  boot.efi_descriptor_version = map->desc_version;
   boot.efi_map_valid = true;
 }
 
@@ -473,6 +571,7 @@ static void copy_command_line(void)
   copy_executable_placement();
   copy_memory_map();
   copy_efi_memory_map();
+  copy_efi_runtime_table();
   /* Validation needs the memory map; start the screen before other checks. */
   copy_framebuffer();
   if (boot.framebuffer.size) {

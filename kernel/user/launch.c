@@ -31,6 +31,8 @@
 #include <kernel/boot_files.h>
 #include <kernel/object/disk.h>
 #include <kernel/object/power.h>
+#include <kernel/object/uefi.h>
+#include <abi/uefi.h>
 #include <kernel/object/screen_capture.h>
 #include <abi/acpi_tables.h>
 #include <kernel/object/bluetooth_hci.h>
@@ -118,6 +120,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *disks = NULL;
   struct kernel_object *fat_mounts = NULL;
   struct kernel_object *power = NULL;
+  struct kernel_object *uefi = NULL;
   struct kernel_object *screen_capture = NULL;
   struct directory_object *acpi_tables = NULL;
   struct kernel_object *bluetooth_hci = NULL, *wifi = NULL;
@@ -159,6 +162,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   net_policy = net_policy_create();
   random = random_create();
   power = power_create();
+  uefi = uefi_create();
   screen_capture = screen_capture_create();
   bluetooth_hci = bluetooth_hci_create();
   wifi = wifi_create(process);
@@ -167,7 +171,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   service = endpoint_service_create();
   terminal_service = terminal_service_create();
   retention_factory = retention_factory_create();
-  if (!memory || !threads || !launcher || !clock || !system_info || !log || !net_registry || !net_policy || !random || !power || !screen_capture || !bluetooth_hci || !wifi || !profile || !pipe || !service || !terminal_service || !retention_factory) {
+  if (!memory || !threads || !launcher || !clock || !system_info || !log || !net_registry || !net_policy || !random || !power || !uefi || !screen_capture || !bluetooth_hci || !wifi || !profile || !pipe || !service || !terminal_service || !retention_factory) {
     goto fail;
   }
 
@@ -176,7 +180,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   handle_t clock_handle, net_registry_handle, net_policy_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, terminal_service_handle;
   handle_t retention_factory_handle;
-  handle_t system_info_handle, power_handle, log_handle, screen_capture_handle;
+  handle_t system_info_handle, power_handle, uefi_handle, log_handle, screen_capture_handle;
   handle_t bluetooth_hci_handle, wifi_handle;
   handle_t input_policy_handle = HANDLE_INVALID;
   handle_t script_handle = HANDLE_INVALID;
@@ -207,6 +211,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, net_registry, NET_REGISTRY_RIGHT_READ, 0, &net_registry_handle) != CAP_OK ||
       capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||
       capability_install(&process->capabilities, power, POWER_RIGHTS, 0, &power_handle) != CAP_OK ||
+      capability_install(&process->capabilities, uefi, UEFI_RIGHTS, 0, &uefi_handle) != CAP_OK ||
       capability_install(&process->capabilities, screen_capture,
           SCREEN_CAPTURE_RIGHT_CAPTURE, 0, &screen_capture_handle) != CAP_OK ||
       capability_install(&process->capabilities, wifi,
@@ -350,6 +355,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   random = NULL;
   object_release(power);
   power = NULL;
+  object_release(uefi);
+  uefi = NULL;
   object_release(screen_capture);
   screen_capture = NULL;
   object_release(bluetooth_hci);
@@ -373,7 +380,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_environment_entry entries[40] = {
+  struct process_environment_entry entries[41] = {
     {"memory", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, memory_handle, 0},
     {"threads", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, threads_handle, 0},
     {"launcher", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, launcher_handle, 0},
@@ -388,12 +395,13 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"service", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, service_handle, 0},
     {"terminal", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, terminal_service_handle, 0},
     {"power", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, power_handle, 0},
+    {"uefi", ENVIRONMENT_CAP, 0, uefi_handle, 0},
     {"screen_capture", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, screen_capture_handle, 0},
     {"acpi_tables", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, acpi_tables_handle, 0},
     {"bluetooth_hci", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, bluetooth_hci_handle, 0},
     {"fat_mounts", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, fat_mounts_handle, 0},
   };
-  size_t entry_count = 18;
+  size_t entry_count = 19;
   entries[entry_count++] = (struct process_environment_entry){"wifi", ENVIRONMENT_CAP, 0, wifi_handle, 0};
   entries[entry_count++] = (struct process_environment_entry){"retention_factory",
     ENVIRONMENT_CAP, 0, retention_factory_handle, 0};
@@ -540,6 +548,9 @@ fail:
   }
   if (power) {
     object_release(power);
+  }
+  if (uefi) {
+    object_release(uefi);
   }
   if (net_registry) {
     object_release(net_registry);
