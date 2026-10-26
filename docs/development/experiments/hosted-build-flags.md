@@ -135,10 +135,16 @@ fixture and Neovim headless edit/write/quit passed. Neovim uses its supported
 no-swap/no-backup settings; a preliminary `-u NONE` script omitted those and
 correctly refused unsupported operations. OpenArena completed the full 3,398
 frames and exited zero. These checks establish functionality, not native
-performance. Detailed build/command records stay in
+performance. The final rebase was checked with the rebuilt `a5cf48f8` kernel and the
+explicit development fixture: shell/cat, SHA and Neovim edit/write/quit passed
+again. A stopped debugger snapshot found a live timed user task with its FS
+context bound; this is startup evidence, not a leak or allocation proof.
+Detailed build/command records stay in
 `/shared/present/hosted-flags/delivery/`.
 
-A short delivered-SDK ImGui repeat, same guest/method as above, produced FPS
+A short delivered-SDK ImGui repeat, before the main rebase (userland
+`2324cc5`, ports `739fe8a`, kernel `c02a2bfa`), used the same guest/method and
+produced FPS
 A **30.5, 30.3, 25.7** and B **32.0, 30.9, 23.0**. Medians 30.3/30.9 and broad
 overlapping ranges do not establish a stable gain or regression. Late low
 points on both sides are retained. Do not substitute the cleaner prototype
@@ -149,8 +155,8 @@ profiles use delta's identical normally generated slot-A first-room save and
 one hashed JSON: 320x240 internal, 4:3, 1920x1048 drawable, 20 FPS cap and MSAA
 off. chronium selects slot A normally on each system and leaves its initial
 room position/camera unchanged; no input sequencer is added. Existing rolling
-HUD screenshots are sampled automatically after that confirmation. A normal
-quit is verified before another profile restores the common state. Delivery
+HUD screenshots are sampled automatically after that confirmation. After chronium confirms the shell prompt, the normal-quit receipt is checked
+before another profile restores the common state. Delivery
 requires positive RAM-home evidence and uses bounded private HTTP parts.
 Fedora must use the same save/JSON and SoH/Mesa pins through its working
 softpipe launcher; that launcher/environment still needs confirmation before

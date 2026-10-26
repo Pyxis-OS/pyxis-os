@@ -108,5 +108,5 @@ workflow, before any native staging.
 
 - [x] Userland: hosted SDK C flags and explicit libc/startup exceptions.
 - [x] Ports: Mesa optimization authority and duplicated target C flags.
-- [ ] Parent integration: CMake, dependency pins, build references and QEMU checks.
+- [x] Parent integration: CMake, dependency pins, build references and QEMU checks.
 - [ ] Coordinated native matched comparison with the same private save/settings.
