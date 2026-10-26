@@ -264,8 +264,14 @@ The native interface and visualizer are described in the
 Fresh kernel, SDK, full ports/userland and image builds passed. QEMU (q35/KVM,
 four CPUs, Bochs 1024x768, empty xHCI) passed empty acquisition, fonts package
 resolution, the normal `gamepadtest` launch, rendered empty state and Escape.
-The checkbox remains open for the brief owner-attended vela check; physical
-reports, buttons and native USB behavior are not yet qualified.
+Native vela check (chronium, 2026-10-26): all directly exercised buttons
+and triggers worked, including physical trigger stops. Paddles were
+remapped in the onboard profile and their independent bits remain unqualified;
+that limitation is accepted. Connected-at-boot failed until unplug/replug.
+The checkbox stays open for one connected-at-boot confirmation after the
+USB 2 reset/address recovery correction. All six stick/trigger report axes are
+unsigned eight-bit values (0–255), not values truncated by Pyxis; this does not
+establish the controller's internal ADC resolution.
 
 ## Validation and limits
 
@@ -283,5 +289,5 @@ failures; disappearing input alone does not establish a controller freeze.
 Gamepad authority follows keyboard defaults. Focus return can resume a held
 stick or trigger; held buttons/hat need a fresh action. Existing finite USB
 record retention/quarantine limits remain. This plan introduces a typed input
-session and fresh attachment identity, not raw HID authority. No controller
-implementation or Pyxis/QEMU/native qualification is claimed by this document.
+session and fresh attachment identity, not raw HID authority. The native control check above qualifies
+the exercised input; connected-at-boot confirmation remains outstanding.

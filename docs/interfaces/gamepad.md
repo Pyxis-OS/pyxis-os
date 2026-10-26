@@ -59,7 +59,8 @@ extension, trailer ignoring, feature/output request or vendor initialization is
 used. Unused sensor, touch and audio fields remain unexposed. Transport loss
 invalidates the source before existing USB retirement/loss acknowledgement.
 
-The six axes are raw unsigned bytes, 0–255: left X/Y, right X/Y, left trigger,
+The six axes have native USB-report precision of eight bits each, unsigned
+0–255 (Pyxis preserves the report bytes): left X/Y, right X/Y, left trigger,
 right trigger. Hat directions are 0–7 clockwise from up; 8 means neutral.
 Nineteen named bits cover the face buttons, shoulders, digital trigger buttons,
 Create/Options, stick clicks, PS, touchpad click, mic, Fn and paddles. Analog

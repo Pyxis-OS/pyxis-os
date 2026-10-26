@@ -1261,7 +1261,7 @@ static enum usb_speed hub_reset_port(struct usb_device_record *hub, unsigned por
   } while ((status & USB_HUB_PORT_RESET) || !(status & USB_HUB_PORT_ENABLE) ||
            !(change & USB_HUB_CHANGE_RESET));
   if (!hub_acknowledge(hub, port, change, deadline) ||
-      !hub_sleep(hub, USB_HUB_RESET_RECOVERY_MS, deadline) ||
+      !hub_sleep(hub, USB_RESET_RECOVERY_MS, deadline) ||
       !hub_port_status(hub, port, &status, &change, deadline) ||
       !hub_port_connected(hub, status, change) || !(status & USB_HUB_PORT_ENABLE)) {
     return USB_SPEED_UNKNOWN;
