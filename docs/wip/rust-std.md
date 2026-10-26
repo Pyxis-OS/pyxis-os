@@ -189,13 +189,44 @@ API. Parent/file-name inspection remains lexical, not provider discovery.
 Gate 2's baseline precedes adapter edits; see the
 [record](../development/experiments/rust-std-main.md).
 
-The current libc DIR abstraction retains enumeration authority without a public
-held-directory lookup helper. First-profile `DirEntry::metadata` is Unsupported
-until it can operate against a retained authorized directory; reopening a saved
-relative path after cwd changes is not an implementation. Enumeration errors
-such as concurrent-change EAGAIN are errors, not EOF. Infallible permission
-queries use the authority contract below; missing native facts remain explicit
-errors rather than invented permission bits. These are explicit first-profile limits.
+### Directories — accepted (chronium, 2026-10-26)
+
+ReadDir and its entries share ownership of one retained native directory. Copy
+name bytes and known types before advancing; names are not forced to UTF-8.
+Entry metadata resolves through that original parent, never a reconstructed
+path or a later cwd/environment lookup. It may observe removal or replacement
+at the same name. The original path remains display spelling. Entries can
+outlive the iterator and keep a mount reference until their last owner closes;
+retain the existing checked-close failure policy.
+
+Admission requires ENUMERATE only, preserving already delegated rights for later
+entry queries. Ordinary C opendir remains unchanged. Iteration is live: return
+one actual error, then finish; no sorting, snapshot or automatic restart. A
+known cached type requires no lookup. An unknown type uses zero-right native
+typed lookup through the retained parent, requiring its existing LOOKUP; never
+guess, follow links or demand file content rights merely to identify a type.
+
+Create/remove/rename are native-only libc routes, refusing provider invocation
+before effects. Preserve traversal/CREATE/REMOVE authority, backend type and
+same-store limits; no copy/delete rename fallback, implicit sync or automatic
+mutation retry. A failed mutation may already have effects. Directory mode bits
+are not persistent native permissions.
+
+Checked create_dir_all captures its native root/cwd once, retaining the chain
+and resolving components in original order. Do not cancel `..` or escape the
+boundary. Validate real scheme roots and existing directories fallibly; reject
+leading slash, preserve the documented empty-path no-op and concurrent creators.
+Existing final `.`/`..` require actual resolution. Failure may leave created
+parents; there is no transaction/rollback promise.
+
+**Next Rust std work item:** proper native remove_dir_all and fs::copy, needed
+by Cargo, tempfile cleanup and installers. They remain Unsupported only for
+this directory stage, not a long-term disabled profile. Recursive removal needs
+held-parent traversal/deletion without following links; copy must handle actual
+native authority and identity without self-truncation or fabricated permissions.
+Do not select the shared fallbacks incidentally: one reopens saved paths and the
+other writes before failing unsupported permission application. This next item
+still needs its own implementation assignment and just-in-time decisions.
 
 References: [process environment](../interfaces/environment.md),
 [cwd and TEXT](../userland/process-state.md), [paths](../userland/paths.md),
@@ -329,7 +360,9 @@ Installed std metadata does not promise every std API or crate works.
    supplied roots/streams; preserve metadata validity and Unsupported boundaries.
    - [x] Native writable FILE opens, writes/resize/sync and authority metadata
      (accepted 2026-10-26); see the [qualification](../development/experiments/rust-native-files.md).
-   - [ ] Directory enumeration and namespace mutation (separate assignment).
+   - [ ] Directory enumeration and namespace mutation (accepted/assigned 2026-10-26).
+   - [ ] Next: native remove_dir_all and fs::copy (Cargo/tempfile/installers);
+     Unsupported only for the directory stage, separate implementation assignment.
    **After this task chronium can:** read, write, seek, sync and enumerate granted
    files from std without an ambient filesystem or process launch mechanism.
 5. [x] **Hexyl.** Pin/patch/build/package hexyl with the read-only File subset;

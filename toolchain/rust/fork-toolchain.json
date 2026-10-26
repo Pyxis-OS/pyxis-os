@@ -49,7 +49,7 @@
     "base_commit": "ccc2ff4aaab962f7fde7b8edda7379c045b1ca12",
     "crate_sha256": "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a",
     "base_branch": "libc-0.2",
-    "pyxis_commit": "94498eae9e79ef076eded365fcd9625f17f63377"
+    "pyxis_commit": "bd180991f68ff9533a7921d88ab9c326bb9c5a0f"
   },
   "source_archives": [
     {
