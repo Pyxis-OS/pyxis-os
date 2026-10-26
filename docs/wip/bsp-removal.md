@@ -215,6 +215,15 @@ Include the existing audio/network/display mixed load to detect CPU0 starvation
 and verify XSAVE state across the new continuations. No raw-device writes,
 firmware changes, new scheduler precedence or native action is authorized here.
 
+### Native tasks 1–2 (chronium/orchestrator, 2026-10-26)
+
+[Hands-free vela A/B/C](../development/experiments/memory-native-abc/README.md)
+passes every boot's functional packet and single-run workload checks. A/B/C
+small elapsed is 3.964/2.808/2.807 ms; long control 104.976/95.582/94.662 ms.
+This closes that native packet, with no native variance/scaling claim. Native
+unrelated mixed-load stress and the separate masked UDP capture remain open;
+Remote kernel-ring evidence is retained and identified honestly.
+
 ## What stays separate
 
 The fixed-worker placement rule, device IRQ/MSI targets, audio/network/USB owner

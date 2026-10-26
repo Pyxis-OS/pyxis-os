@@ -107,5 +107,7 @@ Evidence stays in `/shared/present/bsp-removal/`: ELF/config/command/program
 hashes, initial baseline and matched raw logs, `matched-results.json`, longer
 controls, functional runs and `ownership-stop-gdb.log`. Early private harness
 failures and the superseded unsynchronized stop attempt are not counted as
-qualification passes. Native mixed-load validation and measurement of shared
-PMM costs remain open; launch/final reclamation and shared kernel VM stay BSP-owned.
+qualification passes. [Native vela A/B/C](../memory-native-abc/README.md) now passes the task 1/2
+functional packet; the shared PMM measurement and batches are recorded
+[separately](../frame-batches/README.md). Native unrelated mixed-load stress
+remains open; launch/final reclamation and shared kernel VM stay BSP-owned.

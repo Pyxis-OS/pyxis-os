@@ -160,6 +160,7 @@ or test helper is merged.
 Evidence, exact ELF/config/archive/source hashes, commands, counter patches,
 workload sources, GDB transcripts and `analyze.py` are outside Git under
 `/shared/present/bsp-removal/frame-batches/`. Public 0.0.8/0.0.9 ABI checks pass.
-Native batch qualification remains open; the sealed task 1 native A/B packet is
-unchanged and still tests task 1, not these batches. Shared live-root mutation,
+[Native vela A/B/C](../memory-native-abc/README.md) now passes the task 1/2
+functional packet, with current-main batches in C; its single runs do not prove
+a native batch speedup or multi-CPU scaling. Shared live-root mutation,
 invalidation, launch/reaper ownership and JIT remain later work.
