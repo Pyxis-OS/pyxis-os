@@ -75,7 +75,8 @@ Pyxis profiles, not merely similar scene presentation. Fedora uses SoH 9.3.1
 `f0599f9` and Mesa 26.2.5 softpipe; both systems use identical JSON settings:
 240-line internal canvas, 4:3, 1920x1048 output, 20 FPS cap and MSAA off, with
 CPU at full power. The packet records save/configuration hashes and the camera
-spot. Private assets remain under `/shared/oot`; no private game content enters
+spot. Chronium selects and loads slot A on each system; delivery and collection
+are automated, with no input sequencer (chronium, 2026-10-26). Private assets remain under `/shared/oot`; no private game content enters
 the repository.
 
 ## Accepted contract (chronium, 2026-10-26)
