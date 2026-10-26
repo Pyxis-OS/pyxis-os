@@ -237,10 +237,11 @@ block; preserve current source and DMA/retirement ownership rules.
 - [ ] **1. Edge native input.** Dedicated descriptor-checked decoder, retained
   gamepad source, object/focus/readiness/lifetime, SDK exports and userland
   wrappers/default forwarding/bundle recognition. The brief Vela visualizer
-  check exercises both sticks/triggers, D-pad and all buttons. Hand-run checks
-  also cover missing grant/competing ownership, empty startup, focus,
-  held-input rearming and reconnect with a fresh ID. This task stays open until
-  owner-attended native qualification. Deliver dependency
+  check plugs the Edge into vela, presses a few buttons and moves the sticks
+  for about a minute; no exhaustive control/trigger-stop matrix. Local checks
+  cover the ordinary launch path, empty startup, presentation and clean exit;
+  authority/lifetime/reset paths also receive source review. This task stays
+  open until that brief owner-attended native check. Deliver dependency
   PRs before the parent pin; update this task here, not in the milestone index.
 - [ ] **2. Pyxis SDL backend.** Named native driver, real USB identity, verified
   automatic GameController mapping, lifecycle/reset handling and blocked event
@@ -257,8 +258,14 @@ block; preserve current source and DMA/retirement ownership rules.
   can qualify simultaneous devices if available; Ultimate 2 is not a gate here.
 
 The native interface and visualizer are described in the
-[gamepad reference](../interfaces/gamepad.md). Task 1 implementation is prepared;
-its checkbox remains open until the brief owner-attended vela check.
+[gamepad reference](../interfaces/gamepad.md). Task 1 implementation is prepared in
+[#1258](https://git.internal/PyxisOS/pyxis-os/pulls/1258), with
+[userland #390](https://git.internal/PyxisOS/pyxis-userland/pulls/390) first.
+Fresh kernel, SDK, full ports/userland and image builds passed. QEMU (q35/KVM,
+four CPUs, Bochs 1024x768, empty xHCI) passed empty acquisition, fonts package
+resolution, the normal `gamepadtest` launch, rendered empty state and Escape.
+The checkbox remains open for the brief owner-attended vela check; physical
+reports, buttons and native USB behavior are not yet qualified.
 
 ## Validation and limits
 
