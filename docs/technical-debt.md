@@ -1258,7 +1258,13 @@ requests callers expect to restrict access.
 ## Non-atomic stdio append
 
 Append streams and `O_APPEND` descriptors query the file size before each native write, so concurrent appenders can overwrite each
-other, and seeking does not make the pair atomic. Keep this until concurrent appending needs a native operation that chooses the end and writes under one file operation.
+other, and seeking does not make the pair atomic. A separately scoped native
+operation must choose EOF and write under the same file owner serialization.
+Rust `OpenOptions::append`, ordinary Go append opens (therefore Git's billy
+adapter) and sbase `tee -a` remain unavailable; revisit their adapters together
+with that operation. Existing libc/Lua/libuv/Neovim/shell native FILE append is
+supported but non-atomic. Provider transactions and non-FILE append need their
+own contracts; a native EOF operation does not enable HTTP append.
 Formatted output stages the full result with `snprintf` (heap allocation and a second pass when the stack buffer is too small), so large
 formatted output needs temporary memory; revisit bounded streaming when a consumer makes that material. FILE output is unbuffered by
 default; `setvbuf` and `setbuf` select [full or line buffering](userland/stdio.md#output-buffering).

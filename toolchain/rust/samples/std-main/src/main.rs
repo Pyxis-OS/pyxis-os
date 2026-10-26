@@ -139,6 +139,8 @@ fn readonly_file(path: &str) -> io::Result<()> {
     let mut file = std::fs::File::open(path)?;
     let metadata = file.metadata()?;
     assert!(metadata.is_file());
+    assert!(metadata.permissions().readonly());
+    assert!(std::fs::metadata(path)?.permissions().readonly());
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)?;
     assert_eq!(bytes.len() as u64, metadata.len());
@@ -150,7 +152,7 @@ fn readonly_file(path: &str) -> io::Result<()> {
     assert_eq!(copy, bytes);
     assert_eq!(file.stream_position()?, metadata.len());
     assert_eq!(std::fs::OpenOptions::new().write(true).open(path).unwrap_err().kind(),
-               io::ErrorKind::Unsupported);
+               io::ErrorKind::PermissionDenied);
     writeln!(io::stdout(), "rust-std-main: readonly file {metadata:?}")
 }
 

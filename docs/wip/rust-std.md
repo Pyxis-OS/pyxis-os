@@ -239,6 +239,13 @@ operation exists; seek-to-end followed by write is not atomic append. This does
 not disable libc's existing non-atomic append behavior or change provider
 transaction contracts.
 
+The writable slice is delivered by [userland #388](https://git.internal/PyxisOS/pyxis-userland/pulls/388),
+[libc #4](https://git.internal/PyxisOS/pyxis-libc/pulls/4),
+[Rust #5](https://git.internal/PyxisOS/pyxis-rust/pulls/5) and
+[Pyxis #1257](https://git.internal/PyxisOS/pyxis-os/pulls/1257).
+The [record](../development/experiments/rust-native-files.md) separates functional
+qualification, backing and noisy nested timing; no native run is claimed.
+
 ### Managed-worker delivery
 
 [Libc #3](https://git.internal/PyxisOS/pyxis-libc/pulls/3) at `bdaad80e`
@@ -320,8 +327,8 @@ Installed std metadata does not promise every std API or crate works.
    state, channels, synchronization and deadlines.
 4. [ ] **Native files.** Add the selected fs subset and retained ownership over
    supplied roots/streams; preserve metadata validity and Unsupported boundaries.
-   - [ ] Native writable FILE opens, writes/resize/sync and authority metadata
-     (accepted 2026-10-26; qualification in progress).
+   - [x] Native writable FILE opens, writes/resize/sync and authority metadata
+     (accepted 2026-10-26); see the [qualification](../development/experiments/rust-native-files.md).
    - [ ] Directory enumeration and namespace mutation (separate assignment).
    **After this task chronium can:** read, write, seek, sync and enumerate granted
    files from std without an ambient filesystem or process launch mechanism.
