@@ -127,6 +127,8 @@ Native directory enumeration/mutation is added at
 `4be8bb57d5f5b8cc6a959f0e9cb25f4671868504`; its
 [qualification](experiments/rust-directories.md) covers retained-parent entries,
 checked recursive creation and the native-only mutation boundary.
+Copy and recursive removal use `1c82b7cac7de6e456741ec3084cfb42c30fa8e85`;
+see their [qualification](experiments/rust-copy-remove.md).
 The target keeps `target_os="pyxis"`
 and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
 [first std main record](experiments/rust-std-main.md) separate their qualification
@@ -142,7 +144,9 @@ come from [libc #3](https://git.internal/PyxisOS/pyxis-libc/pulls/3) at
 [libc #4](https://git.internal/PyxisOS/pyxis-libc/pulls/4) at
 `94498eae9e79ef076eded365fcd9625f17f63377`, followed by native directory bindings
 [libc #5](https://git.internal/PyxisOS/pyxis-libc/pulls/5) at
-`bd180991f68ff9533a7921d88ab9c326bb9c5a0f`, overlaid through exact HTTPS
+`bd180991f68ff9533a7921d88ab9c326bb9c5a0f`. Copy/removal helpers use
+[libc #6](https://git.internal/PyxisOS/pyxis-libc/pulls/6) at
+`805ff5ed2f7f88cfea9e5e1fec67e074e8ee8e56`, overlaid through exact HTTPS
 `[patch.crates-io]` entries in the Rust compiler workspace, library workspace
 and sample workspace, with their matching lockfiles. Keep this overlay in
 consumer workspaces that import libc; it does not change the closed crates.io proxy. The SDK
@@ -153,7 +157,9 @@ programs when these native interfaces change; libc still owns startup and FS. Na
 metadata require [userland #388](https://git.internal/PyxisOS/pyxis-userland/pulls/388)
 at `e80f50f87b33733aca70efd7903063e3edb85690`. Native directory helpers require
 [userland #392](https://git.internal/PyxisOS/pyxis-userland/pulls/392) at
-`156924a0c74aa6968ca67c3ef7312c9152d9a42d`.
+`156924a0c74aa6968ca67c3ef7312c9152d9a42d`. Copy/removal adds
+[userland #394](https://git.internal/PyxisOS/pyxis-userland/pulls/394) at
+`fdfa26cb549e701022f0b4e5f6603e2d41c018c9` with the matching typed HOST symlink-removal kernel contract.
 
 [fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the base
 Rust revision, CI LLVM, the three upstream stage0 beta archives, backtrace source
@@ -172,7 +178,7 @@ On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
 ```sh
 git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
 git -C /absolute/pyxis-rust fetch origin
-git -C /absolute/pyxis-rust checkout --detach 4be8bb57d5f5b8cc6a959f0e9cb25f4671868504
+git -C /absolute/pyxis-rust checkout --detach 1c82b7cac7de6e456741ec3084cfb42c30fa8e85
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
