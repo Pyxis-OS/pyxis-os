@@ -133,6 +133,33 @@ sources remain staged.
 A fresh SDK from parent base `09a19c94`, normal builder `3d69e83`, and the
 mirror-only recipe build pass. The unchanged SDL2/Mesa static prefixes came
 from the 0.0.9 packages: their ports/userland pins and public ABI match this
-base exactly. Raw source-identity/build evidence and the upstream draft stay
-under `/shared/present/blurgtext-0.2.0/`. QEMU qualification is recorded in the
-follow-up once completed; no native result is claimed by this refresh.
+base exactly. The QEMU code/image head is parent `a93625be`, ports `9632dd2`;
+subsequent changes add this qualification record only. The core startup/program
+archive is reused from release 0.0.9, with its same userland pin/public ABI,
+the freshly built parent kernel and this build's `os-release`. Only local live
+configuration and ordinary init scripts are overlaid; demo/fonts are not
+embedded. No native result is claimed by this refresh.
+
+KVM/q35, four CPUs, 3 GiB, Bochs display and VirtIO networking rendered an
+**800×632** framebuffer with **800×600 1:1 application content**. The ordinary
+package client installed and verified blurgtext 0.2.0 and its `fonts` dependency
+from a localhost-only, explicitly unsigned development repository. Bare
+`blurgtext` launch and Escape exit pass. Removing `fonts` while blurgtext remains
+installed refuses with the missing-dependency reason and leaves the set intact.
+Read-only post-exit GDB, with function calls disabled, finds all four CPUs in
+ordinary idle/sleep paths; no kernel panic or application fault was observed.
+
+The original demo text/layout/styles, UTF-16 cursor, SVG cat/cucumber, bread and
+CJK fallback all render. Roboto's reported measurement stays
+**90.203125 × 28**. Comparing lossless captures with the native pointer parked
+at the same lower-right position gives **zero differing pixels in the entire
+800×600 content** versus the previous capture; the native navigation-bar title
+is excluded. Images were not rescaled, retouched or composited. This is one
+fixed font/sample/profile, not broad font-engine or performance coverage.
+
+Raw source-identity/build/package/HTTP records, read-only GDB output, unedited
+captures, comparison details and the upstream draft stay under
+`/shared/present/blurgtext-0.2.0/`. The first host HTTP helper had already exited,
+so the initial package attempt reported a transport failure without changing
+the set; keeping the helper running resolved that fixture issue. No new port
+code or failure workaround was added for it.
