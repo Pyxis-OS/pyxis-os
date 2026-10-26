@@ -18,7 +18,7 @@ nightly-2026-10-24 `48f4b055` with LLVM 23.1.4. Final links use SDK Clang/LLD
 23.1.3. The [std main record](../development/experiments/rust-std-main.md)
 separates build, QEMU/debugger and native-program control results.
 The stacked hexyl step uses Rust `a5c9a181`, libc crate `417acae0` and
-ports `76f154a6`, retaining that userland/SDK. Its
+ports `3a056f50`, with the SDK refreshed on userland `6cd1cf57`. Its
 [qualification](../development/experiments/rust-hexyl.md) covers the read-only
 file subset and optional package, not workers or the full filesystem gate.
 The stack is rebased and requalified after the 0.0.9 release; the original

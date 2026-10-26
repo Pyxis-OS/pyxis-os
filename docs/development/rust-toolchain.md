@@ -135,7 +135,7 @@ at `417acae00d4e21abf1a668c8dc71361bfa03d3aa`, overlaid through exact HTTPS
 and sample workspace, with their matching lockfiles. Keep this overlay in
 consumer workspaces that import libc; it does not change the closed crates.io proxy. The SDK
 uses [userland #384](https://git.internal/PyxisOS/pyxis-userland/pulls/384) at
-`14be162ecefc49dbdbc573bb6ef700dc21abb2ec` for owned all-TEXT capture and the
+`6cd1cf577ca46faf031fa7ba2a9a67bae56eabff` for owned all-TEXT capture and the
 end-of-TLS-drain cleanup hook. Rebuild the SDK and affected Rust libraries and
 programs when these native interfaces change; libc still owns startup and FS.
 

@@ -46,7 +46,7 @@ its executable is 827,948 bytes. It was served only through a loopback test
 repository, explicitly configured unsigned using the existing development policy.
 No public repository was signed or published.
 
-## QEMU and debugger results
+## Initial qualification before the patch-scope review
 
 Nested QEMU 10.2.2/KVM q35, host CPU, one/four vCPUs, 2 GiB, OVMF, modern
 VirtIO GPU/net/RNG and SCSI read-only ISO. There is no disk or native access.
@@ -59,7 +59,8 @@ This is a development qualification image, not a released 0.0.9 artifact.
 An unmodified Linux build of the same upstream source is the independent output
 reference. Deterministic comparisons use `--character-table=ascii --panels=2`
 and explicit colour policy, clearing the host's inherited NO_COLOR where needed.
-Both CPU counts pass:
+Both CPU counts passed with the initial three-patch set; the final platform-only
+set is qualified separately below:
 
 | Exercise | Result |
 | --- | --- |
@@ -137,3 +138,30 @@ checks pass again; executable SHA-256 is
 The private ABI-0.0.9 package `0.17.0+d0b05009f748` installs and verifies on
 both guests. No new performance or native results are claimed. Rebase evidence
 is retained in `/shared/present/rust-rebase-20261026/`.
+
+## Platform-only patch set (chronium, 2026-10-26)
+
+Ports `3a056f50` removes patch 0002 entirely. The two remaining patches are
+platform integration: standard NotSeekable in place of an unsupported direct
+libc dependency, and the native terminal_size backend. The local locked
+terminal_size entry selects that backend at the same checksum-pinned version,
+without admitting its Unix termios dependency on Pyxis.
+
+The removed read-error handling also reproduces on unmodified Linux hexyl;
+it is not a Pyxis-specific adaptation. A read-only upstream issue draft is
+kept outside the repository. No output-flush issue is proposed or carried.
+A fresh actual recipe build, package pack/check/install/verify, seven exact
+Linux output comparisons, colours, normal file/pipe errors, forward skipping,
+RAM/npfs files and both ordinary-main regressions pass on one/four CPUs.
+GDB repeats startup/FS and File open/read inspection. Final executable SHA-256:
+`8432bde2f22481fad7beffe7a00fbefa017efd135a625f050689f166e522a17c`.
+
+Error observations deliberately retain upstream behavior: normal display with
+missing stdout reports an error and exits 1; include mode with missing stdout
+exits 0 after dropping its failed final buffer. Persistent input failure does
+not exit on its own; the existing native job deadline stops it and confirms
+cleanup on both CPU counts. These limits supersede the initial three-patch
+error results above; the std backend still returns genuine errors.
+The local package contains 58 files and no copy of removed patch 0002.
+Raw results are in `/shared/present/rust-hexyl-patch-policy/`; no native or
+performance claim is added.
