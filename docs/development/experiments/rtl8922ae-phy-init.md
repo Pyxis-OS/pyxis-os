@@ -123,3 +123,34 @@ The host staging helper was exercised on a disposable local directory: menu
 restoration was byte-identical and protected root payloads unchanged. Actual
 PHY/RF programming, calibration outcome, enforced power behaviour and physical
 rfkill remain unqualified. Both PRs remain draft.
+
+
+## Resume on current main (2026-10-26)
+
+The draft rebases onto main `182c58ba` and helper #367 onto userland main
+`fdfa26cb`. The helper head is `ff4a5c46`; other dependency pins are inherited
+from main. No radio sequence or frozen diagnostic packet was changed by the
+rebase. The opt-in kernel rebuild passes with the current XSAVE, VM and
+allocation changes; one shadow warning is in unchanged `kernel/user/spawn.c`.
+No new QEMU or native qualification is claimed for this rebased head.
+
+Release integration now needs attention before delivery: the draft grows
+WIFI_STATUS from 544 to 600 bytes, changes its published size assertion and
+requires the full new size. The [release ABI contract](../../interfaces/abi.md#keeping-a-releases-abi)
+requires preserving the released 544-byte prefix and accepting its capacity,
+returning only the prefix that fits. The ABI guard therefore currently fails
+for both 0.0.8 and 0.0.9. Apply that existing reply-growth contract without
+silently dropping a release from the supported list. This is an integration
+blocker, not new permission for RF work.
+
+Hardware progress remains the recorded MAC-only refusal at `0x9c94` above.
+The accepted removal of its extra equality check has not yet been exercised on
+hardware. The Linux phase never armed its four terminal guards or sent the
+interface-up token. Its firmware/board output and clocksource timeout do not
+establish whether module probing or subsequent symbol enumeration stalled.
+Next diagnostic preparation should mark those phases separately and retain
+all-vCPU stacks on timeout, rehearsing checkpoint handling without VFIO first.
+A fresh exclusive VFIO window must be scheduled through the orchestrator; do
+not resume the failed invocation or reuse its consumed result directories.
+BB/RF programming, calibration, power enforcement and actual scan remain
+unqualified. Both PRs stay draft.
