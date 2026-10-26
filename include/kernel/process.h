@@ -58,6 +58,7 @@ struct process {
   struct process_task_member *tasks; /* Stop targets, detached before storage reclamation. */
   size_t task_count; /* Linked tasks, including those awaiting BSP retirement. */
   size_t task_storage_count; /* Includes detached storage and context pins until completion. */
+  size_t cleanup_pins; /* lifetime_lock: retained cleanup borrowing process records. */
   bool stopping;
   /* One packed first-event election, including fault entry without lifetime_lock. */
   atomic_uint_fast64_t terminal_result;
@@ -79,7 +80,8 @@ struct process *process_current(void);
 enum mm_result process_create(struct space *space, struct vm_space *address_space,
                               struct process **result);
 
-/* BSP, IF=0, exclusive unsubmitted process, with no prepared task storage.
+/* BSP, IF=0, shared kernel structural owner held, exclusive unsubmitted
+ * process, with no prepared task storage.
  * Submitted processes finalize through process_task_reclaimed(). Frees the address
  * space, private allocation records, capability table and process. Owned
  * keyboard, graphics and audio sessions are released first; if VM destruction fails,
@@ -126,14 +128,26 @@ bool process_result_get(struct process *process, struct process_result *result);
  * Detach the stop target, reclaim task storage, release context pins and publish
  * native thread completion, then call reclaimed. The last detach elects EXITED/0
  * only when no process-wide event exists and closes VM admission. For the last
- * storage, reclaimed marks the process RETIRED, detaches its control and group
- * membership and queues it for the reaper without allocating; it returns true
- * and the caller must not access the process afterwards. The reaper releases
+ * storage, reclaimed returns true and queues the process for the reaper only
+ * when no cleanup pins remain; the caller must not access it afterwards. The
+ * final task storage or cleanup pin marks RETIRED and detaches control/group
+ * membership before queueing without allocation. The reaper releases
  * the address space in bounded interrupts-off steps, then the remaining
  * resources, and only then publishes control and group completion. */
 void process_task_detach(struct process *process, struct process_task_member *member);
 bool process_task_reclaimed(struct process *process);
+/* IF=0, caller already keeps the submitted process live. Retain borrowed
+ * process records through whole-record cleanup after the syscall returns.
+ * Pin and unpin are any CPU while task storage remains. The final unpin after
+ * all task storage is gone uses the existing BSP finalization owner. Process,
+ * control and group completion wait for both task storage and these pins.
+ * No access to process is permitted after unpin without another live owner. */
+bool process_cleanup_pin(struct process *process);
+void process_cleanup_unpin(struct process *process);
 /* BSP, IF=0, after task_init(). Starts the BSP process reaper task. */
 void process_reaper_init(void);
+/* Any CPU, IF=0, after releasing the producer's retirement queue guard. Wake
+ * the existing reaper for retained cleanup; no allocation or context switch. */
+void process_cleanup_notify(void);
 
 #endif

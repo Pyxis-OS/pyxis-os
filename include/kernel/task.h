@@ -22,6 +22,7 @@ struct forwarder_operation;
  * task/control/context storage; failure leaves control with its caller. */
 enum call_status task_thread_prepare(struct task *creator, const struct thread_create *input,
     struct thread_control *control, struct task **result);
+/* Caller already holds the shared kernel structural owner. */
 void task_thread_discard(struct task *task);
 /* Group admission and process lifetime guards held, no allocation. Attach
  * before observer installation, then enqueue as the final publication step. */
@@ -31,6 +32,9 @@ enum call_status task_thread_bind_fs(struct task *task, uint64_t identity, uintp
 /* Current user, after request capture; actual EXIT follows dispatch cleanup. */
 void task_thread_exit_request(uint64_t value);
 
+/* Current retained task, including kernel workers; NULL on the permanent
+ * scheduler stack and before scheduler initialization. IF=0. */
+struct task *task_current_actor(void);
 /* VM admission helpers, IF=0. The process VM guard owns continuation changes
  * and held links; scheduler parking/enqueue helpers take only the queue guard. */
 struct task *task_current_user(void);

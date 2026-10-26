@@ -7,6 +7,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/object/object.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/process.h>
@@ -168,6 +169,11 @@ struct process *process_current(void)
 {
   struct task *task = local_scheduler()->current_task;
   return task && task->kind == TASK_USER ? task->process : NULL;
+}
+
+struct task *task_current_actor(void)
+{
+  return schedulers ? local_scheduler()->current_task : NULL;
 }
 
 struct task *task_current_user(void)
@@ -1032,6 +1038,7 @@ void task_user_release(void)
 
 static enum mm_result allocate_task(struct task **result)
 {
+  KASSERT(vm_kernel_owner_held());
   struct task *task = kmalloc(sizeof(*task));
   if (!task) {
     return MM_NO_MEMORY;
@@ -1055,7 +1062,7 @@ static enum mm_result allocate_task(struct task **result)
 
 static void free_task(struct task *task)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(arch_cpu_index() == 0 && vm_kernel_owner_held());
   KASSERT(!task->bsp_request && !task->deferred_request);
   KASSERT(!task->wait && !task->wait_record.timed && !task->resource_wait.next);
   KASSERT(!task->address_wait && !task->address_wait_expired &&
@@ -1067,7 +1074,7 @@ static void free_task(struct task *task)
   kfree(task);
 }
 
-enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
+static enum mm_result create_kernel_task(void (*entry)(void *), void *argument)
 {
   KASSERT(arch_cpu_index() == 0);
   if (!schedulers || !entry) {
@@ -1085,6 +1092,17 @@ enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
   task->argument = argument;
   enqueue(&schedulers[0], task);
   return MM_OK;
+}
+
+enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
+{
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    return MM_BUSY;
+  }
+  enum mm_result result = create_kernel_task(entry, argument);
+  vm_kernel_owner_release(&owner);
+  return result;
 }
 
 void task_space_close_setup(struct space *space)
@@ -1121,7 +1139,7 @@ enum call_status task_space_set_affinity(struct space *space, const uint64_t *cp
   return CALL_OK;
 }
 
-enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
+static enum mm_result prepare_user_task(struct process *process, uintptr_t entry,
                                  uintptr_t stack_top, size_t preferred_cpu,
                                  struct task **result)
 {
@@ -1181,9 +1199,24 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
   return MM_OK;
 }
 
+enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
+    uintptr_t stack_top, size_t preferred_cpu, struct task **result)
+{
+  *result = NULL;
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    return MM_BUSY;
+  }
+  enum mm_result status = prepare_user_task(process, entry, stack_top,
+      preferred_cpu, result);
+  vm_kernel_owner_release(&owner);
+  return status;
+}
+
 void user_task_discard_prepared(struct task *task)
 {
   KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
+  KASSERT(vm_kernel_owner_held());
   process_task_discard(task->process, &task->process_member);
   free_task(task);
 }
@@ -1194,7 +1227,7 @@ static bool fs_context_valid(const struct private_context *context, uintptr_t ba
       base - context->usable_address <= context->usable_size;
 }
 
-enum call_status task_thread_prepare(struct task *creator, const struct thread_create *input,
+static enum call_status prepare_thread_task(struct task *creator, const struct thread_create *input,
     struct thread_control *control, struct task **result)
 {
   KASSERT(arch_cpu_index() == 0 && creator && creator->kind == TASK_USER && control);
@@ -1212,8 +1245,9 @@ enum call_status task_thread_prepare(struct task *creator, const struct thread_c
     return CALL_BAD_REQUEST;
   }
   struct task *task;
-  if (allocate_task(&task) != MM_OK) {
-    return CALL_NO_MEMORY;
+  enum mm_result allocation = allocate_task(&task);
+  if (allocation != MM_OK) {
+    return allocation == MM_BUSY ? CALL_BUSY : CALL_NO_MEMORY;
   }
   enum call_status status = private_context_pin(process, input->stack_identity,
       &task->stack_context);
@@ -1258,9 +1292,24 @@ enum call_status task_thread_prepare(struct task *creator, const struct thread_c
   return CALL_OK;
 }
 
+enum call_status task_thread_prepare(struct task *creator,
+    const struct thread_create *input, struct thread_control *control,
+    struct task **result)
+{
+  *result = NULL;
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    return CALL_BUSY;
+  }
+  enum call_status status = prepare_thread_task(creator, input, control, result);
+  vm_kernel_owner_release(&owner);
+  return status;
+}
+
 void task_thread_discard(struct task *task)
 {
   KASSERT(arch_cpu_index() == 0 && task && !task->process_member.task);
+  KASSERT(vm_kernel_owner_held());
   private_context_unpin(&task->stack_context);
   private_context_unpin(&task->fs_context);
   object_release(&task->thread_control->object);
@@ -1389,6 +1438,10 @@ static void complete_task(struct task *task)
 
 static void reap_completed(void)
 {
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    return;
+  }
   lock_queues();
   struct task *task = completed_head;
   completed_head = NULL;
@@ -1434,6 +1487,7 @@ static void reap_completed(void)
     }
     task = next;
   }
+  vm_kernel_owner_release(&owner);
 }
 
 static void wake_sleepers(struct timer_clock *clock)
@@ -1545,6 +1599,7 @@ void task_yield_masked(void)
   size_t cpu_index = arch_cpu_index();
   if (cpu_index == 0) {
     KASSERT(schedulers && !atomic_load_explicit(&started, memory_order_relaxed));
+    vm_kernel_runtime_start();
     /* Publish scheduler storage and initialized console state to every AP. */
     atomic_store_explicit(&started, true, memory_order_release);
   } else {

@@ -14,6 +14,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/private.h>
 #include <kernel/mm/vm.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/panic.h>
 #include <kernel/object/process.h>
 #include <kernel/object/execution_group.h>
@@ -21,6 +22,7 @@
 #include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user/readiness_set.h>
+#include <kernel/user/launch.h>
 
 /* Tunable storage policy, including the initial and retiring threads. */
 #define PROCESS_THREAD_LIMIT 256
@@ -78,8 +80,23 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
  * step. Tuning, not a contract. */
 #define TEARDOWN_STEP_BUDGET 256
 
-static struct process *retired_head, *retired_tail; /* BSP, IF=0. */
-static struct task_wait *reaper_wait; /* BSP, IF=0. */
+/* Enqueue, dequeue and waiter ownership are joined under this guard. Queue
+ * producers notify only after dropping their own retirement guards. */
+static struct spinlock reaper_guard;
+static struct process *retired_head, *retired_tail;
+static struct task_wait *reaper_wait;
+
+void process_cleanup_notify(void)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  spin_lock(&reaper_guard);
+  if (reaper_wait) {
+    struct task_wait *wait = reaper_wait;
+    reaper_wait = NULL;
+    task_wait_wake(wait);
+  }
+  spin_unlock(&reaper_guard);
+}
 
 /* Closes VM admission and ends device sessions. */
 static void release_sessions(struct process *process)
@@ -119,9 +136,9 @@ static void release_records(struct process *process)
 
 static enum mm_result destroy_process(struct process *process)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(arch_cpu_index() == 0 && vm_kernel_owner_held());
   KASSERT(process->lifetime != PROCESS_SUBMITTED && !process->tasks &&
-      !process->task_count && !process->task_storage_count);
+      !process->task_count && !process->task_storage_count && !process->cleanup_pins);
   release_sessions(process);
   enum mm_result result = vm_space_destroy(process->address_space);
   if (result != MM_OK) {
@@ -288,21 +305,8 @@ void process_task_detach(struct process *process, struct process_task_member *me
   }
 }
 
-bool process_task_reclaimed(struct process *process)
+static void queue_retired_process(struct process *process)
 {
-  KASSERT(arch_cpu_index() == 0);
-  spin_lock(&process->lifetime_lock);
-  KASSERT(process->lifetime == PROCESS_SUBMITTED &&
-      process->task_storage_count > process->task_count);
-  --process->task_storage_count;
-  if (process->task_storage_count) {
-    spin_unlock(&process->lifetime_lock);
-    return false;
-  }
-  KASSERT(!process->tasks && !process->task_count && process_result_committed(process));
-  process->lifetime = PROCESS_RETIRED;
-  spin_unlock(&process->lifetime_lock);
-
   /* Waiters keep the control and the group keeps its member count until the
    * reaper has released the address space and resources. */
   process_control_detach_process(process->control);
@@ -314,6 +318,7 @@ bool process_task_reclaimed(struct process *process)
     process->execution_group = NULL;
   }
 
+  spin_lock(&reaper_guard);
   process->retired_next = NULL;
   if (retired_tail) {
     retired_tail->retired_next = process;
@@ -321,11 +326,56 @@ bool process_task_reclaimed(struct process *process)
     retired_head = process;
   }
   retired_tail = process;
-  if (reaper_wait) {
-    struct task_wait *wait = reaper_wait;
-    reaper_wait = NULL;
-    task_wait_wake(wait);
+  spin_unlock(&reaper_guard);
+  process_cleanup_notify();
+}
+
+bool process_cleanup_pin(struct process *process)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  spin_lock(&process->lifetime_lock);
+  bool pinned = process->lifetime == PROCESS_SUBMITTED &&
+      process->cleanup_pins != SIZE_MAX;
+  if (pinned) {
+    ++process->cleanup_pins;
   }
+  spin_unlock(&process->lifetime_lock);
+  return pinned;
+}
+
+void process_cleanup_unpin(struct process *process)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  spin_lock(&process->lifetime_lock);
+  KASSERT(process->lifetime == PROCESS_SUBMITTED && process->cleanup_pins);
+  --process->cleanup_pins;
+  bool retired = !process->cleanup_pins && !process->task_storage_count;
+  if (retired) {
+    KASSERT(arch_cpu_index() == 0);
+    KASSERT(!process->tasks && !process->task_count && process_result_committed(process));
+    process->lifetime = PROCESS_RETIRED;
+  }
+  spin_unlock(&process->lifetime_lock);
+  if (retired) {
+    queue_retired_process(process);
+  }
+}
+
+bool process_task_reclaimed(struct process *process)
+{
+  KASSERT(arch_cpu_index() == 0);
+  spin_lock(&process->lifetime_lock);
+  KASSERT(process->lifetime == PROCESS_SUBMITTED &&
+      process->task_storage_count > process->task_count);
+  --process->task_storage_count;
+  if (process->task_storage_count || process->cleanup_pins) {
+    spin_unlock(&process->lifetime_lock);
+    return false;
+  }
+  KASSERT(!process->tasks && !process->task_count && process_result_committed(process));
+  process->lifetime = PROCESS_RETIRED;
+  spin_unlock(&process->lifetime_lock);
+  queue_retired_process(process);
   return true;
 }
 
@@ -338,10 +388,13 @@ static void reclaim_process(struct process *process)
   struct process_result result;
   KASSERT(process_result_get(process, &result));
 
+  struct vm_kernel_owner owner = {0};
+  vm_kernel_owner_cleanup(&owner);
   uint64_t flags = cpu_save_interrupts();
   /* Cleanup attribution belongs to this task, so it survives the yields. */
   struct execution_group *previous = object_cleanup_enter(group);
   release_sessions(process);
+  vm_kernel_owner_release(&owner);
   KASSERT(vm_space_retire(process->address_space) == MM_OK);
   cpu_restore_interrupts(flags);
 
@@ -356,6 +409,7 @@ static void reclaim_process(struct process *process)
   }
   process->address_space = NULL;
 
+  vm_kernel_owner_cleanup(&owner);
   flags = cpu_save_interrupts();
   release_records(process);
   process_control_complete(control, result);
@@ -364,6 +418,7 @@ static void reclaim_process(struct process *process)
   if (group) {
     execution_group_member_complete(group);
   }
+  vm_kernel_owner_release(&owner);
   cpu_restore_interrupts(flags);
 }
 
@@ -372,21 +427,32 @@ static void reaper(void *argument)
   (void)argument;
   for (;;) {
     uint64_t flags = cpu_save_interrupts();
+    spin_lock(&reaper_guard);
     struct process *process = retired_head;
-    if (!process) {
+    if (!process && !vm_kernel_retire_pending() && !display_retire_pending() &&
+        !launcher_retire_pending()) {
       struct task_wait *wait = task_wait_prepare();
       reaper_wait = wait;
+      spin_unlock(&reaper_guard);
       task_wait_sleep(wait);
       cpu_restore_interrupts(flags);
       continue;
     }
-    retired_head = process->retired_next;
-    if (!retired_head) {
-      retired_tail = NULL;
+    if (process) {
+      retired_head = process->retired_next;
+      if (!retired_head) {
+        retired_tail = NULL;
+      }
+      process->retired_next = NULL;
     }
-    process->retired_next = NULL;
+    spin_unlock(&reaper_guard);
     cpu_restore_interrupts(flags);
-    reclaim_process(process);
+    if (process) {
+      reclaim_process(process);
+    }
+    vm_kernel_reap();
+    display_reap_frames();
+    launcher_reap_prepared();
   }
 }
 
