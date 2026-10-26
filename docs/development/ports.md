@@ -143,7 +143,7 @@ Host builds use `build/ports-dev/fmt`; installed `fmt-dev` depends on
 [library record](experiments/library-dev-packages.md) qualifies format.h use,
 not every installed header/API.
 
-## SDL2 development library
+## raylib development library
 
 The [raylib recipe](../../ports/raylib/README.md) exports a static 6.2 SDL2/rlsw
 source profile under `build/ports-dev/raylib`, with its headers, CMake imported
@@ -151,6 +151,8 @@ target, configuration and reached-source notices. SDL2 is an explicit build/link
 dependency; the selected audio backend uses SDL playback. The source closure
 compiles and links with the SDK;
 the [raylib reference](raylib.md) describes the SDL integration and qualification limits.
+
+## SDL2 development library
 
 The [SDL2 recipe](../../ports/sdl2/README.md) builds SDL 2.32.10 from the
 owner's `mirrors/SDL` mirror as a static library with a native backend:
@@ -170,8 +172,12 @@ Threads, timers and audio need declared grants: a bundle manifest requests
 needs the `audio` grant plus `threads/manage` for the callback thread. A plain
 program without them gets honest errors and, for audio, stays silent. Audio capture
 and output device selection, joysticks (zero devices), haptics, sensors, HIDAPI,
-shared objects, power, OpenGL and Vulkan are left out and report themselves as
-unsupported. The [SDL2 reference](sdl2.md) has the decisions and measurements.
+shared objects, power and Vulkan are left out and report themselves as
+unsupported. Ordinary `libSDL2.a` also excludes OpenGL. The opt-in
+`libSDL2-osmesa.a` profile supplies static software OpenGL through Mesa softpipe;
+select it in place of the ordinary archive and install `sdl2-osmesa-dev` for its
+SDK metadata and dependencies. The [SDL2 reference](sdl2.md#opengl-through-osmesa)
+describes that profile, its authority and qualification limits.
 
 `build/ports-dev/sdl2` contains `libSDL2.a`, the `SDL2` headers with the
 port's `SDL_config.h`, and a CMake package (`SDL2::SDL2-static`), outside the
