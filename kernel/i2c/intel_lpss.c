@@ -52,6 +52,7 @@ static struct {
   struct acpi_hid_i2c_pci companion;
   struct hid_i2c_descriptor descriptor;
   const struct gpio_input *interrupt;
+  struct task_wait *descriptor_wait;
   enum lpss_state state;
   bool reset_started, assignment_pending;
 } lpss;
@@ -253,6 +254,14 @@ static bool get_timing(struct dw_i2c_timing *timing)
 static void descriptor_worker(void *argument)
 {
   (void)argument;
+  /* BSP IF=0 joins the state check/park with ACPI's endpoint publication. */
+  uint64_t wait_flags = cpu_save_interrupts();
+  while (lpss.state != LPSS_BOUND) {
+    lpss.descriptor_wait = task_wait_prepare();
+    task_wait_sleep(lpss.descriptor_wait);
+    lpss.descriptor_wait = NULL;
+  }
+  cpu_restore_interrupts(wait_flags);
   if (lpss.assignment_pending) {
     /* Keep the whole pending preparation across admission, before any attempt
      * record or hardware effect. Contention cannot declare it unsupported. */
@@ -332,6 +341,19 @@ static void descriptor_worker(void *argument)
   }
 }
 
+void intel_lpss_i2c_start(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled() && !vm_kernel_runtime());
+  if (lpss.state != LPSS_PREPARED && lpss.state != LPSS_ASSIGNMENT_PENDING) {
+    return;
+  }
+  enum mm_result result = kernel_task_create(descriptor_worker, NULL);
+  if (result != MM_OK) {
+    lpss.state = LPSS_REFUSED;
+    kinfo("i2c-lpss: cannot create descriptor worker (error %u)\n", result);
+  }
+}
+
 void intel_lpss_i2c_attach(const struct acpi_hid_i2c_endpoint *endpoint,
     const struct acpi_hid_i2c_pci *companion, const struct gpio_input *interrupt)
 {
@@ -352,9 +374,9 @@ void intel_lpss_i2c_attach(const struct acpi_hid_i2c_endpoint *endpoint,
   lpss.companion = *companion;
   lpss.interrupt = interrupt;
   lpss.state = LPSS_BOUND;
-  enum mm_result result = kernel_task_create(descriptor_worker, NULL);
-  if (result != MM_OK) {
-    lpss.state = LPSS_REFUSED;
-    kinfo("i2c-lpss: cannot create descriptor worker (error %u)\n", result);
+  struct task_wait *wait = lpss.descriptor_wait;
+  lpss.descriptor_wait = NULL;
+  if (wait) {
+    task_wait_wake(wait);
   }
 }

@@ -129,6 +129,7 @@
   nvme_start();
   gpt_start();
   npfs_start();
+  intel_lpss_i2c_start();
   acpi_start();
   kinfo("devices: workers started\n");
   arch_clock_maintain();
