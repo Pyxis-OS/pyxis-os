@@ -60,6 +60,7 @@ struct task {
   size_t cpu_index;
   bool exited, in_syscall;
   atomic_bool vm_continuation;
+  bool vm_kernel; /* Current syscall owns a kernel-root continuation, never movable. */
   bool thread_exit_pending;
   size_t vm_borrowers; /* Process VM guard; owned by this task's active accesses. */
   struct process_vm_held vm_held;
@@ -313,7 +314,7 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
   struct task *task = scheduler->current_task;
   KASSERT(task && task->kind == TASK_USER && !task->exited);
   KASSERT(!task->bsp_request && !task->deferred_request && !task->wait);
-  KASSERT(!task->vm_borrowers);
+  KASSERT(!task->vm_borrowers && !task->vm_kernel);
   if (task_vm_continuation(task)) {
     process_vm_syscall_leave(task->process, task);
   }
@@ -846,6 +847,34 @@ static struct task *current_user_task(void)
   struct task *task = local_scheduler()->current_task;
   KASSERT(task && task->kind == TASK_USER && !task->exited);
   return task;
+}
+
+bool task_vm_kernel_active(void)
+{
+  struct task *task = task_current_user();
+  return task && task->vm_kernel;
+}
+
+static void switch_vm_root(bool kernel)
+{
+  struct task *task = current_user_task();
+  KASSERT(task->in_syscall && !task->vm_borrowers && task->vm_kernel != kernel);
+  KASSERT(!task->wait && !task->deferred_request);
+  arch_user_save(&task->cpu);
+  task->vm_kernel = kernel;
+  /* The scheduler drops the old root on its permanent stack before making
+   * this continuation runnable. in_syscall pins its CPU across every yield. */
+  arch_context_switch(&task->saved_stack, local_scheduler()->stack);
+}
+
+void task_vm_kernel_enter(void)
+{
+  switch_vm_root(true);
+}
+
+void task_vm_kernel_leave(void)
+{
+  switch_vm_root(false);
 }
 
 struct bsp_request *task_bsp_request_acquire(void)
@@ -1556,14 +1585,15 @@ void task_yield_masked(void)
       scheduler->current_task = NULL;
       continue;
     }
-    if (task->kind == TASK_USER && !process_vm_dispatch(task->process, task)) {
+    bool private_root = task->kind == TASK_USER && !task->vm_kernel;
+    if (private_root && !process_vm_dispatch(task->process, task)) {
       scheduler->current_task = NULL;
       continue;
     }
 
     /* Reload CR3 before touching a newly published task stack. This also
      * discards translations from a previous use of its kernel virtual range. */
-    struct vm_space *address_space = task->kind == TASK_USER ?
+    struct vm_space *address_space = private_root ?
                                     task->process->address_space : vm_kernel_space();
     KASSERT(vm_space_activate(address_space) == MM_OK);
     if (task->kind == TASK_USER) {
@@ -1578,7 +1608,7 @@ void task_yield_masked(void)
     KASSERT(vm_space_activate(vm_kernel_space()) == MM_OK);
     arch_user_set_kernel_stack(0);
     scheduler->current_task = NULL;
-    if (task->kind == TASK_USER) {
+    if (private_root) {
       process_vm_root_depart(task->process);
     }
     if (task->exited) {

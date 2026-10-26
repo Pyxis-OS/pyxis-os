@@ -34,6 +34,12 @@ void task_thread_exit_request(uint64_t value);
 /* VM admission helpers, IF=0. The process VM guard owns continuation changes
  * and held links; scheduler parking/enqueue helpers take only the queue guard. */
 struct task *task_current_user(void);
+/* Current admitted user syscall, IF=0, no lease/lock: switch via the permanent
+ * scheduler stack. Kernel-root execution stays on the calling CPU; every yield
+ * preserves user FP/TLS state even though its private mappings are inactive. */
+void task_vm_kernel_enter(void);
+void task_vm_kernel_leave(void);
+bool task_vm_kernel_active(void);
 bool task_vm_continuation(struct task *task);
 void task_vm_set_continuation(struct task *task, bool admitted);
 size_t task_vm_borrow_count(struct task *task);

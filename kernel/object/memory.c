@@ -45,14 +45,6 @@ static bool updates_memory(uint64_t operation)
   return operation == MEMORY_COMMIT || operation == MEMORY_DECOMMIT;
 }
 
-bool memory_request_stepped(const struct memory_request *request)
-{
-  return updates_memory(request->operation) ||
-      (request->operation == MEMORY_RELEASE_RESERVATION &&
-       private_memory_release_stepped(request->process, request->reservation.identity)) ||
-      (allocates_memory(request->operation) && private_memory_stepped(request->region.size));
-}
-
 static size_t allocation_reply_size(uint64_t operation)
 {
   return operation == MEMORY_ALLOCATE_GUARDED || operation == MEMORY_RESERVE ?
@@ -214,7 +206,7 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   pending->result = MM_INVALID;
   pending->request.vm_process = process;
   pending->request.vm_mutator = task_current_user();
-  bsp_request_submit_and_wait(&pending->request);
+  process_vm_memory_call(pending);
   region = pending->region;
   reservation = pending->reservation;
   enum mm_result result = pending->result;
@@ -224,7 +216,7 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   struct syscall_result reply = {pending->status, 0};
   bsp_request_release(&pending->request);
   if (reply.status == CALL_OK && returns_memory(operation)) {
-    /* BSP rechecked this output before effects; REPLY ownership prevents
+    /* The exclusive owner rechecked this output before effects; REPLY ownership prevents
      * intervening mapping changes until the final copy has finished. */
     if (operation == MEMORY_ALLOCATE_GUARDED || operation == MEMORY_RESERVE) {
       KASSERT(copy_to_user(reply_address, &reservation, sizeof(reservation)));

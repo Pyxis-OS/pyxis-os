@@ -57,7 +57,14 @@ void process_vm_root_depart(struct process *process)
   spin_lock(&process->vm.lock);
   KASSERT(process->vm.roots);
   --process->vm.roots;
-  bool pending = process->vm.pending != NULL;
+  bool pending = process->vm.pending &&
+    process->vm.pending->service != BSP_SERVICE_MEMORY;
+  if (process->vm.local_wait) {
+    struct task_wait *wait = process->vm.local_wait;
+    process->vm.local_wait = NULL;
+    /* VM guard joins this access with timeout detachment before record reuse. */
+    task_wait_wake(wait);
+  }
   spin_unlock(&process->vm.lock);
   if (pending) {
     wake_worker();
@@ -150,7 +157,7 @@ void process_vm_unhold(struct process *process, struct task *task)
   }
 }
 
-static void finish_mutation(struct process *process, bool expired);
+static void finish_mutation(struct process *process, bool expired, bool local);
 
 static void refuse_mutation(struct bsp_request *request)
 {
@@ -177,8 +184,7 @@ static void refuse_mutation(struct bsp_request *request)
 void process_vm_mutation_forward(struct bsp_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && request->state == BSP_REQUEST_SERVICING);
-  KASSERT(request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY ||
-      request->service == BSP_SERVICE_THREAD);
+  KASSERT(request->service == BSP_SERVICE_DISPLAY || request->service == BSP_SERVICE_THREAD);
   struct process *process = request->vm_process;
   struct task *mutator = request->vm_mutator;
   KASSERT(process && mutator);
@@ -197,6 +203,7 @@ void process_vm_mutation_forward(struct bsp_request *request)
   bool drained = !process->vm.roots && !process->vm.borrowers;
   process->vm.phase = drained ? PROCESS_VM_MUTATING : PROCESS_VM_DRAINING;
   process->vm.mutator = mutator;
+  process->vm.mutation_cpu = 0;
   process->vm.pending = request;
   if (!drained) {
     uint64_t now = arch_monotonic_ns();
@@ -205,12 +212,10 @@ void process_vm_mutation_forward(struct bsp_request *request)
   }
   spin_unlock(&process->vm.lock);
   request->state = BSP_REQUEST_FORWARDED;
-  if (drained && (request->service != BSP_SERVICE_MEMORY ||
-      !memory_request_stepped((struct memory_request *)request))) {
-    /* Admission is closed and every departure already acknowledged. Execute
-     * the bounded service here; only waiting for drainage or a stepped
-     * allocation needs the worker. */
-    finish_mutation(process, false);
+  if (drained) {
+    /* BSP DISPLAY/thread clients keep the same gate. Only drainage needs
+     * the VM worker; private MEMORY never enters this pending list. */
+    finish_mutation(process, false, false);
     return;
   }
   struct process **tail = &pending_processes;
@@ -225,8 +230,11 @@ void process_vm_mutation_forward(struct bsp_request *request)
 
 void process_vm_require_mutation(struct process *process)
 {
-  KASSERT(arch_cpu_index() == 0);
   spin_lock(&process->vm.lock);
+  KASSERT(arch_cpu_index() == process->vm.mutation_cpu);
+  struct task *actor = task_current_user();
+  KASSERT(actor ? task_vm_kernel_active() && actor == process->vm.mutator :
+      arch_cpu_index() == 0);
   KASSERT(process->vm.phase == PROCESS_VM_MUTATING && !process->vm.roots &&
       !process->vm.borrowers && process->vm.pending && process->vm.mutator);
   spin_unlock(&process->vm.lock);
@@ -291,7 +299,7 @@ static struct process *select_pending(uint64_t now, uint64_t *deadline, bool *ex
   while (*link) {
     struct process *process = *link;
     spin_lock(&process->vm.lock);
-    /* A stepped allocation can arrive already drained and MUTATING. */
+    /* BSP clients may arrive already drained and MUTATING. */
     bool mutating = process->vm.phase == PROCESS_VM_MUTATING;
     bool drained = mutating || (!process->vm.roots && !process->vm.borrowers);
     *expired = !drained && now >= process->vm.deadline;
@@ -314,7 +322,7 @@ static struct process *select_pending(uint64_t now, uint64_t *deadline, bool *ex
   return NULL;
 }
 
-static void finish_mutation(struct process *process, bool expired)
+static void finish_mutation(struct process *process, bool expired, bool local)
 {
   struct bsp_request *request = process->vm.pending;
   KASSERT(request && request->state == BSP_REQUEST_FORWARDED);
@@ -363,7 +371,71 @@ static void finish_mutation(struct process *process, bool expired)
   }
   spin_unlock(&process->vm.lock);
   resume_held(held);
-  bsp_request_complete(request);
+  if (local) {
+    /* No endpoint publication or waiter owns this record: its caller executed
+     * it synchronously under kernel CR3 and now consumes the staged result. */
+    request->wait = NULL;
+    request->cleanup_group = NULL;
+    request->state = BSP_REQUEST_COMPLETE;
+  } else {
+    bsp_request_complete(request);
+  }
+}
+
+void process_vm_memory_call(struct memory_request *memory)
+{
+  struct bsp_request *request = &memory->request;
+  struct process *process = request->vm_process;
+  struct task *mutator = request->vm_mutator;
+  KASSERT(request->service == BSP_SERVICE_MEMORY &&
+      request->state == BSP_REQUEST_PREPARED && mutator == task_current_user());
+  task_vm_kernel_enter();
+  spin_lock(&process->vm.lock);
+  if (process->vm.phase != PROCESS_VM_OPEN) {
+    spin_unlock(&process->vm.lock);
+    refuse_mutation(request);
+    request->wait = NULL;
+    request->cleanup_group = NULL;
+    request->state = BSP_REQUEST_COMPLETE;
+    task_vm_kernel_leave();
+    return;
+  }
+  KASSERT(!process->vm.pending && !process->vm.mutator && !process->vm.local_wait);
+  task_vm_set_continuation(mutator, false);
+  process->vm.phase = PROCESS_VM_DRAINING;
+  process->vm.mutator = mutator;
+  process->vm.mutation_cpu = arch_cpu_index();
+  process->vm.pending = request;
+  request->state = BSP_REQUEST_FORWARDED;
+  process->vm.deadline = 0;
+  if (process->vm.roots || process->vm.borrowers) {
+    uint64_t now = arch_monotonic_ns();
+    process->vm.deadline = now > UINT64_MAX - VM_QUIESCENCE_NS ?
+      UINT64_MAX : now + VM_QUIESCENCE_NS;
+  }
+  bool expired;
+  for (;;) {
+    bool drained = !process->vm.roots && !process->vm.borrowers;
+    expired = !drained && arch_monotonic_ns() >= process->vm.deadline;
+    if (drained || expired) {
+      if (drained) {
+        process->vm.phase = PROCESS_VM_MUTATING;
+      }
+      spin_unlock(&process->vm.lock);
+      break;
+    }
+    struct task_wait *wait = task_wait_prepare();
+    process->vm.local_wait = wait;
+    uint64_t deadline = process->vm.deadline;
+    spin_unlock(&process->vm.lock);
+    task_wait_sleep_until(wait, deadline);
+    spin_lock(&process->vm.lock);
+    if (process->vm.local_wait == wait) {
+      process->vm.local_wait = NULL;
+    }
+  }
+  finish_mutation(process, expired, true);
+  task_vm_kernel_leave();
 }
 
 static void vm_worker(void *argument)
@@ -396,7 +468,7 @@ static void vm_worker(void *argument)
     }
     spin_unlock(&worker_lock);
     if (process) {
-      finish_mutation(process, expired);
+      finish_mutation(process, expired, false);
     }
     cpu_restore_interrupts(flags);
     kernel_task_yield_if_runnable();

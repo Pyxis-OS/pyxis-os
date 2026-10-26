@@ -14,7 +14,7 @@ enum bsp_service {
   BSP_SERVICE_RETENTION,
   BSP_SERVICE_TERMINAL_CREATE,
   BSP_SERVICE_DISPLAY,
-  BSP_SERVICE_MEMORY,
+  BSP_SERVICE_MEMORY, /* Preallocated typed storage only; no BSP submission. */
   BSP_SERVICE_POINTER,
   BSP_SERVICE_AUDIO,
   BSP_SERVICE_CAPABILITY_GROW,
@@ -65,6 +65,8 @@ enum bsp_request_state {
  * parked handoff. Queue publication and wait notification synchronize loans.
  * FORWARDED belongs to the HOST, native filesystem, readiness, audio or ACPI worker,
  * the USB worker, or the sole screen presenter until final completion.
+ * MEMORY uses the same retained typed storage locally, without queue publication
+ * or a completion notification; its kernel-root caller consumes the result.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {
   struct bsp_request *next;
@@ -75,7 +77,7 @@ struct bsp_request {
   struct forwarder_operation *operation;
   enum bsp_service service;
   enum bsp_request_state state;
-  struct process *vm_process; /* Only deferred VM mutation requests. */
+  struct process *vm_process; /* Staged local MEMORY or deferred BSP VM mutation. */
   struct task *vm_mutator;
   bool vm_reply_owned; /* Consumed before releasing the completed record. */
 };
@@ -90,7 +92,7 @@ void bsp_request_storage_destroy(struct bsp_request *storage);
  * prepare, fill the typed record, submit/wait, consume results, release.
  * Preparation uses reserved shared storage and cannot fail allocation. */
 struct bsp_request *bsp_request_prepare(enum bsp_service service);
-/* Memory, display and screen capture require post-switch publication, chosen
+/* Display and screen capture require post-switch publication, chosen
  * by the closed service catalog. Other requests publish before sleeping. */
 void bsp_request_submit_and_wait(struct bsp_request *request);
 void bsp_request_release(struct bsp_request *request);
