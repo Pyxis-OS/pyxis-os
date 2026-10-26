@@ -219,15 +219,19 @@ queries follow decision 2. Writable opens refuse Unsupported before lookup or
 side effects. Directory iteration, namespace mutation, file locks and the rest
 of gate 4 remain undelivered.
 
-Three ordered port patches replace the direct libc ESPIPE dependency with
-NotSeekable, propagate input errors and flush buffered output, then add a
-native supplied-console backend to terminal_size. Its rustix dependency applies
+Two platform patches replace the direct libc ESPIPE dependency with
+NotSeekable and add a native supplied-console backend to terminal_size. Its rustix dependency applies
 only to actual Unix targets. The patched terminal_size source is a separate
 local dependency; registry vendor checksums stay intact. supports-color uses
 std IsTerminal and TEXT without a patch or Unix impersonation. Preserve
 upstream BrokenPipe exit-success behavior. The locked closure, patch sources,
 MIT/Apache notices and embedded CP437/CP1047 notices accompany the package;
 the CP1047 table's EPL-1.0 text is retained in full.
+
+General upstream I/O behavior is retained: a persistent read error can loop,
+and include-mode final buffer-drop errors can go unreported. These limits are
+recorded in [technical debt](../technical-debt.md#hexyl-upstream-io-errors);
+no generic error-handling patch is carried in the port.
 
 The explicit qualified character profile is `--character-table=ascii`;
 box borders remain UTF-8. Colour Always/Auto/Force, NO_COLOR, custom RGB,
@@ -301,7 +305,8 @@ is implied by these checks.
 
 Compare hexyl with the pinned Linux build on identical binary input, explicit
 ASCII/colour options, empty and partial final rows, seek/skip/count, stdin pipe,
-file redirection and absent/denied inputs. Verify read/write errors are returned;
+file redirection and absent/denied inputs. Observe errors, bounding the
+known upstream persistent-read loop with the existing job supervisor;
 colour Auto/NO_COLOR and terminal width work on supplied streams. Qualify ordinary
 package install/verify and subsequent launches. Full default-glyph rendering,
 general crates, native hardware and performance require their own evidence.

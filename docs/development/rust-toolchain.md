@@ -282,7 +282,7 @@ of the 0.0.9 release; this optional profile is separate from those release artif
 The recipe pins v0.17.0, vendors its locked graph through the closed Cargo proxy,
 then builds frozen/offline with panic-abort, LTO and embedded bitcode off. It
 consumes the canonical adapter in the prefix. The package retains the original
-and patched locks, three ordered patches, full vendored source/notices and the
+and patched locks, two platform patches, full vendored source/notices and the
 Rust/SDK provenance. A consumer needs a libc `[patch.crates-io]` entry only if
 its own dependency graph imports libc; hexyl's sole direct libc use was removed,
 while the installed std already uses the pinned fork bindings.
@@ -302,3 +302,7 @@ and retain the upstream 80-column fallback. Files use existing delegated roots;
 linking Rust grants no filesystem access. The
 [hexyl record](experiments/rust-hexyl.md) separates actual recipe/package/QEMU
 qualification from the unrun native and complete-profile work.
+
+The port retains general upstream I/O behavior: persistent read errors can loop,
+and include-mode final buffer-drop errors can be unreported. See the
+[recorded limits](../technical-debt.md#hexyl-upstream-io-errors).

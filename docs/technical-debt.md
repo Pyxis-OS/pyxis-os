@@ -1713,6 +1713,14 @@ Saves are Quake's trusted text format, and shareware and retail data share `home
 QuakeC strings outside the hunk use a 512-entry table whose overflow stops the game with an error. Revisit when a second data set matters.
 Config, saves and screenshots follow the [atomic-save limits](#atomic-save-limits); demos are still recorded in place.
 
+## Hexyl upstream I/O errors
+
+The optional hexyl 0.17.0 port retains its upstream read loop: persistent input
+errors can keep it running until interrupted or stopped by a job deadline.
+Include mode can miss errors during final buffer drop. Generic fixes are not
+carried in the [Pyxis port](../ports/hexyl/README.md); revisit the read loop when
+upstream fixes it, and requalify error handling on a version update.
+
 ## vi port limits
 
 [BusyBox vi](userland/vi.md) displays ASCII only. BRE search and substitution use libc's [regex limits](#regex-character-classes-and-back-references)
