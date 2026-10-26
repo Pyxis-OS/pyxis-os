@@ -1,9 +1,9 @@
-# Hosted build flags: pre-decision comparison
+# Hosted build flags
 
-2026-10-25, nested QEMU investigation for the
-[hosted-flags proposal](../../wip/hosted-build-flags.md). SDK and recipe defaults
-are unchanged; these are temporary target-compiler overrides, not an implemented
-SDK split or native qualification.
+The 2026-10-25 pre-decision nested QEMU investigation for the
+[hosted-flags proposal](../../wip/hosted-build-flags.md). used temporary compiler overrides with unchanged SDK and recipe defaults.
+The implementation qualification below uses the delivered SDK split; neither
+record is native qualification.
 
 ## Inputs and method
 
@@ -109,6 +109,49 @@ alone does not establish an instruction-cache cause for a timing difference.
 The earlier attended vela/Fedora SoH observations (5.2/6.2 FPS) used different
 scene presentation and are not a matched gap attributable to compiler flags.
 SoH and the selected defaults still need coordinated native vela A/B with the
-same scene/save, resolution, frame cap, audio and CPU-power policy. No private
-assets or settings were inspected here. Nested results do not establish native
+same scene/save, resolution, frame cap, audio and CPU-power policy. No private assets or settings were used in the pre-decision matrix. Nested results do not establish native
 speedups or CPU-placement effects.
+
+
+## Delivered SDK qualification (2026-10-26)
+
+The focused delivery uses userland `f334716` and ports `d998943`, each rebased
+onto its fetched main (`6cd1cf5` and `deff7c1`). The ordinary C mode is hosted;
+whole libc/musl/TLSF, crt0 and the native startup/environment/handle/memory/thread
+units used before TLS remain freestanding. Existing strict rounding/no-builtin
+controls and no-red-zone remain. No compiler-container rebuild or runtime ABI
+change is required. The builder remains `3d69e83`.
+
+A full SDK build and real Mesa, SDL2/OSMesa, ioquake3, ImGui, Lua, Mbed TLS,
+picohttpparser, libuv and Neovim closure builds passed. Actual Mesa TGSI and
+sampler commands have one O2 selector and no freestanding flag; Neovim's C
+commands are hosted and its host generators remain native. After unrelated
+main changes, the SDK and selected consumers were rebuilt; the native A/B
+runtime sources are held to the same updated main. Unchanged C++ runtime
+archives are shared between native profiles. No source pin or licence changes.
+
+In the explicit development QEMU fixture, the rebuilt shell/cat, 64 MiB SHA
+fixture and Neovim headless edit/write/quit passed. Neovim uses its supported
+no-swap/no-backup settings; a preliminary `-u NONE` script omitted those and
+correctly refused unsupported operations. OpenArena completed the full 3,398
+frames and exited zero. These checks establish functionality, not native
+performance. Detailed build/command records stay in
+`/shared/present/hosted-flags/delivery/`.
+
+A short delivered-SDK ImGui repeat, same guest/method as above, produced FPS
+A **30.5, 30.3, 25.7** and B **32.0, 30.9, 23.0**. Medians 30.3/30.9 and broad
+overlapping ranges do not establish a stable gain or regression. Late low
+points on both sides are retained. Do not substitute the cleaner prototype
+matrix for these delivered-runtime observations.
+
+The native SoH packet is private under `/shared/oot/hosted-flags/`. Both Pyxis
+profiles use delta's identical normally generated slot-A first-room save and
+one hashed JSON: 320x240 internal, 4:3, 1920x1048 drawable, 20 FPS cap and MSAA
+off. chronium selects slot A normally on each system and leaves its initial
+room position/camera unchanged; no input sequencer is added. Existing rolling
+HUD screenshots are sampled automatically after that confirmation. A normal
+quit is verified before another profile restores the common state. Delivery
+requires positive RAM-home evidence and uses bounded private HTTP parts.
+Fedora must use the same save/JSON and SoH/Mesa pins through its working
+softpipe launcher; that launcher/environment still needs confirmation before
+the Fedora half is ready. **Native measurements remain pending.**

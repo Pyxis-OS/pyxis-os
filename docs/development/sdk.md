@@ -117,11 +117,11 @@ executable: the Pyxis driver has LLD write P1F. For a debugger, relink with
 `-Wl,--oformat=elf`; the ELF has symbols at the same addresses.
 
 The fragment selects hosted GNU C23 for programs and reusable libraries, static
-linking,
-4 KiB segment alignment and fixed load address. Libc, its musl/TLSF closure,
+linking, 4 KiB segment alignment and fixed load address. Libc, its musl/TLSF closure,
 crt0 and pre-TLS startup remain freestanding in `runtime.mk`, including the
 native environment/handle/memory/thread helper units used before FS is installed.
-Explicit no-builtin and rounding controls are preserved. The no-red-zone convention is unchanged.
+Explicit no-builtin and rounding controls are preserved. The no-red-zone
+convention is unchanged.
 The fragment excludes implicit host or
 cross-installation C headers, keeping compiler builtin headers and SDK headers.
 Project headers use a normal include path so generated dependencies track them.
