@@ -1586,8 +1586,8 @@ void task_yield_masked(void)
       continue;
     }
     bool private_root = task->kind == TASK_USER && !task->vm_kernel;
-    uint64_t root_generation = 0;
-    if (private_root && !process_vm_dispatch(task->process, task, &root_generation)) {
+    struct process_vm_root_epoch root_epoch = {0};
+    if (private_root && !process_vm_dispatch(task->process, task, &root_epoch)) {
       scheduler->current_task = NULL;
       continue;
     }
@@ -1610,7 +1610,7 @@ void task_yield_masked(void)
     arch_user_set_kernel_stack(0);
     scheduler->current_task = NULL;
     if (private_root) {
-      process_vm_root_depart(task->process, root_generation);
+      process_vm_root_depart(task->process, root_epoch);
     }
     if (task->exited) {
       complete_task(task);

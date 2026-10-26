@@ -12,6 +12,10 @@ struct bsp_request;
 struct memory_request;
 struct task_wait;
 
+struct process_vm_root_epoch {
+  uint64_t incarnation, generation;
+};
+
 enum process_vm_phase {
   PROCESS_VM_OPEN,
   PROCESS_VM_DRAINING,
@@ -47,8 +51,9 @@ struct process_vm_activity {
 
 /* Scheduler, IF=0. Reserve before CR3 activation, acknowledge after kernel CR3.
  * Refusal atomically parks the task on a separate process-owned held list. */
-bool process_vm_dispatch(struct process *process, struct task *task, uint64_t *generation);
-void process_vm_root_depart(struct process *process, uint64_t generation);
+bool process_vm_dispatch(struct process *process, struct task *task,
+                          struct process_vm_root_epoch *epoch);
+void process_vm_root_depart(struct process *process, struct process_vm_root_epoch epoch);
 bool process_vm_execution_closed(struct process *process);
 
 /* Current task, IF=0. Admission is nonblocking; a refused entry must switch out

@@ -75,7 +75,8 @@ static bool access_allowed(struct process *process, struct task *task)
     (process->vm.phase == PROCESS_VM_REPLY && process->vm.mutator == task);
 }
 
-bool process_vm_dispatch(struct process *process, struct task *task, uint64_t *generation)
+bool process_vm_dispatch(struct process *process, struct task *task,
+                          struct process_vm_root_epoch *epoch)
 {
   spin_lock(&process->vm.lock);
   bool admitted = access_allowed(process, task);
@@ -85,7 +86,8 @@ bool process_vm_dispatch(struct process *process, struct task *task, uint64_t *g
     KASSERT(process->vm.incarnation && process->vm.generation && !resident(process, cpu));
     process->vm.resident_cpus[cpu / 64] |= UINT64_C(1) << (cpu % 64);
     ++process->vm.roots;
-    *generation = process->vm.generation;
+    *epoch = (struct process_vm_root_epoch){process->vm.incarnation,
+                                            process->vm.generation};
   } else {
     struct process_vm_held *held = task_vm_hold(task);
     held->next = process->vm.held;
@@ -95,12 +97,13 @@ bool process_vm_dispatch(struct process *process, struct task *task, uint64_t *g
   return admitted;
 }
 
-void process_vm_root_depart(struct process *process, uint64_t generation)
+void process_vm_root_depart(struct process *process, struct process_vm_root_epoch epoch)
 {
   spin_lock(&process->vm.lock);
   size_t cpu = arch_cpu_index();
   KASSERT(process->vm.roots && resident(process, cpu) &&
-      process->vm.generation == generation);
+      process->vm.incarnation == epoch.incarnation &&
+      process->vm.generation == epoch.generation);
   process->vm.resident_cpus[cpu / 64] &= ~(UINT64_C(1) << (cpu % 64));
   --process->vm.roots;
   bool pending = process->vm.pending &&
