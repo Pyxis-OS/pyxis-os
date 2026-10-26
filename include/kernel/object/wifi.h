@@ -23,7 +23,7 @@ struct wifi_request {
   struct capability_reservation reservation;
   struct capability_reserved_slot slot;
   union {
-    struct wifi_status_reply status;
+    struct wifi_status_full_reply status;
     struct wifi_scan_start_reply started;
     struct wifi_scan_take_reply taken;
     struct wifi_credential_reply credential;

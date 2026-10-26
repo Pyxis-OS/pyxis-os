@@ -29,7 +29,7 @@
 /* The BSP owns preparation and the sole worker. Status publication uses IF=0;
  * archive bytes, plans, PCI context and DMA backing survive the worker. */
 static struct {
-  struct wifi_status_reply status;
+  struct wifi_status_full_reply status;
   struct initrd_file asset;
   struct rtl8922ae_firmware_info inspection;
   struct rtl8922ae_firmware_plan plan, bbmcu;
@@ -123,7 +123,7 @@ static void publish_sar(struct wifi_sar_inputs *out,
 
 static void publish_rules(const struct wifi_regdb_profile *profile, uint32_t channels)
 {
-  struct wifi_radio_inputs *radio = &preparation.status.radio;
+  struct wifi_radio_inputs *radio = &preparation.status.base.radio;
   radio->rule_channels = profile->channels & channels;
   memset(radio->channel, 0, sizeof(radio->channel));
   for (size_t i = 0; i < WIFI_CHANNEL_24_COUNT; ++i) {
@@ -139,16 +139,16 @@ static void publish_rules(const struct wifi_regdb_profile *profile, uint32_t cha
 static void set_detail(const char *detail)
 {
   size_t i = 0;
-  while (i + 1 < sizeof(preparation.status.detail) && detail[i]) {
-    preparation.status.detail[i] = detail[i];
+  while (i + 1 < sizeof(preparation.status.base.detail) && detail[i]) {
+    preparation.status.base.detail[i] = detail[i];
     ++i;
   }
-  preparation.status.detail[i] = '\0';
+  preparation.status.base.detail[i] = '\0';
 }
 
 static void failed(const char *detail)
 {
-  preparation.status.flags |= WIFI_FAILED;
+  preparation.status.base.flags |= WIFI_FAILED;
   set_detail(detail);
 }
 
@@ -167,8 +167,8 @@ static bool rfkill_current(const char **detail)
   ++preparation.status.phy.rfkill_checks;
   if (valid) {
     preparation.status.phy.state |= WIFI_PHY_RFKILL_VALID;
-    if (blocked) preparation.status.flags |= WIFI_RFKILL;
-    else preparation.status.flags &= ~WIFI_RFKILL;
+    if (blocked) preparation.status.base.flags |= WIFI_RFKILL;
+    else preparation.status.base.flags &= ~WIFI_RFKILL;
   } else {
     preparation.status.phy.state &= ~WIFI_PHY_RFKILL_VALID;
   }
@@ -212,8 +212,8 @@ static bool download(uint64_t deadline, const char **detail)
   uint8_t security[4];
   if (!rtl8922ae_operation_continue() || !rtl8922ae_hw_cut(&preparation.cut, detail)) return false;
   uint64_t flags = cpu_save_interrupts();
-  preparation.status.boot.live_cut = preparation.cut;
-  preparation.status.boot.valid |= WIFI_BOOT_CUT_VALID;
+  preparation.status.base.boot.live_cut = preparation.cut;
+  preparation.status.base.boot.valid |= WIFI_BOOT_CUT_VALID;
   cpu_restore_interrupts(flags);
   /* AFE precedes MAC power-on, before the live RFE can be read. Inspect only
    * that independent element here, without inventing a board selection. */
@@ -247,10 +247,10 @@ static bool download(uint64_t deadline, const char **detail)
     return false;
   }
   flags = cpu_save_interrupts();
-  preparation.status.boot.secure_boot = preparation.plan.security.secure_boot;
-  memcpy(preparation.status.boot.firmware_version, preparation.plan.version,
-      sizeof(preparation.status.boot.firmware_version));
-  preparation.status.boot.valid |= WIFI_BOOT_SECURITY_VALID | WIFI_BOOT_IMAGE_VALID;
+  preparation.status.base.boot.secure_boot = preparation.plan.security.secure_boot;
+  memcpy(preparation.status.base.boot.firmware_version, preparation.plan.version,
+      sizeof(preparation.status.base.boot.firmware_version));
+  preparation.status.base.boot.valid |= WIFI_BOOT_SECURITY_VALID | WIFI_BOOT_IMAGE_VALID;
   cpu_restore_interrupts(flags);
   if (!rtl8922ae_phy_preinit(deadline, detail) ||
       !rtl8922ae_hw_download_prepare(deadline, detail) ||
@@ -262,14 +262,14 @@ static bool download(uint64_t deadline, const char **detail)
   cpu_restore_interrupts(flags);
   if (!rtl8922ae_hw_board(&preparation.board, preparation.cut, deadline, detail)) return false;
   flags = cpu_save_interrupts();
-  preparation.status.boot.rfe = preparation.board.rfe;
-  preparation.status.boot.xtal = preparation.board.xtal;
-  preparation.status.boot.tx_nss = preparation.board.tx_nss;
-  preparation.status.boot.rx_nss = preparation.board.rx_nss;
-  preparation.status.boot.tx_antennas = preparation.board.tx_antennas;
-  preparation.status.boot.rx_antennas = preparation.board.rx_antennas;
-  memcpy(preparation.status.boot.board_country, preparation.board.country, 2);
-  preparation.status.boot.valid |= WIFI_BOOT_BOARD_VALID;
+  preparation.status.base.boot.rfe = preparation.board.rfe;
+  preparation.status.base.boot.xtal = preparation.board.xtal;
+  preparation.status.base.boot.tx_nss = preparation.board.tx_nss;
+  preparation.status.base.boot.rx_nss = preparation.board.rx_nss;
+  preparation.status.base.boot.tx_antennas = preparation.board.tx_antennas;
+  preparation.status.base.boot.rx_antennas = preparation.board.rx_antennas;
+  memcpy(preparation.status.base.boot.board_country, preparation.board.country, 2);
+  preparation.status.base.boot.valid |= WIFI_BOOT_BOARD_VALID;
   cpu_restore_interrupts(flags);
   if (!rtl8922ae_operation_continue()) return false;
   phase(WIFI_PHY_TABLES);
@@ -278,13 +278,13 @@ static bool download(uint64_t deadline, const char **detail)
       preparation.board.rfe, &preparation.tables);
   flags = cpu_save_interrupts();
   switch (tables) {
-  case RTL8922AE_TABLES_OK: preparation.status.radio.tables_state = WIFI_INPUT_VALID; break;
-  case RTL8922AE_TABLES_MISSING: preparation.status.radio.tables_state = WIFI_INPUT_ABSENT; break;
-  case RTL8922AE_TABLES_MALFORMED: preparation.status.radio.tables_state = WIFI_INPUT_MALFORMED; break;
-  case RTL8922AE_TABLES_UNSUPPORTED: preparation.status.radio.tables_state = WIFI_INPUT_UNSUPPORTED; break;
+  case RTL8922AE_TABLES_OK: preparation.status.base.radio.tables_state = WIFI_INPUT_VALID; break;
+  case RTL8922AE_TABLES_MISSING: preparation.status.base.radio.tables_state = WIFI_INPUT_ABSENT; break;
+  case RTL8922AE_TABLES_MALFORMED: preparation.status.base.radio.tables_state = WIFI_INPUT_MALFORMED; break;
+  case RTL8922AE_TABLES_UNSUPPORTED: preparation.status.base.radio.tables_state = WIFI_INPUT_UNSUPPORTED; break;
   }
   if (preparation.tables.default_power_mask & RTL8922AE_TABLES_POWER_2G_MASK) {
-    preparation.status.radio.tables_flags |= WIFI_TABLE_POWER_DEFAULT;
+    preparation.status.base.radio.tables_flags |= WIFI_TABLE_POWER_DEFAULT;
   }
   cpu_restore_interrupts(flags);
   if (tables != RTL8922AE_TABLES_OK) {
@@ -319,7 +319,7 @@ static bool initialize_phy(uint64_t deadline, const char **detail)
    * A table fallback supplies data, never additional regulatory authority. */
   enum rtl8922ae_power_result power = rtl8922ae_power_prepare(
       preparation.asset.data, preparation.asset.size, &preparation.tables,
-      &preparation.sar, preparation.platform.rtag.state, preparation.status.country,
+      &preparation.sar, preparation.platform.rtag.state, preparation.status.base.country,
       &preparation.rules, preparation.channel, &preparation.power);
   if (power != RTL8922AE_POWER_OK) {
     *detail = "RTL8922AE effective power image unsupported or incomplete";
@@ -401,7 +401,7 @@ static void rtl8922ae_worker(void *argument)
   }
   preparation.attempted = true;
   flags = cpu_save_interrupts();
-  preparation.status.boot.state |= WIFI_BOOT_ATTEMPTED;
+  preparation.status.base.boot.state |= WIFI_BOOT_ATTEMPTED;
   preparation.status.phy.phase = WIFI_PHY_FIRMWARE;
   cpu_restore_interrupts(flags);
   rtl8922ae_rfk_reset();
@@ -426,7 +426,7 @@ static void rtl8922ae_worker(void *argument)
     if (preparation.abort_status == CALL_OK) failed(detail);
   }
   if (!stopped) {
-    preparation.status.flags |= WIFI_FAILED;
+    preparation.status.base.flags |= WIFI_FAILED;
     /* Keep a primary startup refusal; stop uncertainty has its own state and
      * OUTCOME_UNKNOWN result, even when cancellation initiated cleanup. */
     if (ready || preparation.abort_status != CALL_OK) set_detail(stop_detail);
@@ -440,12 +440,12 @@ static void rtl8922ae_worker(void *argument)
 void rtl8922ae_prepare(const struct boot_info *boot)
 {
   KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled());
-  preparation.status.flags = WIFI_ENABLED;
-  preparation.status.radio.kind = WIFI_RADIO_INPUTS_RTL8922AE;
-  preparation.status.policy_channels = WIFI_SCAN_CHANNELS;
-  memcpy(preparation.status.country, "00", 2);
+  preparation.status.base.flags = WIFI_ENABLED;
+  preparation.status.base.radio.kind = WIFI_RADIO_INPUTS_RTL8922AE;
+  preparation.status.base.policy_channels = WIFI_SCAN_CHANNELS;
+  memcpy(preparation.status.base.country, "00", 2);
   struct wifi_regdb_profile world;
-  KASSERT(wifi_regdb_profile(preparation.status.country, &world));
+  KASSERT(wifi_regdb_profile(preparation.status.base.country, &world));
   publish_rules(&world, WIFI_SCAN_CHANNELS);
   if (boot_options_get()->wifi_ax200) {
     failed("Select only one Wi-Fi backend; both radios left untouched");
@@ -455,22 +455,22 @@ void rtl8922ae_prepare(const struct boot_info *boot)
   enum pci_selection selection = pci_select_device(RTL8922AE_VENDOR, RTL8922AE_DEVICE, &device);
   if (selection != PCI_SELECTION_UNIQUE) {
     if (selection != PCI_SELECTION_ABSENT) {
-      preparation.status.flags |= WIFI_FAILED;
+      preparation.status.base.flags |= WIFI_FAILED;
     }
     set_detail(selection == PCI_SELECTION_ABSENT ? "RTL8922AE absent" :
         "RTL8922AE inventory unavailable or ambiguous");
     return;
   }
-  preparation.status.flags |= WIFI_PRESENT;
+  preparation.status.base.flags |= WIFI_PRESENT;
   for (size_t i = 0; i < pci_device_count(); ++i) {
     if (pci_device_at(i) == device) {
-      preparation.status.controller_id = (uint32_t)i + 1;
+      preparation.status.base.controller_id = (uint32_t)i + 1;
       break;
     }
   }
-  preparation.status.pci_bus = device->address.bus;
-  preparation.status.pci_device = device->address.device;
-  preparation.status.pci_function = device->address.function;
+  preparation.status.base.pci_bus = device->address.bus;
+  preparation.status.base.pci_device = device->address.device;
+  preparation.status.base.pci_function = device->address.function;
   if (initrd_lookup("firmware/rtl8922ae/rtw8922a_fw-4.bin", &preparation.asset) != INITRD_OK ||
       !rtl8922ae_firmware_inspect(preparation.asset.data, preparation.asset.size,
           &preparation.inspection)) {
@@ -483,7 +483,7 @@ void rtl8922ae_prepare(const struct boot_info *boot)
     return;
   }
   preparation.prepared = true;
-  preparation.status.flags |= WIFI_PREPARED;
+  preparation.status.base.flags |= WIFI_PREPARED;
   set_detail("RTL8922AE prepared; explicit SCAN required for one-PHY initialization");
 }
 
@@ -499,10 +499,10 @@ void rtl8922ae_interrupt(void)
   rtl8922ae_transport_interrupt();
 }
 
-void rtl8922ae_status(struct wifi_status_reply *status)
+void rtl8922ae_status(struct wifi_status_full_reply *status)
 {
   *status = preparation.status;
-  rtl8922ae_transport_status(status);
+  rtl8922ae_transport_status(&status->base);
   struct rtl8922ae_rfk_observations rfk;
   rtl8922ae_rfk_observe(&rfk);
   status->phy.rfk_completed = rfk.completed;
@@ -512,7 +512,7 @@ void rtl8922ae_status(struct wifi_status_reply *status)
     status->phy.rfk_version = rfk.version;
   }
   enum acpi_wifi_state state = acpi_rtl_wifi_snapshot(&preparation.platform);
-  struct wifi_radio_inputs *radio = &status->radio;
+  struct wifi_radio_inputs *radio = &status->base.radio;
   const struct acpi_rtl_wifi_policy *platform = &preparation.platform;
   radio->acpi_state = input_state(state);
   radio->static_sar_state = input_state(platform->wrds.data.state);
@@ -535,16 +535,16 @@ enum call_status rtl8922ae_policy(const struct wifi_policy_request *policy)
   if (!wifi_regdb_profile(policy->country, &profile)) {
     return CALL_BAD_REQUEST;
   }
-  if (!(preparation.status.flags & WIFI_PRESENT)) {
+  if (!(preparation.status.base.flags & WIFI_PRESENT)) {
     return CALL_UNAVAILABLE;
   }
   if (preparation.pending || preparation.attempted) return CALL_BUSY;
-  if (preparation.status.flags & WIFI_POLICY_INSTALLED) {
+  if (preparation.status.base.flags & WIFI_POLICY_INSTALLED) {
     return CALL_ALREADY_EXISTS;
   }
-  memcpy(preparation.status.country, policy->country, 2);
-  preparation.status.policy_channels = policy->channels;
-  preparation.status.flags |= WIFI_POLICY_INSTALLED;
+  memcpy(preparation.status.base.country, policy->country, 2);
+  preparation.status.base.policy_channels = policy->channels;
+  preparation.status.base.flags |= WIFI_POLICY_INSTALLED;
   publish_rules(&profile, policy->channels);
   return CALL_OK;
 }
@@ -555,15 +555,15 @@ enum call_status rtl8922ae_scan(struct wifi_scan_work *work)
   KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled());
   if (preparation.pending) return CALL_BUSY;
   if (!preparation.started || !preparation.prepared || preparation.attempted ||
-      (preparation.status.flags & WIFI_FAILED)) return CALL_UNAVAILABLE;
+      (preparation.status.base.flags & WIFI_FAILED)) return CALL_UNAVAILABLE;
   enum acpi_wifi_state captured = acpi_rtl_wifi_snapshot(&preparation.platform);
   preparation.sar = rtl8922ae_sar_envelope(&preparation.platform, captured);
   if (captured != ACPI_WIFI_VALID || preparation.sar.state != ACPI_WIFI_VALID) {
     set_detail("RTL8922AE required platform/SAR inputs unavailable; no firmware/RF startup");
     return CALL_UNAVAILABLE;
   }
-  if (!wifi_regdb_profile(preparation.status.country, &preparation.rules)) return CALL_BAD_REQUEST;
-  uint32_t admitted = preparation.rules.channels & preparation.status.policy_channels;
+  if (!wifi_regdb_profile(preparation.status.base.country, &preparation.rules)) return CALL_BAD_REQUEST;
+  uint32_t admitted = preparation.rules.channels & preparation.status.base.policy_channels;
   if (!admitted) return CALL_UNAVAILABLE;
   if (work->channels & ~admitted) return CALL_BAD_REQUEST;
   if (!work->channels) work->channels = admitted;

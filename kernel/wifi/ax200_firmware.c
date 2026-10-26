@@ -939,44 +939,46 @@ void wifi_start(void)
   }
 }
 
-void wifi_driver_status(struct wifi_status_reply *status)
+void wifi_driver_status(struct wifi_status_full_reply *status)
 {
   require_bsp();
   if (boot_options_get()->wifi_rtl8922ae) {
     rtl8922ae_status(status);
     return;
   }
-  ax200_transport_status(status);
+  *status = (struct wifi_status_full_reply){0};
+  struct wifi_status_reply *base = &status->base;
+  ax200_transport_status(base);
   struct wifi_network_statistics data;
   wifi_driver_network_statistics(&data);
-  status->tx_queued = data.tx_queued;
-  status->tx_completed = data.tx_completed;
-  status->tx_failed = data.tx_failed;
-  status->tx_dropped = data.tx_dropped;
-  status->rx_queued = data.rx_queued;
-  status->rx_dropped = data.rx_dropped;
-  status->data_tx_pending = data.tx_pending;
-  status->data_tx_high_water = data.tx_high_water;
-  status->data_rx_high_water = data.rx_high_water;
-  status->data_ring_entries = driver.prepared ? data.ring_entries : 0;
+  base->tx_queued = data.tx_queued;
+  base->tx_completed = data.tx_completed;
+  base->tx_failed = data.tx_failed;
+  base->tx_dropped = data.tx_dropped;
+  base->rx_queued = data.rx_queued;
+  base->rx_dropped = data.rx_dropped;
+  base->data_tx_pending = data.tx_pending;
+  base->data_tx_high_water = data.tx_high_water;
+  base->data_rx_high_water = data.rx_high_water;
+  base->data_ring_entries = driver.prepared ? data.ring_entries : 0;
   if (driver.ready) {
-    status->flags |= WIFI_READY;
+    base->flags |= WIFI_READY;
   }
   if (driver.failed) {
-    status->flags |= WIFI_FAILED;
-    status->flags &= ~WIFI_READY;
+    base->flags |= WIFI_FAILED;
+    base->flags &= ~WIFI_READY;
   }
-  status->allowed_channels = driver.allowed_channels;
-  status->policy_channels = driver.policy_installed ? driver.policy_channels : WIFI_SCAN_CHANNELS;
+  base->allowed_channels = driver.allowed_channels;
+  base->policy_channels = driver.policy_installed ? driver.policy_channels : WIFI_SCAN_CHANNELS;
   if (driver.policy_installed) {
-    status->flags |= WIFI_POLICY_INSTALLED;
-    memcpy(status->country, driver.country, sizeof(driver.country));
+    base->flags |= WIFI_POLICY_INSTALLED;
+    memcpy(base->country, driver.country, sizeof(driver.country));
   }
   if (driver.detail) {
-    memset(status->detail, 0, sizeof(status->detail));
+    memset(base->detail, 0, sizeof(base->detail));
     size_t i = 0;
-    while (i + 1 < sizeof(status->detail) && driver.detail[i]) {
-      status->detail[i] = driver.detail[i];
+    while (i + 1 < sizeof(base->detail) && driver.detail[i]) {
+      base->detail[i] = driver.detail[i];
       ++i;
     }
   }

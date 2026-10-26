@@ -575,8 +575,15 @@ struct syscall_result wifi_call(struct kernel_object *object, uint64_t rights,
       !wifi_policy_owned(object, process_current()))) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  if (size != input_size || reply_capacity < output_size) {
+  if (size != input_size || (operation != WIFI_STATUS && reply_capacity < output_size)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (reply_capacity < output_size) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
+  if (operation == WIFI_STATUS) {
+    output_size = reply_capacity < sizeof(struct wifi_status_full_reply) ?
+        reply_capacity : sizeof(struct wifi_status_full_reply);
   }
   if (output_size && !user_buffer_check(reply_address, output_size, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};

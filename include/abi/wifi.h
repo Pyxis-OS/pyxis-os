@@ -331,6 +331,13 @@ struct wifi_status_reply {
   uint32_t data_tx_pending, data_tx_high_water, data_rx_high_water, data_ring_entries;
   struct wifi_boot_facts boot;
   struct wifi_radio_inputs radio;
+};
+
+/* WIFI_STATUS accepts at least sizeof(struct wifi_status_reply), writes the
+ * prefix fitting the capacity, and returns the number of bytes written.
+ * PHY facts require the complete extended reply. */
+struct wifi_status_full_reply {
+  struct wifi_status_reply base;
   struct wifi_phy_facts phy;
 };
 
@@ -443,7 +450,8 @@ _Static_assert(sizeof(struct wifi_tas_diagnostic) == 32, "Wi-Fi TAS diagnostic")
 _Static_assert(sizeof(struct wifi_sar_inputs) == 64, "Wi-Fi SAR inputs");
 _Static_assert(sizeof(struct wifi_radio_inputs) == 256, "Wi-Fi radio inputs");
 _Static_assert(sizeof(struct wifi_phy_facts) == 56, "Wi-Fi PHY facts");
-_Static_assert(sizeof(struct wifi_status_reply) == 600, "Wi-Fi status reply");
+_Static_assert(sizeof(struct wifi_status_reply) == 544, "Wi-Fi status reply");
+_Static_assert(sizeof(struct wifi_status_full_reply) == 600, "Wi-Fi full status reply");
 _Static_assert(sizeof(struct wifi_target) == 48, "Wi-Fi target");
 _Static_assert(sizeof(struct wifi_credential) == 72, "Wi-Fi credential");
 _Static_assert(sizeof(struct wifi_credential_request) == 88, "Wi-Fi credential request");
