@@ -29,7 +29,7 @@ struct cpu_local {
   uint64_t timer_armed_target;
   bool timer_armed;
   bool timer_deadline_started;
-  _Atomic uint64_t tlb_flush_ack;
+  _Atomic uint64_t tlb_flush_requested, tlb_flush_ack;
   _Atomic bool online;
   uintptr_t stack_top, double_fault_stack_top;
   struct cpu_descriptors descriptors;
