@@ -63,6 +63,22 @@ power-fail-atomic log-record promise.
 | Rust writable-files work | Coordinate with its owner; `.append(true)` selects write access plus O_APPEND. Do not absorb unrelated writable-files work. |
 | LLVM Support append refusal | Audit actual fork call sites, adapt append and retain unrelated mode/CRLF refusals. |
 
+Cross-checked against the append inventory in [Rust integration #1257](https://git.internal/PyxisOS/pyxis-os/pulls/1257).
+Git's billy adapter (`userspace/git/fs.go`) forwards append to Go; with CREATE it
+may create parent directories before Go rejects the flag, so that refusal is not
+a before-all-effects guarantee for Git. spdlog and Chocolate Quake file logging
+already use libc append and need their non-atomic documentation updated, without
+adding atomic log rotation or durability promises.
+
+Keep the independent protocol/profile refusals: libc append on PIPE, CONSOLE,
+STREAM or TRANSACTION; direct non-FILE typed OPEN flags; stdin and non-FILE
+append companions in startup/job/Lua/libuv handoffs; shell `>>` to provider or
+transaction staging sinks; and read-only textfs. Libc's transaction type check is
+after typed OPEN but before STAGE; native FILE append does not introduce a new
+transaction contract. BusyBox `tar -r` remains outside its selected archive
+profile: appending an archive requires header/terminator handling beyond EOF
+placement. Migrate FILE admission without weakening these type/direction checks.
+
 Source inspection baseline: parent `1d2f71e7`, userland `4060486d`, ports
 `4f2e8aeb`, fs `f3f22b6e`; current docs base `e13b8f35` adds only controller docs.
 Key references: [FILE ABI](../../include/abi/file.h),
