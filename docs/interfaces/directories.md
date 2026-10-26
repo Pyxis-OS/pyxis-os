@@ -178,8 +178,12 @@ changing a directory.
 
 ## Exclusive creation
 
-CREATE takes the same counted single component, kind and requested rights as
-LOOKUP, and returns a newly owned handle. It requires CREATE on the parent.
+CREATE takes a `directory_create_request`: the counted single component, kind,
+requested rights and requirements. It returns a newly owned handle and requires
+CREATE on the parent. Zero requirements are ordinary creation;
+`DIRECTORY_CREATE_REQUIRE_APPEND` requires a FILE with WRITE and an append-capable
+backing before namespace effects. HOST refuses BAD_OPERATION, with no SIZE/WRITE
+approximation. The requirement grants no new authority.
 Returned directory rights are still a subset of the parent; file READ still
 requires READ_FILES, and WRITE requires WRITE_FILES. CREATE alone does not imply
 permission to read or modify the child.

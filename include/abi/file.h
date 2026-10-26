@@ -8,6 +8,7 @@
 
 /* Operations use explicit offsets. SIZE accepts either READ or WRITE; WRITE
  * permits WRITE, RESIZE and SYNC, subject to backend/host restrictions. */
+/* APPEND below is the offset-free exception and also requires WRITE. */
 #define FILE_RIGHT_READ (UINT64_C(1) << 0)
 #define FILE_RIGHT_WRITE (UINT64_C(1) << 1)
 #define FILE_RIGHTS (FILE_RIGHT_READ | FILE_RIGHT_WRITE)
@@ -25,6 +26,7 @@
 #define FILE_TRANSFER_MAX_BYTES (1024u * 1024u)
 #define FILE_READ_BULK UINT64_C(10)
 #define FILE_READ_BULK_MAX_BYTES (1024u * 1024u)
+#define FILE_APPEND UINT64_C(11)
 
 /* Payloads contain no caller addresses. The native message header is separate;
  * exported delivery carries protocol/operation in its transport metadata.
@@ -65,6 +67,23 @@ struct file_write_request {
   uint64_t size;
 };
 
+/* WRITE authority; EOF selection and the confirmed prefix write share one
+ * backing-object mutation reservation. reserved must be zero. No caller
+ * offset, cursor or addresses are carried. Zero size validates support and
+ * returns current EOF without mutation. Unsupported backends refuse even zero.
+ * Larger application writes split into independent operations which may
+ * interleave. Short success and uncertain outcomes follow WRITE's rules below;
+ * neither completion nor close implies SYNC. */
+struct file_append_request {
+  uint64_t size;
+  uint64_t reserved;
+};
+
+struct file_append_reply {
+  uint64_t offset;
+  uint64_t written;
+};
+
 /* Destination WRITE is the call target; source READ is captured separately.
  * Native RAM/initrd -> FAT32 and FAT32 -> RAM only. Other backing pairs refuse
  * before effects. Finite ranges may stop at source EOF. No caller addresses.
@@ -92,6 +111,7 @@ struct file_read_reply {
 
 #define FILE_READ_MAX_BYTES (FILE_PAYLOAD_MAX - sizeof(struct file_read_reply))
 #define FILE_WRITE_MAX_BYTES (FILE_PAYLOAD_MAX - sizeof(struct file_write_request))
+#define FILE_APPEND_MAX_BYTES (FILE_PAYLOAD_MAX - sizeof(struct file_append_request))
 
 /* A successful nonempty WRITE reports 1..size bytes; advance offset/source by
  * written and submit only the remaining suffix. A zero-byte WRITE validates
@@ -130,6 +150,9 @@ _Static_assert(sizeof(struct file_transfer_request) == 32, "file transfer reques
 _Static_assert(sizeof(struct file_transfer_reply) == 8, "file transfer reply layout");
 _Static_assert(sizeof(struct file_write_request) == 16, "file write request layout");
 _Static_assert(sizeof(struct file_write_reply) == 8, "file write reply layout");
+_Static_assert(sizeof(struct file_append_request) == 16, "file append request layout");
+_Static_assert(sizeof(struct file_append_reply) == 16, "file append reply layout");
+_Static_assert(FILE_APPEND_MAX_BYTES == 4080, "bounded atomic append data");
 _Static_assert(sizeof(struct file_resize_request) == 8, "file resize request layout");
 _Static_assert(sizeof(struct file_read_request) == 16, "file read request layout");
 _Static_assert(sizeof(struct file_bulk_read_request) == 24, "file bulk read request layout");

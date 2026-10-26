@@ -45,7 +45,7 @@ enum npfs_operation {
   NPFS_COMMAND_VIEW, NPFS_COMMAND_CAPTURE, NPFS_COMMAND_INFO, NPFS_COMMAND_LOOKUP, NPFS_COMMAND_BIND,
   NPFS_ROOT_VIEW, NPFS_ROOT_SELECT, NPFS_SDK_VIEW,
   NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_INFO, NPFS_CREATE, NPFS_REMOVE,
-  NPFS_RENAME, NPFS_LINK, NPFS_WRITE, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC, NPFS_CREATE_VOLUME,
+  NPFS_RENAME, NPFS_LINK, NPFS_WRITE, NPFS_APPEND, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC, NPFS_CREATE_VOLUME,
   NPFS_RAM_ROOT,
   NPFS_FAT_OPEN, NPFS_FAT_ROOT, NPFS_FAT_STATE, NPFS_FAT_RETIRE,
   NPFS_FAT_SYNC, NPFS_FAT_BEGIN, NPFS_FAT_END, NPFS_FAT_CHECK, NPFS_FAT_FINISH_BEGIN,
@@ -69,7 +69,8 @@ enum npfs_job_state {
  * for either kind; directory self-metadata needs no content rights. READ/ENUMERATE publish data
  * only on success. CREATE_VOLUME takes the device, partition, name and a
  * caller-generated volume ID in data. Format/backing diagnostics belong to this
- * operation alone. */
+ * operation alone. APPEND selects canonical backing EOF inside the worker;
+ * offset and count return the selected start and confirmed byte count. */
 struct npfs_job {
   enum npfs_job_state state;
   enum npfs_operation operation;

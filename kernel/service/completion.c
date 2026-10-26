@@ -311,7 +311,8 @@ void completion_admit_execute(struct completion_admit_request *request)
       .deadline_ns = request->deadline_ns, .correlation_id = request->correlation_id,
       .input_size = request->input_size, .target = request->target, .source = request->source};
     request->source = (struct capability_reference){0};
-    if (operation->protocol == PROTOCOL_FILE && operation->operation == FILE_TRANSFER) {
+    if (operation->protocol == PROTOCOL_FILE &&
+        (operation->operation == FILE_TRANSFER || operation->operation == FILE_APPEND)) {
       if (!object_retain(&request->owner->control->object)) {
         status = CALL_LIMIT;
       } else {
@@ -406,7 +407,7 @@ static enum call_status source_status(struct kernel_object *object, uint64_t rig
     }
     if (operation == FILE_READ || operation == FILE_READ_BULK) {
       required = FILE_RIGHT_READ;
-    } else if (operation == FILE_WRITE || operation == FILE_RESIZE || operation == FILE_TRANSFER) {
+    } else if (operation == FILE_WRITE || operation == FILE_APPEND || operation == FILE_RESIZE || operation == FILE_TRANSFER) {
       required = FILE_RIGHT_WRITE;
     } else if (operation == FILE_SIZE) {
       required = rights & FILE_RIGHTS;

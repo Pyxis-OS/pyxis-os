@@ -138,6 +138,9 @@ struct syscall_result file_read_captured(struct file_object *file,
 struct syscall_result file_output_write(struct file_object *file,
     const struct file_write_request *request, const void *data,
     uintptr_t reply_address, size_t reply_capacity);
+struct syscall_result file_output_append(struct file_object *file,
+    const struct file_append_request *request, const void *data,
+    uintptr_t reply_address, size_t reply_capacity);
 struct syscall_result file_output_resize(struct file_object *file, size_t size);
 
 /* Capture a second FILE grant into the current operation lineage, before a

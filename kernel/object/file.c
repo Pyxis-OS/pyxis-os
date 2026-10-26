@@ -801,19 +801,23 @@ static struct syscall_result read_bulk_file(struct file_object *file, uint64_t r
 
 static struct syscall_result write_file(struct file_object *file, uint64_t rights,
     const struct file_write_request *request, uintptr_t data_address,
-    const void *captured_data, uintptr_t reply_address, size_t reply_capacity)
+    const void *captured_data, uintptr_t reply_address, size_t reply_capacity,
+    bool append)
 {
-  struct file_write_reply reply = {.written = request->size};
-  if (reply_capacity < sizeof(reply) || request->size > SIZE_MAX - request->offset) {
+  struct file_write_request selected = *request;
+  request = &selected;
+  struct file_append_reply reply = {.offset = request->offset, .written = request->size};
+  size_t reply_size = append ? sizeof(reply) : sizeof(reply.written);
+  if (reply_capacity < reply_size || request->size > SIZE_MAX - request->offset) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
+  if (!user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE) ||
       (!captured_data && !user_buffer_check(data_address, request->size, USER_BUFFER_READ))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
   if (file->backing == FILE_NPFS || file->backing == FILE_FAT32) {
-    struct npfs_request *pending = npfs_request_prepare(NPFS_WRITE);
+    struct npfs_request *pending = npfs_request_prepare(append ? NPFS_APPEND : NPFS_WRITE);
     pending->job.node = file->npfs;
     pending->job.fat_node = file->fat32;
     if (file->backing == FILE_FAT32) {
@@ -835,13 +839,21 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
       return (struct syscall_result){status, 0};
     }
     KASSERT(pending->job.count <= request->size);
+    reply.offset = pending->job.offset;
     reply.written = pending->job.count;
-    bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
+    bool copied = copy_to_user(reply_address, append ? (const void *)&reply : &reply.written,
+        reply_size);
     npfs_request_release(pending);
     if (!copied) {
-      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+      return (struct syscall_result){append && reply.written ? CALL_OUTCOME_UNKNOWN : CALL_BAD_BUFFER, 0};
     }
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
+    return (struct syscall_result){CALL_OK, reply_size};
+  }
+  if (append && file->backing == FILE_HOST) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (append && file->backing != FILE_RAM) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
   }
   enum call_status failure = file_failure_status(file);
   if (failure != CALL_OK) {
@@ -851,10 +863,25 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
   if (!request->size) {
-    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    if (append) {
+      if (!file_begin_operation(file)) {
+        return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+      }
+      failure = file_failure_status(file);
+      if (failure == CALL_OK && file->immutable_snapshot) {
+        failure = CALL_READ_ONLY;
+      }
+      reply.offset = file->size;
+      file_end_operation(file);
+      if (failure != CALL_OK) {
+        return (struct syscall_result){failure, 0};
+      }
+    }
+    if (!copy_to_user(reply_address, append ? (const void *)&reply : &reply.written,
+        reply_size)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
+    return (struct syscall_result){CALL_OK, reply_size};
   }
   if (file->backing == FILE_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_WRITE);
@@ -873,12 +900,12 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
       return (struct syscall_result){status, 0};
     }
     reply.written = pending->count;
-    bool copied = copy_to_user(reply_address, &reply, sizeof(reply));
+    bool copied = copy_to_user(reply_address, &reply.written, sizeof(reply.written));
     hostfs_request_release(pending);
     if (!copied) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
+    return (struct syscall_result){CALL_OK, sizeof(reply.written)};
   }
   if (file->backing != FILE_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
@@ -908,6 +935,15 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     file_end_operation(file);
     kfree(data);
     return (struct syscall_result){CALL_READ_ONLY, 0};
+  }
+  if (append) {
+    selected.offset = file->size;
+    reply.offset = selected.offset;
+    if (request->size > SIZE_MAX - request->offset) {
+      file_end_operation(file);
+      kfree(data);
+      return (struct syscall_result){CALL_FILE_TOO_LARGE, 0};
+    }
   }
   size_t old_charge = file->retained_bytes;
   size_t end = request->offset + request->size;
@@ -953,10 +989,11 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
   file_end_operation(file);
   kfree(data);
 
-  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  if (!copy_to_user(reply_address, append ? (const void *)&reply : &reply.written,
+      reply_size)) {
+    return (struct syscall_result){append ? CALL_OUTCOME_UNKNOWN : CALL_BAD_BUFFER, 0};
   }
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  return (struct syscall_result){CALL_OK, reply_size};
 }
 
 static void resize_owned(struct file_object *file, size_t size)
@@ -1019,13 +1056,23 @@ struct syscall_result file_output_write(struct file_object *file,
 {
   KASSERT(file->backing == FILE_RAM && request->size <= FILE_WRITE_MAX_BYTES);
   return write_file(file, FILE_RIGHT_WRITE, request, 0, data,
-      reply_address, reply_capacity);
+      reply_address, reply_capacity, false);
 }
 
 struct syscall_result file_output_resize(struct file_object *file, size_t size)
 {
   KASSERT(file->backing == FILE_RAM);
   return resize_file(file, size);
+}
+
+struct syscall_result file_output_append(struct file_object *file,
+    const struct file_append_request *request, const void *data,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  KASSERT(file->backing == FILE_RAM && request->size <= FILE_APPEND_MAX_BYTES);
+  struct file_write_request selected = {.size = request->size};
+  return write_file(file, FILE_RIGHT_WRITE, &selected, 0, data,
+      reply_address, reply_capacity, true);
 }
 
 #define FILE_TRANSFER_MAX_PAGES (FILE_TRANSFER_MAX_BYTES / PAGE_SIZE + 1)
@@ -1344,6 +1391,21 @@ enum call_status file_completion_reserve(struct native_completion *operation)
     count = request.size;
     break;
   }
+  case FILE_APPEND: {
+    required = FILE_RIGHT_WRITE;
+    code = NPFS_APPEND;
+    struct file_append_request request;
+    if (operation->input_size < sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    memcpy(&request, operation->input, sizeof(request));
+    if (request.reserved || request.size > FILE_APPEND_MAX_BYTES ||
+        request.size != operation->input_size - sizeof(request)) {
+      return CALL_BAD_REQUEST;
+    }
+    count = request.size;
+    break;
+  }
   case FILE_RESIZE: {
     required = FILE_RIGHT_WRITE;
     code = NPFS_RESIZE;
@@ -1373,15 +1435,17 @@ enum call_status file_completion_reserve(struct native_completion *operation)
     return failure;
   }
   if (file->immutable_snapshot && (operation->operation == FILE_WRITE ||
-      operation->operation == FILE_RESIZE)) {
+      operation->operation == FILE_APPEND || operation->operation == FILE_RESIZE)) {
     return CALL_READ_ONLY;
   }
   if (file->backing != FILE_RAM && file->backing != FILE_INITRD &&
-      file->backing != FILE_NPFS) {
+      file->backing != FILE_NPFS &&
+      !(file->backing == FILE_FAT32 && operation->operation == FILE_APPEND)) {
     return CALL_BAD_OPERATION;
   }
-  if (file->backing == FILE_NPFS || operation->operation == FILE_READ_BULK) {
-    bool memory = file->backing != FILE_NPFS;
+  if (file->backing == FILE_NPFS || file->backing == FILE_FAT32 ||
+      operation->operation == FILE_READ_BULK) {
+    bool memory = file->backing != FILE_NPFS && file->backing != FILE_FAT32;
     if (memory) {
       lock_file(file);
       if (file->busy) {
@@ -1402,6 +1466,10 @@ enum call_status file_completion_reserve(struct native_completion *operation)
     struct npfs_job *job = operation->backend;
     job->offset = offset;
     job->count = count;
+    if (file->backing == FILE_FAT32) {
+      job->fat_node = file->fat32;
+      job->fat_actor = operation->actor;
+    }
     if (operation->operation == FILE_READ_BULK) {
       KASSERT(bulk_buffer_retain(operation->bulk));
       job->bulk = operation->bulk;
@@ -1410,8 +1478,10 @@ enum call_status file_completion_reserve(struct native_completion *operation)
         job->bulk_memory = file;
       }
     }
-    if (code == NPFS_WRITE && count) {
-      memcpy(job->data, operation->input + sizeof(struct file_write_request), count);
+    if ((code == NPFS_WRITE || code == NPFS_APPEND) && count) {
+      size_t prefix = code == NPFS_APPEND ? sizeof(struct file_append_request) :
+          sizeof(struct file_write_request);
+      memcpy(job->data, operation->input + prefix, count);
     }
     return CALL_OK;
   }
@@ -1429,7 +1499,9 @@ enum call_status file_completion_reserve(struct native_completion *operation)
 void file_completion_discard(struct native_completion *operation)
 {
   struct file_object *file = (struct file_object *)operation->target.object;
-  if (file->backing == FILE_NPFS || operation->operation == FILE_TRANSFER ||
+  if (file->backing == FILE_NPFS ||
+      (file->backing == FILE_FAT32 && operation->operation == FILE_APPEND) ||
+      operation->operation == FILE_TRANSFER ||
       operation->operation == FILE_READ_BULK) {
     npfs_completion_discard(operation);
   } else if (operation->backend) {
@@ -1442,7 +1514,9 @@ void file_completion_discard(struct native_completion *operation)
 void file_completion_start(struct native_completion *operation)
 {
   struct file_object *file = (struct file_object *)operation->target.object;
-  if (file->backing == FILE_NPFS || operation->operation == FILE_TRANSFER ||
+  if (file->backing == FILE_NPFS ||
+      (file->backing == FILE_FAT32 && operation->operation == FILE_APPEND) ||
+      operation->operation == FILE_TRANSFER ||
       operation->operation == FILE_READ_BULK) {
     npfs_completion_start(operation);
     return;
@@ -1452,11 +1526,14 @@ void file_completion_start(struct native_completion *operation)
   uint8_t output[FILE_PAYLOAD_MAX];
   size_t output_size = 0;
   operation->progress_known = operation->operation == FILE_READ ||
-      operation->operation == FILE_WRITE;
+      operation->operation == FILE_WRITE || operation->operation == FILE_APPEND;
   if (!native_completion_mark_started(operation)) {
     status = native_completion_cancel_reason(operation);
   } else if (file_failure_status(file) != CALL_OK) {
     status = file_failure_status(file);
+  } else if (file->immutable_snapshot && (operation->operation == FILE_WRITE ||
+      operation->operation == FILE_APPEND || operation->operation == FILE_RESIZE)) {
+    status = CALL_READ_ONLY;
   } else if (operation->operation == FILE_READ) {
     struct file_read_request request;
     memcpy(&request, operation->input, sizeof(request));
@@ -1473,13 +1550,24 @@ void file_completion_start(struct native_completion *operation)
     }
     output_size = sizeof(reply) + count;
     operation->progress = count;
-  } else if (operation->operation == FILE_WRITE) {
+  } else if (operation->operation == FILE_WRITE || operation->operation == FILE_APPEND) {
+    bool append = operation->operation == FILE_APPEND;
     struct file_write_request request;
-    memcpy(&request, operation->input, sizeof(request));
-    if (!request.size) {
-      struct file_write_reply reply = {0};
-      memcpy(output, &reply, sizeof(reply));
-      output_size = sizeof(reply);
+    if (append) {
+      struct file_append_request input;
+      memcpy(&input, operation->input, sizeof(input));
+      request = (struct file_write_request){.offset = file->size, .size = input.size};
+    } else {
+      memcpy(&request, operation->input, sizeof(request));
+    }
+    if (append && file->backing != FILE_RAM) {
+      status = CALL_READ_ONLY;
+    } else if (request.size > SIZE_MAX - request.offset) {
+      status = CALL_FILE_TOO_LARGE;
+    } else if (!request.size) {
+      struct file_append_reply reply = {.offset = request.offset};
+      output_size = append ? sizeof(reply) : sizeof(reply.written);
+      memcpy(output, append ? (const void *)&reply : &reply.written, output_size);
     } else if (file->backing != FILE_RAM) {
       status = CALL_READ_ONLY;
     } else {
@@ -1499,9 +1587,9 @@ void file_completion_start(struct native_completion *operation)
           file->size = end;
         }
         fs_metadata_touch(&file->metadata);
-        struct file_write_reply reply = {.written = request.size};
-        memcpy(output, &reply, sizeof(reply));
-        output_size = sizeof(reply);
+        struct file_append_reply reply = {.offset = request.offset, .written = request.size};
+        output_size = append ? sizeof(reply) : sizeof(reply.written);
+        memcpy(output, append ? (const void *)&reply : &reply.written, output_size);
         operation->progress = request.size;
       }
     }
@@ -1604,6 +1692,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     required = FILE_RIGHTS;
     break;
   case FILE_WRITE:
+  case FILE_APPEND:
   case FILE_TRANSFER:
   case FILE_RESIZE:
   case FILE_SYNC:
@@ -1619,7 +1708,8 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   if (failure != CALL_OK) {
     return (struct syscall_result){failure, 0};
   }
-  if (file->immutable_snapshot && (operation == FILE_WRITE || operation == FILE_RESIZE || operation == FILE_TRANSFER)) {
+  if (file->immutable_snapshot && (operation == FILE_WRITE || operation == FILE_APPEND ||
+      operation == FILE_RESIZE || operation == FILE_TRANSFER)) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
   if (operation == FILE_INFO) {
@@ -1649,6 +1739,21 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     }
     return read_bulk_file(file, rights, &request, reply_address, reply_capacity);
   }
+  if (operation == FILE_APPEND) {
+    struct file_append_request request;
+    if (request_size < sizeof(request) || request_size > FILE_PAYLOAD_MAX) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&request, request_address, sizeof(request))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (request.reserved || request.size != request_size - sizeof(request)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    struct file_write_request selected = {.size = request.size};
+    return write_file(file, rights, &selected, request_address + sizeof(request),
+        NULL, reply_address, reply_capacity, true);
+  }
   if (operation == FILE_WRITE) {
     struct file_write_request request;
     if (request_size < sizeof(request) || request_size > FILE_PAYLOAD_MAX) {
@@ -1661,7 +1766,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
     return write_file(file, rights, &request, request_address + sizeof(request),
-        NULL, reply_address, reply_capacity);
+        NULL, reply_address, reply_capacity, false);
   }
   if (operation == FILE_SYNC) {
     if (request_size) {

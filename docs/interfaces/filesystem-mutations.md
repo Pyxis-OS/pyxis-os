@@ -1,5 +1,12 @@
 # Filesystem mutations
 
+Native CREATE carries a `directory_create_request` with explicit requirements.
+Ordinary `directory_create` supplies zero; `directory_create_required` can demand
+`DIRECTORY_CREATE_REQUIRE_APPEND` for a FILE with WRITE. HOST rejects that
+requirement before namespace effects; RAM, npfs and writable FAT32 preserve their
+normal authority, allocation and ownership gates. The flag requires backend
+support, not additional authority, a shared cursor or append-only protection.
+
 The native directory protocol supports creation, removal and atomic file/directory
 rename/replacement. These operations act on single component names through
 capabilities; libc and libpyxis resolve paths in userspace. The initrd remains
