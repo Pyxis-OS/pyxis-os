@@ -144,14 +144,14 @@ installed ThinkPad is open.
 
 ## Planned next kernel milestone
 
-[Remove BSP-owned allocation and VM mutation](bsp-removal.md): proposal assigned
+[Remove BSP-owned allocation and VM mutation](bsp-removal.md): active milestone assigned
 to Codex alpha (chronium, 2026-10-26), after merged/native-qualified XSAVE/AVX
 and before the JIT kernel task. Caller-CPU transactions, per-address-space
 ownership, frame allocation, acknowledged invalidation and non-centralized
 cleanup. The first-task execution/quiescence/allocator decisions are accepted
-(chronium, 2026-10-26); task 1 starts with a matched baseline. Task 2 starts by
-measuring the shared PMM path after dispatcher removal and bringing the frame
-allocation decision to chronium.
+(chronium, 2026-10-26). Task 1 is merged; its hands-free native packet awaits
+the orchestrator. Task 2 has measured the shared PMM after dispatcher removal
+and bounded caller-owned frame batches are accepted (chronium, 2026-10-26). No retained per-CPU cache is implemented.
 
 ## Candidates for the next milestone
 
