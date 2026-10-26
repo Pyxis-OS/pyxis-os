@@ -151,7 +151,8 @@ ownership, frame allocation, acknowledged invalidation and non-centralized
 cleanup. The first-task execution/quiescence/allocator decisions are accepted
 (chronium, 2026-10-26). Task 1 is merged; its hands-free native packet awaits
 the orchestrator. Task 2 has measured the shared PMM after dispatcher removal
-and bounded caller-owned frame batches are accepted (chronium, 2026-10-26). The bounded-batch implementation is qualified in nested QEMU and ready for
+and bounded caller-owned frame batches are accepted (chronium, 2026-10-26).
+The bounded-batch implementation is qualified in nested QEMU and ready for
 review; no retained per-CPU cache is implemented. Native batches remain open.
 
 ## Candidates for the next milestone

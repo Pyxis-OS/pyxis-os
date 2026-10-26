@@ -38,7 +38,13 @@ interrupts-off tail is unchanged.
 
 Recorded 2026-10-26, **nested KVM**, q35/8 vCPUs, `host,+invtsc`, 4 GiB,
 KVM shared monotonic-floor clock, HWP unavailable, XSAVE `0x7`/832 bytes, RAM only.
-No network/disk or debugger during timing; no concurrent build in these samples.
+No network/disk or debugger during timing; this collector ran no build or
+second benchmark concurrently. The shared host was not isolated from other
+agents: a controller-correctness QEMU started during the first repetition and
+remained active during later pairs and stock controls. Its CPU load was not
+measured. Close interleaving and ranges reduce, but do not eliminate, that
+uncertainty; particularly the small-request percent differences are not an
+isolated-host regression estimate.
 Clang23 builder `pyxis-llvm23.1.3-3d69e83`, same tracked configuration as the
 pre-change record. Separate processes fixed on dense CPU1 through CPU N;
 ready/release PIPE barrier before PROFILE/timing, actual child retirement waited.
