@@ -9,7 +9,14 @@ and [subsystems per space](subsystems-per-space.md).
 
 ## Package manager
 
-The native `pkg` client and slice 1 data packages are delivered ([packages](packages.md), [formats](../interfaces/packages.md)), including the toolchain and clangd default; [manual toolchain publication](../development/hosted-tools.md#manual-immutable-publication) remains as a recovery workflow. Parked: program packages per release, a whole-system upgrader and dynamic linking; see the related [source-build direction](source-builds.md). No work is assigned.
+The native `pkg` client, data/program/development packages and installed command
+views are delivered ([formats](../interfaces/packages.md)). The
+[ABI/core/updater milestone](pkg-upgrade.md) records the core archive, online
+Install and signed `pkg upgrade`: QEMU upgrade/new/previous/rescue boots are
+qualified; the native ThinkPad upgrade check remains open. Dynamic linking and
+the [source-build direction](source-builds.md) remain future work.
+[Manual toolchain publication](../development/hosted-tools.md#manual-immutable-publication)
+remains a recovery workflow.
 
 Selecting existing build artifacts, so a developer can consume successful CI work
 without finding and extracting each [bundle](../development/build-bundles.md), is
@@ -32,14 +39,12 @@ source first. The rules worth keeping:
 This is build-product reuse, not a cross-repository dispatch system, which remains
 a separate owner-managed integration.
 
-Upgrading the system itself through the package manager, without booting the
-installer (owner idea, 2026-10-14). Today [Update](../userland/system-updates.md)
-runs from the installer; installed program revisions already sit side by side, so a
-new revision could be staged from the running system and activated at the next
-boot, keeping the previous one for rollback.
+Upgrading the system through the package manager, without booting the installer
+(owner idea, 2026-10-14), is implemented by `pkg upgrade` with the qualification
+limits above. The installer retains [Update](../userland/system-updates.md).
 
-Program store and generations (owner, 2026-10-17), replacing the
-interim revision directories (removed in step 2 task 3 of [package upgrades](pkg-upgrade.md)):
+Historical program-store direction (owner, 2026-10-17), before
+[package upgrades](pkg-upgrade.md) removed the interim revision directories:
 each program version is written once into a store (`bin/store/NAME-HASH/`), a
 generation maps stable names to store entries, one atomic step switches the
 current generation, and cleanup removes only store entries no kept generation
@@ -48,6 +53,9 @@ generation is a directory of symbolic links or a manifest that boot init turns
 into the read-only `bin://` view is open; the owner leans towards links. User
 programs stay outside it, in a plain user command directory (see
 [everyday gaps](everyday-gaps.md)), so installing one never needs a tool.
+The implemented store/set and command-view contracts are now described by
+[package formats](../interfaces/packages.md); the choices above preserve the
+earlier proposal rather than reopen those decisions.
 
 ## Execution lifecycle
 
@@ -204,7 +212,11 @@ not comparable with earlier figures.
 
 [Hosted toolchains and language runtimes](toolchains-and-runtimes.md) records
 the chosen LLVM/Clang transition and hosted compiler direction, C++ userspace, a Go
-cross compiler and later hosted Go tools. Rust is a separate possible direction.
+cross compiler and later hosted Go tools. [Rust stage 1](rust.md) delivers
+core+alloc and tiny-skia; the [std milestone](rust-std.md#qualified-delivery)
+records the fork compiler, std main and read-only-file hexyl subset. The complete
+std profile, Rust worker integration and native hardware qualification remain
+separate gates; hosted Rust remains later work.
 Tailscale has a concrete future [homelab administration target](toolchains-and-runtimes.md#homelab-administration-over-tailscale);
 Ladybird is the first planned full web browser (owner, 2026-10-16), much later:
 it needs hosted C++ tools, capability pipes for its multi-process design, its
@@ -413,12 +425,12 @@ policy rounds remain open and need explicit assignment.
 
 ## Wi-Fi
 
-The owner assigned an [investigation/proposal](wifi.md) on 2026-10-18:
-ThinkPad AX200 first, vela RTL8922AE next; Deck QCA2066 deferred. It records
-source/firmware evidence and the proposed shared stack. AX200 stages 1–2 (resource and
-firmware startup, bounded passive scan) are implemented and qualified for review;
-association, authentication and Wi-Fi data/IP traffic are not, and later stages
-need their own assignment.
+The owner assigned the [Wi-Fi milestone](wifi.md) on 2026-10-18.
+[AX200 stages 1–4](../devices/ax200-wifi.md) deliver firmware, passive scan,
+legacy 2.4 GHz open and WPA2-Personal/CCMP links, independent DHCP and verified
+data with recorded qualification limits. Next are vela RTL8922AE and WPA3;
+AX200 5 GHz and the Deck QCA2066 remain deferred. These results do not qualify
+the RTL8922AE backend or broader radio coverage.
 
 ## Beyond x86: aarch64
 

@@ -292,7 +292,7 @@ and ports.
   invariant requires; the kernel keeps loading P1F, including the loader itself.
 - **ABI names:** a system library's ABI name is what packages record in
   `abi`, and the system's list grows and shrinks by the
-  [ABI list rule](#the-abi-identifier).
+  [release-ABI policy](pkg-upgrade.md#decided).
 - **Toolchain and SDK:** LLD writes the new formats; position-independent builds
   of libc, libpyxis, libterm, libfont and libc++; relocation kinds; a TLS model
   beyond today's static local-exec; library naming and versions; the SDK exports

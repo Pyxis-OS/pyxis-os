@@ -74,8 +74,10 @@ management retained through the [multiple-interface core](devices/network-interf
 The [Wi-Fi plan](wip/wifi.md) continues with vela RTL8922AE, then WPA3; AX200
 5 GHz and the Deck remain later.
 
-The [packages and upgrades plan](wip/packages.md) starts with data packages,
-then program packages, native links and dynamic linking.
+The [package reference](interfaces/packages.md) describes implemented data,
+program and development packages and their command/SDK views. The
+[updater milestone](wip/pkg-upgrade.md) records QEMU-qualified `pkg upgrade` and
+its remaining native upgrade gate. Dynamic linking remains future work.
 
 The [gallery](gallery/README.md) is the project's screenshot album.
 
