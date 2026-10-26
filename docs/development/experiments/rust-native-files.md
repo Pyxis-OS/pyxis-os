@@ -47,6 +47,11 @@ plus a confined host directory through virtiofsd. All following checks pass:
   tiny-skia (`d0dfb9f8f80d6c59`) pass. Rebuilt hexyl ASCII/no-colour output matches
   the pinned upstream Linux build byte-for-byte.
 
+After rebasing onto main `e13b8f35`, the rebuilt integration kernel `d8cc8910`
+repeats the one/four-CPU functional set successfully, including main's caller-CPU
+MEMORY transaction changes. The matched cost fixtures retain the original
+baseline kernel to isolate this task.
+
 The existing std sample's former blanket writable-Unsupported expectation is
 updated to PermissionDenied for its read-only bundle license. Raw evidence,
 build/fixture hashes and private workload commands remain under
