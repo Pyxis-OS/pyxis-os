@@ -115,8 +115,11 @@ speedups or CPU-placement effects.
 
 ## Delivered SDK qualification (2026-10-26)
 
-The focused delivery uses userland `f334716` and ports `d998943`, each rebased
-onto its fetched main (`6cd1cf5` and `deff7c1`). The ordinary C mode is hosted;
+The qualified builds use userland `f334716` and ports `d998943`, based on
+`6cd1cf5` and `deff7c1`. Final pins `4060486`/`4f2e8ae` contain the newer
+dependency mains (`20172d3`/`a0bfc8c`); that rebase changes only documentation
+and an unrelated blurgtext recipe. Reached SDK/port code and kernel sources
+are byte-identical to the qualified revisions. The ordinary C mode is hosted;
 whole libc/musl/TLSF, crt0 and the native startup/environment/handle/memory/thread
 units used before TLS remain freestanding. Existing strict rounding/no-builtin
 controls and no-red-zone remain. No compiler-container rebuild or runtime ABI
