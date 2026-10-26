@@ -8,7 +8,8 @@ planning and the llvmpipe JIT grant follow separately.
 1. Enable x87/SSE/AVX only, XCR0 `0x7`, automatically when qualified.
    AVX-512 and every other component remain disabled.
 2. Require one compatible profile on every online CPU before user scheduling.
-   Compare the selected CPUID leaf `0xD` layout and the AVX-family features
+   Compare the selected CPUID leaf `0xD` layout, newly enabled user XSAVE
+   instruction flags and the AVX-family features
    used by current Go/Mesa dispatchers; XCR0 cannot mask userspace CPUID.
    If support/layout/features differ or usable XSAVE state cannot be established,
    warn and retain FXSAVE system-wide, with OSXSAVE clear. No CPU offlining,
@@ -100,3 +101,11 @@ checked on nested QEMU before handoff. All archive/member/selected-set hashes
 passed for four fresh 268 MiB/1242-file installs. No native staging or run was
 done. The orchestrator schedules vela and ThinkPad; the optional bulk comparison
 qualifies live RAM-npfs, not installed NVMe storage.
+
+Final source `23be575c` rebases the same engine onto main `6ca85efd`, idles APs
+at the boot rendezvous using their existing bootstrap timer, and also compares
+optional user XSAVE/XGETBV instruction support. These follow-ups affect boot
+admission/waiting, not the timed task save/restore engine above. The strengthened
+one/four-CPU state/default/inheritance/migration probes and legacy fallback were
+repeated after them; final packet checks use that kernel. Native results are
+still pending, and the timing table is labelled with its measured revision.

@@ -419,9 +419,9 @@ retain FXSAVE64 system-wide with OSXSAVE clear. AVX-512 and other components
 remain disabled. The compiler baseline stays x86-64; optional instructions still
 need CPUID and XGETBV checks.
 
-Initial tasks start with empty x87 registers, zero XMM/YMM registers, x87 control
-word `0x037f` and MXCSR `0x1f80`: round to nearest, masked FP exceptions, and no
-flush-to-zero/denormals-are-zero mode. Native siblings inherit their creator's
+Initial tasks start with empty x87 registers, zero XMM registers (and zero YMM
+upper halves under XSAVE), x87 control word `0x037f` and MXCSR `0x1f80`: round
+to nearest, masked FP exceptions, and no flush-to-zero/denormals-are-zero mode. Native siblings inherit their creator's
 complete saved FP state, including exception flags and YMM upper halves.
 Preemption and blocking save it; dispatch restores it before returning to the
 task. Nonswitching syscalls leave it untouched. Kernel code remains non-FP/SIMD;
