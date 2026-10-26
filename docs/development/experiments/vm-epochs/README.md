@@ -155,3 +155,23 @@ approval is not a blanket authorization for other fault scenarios or native
 fault testing. Chronium clarified that the fault-injection rule concerns
 manufactured appearances/screenshots, not approved disposable failure-path
 checks; no screenshot was produced here.
+
+## Shared query guard checkpoint
+
+Follow-up branch `mm/shared-kernel-vm`, source `7d5ee540`, separates normal
+general-kernel mapping snapshots from structural mutator admission. New ancestor
+frames are allocated/zeroed before short guarded publication; leaf publication,
+unmap/protect and scalar query snapshots share an allocation-free guard. Retained
+ancestors stay alive. The never-reused heap arena keeps its separate owner and
+disjoint ancestor proof. Fatal/debugger recursive inspection keeps its existing
+separate path. All general kernel mutations still require the BSP; the long-lived
+structural owner and caller conversion are not implemented at this checkpoint.
+
+Production-kernel single runs with one and four CPUs pass the same memory/Go/
+stop/resize collector. A separate private fixture on CPUs 1/2 also completes 32
+queries of each actor's retained kernel stack and 32 concurrent invalidations
+per CPU, with overlap 2. The scalar snapshot is not a lease; the actor retains
+its stack throughout. The same GDB departure/re-entry checks pass. Evidence is
+under `/shared/present/bsp-removal/task3/shared-query-fixture/` and baseline
+labels `query-guard-1cpu` / `query-guard-preallocated-4cpu`. No failure injected,
+no production diagnostic/test operation, all sources restored and guests stopped.
