@@ -33,10 +33,8 @@ set(CMAKE_CXX_COMPILER "${PYXIS_CLANGXX}")
 set(CMAKE_ASM_COMPILER "${PYXIS_CLANG}")
 set(CMAKE_SYSROOT "${PYXIS_SYSROOT}")
 
-# C is freestanding, as in pyxis.mk, so Clang never turns code into calls to
-# library functions the source did not make. C++ is hosted: libc++ needs it.
-# Flags set on the command line replace these, so include -ffreestanding there.
-set(CMAKE_C_FLAGS_INIT "-ffreestanding")
+# C and C++ consume the hosted SDK libraries, as in pyxis.mk. Libc and
+# pre-TLS startup select their implementation exceptions in runtime.mk.
 # The SDK's C headers come before Clang's builtin ones, as in pyxis.mk: in
 # freestanding mode Clang's own stdint.h would define the int_fast types
 # differently from libc. C++ keeps the driver's order, which puts libc++ first.

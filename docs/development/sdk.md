@@ -116,8 +116,13 @@ their objects with `PYXIS_START` and `PYXIS_LDLIBS` straight to a `.pxe`
 executable: the Pyxis driver has LLD write P1F. For a debugger, relink with
 `-Wl,--oformat=elf`; the ELF has symbols at the same addresses.
 
-The fragment preserves the current GNU C23 freestanding/static build settings,
-4 KiB segment alignment and fixed load address. It excludes implicit host or
+The fragment selects hosted GNU C23 for programs and reusable libraries, static
+linking,
+4 KiB segment alignment and fixed load address. Libc, its musl/TLSF closure,
+crt0 and pre-TLS startup remain freestanding in `runtime.mk`, including the
+native environment/handle/memory/thread helper units used before FS is installed.
+Explicit no-builtin and rounding controls are preserved. The no-red-zone convention is unchanged.
+The fragment excludes implicit host or
 cross-installation C headers, keeping compiler builtin headers and SDK headers.
 Project headers use a normal include path so generated dependencies track them.
 Startup and runtime archives are explicit link inputs; no host libc or startup
@@ -259,21 +264,23 @@ Like `pyxis.mk`, the file resolves paths from its own location. It sets:
   on `PATH`; `-DPYXIS_CROSS_COMPILE=PREFIX` or a `CROSS_COMPILE` environment
   variable selects another prefix. `CMAKE_SYSROOT` is the SDK's sysroot, and
   the driver supplies startup, libraries, the linker script and P1F output.
-- **The language modes.** C is freestanding with the SDK's headers ahead of
-  Clang's builtin ones, as in `pyxis.mk`, so `stdint.h` is the SDK's. C++ is
-  hosted with the driver's own header order.
+- **The language modes.** C and C++ are hosted. C keeps the SDK's headers ahead
+  of Clang's builtin ones, as in `pyxis.mk`, so `stdint.h` is the SDK's. C++
+  keeps the driver's own header order. Runtime implementation exceptions are
+  selected by their build, not inherited by applications.
 - **Searching.** Libraries, headers and packages are searched only in the
   sysroot and in other `CMAKE_FIND_ROOT_PATH` entries, never programs. Each
   entry is searched at `/usr` and at its top. Development prefixes such as
   `build/ports-dev/sdl2` can therefore be added, for example
   `-DCMAKE_FIND_ROOT_PATH=/path/to/pyxis/build/ports-dev/sdl2`.
 
+CMake caches its C flags: use a fresh build directory when adopting changed
+SDK language defaults.
+
 It leaves the language standard, optimization and warnings to the project and
 `CMAKE_BUILD_TYPE`. Configure checks link real executables against the
 complete SDK, so a check for a missing function fails. Some things to know:
 
-- Flags given on the command line replace the file's C flags: include
-  `-ffreestanding` in your `CMAKE_C_FLAGS`.
 - Stripping after the link does not work, because `llvm-strip` cannot read
   P1F executables.
 - Object files are named `.obj`, because CMake picks `.o` only for `UNIX`
