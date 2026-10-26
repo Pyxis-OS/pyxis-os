@@ -92,6 +92,66 @@ processes were joined and stopped.
 
 Shared structural ownership, stable concurrent queries, safe scheduler
 admission, retained uncertainty, actual shared range reuse/permissions and
-consumer exclusion are not delivered by this foundation. Deliberately missed
-or delayed acknowledgements still require chronium's explicit disposable-QEMU
-authorization; none was injected. Native task 1/2 results do not qualify task 3.
+consumer exclusion are not delivered by this foundation. The separately
+authorized delayed-ACK check below covers the existing retained-resize consumer;
+it does not qualify the pending structural-owner integration. Native task 1/2
+results do not qualify task 3.
+
+## Delayed acknowledgement: production-kernel QEMU pass
+
+**Authorized and checked (chronium, 2026-10-26):** one disposable, RAM-only,
+four-CPU QEMU run of production foundation head `adb8b87e`. No kernel delay
+hook, guest-memory/PTE write, general-register edit, native operation or merged
+test mechanism. The exact tested ELF SHA-256 is
+`fcd295b78a69954a90ac6f50702f320cc51bf27ae6333810cb329acd2c0473f3`.
+The diskless configuration, old live archive, invariant-TSC/KVM clock and
+`nvme.write=0` match the earlier foundation check. This is failure-path
+correctness, not a native latency or performance measurement.
+
+GDB hardware breakpoints stop CPU 3 at entry to `arch_tlb_flush_interrupt`,
+before its acknowledgement. QEMU 10.2.2's GDB `vCont` resumes only CPUs 0–2;
+CPU 3 stays stopped while the initiator's existing absolute one-second deadline
+expires. QMP stops that running subset for read-only inspection. Then all CPUs
+resume, including the delayed handler. See the pinned
+[partial-resume implementation](https://github.com/qemu/qemu/blob/v10.2.2/gdbstub/system.c#L558)
+and [QEMU GDB CPU/thread model](https://www.qemu.org/docs/master/system/gdb.html#debugging-multicore-machines).
+
+| Observation | Requested epochs | Acknowledgements, CPUs 0–3 | Resize disabled |
+| --- | --- | --- | --- |
+| Before request | 0, 0, 0, 0 | 0, 0, 0, 0 | No |
+| Deadline expired, CPU 3 still paused | 1, 1, 1, 1 | 1, 1, 1, 0 | Yes |
+| CPU 3 resumed: late ACK | 1, 1, 1, 1 | 1, 1, 1, 1 | Yes |
+| Another resize requested | 1, 1, 1, 1 | 1, 1, 1, 1 | Yes |
+
+The existing resize transaction had switched software to 1024x640 before
+retiring its old buffers; it had not unmapped them. On timeout it emits the
+existing retention diagnostic and transfers the old batch to permanent
+`retained_resize`. Inspection confirms **five VM-owned ranges, 2,940 pages
+(12,042,240 bytes)** stay backed. Every page's physical frame and PTE permissions
+match the pre-request snapshot, excluding only hardware accessed/dirty status.
+The PMM marks every frame allocated and allocatable. Range states and backing
+counts match too. These checks pass at timeout, after the late ACK, and after
+the additional resize request. The retained record's bytes remain identical
+after timeout; a hardware breakpoint on its cleanup function is never hit.
+
+The later 1280x720 request does not start another resize: the layout stays
+1024x640, the resize-disable flag stays set, and no second epoch is issued.
+Private MEMORY completes 16 allocations/releases without failures while that
+consumer is fenced. Remote remains usable, returns the kernel log, and exits
+with confirmed normal completion. No routine panic or late-ACK reclamation.
+
+The observed KVM clock floor after timeout exceeds the captured absolute
+deadline. Host/GDB stop intervals are not treated as target performance data.
+The source/ELF, host commands, QEMU command line, GDB script/transcript, full
+page/bitmap checks and snapshots are retained under
+`/shared/present/bsp-removal/task3/delayed-ack/gdb-paused-vcpu/` and its parent,
+with a hash inventory. Only this prose is committed; no raw log, image or
+test code. All owned QEMU/GDB/Remote helpers are stopped and joined.
+
+This confirms the existing display consumer's fencing and retention policy
+with the new engine. Shared-owner admission/cleanup, range reuse and permission
+transitions still need their own implementation and qualification. This single
+approval is not a blanket authorization for other fault scenarios or native
+fault testing. Chronium clarified that the fault-injection rule concerns
+manufactured appearances/screenshots, not approved disposable failure-path
+checks; no screenshot was produced here.
