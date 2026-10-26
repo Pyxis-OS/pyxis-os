@@ -1954,6 +1954,13 @@ separates dirty-FAT refusal from completion on externally repaired copies.
 
 ## Boot publication activation
 
+The 0.0.10 pre-alpha upgrade plan removes the previous boot entry, predecessor
+package set and automatic rollback. A failed new release boot can require
+rescue, installer Update or reinstall. The independent static rescue pair and
+interrupted-publication recovery copies do not select a prior release. Revisit
+recoverable failed-release upgrades before Pyxis promises that guarantee or
+enters a beta update channel ([0.0.10 upgrade milestone](wip/pkg-upgrade-0.0.10.md)).
+
 Classic normal-build publication is owner-authorized after its prior-UI
 vela gate. Native foreign-file preservation remains unqualified: that medium was
 freshly wiped. Native power cuts, torn sectors and devices ignoring FLUSH are
