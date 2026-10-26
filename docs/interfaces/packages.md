@@ -720,12 +720,12 @@ without `package_upgrade` cannot upgrade. Under the writer lock it then:
 4. admits the boot ESP once through `UPGRADE_BOOT_ESP`, checks that its boot
    record is still the one this boot read, and publishes the new attempt with
    the shared boot publisher, the boot entry's `mount.pool` from the evidence;
-   the running attempt becomes `Pyxis OS (previous)`;
+   the current selection is replaced; the static rescue entry remains independent;
 5. removes the staging and prints `upgrade staged: reboot to run VERSION`.
 
 Nothing is written before step 4. The admission is single-use per boot, so a
-failure from step 4 on needs a reboot before the next attempt; the previous
-entry still boots the release that was running. Packages upgrade separately, as
+failure from step 4 on needs a reboot before the next attempt; inspect the
+reported publication phase and boot selection before rebooting. Packages upgrade separately, as
 ordinary packages.
 
 ## Verification order
