@@ -10,12 +10,13 @@ hardware run is involved.
 
 The baseline was captured before implementation on Pyxis `aa48e42b`,
 userland `e80f50f8`, Rust `7bb492df` and libc crate `94498eae`.
-The candidate uses userland `fdb3759a` ([#392](https://git.internal/PyxisOS/pyxis-userland/pulls/392)),
+The candidate uses userland `156924a0` ([#392](https://git.internal/PyxisOS/pyxis-userland/pulls/392)),
 libc crate `bd180991` ([#5](https://git.internal/PyxisOS/pyxis-libc/pulls/5)) and
 Rust `4be8bb57` ([#6](https://git.internal/PyxisOS/pyxis-rust/pulls/6)).
 The userland helper/runtime changes were first measured at `3ec90eaf` and
-rebased unchanged onto package-update main `e53e869`; the final integration
-repeats the functional checks after rebuilding on main `1c71d1bb`.
+rebased unchanged onto userland main `9ad9d15` (package/gamepad changes).
+Integration repeats the functional checks after rebuilding on main `1c71d1bb`
+and again on `3e5c22e0` after the gamepad/USB merge.
 Ports remain `4f2e8aeb`, fs `f3f22b6e`, lwIP `d52ebd20`.
 
 Build the runtime/SDK with

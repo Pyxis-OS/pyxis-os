@@ -153,7 +153,7 @@ programs when these native interfaces change; libc still owns startup and FS. Na
 metadata require [userland #388](https://git.internal/PyxisOS/pyxis-userland/pulls/388)
 at `e80f50f87b33733aca70efd7903063e3edb85690`. Native directory helpers require
 [userland #392](https://git.internal/PyxisOS/pyxis-userland/pulls/392) at
-`fdb3759ad613c7e48d7c353fc03a8999e536897d`.
+`156924a0c74aa6968ca67c3ef7312c9152d9a42d`.
 
 [fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the base
 Rust revision, CI LLVM, the three upstream stage0 beta archives, backtrace source
