@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/clock.h>
 #include <arch/paging.h>
 #include <arch/smp.h>
 #include <kernel/mm/pmm.h>
@@ -18,6 +19,7 @@ enum range_state {
 
 /* Metadata and token work never scale with an unused reservation span. */
 #define SPARSE_EXTENT_PAGES 256
+#define KERNEL_FLUSH_TIMEOUT_NS UINT64_C(1000000000)
 
 struct vm_extent {
   uintptr_t base;
@@ -937,7 +939,10 @@ struct vm_space *vm_kernel_space(void)
 bool vm_kernel_flush_remote(void)
 {
   require_kernel_owner(&kernel_space);
-  return arch_kernel_flush_remote();
+  uint64_t now = arch_monotonic_ns();
+  uint64_t deadline = KERNEL_FLUSH_TIMEOUT_NS > UINT64_MAX - now ? UINT64_MAX :
+    now + KERNEL_FLUSH_TIMEOUT_NS;
+  return arch_kernel_flush_remote(deadline);
 }
 
 enum mm_result vm_space_create(struct vm_space **result)

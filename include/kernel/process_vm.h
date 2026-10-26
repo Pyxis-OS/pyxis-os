@@ -2,6 +2,7 @@
 #define KERNEL_PROCESS_VM_H
 
 #include <kernel/spinlock.h>
+#include <arch/smp.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -10,6 +11,10 @@ struct task;
 struct bsp_request;
 struct memory_request;
 struct task_wait;
+
+struct process_vm_root_epoch {
+  uint64_t incarnation, generation;
+};
 
 enum process_vm_phase {
   PROCESS_VM_OPEN,
@@ -30,6 +35,11 @@ struct process_vm_activity {
   struct spinlock lock;
   _Atomic(enum process_vm_phase) phase;
   size_t roots, borrowers;
+  /* LOCK protects the live root reservations, including entry before CR3.
+   * The incarnation is globally non-reused; generation is non-reused within
+   * it. Neither a reused process address nor a reused CR3 identifies an epoch. */
+  uint64_t incarnation, generation;
+  uint64_t resident_cpus[(ARCH_CPU_LIMIT + 63) / 64];
   struct process_vm_held *held;
   struct task *mutator;
   struct bsp_request *pending;
@@ -41,8 +51,9 @@ struct process_vm_activity {
 
 /* Scheduler, IF=0. Reserve before CR3 activation, acknowledge after kernel CR3.
  * Refusal atomically parks the task on a separate process-owned held list. */
-bool process_vm_dispatch(struct process *process, struct task *task);
-void process_vm_root_depart(struct process *process);
+bool process_vm_dispatch(struct process *process, struct task *task,
+                          struct process_vm_root_epoch *epoch);
+void process_vm_root_depart(struct process *process, struct process_vm_root_epoch epoch);
 bool process_vm_execution_closed(struct process *process);
 
 /* Current task, IF=0. Admission is nonblocking; a refused entry must switch out
@@ -72,6 +83,8 @@ bool process_vm_buffer_check(struct process *process, uintptr_t address,
 void process_vm_unhold(struct process *process, struct task *task);
 /* BSP exclusive preparation or final reaping; closes admission permanently. */
 void process_vm_retire(struct process *process);
+/* Zero-initialized unpublished process. False on root-incarnation exhaustion. */
+bool process_vm_activity_init(struct process *process);
 void process_vm_init(void);
 
 #endif

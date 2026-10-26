@@ -50,8 +50,10 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
     .space = space, .address_space = address_space, .lifetime = PROCESS_PREPARING,
   };
   atomic_init(&process->lifetime_lock.locked, false);
-  atomic_init(&process->vm.lock.locked, false);
-  atomic_init(&process->vm.phase, PROCESS_VM_OPEN);
+  if (!process_vm_activity_init(process)) {
+    kfree(process);
+    return MM_NO_MEMORY;
+  }
   atomic_init(&process->terminal_result, 0);
   atomic_init(&process->completion_gate, NULL);
   atomic_init(&process->bulk_gate, NULL);
