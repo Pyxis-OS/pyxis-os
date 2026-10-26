@@ -5,7 +5,7 @@ file inventory and the archive, as accepted for
 [packages slice 1](../wip/packages.md#slice-1-data-packages) and extended with
 program packages that record the ABI they need
 ([stage 2](../wip/packages.md#binding-a-build-to-a-system) and the
-[package ABI](../wip/packages.md#the-abi-identifier)), and the installed
+[release ABI](abi.md)), and the installed
 `packages` volume that programs read them from.
 
 There is one current form of each file and no version field: before a public
