@@ -14,7 +14,7 @@ enum bsp_service {
   BSP_SERVICE_RETENTION,
   BSP_SERVICE_TERMINAL_CREATE,
   BSP_SERVICE_DISPLAY,
-  BSP_SERVICE_MEMORY,
+  BSP_SERVICE_MEMORY, /* Preallocated typed storage only; no BSP submission. */
   BSP_SERVICE_POINTER,
   BSP_SERVICE_AUDIO,
   BSP_SERVICE_CAPABILITY_GROW,
@@ -65,6 +65,8 @@ enum bsp_request_state {
  * parked handoff. Queue publication and wait notification synchronize loans.
  * FORWARDED belongs to the HOST, native filesystem, readiness, audio or ACPI worker,
  * the USB worker, or the sole screen presenter until final completion.
+ * MEMORY uses the same retained typed storage locally, without queue publication
+ * or a completion notification; its kernel-root caller consumes the result.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {
   struct bsp_request *next;

@@ -49,8 +49,8 @@ struct vm_space {
 #define BACKING_RUN_PAGES 64
 
 static struct vm_space kernel_space;
-/* BSP-owned, never reused, including after failed provisional backing. */
-static uint64_t next_wait_token = 1;
+/* Any-CPU reservation; never reused, even after failed provisional backing. */
+static atomic_uint_fast64_t next_wait_token = 1;
 
 /* The general kernel area stays with the BSP. Its ranges are reused, and
  * changing a reused mapping that another CPU may hold would need a remote TLB
@@ -91,21 +91,26 @@ static bool page_count(size_t bytes, size_t *pages)
 
 static enum mm_result reserve_wait_tokens(size_t count, uint64_t *first)
 {
-  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(count && first);
-  if (!next_wait_token || count - 1 > UINT64_MAX - next_wait_token) {
-    return MM_NO_MEMORY;
+  uint64_t value = atomic_load_explicit(&next_wait_token, memory_order_relaxed);
+  for (;;) {
+    if (!value || count - 1 > UINT64_MAX - value) {
+      return MM_NO_MEMORY;
+    }
+    uint64_t last = value + count - 1;
+    if (atomic_compare_exchange_weak_explicit(&next_wait_token, &value,
+          last == UINT64_MAX ? 0 : last + 1, memory_order_relaxed, memory_order_relaxed)) {
+      *first = value;
+      return MM_OK;
+    }
   }
-  *first = next_wait_token;
-  uint64_t last = next_wait_token + (count - 1);
-  next_wait_token = last == UINT64_MAX ? 0 : last + 1;
-  return MM_OK;
 }
 
 static void withdraw_wait_pages(struct vm_space *space, uintptr_t base, size_t bytes)
 {
   KASSERT(space && space != &kernel_space);
-  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   /* Root/borrower drainage prevents enrollment while this hint is sampled. */
   if (atomic_load_explicit(&space->waiters, memory_order_relaxed)) {
     address_wait_withdraw(space, base, bytes);
@@ -615,7 +620,7 @@ static struct vm_extent *new_extent(uintptr_t base, size_t pages)
 enum mm_result vm_sparse_reserve(struct vm_space *space, size_t bytes,
     size_t alignment, uintptr_t *address)
 {
-  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!address) {
     return MM_INVALID;
   }
@@ -636,7 +641,7 @@ enum mm_result vm_sparse_begin(struct vm_space *space, uintptr_t base,
     size_t offset, size_t bytes, enum vm_sparse_action action,
     struct vm_sparse_update **result)
 {
-  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!result) {
     return MM_INVALID;
   }
@@ -835,7 +840,7 @@ static void sparse_discard_step(struct vm_sparse_update *update, size_t *budget)
 bool vm_sparse_step(struct vm_space *space, struct vm_sparse_update *update,
     size_t budget)
 {
-  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(update && update->space == space && budget);
   while (budget && !update->done) {
     switch (update->phase) {

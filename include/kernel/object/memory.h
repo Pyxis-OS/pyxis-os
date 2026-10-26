@@ -30,13 +30,9 @@ void memory_request_execute(struct memory_request *request);
  * object owns no process or mappings, and may be shared/transferred normally. */
 struct kernel_object *memory_create(void);
 
-/* Drained BSP mutation, IF=0. Large eager allocations and sparse updates/releases
- * run on the VM worker, leaving the executor free while bounded steps yield. */
-bool memory_request_stepped(const struct memory_request *request);
-
 /* Current user task, IF=0, live service reference and resolved rights. Captures
  * the payload and checks the allocation reply, then changes the caller's own
- * private address space through a BSP quiescent mutation transaction. RELEASE has
+ * private address space through a caller-CPU quiescent mutation transaction. RELEASE has
  * no reply buffer and may unmap its captured request itself. */
 struct syscall_result memory_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,

@@ -233,7 +233,6 @@ static bool requires_handoff(enum bsp_service service)
     return false;
   case BSP_SERVICE_POINTER:
   case BSP_SERVICE_DISPLAY:
-  case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_SCREEN_CAPTURE:
   case BSP_SERVICE_THREAD:
     return true;
@@ -279,6 +278,7 @@ void bsp_request_submit_and_wait(struct bsp_request *request)
 {
   KASSERT(initialized && request && request->state == BSP_REQUEST_PREPARED);
   KASSERT(request == task_bsp_request_current());
+  KASSERT(request->service != BSP_SERVICE_MEMORY); /* Typed storage only; caller CPU executes it. */
   struct task_wait *wait = request->wait;
   KASSERT(wait && !request->next);
 
@@ -324,7 +324,7 @@ void bsp_request_complete(struct bsp_request *request)
         request->service == BSP_SERVICE_ACPI_TABLES ||
         request->service == BSP_SERVICE_SCREEN_CAPTURE || request->service == BSP_SERVICE_AUDIO ||
         request->service == BSP_SERVICE_BLUETOOTH_HCI || request->service == BSP_SERVICE_WIFI_AUTH ||
-        request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_DISPLAY ||
+        request->service == BSP_SERVICE_DISPLAY ||
         request->service == BSP_SERVICE_THREAD) &&
        request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
@@ -478,7 +478,6 @@ static void service_request(struct bsp_request *request)
     }
     display_request_execute((struct display_request *)request);
     break;
-  case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_THREAD:
     object_cleanup_leave(previous);
     process_vm_mutation_forward(request);

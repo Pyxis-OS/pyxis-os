@@ -8,6 +8,7 @@
 struct process;
 struct task;
 struct bsp_request;
+struct memory_request;
 
 enum process_vm_phase {
   PROCESS_VM_OPEN,
@@ -33,6 +34,8 @@ struct process_vm_activity {
   struct bsp_request *pending;
   struct process *next_pending; /* BSP VM worker list, IF=0. */
   uint64_t deadline;
+  size_t mutation_cpu; /* Exclusive owner, set before MUTATING; never a CPU0 assumption. */
+  struct task_wait *local_wait; /* VM guard joins timeout detachment and notification. */
 };
 
 /* Scheduler, IF=0. Reserve before CR3 activation, acknowledge after kernel CR3.
@@ -54,9 +57,12 @@ void process_vm_borrow_release(struct process *process);
 /* Executor transfers a request without waiting for drainage. The preallocated
  * record owns process/task lifetime through its uninterruptible caller. */
 void process_vm_mutation_forward(struct bsp_request *request);
+/* Admitted MEMORY caller, IF=0; uses its retained record without BSP publication.
+ * Leaves its root, drains under the common gate, executes and rejoins for reply. */
+void process_vm_memory_call(struct memory_request *request);
 void process_vm_reply_finish(struct process *process);
 void process_vm_require_mutation(struct process *process);
-/* BSP mutation token only. Revalidate an output after draining, before effects;
+/* Exclusive mutation token only. Revalidate an output after draining, before effects;
  * replies prechecked by the caller may have changed before gate closure. */
 bool process_vm_buffer_check(struct process *process, uintptr_t address,
                              size_t bytes, bool write);

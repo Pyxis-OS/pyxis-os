@@ -20,11 +20,20 @@ struct private_allocation {
   size_t size;
   uint64_t identity; /* Zero for ordinary address/size allocations. */
   enum private_kind kind;
-  bool pinned;
+  atomic_bool pinned; /* Pin acquisition under VM owner; retirement release is any-CPU safe. */
 };
 
-/* BSP-owned and never reused, including across processes and address reuse. */
-static uint64_t next_identity = 1;
+/* Globally unique even for concurrent private-space owners; zero is exhausted. */
+static atomic_uint_fast64_t next_identity = 1;
+
+static uint64_t reserve_identity(void)
+{
+  uint64_t value = atomic_load_explicit(&next_identity, memory_order_relaxed);
+  while (value && !atomic_compare_exchange_weak_explicit(&next_identity, &value,
+      value == UINT64_MAX ? 0 : value + 1, memory_order_relaxed, memory_order_relaxed)) {
+  }
+  return value;
+}
 
 /* Backs a bare reservation in bounded interrupts-off steps. The process VM
  * transaction stays exclusive across the yields between them. A size within
@@ -42,7 +51,7 @@ static enum mm_result back_private(struct process *process, uintptr_t base, size
     return result;
   }
   while (!vm_back_step(process->address_space, &backing, PRIVATE_MEMORY_STEP_PAGES)) {
-    kernel_task_yield_masked();
+    task_yield_masked();
     process_vm_require_mutation(process);
   }
   return backing.status;
@@ -111,7 +120,8 @@ enum call_status private_memory_allocate_guarded(struct process *process, size_t
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(size && !(size & (PAGE_SIZE - 1)) && size <= SIZE_MAX - PAGE_SIZE);
   *reservation = (struct memory_reservation){0};
-  if (!next_identity) {
+  uint64_t identity = reserve_identity();
+  if (!identity) {
     return CALL_NO_MEMORY;
   }
 
@@ -137,7 +147,7 @@ enum call_status private_memory_allocate_guarded(struct process *process, size_t
 
   *allocation = (struct private_allocation){
     .next = process->allocations, .address = address, .size = span,
-    .identity = next_identity++, .kind = PRIVATE_GUARDED,
+    .identity = identity, .kind = PRIVATE_GUARDED,
   };
   process->allocations = allocation;
   *reservation = (struct memory_reservation){allocation->identity, address, span};
@@ -151,7 +161,8 @@ enum call_status private_memory_reserve(struct process *process, size_t size,
   process_vm_require_mutation(process);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   *reservation = (struct memory_reservation){0};
-  if (!next_identity) {
+  uint64_t identity = reserve_identity();
+  if (!identity) {
     return CALL_NO_MEMORY;
   }
   struct private_allocation *allocation = kmalloc(sizeof(*allocation));
@@ -166,7 +177,7 @@ enum call_status private_memory_reserve(struct process *process, size_t size,
   }
   *allocation = (struct private_allocation){
     .next = process->allocations, .address = address, .size = size,
-    .identity = next_identity++, .kind = PRIVATE_SPARSE,
+    .identity = identity, .kind = PRIVATE_SPARSE,
   };
   process->allocations = allocation;
   *reservation = (struct memory_reservation){allocation->identity, address, size};
@@ -184,7 +195,7 @@ static enum call_status update_sparse(struct process *process,
     return result == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
   }
   while (!vm_sparse_step(process->address_space, update, PRIVATE_MEMORY_STEP_PAGES)) {
-    kernel_task_yield_masked();
+    task_yield_masked();
     process_vm_require_mutation(process);
   }
   result = vm_sparse_finish(update);
@@ -203,7 +214,7 @@ enum call_status private_memory_update(struct process *process,
     if (!range->identity || allocation->identity != range->identity) {
       continue;
     }
-    if (allocation->pinned) {
+    if (atomic_load_explicit(&allocation->pinned, memory_order_acquire)) {
       return CALL_BUSY;
     }
     if (allocation->kind != PRIVATE_SPARSE || !range->size ||
@@ -244,7 +255,7 @@ enum call_status private_memory_release_reservation(struct process *process,
   while (*link) {
     struct private_allocation *allocation = *link;
     if (allocation->identity == identity) {
-      if (allocation->pinned) {
+      if (atomic_load_explicit(&allocation->pinned, memory_order_acquire)) {
         return CALL_BUSY;
       }
       if (allocation->kind == PRIVATE_SPARSE) {
@@ -280,7 +291,7 @@ enum call_status private_context_pin(struct process *process, uint64_t identity,
     if (allocation->identity != identity) {
       continue;
     }
-    if (allocation->pinned) {
+    if (atomic_load_explicit(&allocation->pinned, memory_order_acquire)) {
       return CALL_BUSY;
     }
     if (allocation->kind != PRIVATE_GUARDED) {
@@ -297,7 +308,7 @@ enum call_status private_context_pin(struct process *process, uint64_t identity,
         return CALL_BAD_REQUEST;
       }
     }
-    allocation->pinned = true;
+    atomic_store_explicit(&allocation->pinned, true, memory_order_relaxed);
     *context = (struct private_context){
       .allocation = allocation, .identity = identity,
       .address = allocation->address, .size = allocation->size,
@@ -314,8 +325,10 @@ void private_context_unpin(struct private_context *context)
   KASSERT(arch_cpu_index() == 0 && context);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (context->allocation) {
-    KASSERT(context->allocation->pinned);
-    context->allocation->pinned = false;
+    KASSERT(atomic_load_explicit(&context->allocation->pinned, memory_order_relaxed));
+    /* Final record access: an AP may release/free it immediately after this
+     * store. Scheduler retirement already left the stack/TLS and private root. */
+    atomic_store_explicit(&context->allocation->pinned, false, memory_order_release);
   }
   *context = (struct private_context){0};
 }
@@ -325,7 +338,7 @@ void private_memory_discard_records(struct process *process)
   KASSERT(arch_cpu_index() == 0 && process);
   while (process->allocations) {
     struct private_allocation *allocation = process->allocations;
-    KASSERT(!allocation->pinned);
+    KASSERT(!atomic_load_explicit(&allocation->pinned, memory_order_acquire));
     process->allocations = allocation->next;
     kfree(allocation);
   }
