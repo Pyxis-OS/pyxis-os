@@ -158,6 +158,10 @@ room position/camera unchanged; no input sequencer is added. Existing rolling
 HUD screenshots are sampled automatically after that confirmation. After chronium confirms the shell prompt, the normal-quit receipt is checked
 before another profile restores the common state. Delivery
 requires positive RAM-home evidence and uses bounded private HTTP parts.
+The private packet passed disposable QEMU transfer/hash, A/B first-room load,
+three captures per profile and ordinary menu quit. It includes fixed public
+SHA/tar helpers rather than assuming their optional packages are installed.
+Emulated HDA recovered under nested load; no sound-quality result is claimed.
 Fedora must use the same save/JSON and SoH/Mesa pins through its working
 softpipe launcher; that launcher/environment still needs confirmation before
 the Fedora half is ready. **Native measurements remain pending.**
