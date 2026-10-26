@@ -47,6 +47,7 @@ struct vm_space {
 
 /* Frames unmapped per leaf-table visit before freeing; stack-sized. */
 #define BACKING_RUN_PAGES 64
+_Static_assert(BACKING_RUN_PAGES <= PMM_FRAME_BATCH_MAX, "bounded PMM frame run");
 
 static struct vm_space kernel_space;
 /* Any-CPU reservation; never reused, even after failed provisional backing. */
@@ -367,9 +368,7 @@ static void free_backing(struct vm_space *space, uintptr_t base,
     size_t count = arch_page_unmap_run(page_space(space), base,
         pages < BACKING_RUN_PAGES ? pages : BACKING_RUN_PAGES, frames);
     KASSERT(count);
-    for (size_t i = 0; i < count; ++i) {
-      pmm_free(frames[i], 1);
-    }
+    pmm_free_frames(frames, count);
     base += count * PAGE_SIZE;
     pages -= count;
   }
@@ -445,13 +444,9 @@ static enum mm_result back_run(struct vm_space *space, uintptr_t base,
                                size_t count, unsigned permissions, size_t *mapped)
 {
   phys_addr_t frames[BACKING_RUN_PAGES];
-  size_t allocated = 0;
-  for (; allocated < count; ++allocated) {
-    frames[allocated] = pmm_alloc(1);
-    if (!frames[allocated]) {
-      break;
-    }
-    arch_frame_zero(frames[allocated]);
+  size_t allocated = pmm_alloc_frames(frames, count);
+  for (size_t i = 0; i < allocated; ++i) {
+    arch_frame_zero(frames[i]);
   }
   enum mm_result status = allocated ? MM_OK : MM_NO_MEMORY;
   *mapped = 0;
@@ -463,8 +458,8 @@ static enum mm_result back_run(struct vm_space *space, uintptr_t base,
         frames + *mapped, permissions, &count_mapped);
     *mapped += count_mapped;
   }
-  for (size_t i = *mapped; i < allocated; ++i) {
-    pmm_free(frames[i], 1);
+  if (*mapped < allocated) {
+    pmm_free_frames(frames + *mapped, allocated - *mapped);
   }
   if (status == MM_OK && allocated < count) {
     status = MM_NO_MEMORY;

@@ -2,7 +2,8 @@
 
 Decisions 1–3 accepted (chronium, 2026-10-26). Task 1 is merged in #1254;
 its hands-free native packet is prepared and awaits the orchestrator. Task 2
-measurement is complete; decision 4 is accepted (chronium, 2026-10-26). Later tasks raise decisions
+measurement and bounded-batch implementation are complete for review; decision 4
+is accepted (chronium, 2026-10-26). Later tasks raise decisions
 when reached. XSAVE/AVX is merged and natively qualified; its qualification
 record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
 The accepted JIT grant remains after this milestone.
@@ -144,6 +145,11 @@ invalidation remain separate;
 this recommendation does not reverse the earlier recursive-walk preference or
 claim to finish all per-CPU allocation work. No allocator implementation begins
 beyond this accepted scope without a further decision.
+
+The [implementation and matched result](../development/experiments/frame-batches/README.md)
+reduce the four-client large-allocation lock cost without retained free pools.
+Real exhaustion/rollback, bitmap accounting and completed cross-CPU frees pass.
+Native batch qualification is still open; the task 1 packet remains unchanged.
 
 ## Implementation sequence
 

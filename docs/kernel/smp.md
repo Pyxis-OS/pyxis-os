@@ -603,7 +603,10 @@ outside interrupt and fault entry:
   is first fit over 64-bit bitmap words, skipping fully allocated words and
   starting from a hint below which every frame is unavailable. Frames come back
   unzeroed; the caller zeroes them outside the lock. Memory-pressure
-  notification can also come from any CPU.
+  notification can also come from any CPU. VM backing uses caller-owned vectors
+  of at most 64 single frames under one acquisition; no frames stay in an idle
+  per-CPU cache. Batched free checks every bit before clearing any, and a
+  different CPU may free the vector. Zeroing/mapping/pressure follow unlock.
 - **Scratch mappings.** Each CPU index owns two slots in the 2 MiB window at
   `TEMP_MAP_BASE`, enough for 256 dense CPU indices. Every slot's page-table
   ancestors exist before any private root copies the kernel slots. Only the
@@ -750,7 +753,9 @@ arena's existing capacity bound is unchanged; see the
 [coverage debt](../technical-debt.md#unchecked-hardware-assumptions).
 
 The heap, PMM, scratch mappings and RAM-file backing work on any CPU; private
-mapping mutations now run on BSP under the process transaction.
+MEMORY mutations run on the calling CPU under the process transaction.
+Remaining DISPLAY/thread-context mutations and final process destruction retain
+their BSP ownership.
 Moving a worker off the BSP is a later step; see the
 [follow-ups](../wip/scheduling-and-threads.md#serial-services-off-the-bsp).
 

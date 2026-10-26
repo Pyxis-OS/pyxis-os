@@ -149,6 +149,12 @@ Context pins protect registered backing independently of root/copy drainage.
 The heap, physical allocator and per-CPU scratch mappings retain their
 [SMP contracts](smp.md#memory-and-output-boundaries). The caller CPU zeroes frames
 using its local scratch slots; failed allocation unwinds partial backing before NO_MEMORY.
+VM backing claims and frees up to 64 arbitrary frames per PMM lock acquisition,
+using transaction-owned stack vectors. Zeroing/mapping and pressure notification
+run after unlock. A short claim is accounted immediately and follows the same
+rollback; free validates the whole vector before clearing any bits. There is no
+retained per-CPU free cache. The [matched record](../development/experiments/frame-batches/README.md)
+covers lock cost, actual exhaustion and cross-CPU frees.
 The VM owns one full guarded reservation and one eager backed suffix. Whole
 release and destruction free only that suffix; failure unmaps/frees only the
 provisional backed prefix, leaving the full reservation bare for unwind.

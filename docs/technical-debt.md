@@ -422,9 +422,12 @@ with the same task-8 IPC/allocation work, without further profiling now.
 
 `pmm_alloc()` searches first fit under the PMM lock, skipping fully allocated 64-bit words and starting at a hint below which every
 frame is unavailable; this ended the serialization measured in 7a (lock wait about 150 cycles per call with two page clients,
-[record](development/experiments/smp-task7-pmm/README.md#pmm-lock)). Search time can still grow with fragmentation, and `vm_back()`
-and heap growth take the lock once per frame. Revisit if a workload shows PMM lock waiting again; batching frames per call is the
-next step.
+[record](development/experiments/smp-task7-pmm/README.md#pmm-lock)). Search time can still grow with fragmentation. VM backing and its unwind now
+use caller-owned batches of at most 64 frames per acquisition, with no idle
+per-CPU reserve ([record](development/experiments/frame-batches/README.md)). The
+shared bitmap remains authoritative; scalar/contiguous callers keep the same
+path. Revisit if fragmented or larger concurrent workloads show material lock
+waiting; measure before choosing retained caches or a different search policy.
 
 ## Multi-message MSI
 
