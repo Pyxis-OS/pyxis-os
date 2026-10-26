@@ -159,11 +159,12 @@ backing work before releasing the borrowed data storage.
 
 - [x] Kernel/ABI/SDK foundation: functional typed bulk calls/replies and receipt
   collection, charged ownership, native backends and bounded npfs buffers/runs.
-- [ ] Userland/libpyxis and httpfs: provider receive/reply and backing completion
+- [x] Userland/libpyxis and httpfs: provider receive/reply and backing completion
   collection, including forwarded grants and joined cleanup. Dependency PRs
   precede parent pins; no placeholder interfaces or compatibility readers.
-- [ ] Pkg consumer and qualification, then fold implemented behavior into FILE,
+- [x] Pkg consumer and QEMU qualification, with implemented behavior in FILE,
   endpoint/completion and provider references.
+- [ ] Native live RAM-npfs and separately approved owned NVMe-npfs qualification.
 
 ## Qualification
 
@@ -212,3 +213,7 @@ Kernel and focused SDK/runtime builds use the existing Clang 23.1.3 builder
 `pyxis-llvm23.1.3-3d69e83`. The ABI textual check preserves every released 0.0.8
 header line. New consumers require a kernel providing bulk reads. No compiler rebuild,
 new CI workflow or default-boot diagnostic is added.
+
+The [matched QEMU record](../development/experiments/bulk-file-reads/README.md)
+contains the A/B/A/B package results, controls and measurement limits. All four
+archive/member/extraction/selected-set checks passed; native results remain open.
