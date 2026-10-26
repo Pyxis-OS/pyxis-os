@@ -1,13 +1,18 @@
 # ABI model, core archive and updater
 
-Status: **design for chronium (2026-10-22).** It replaces the earlier
+Status: **ABI/core/program-package implementation delivered; updater
+QEMU-qualified, native upgrade gate open.** This design for chronium
+(2026-10-22) replaces the earlier
 `pkg upgrade` plan: the release package with programs and the set staging of
 pyxis-os #1095 and userland #338, and the self-contained archive of #1102.
 
 - Choices marked *(chronium, 2026-10-22)* are agreed. No decisions are open.
-- Everything else is proposed, and nothing is implemented until chronium has
-  reviewed the whole document.
-- T1–T3 are implemented and stay.
+- The delivery record below distinguishes implemented steps from remaining
+  qualification and publication work; it does not authorize future tasks.
+- T1–T3 are implemented and retained. Step 2 is complete; Step 3 records signed
+  repositories, signing/hosting machinery, `pkg upgrade` and install-image
+  generation. The ThinkPad upgrade check remains unchecked. Implemented hosting
+  and image machinery alone does not establish deployment or publication.
 
 ## Decided
 
