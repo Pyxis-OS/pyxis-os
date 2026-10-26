@@ -125,32 +125,41 @@ PHY/RF programming, calibration outcome, enforced power behaviour and physical
 rfkill remain unqualified. Both PRs remain draft.
 
 
-## Resume on current main (2026-10-26)
+## Current-main preparation (2026-10-26)
 
 The draft rebases onto main `182c58ba` and helper #367 onto userland main
-`fdfa26cb`. The helper head is `ff4a5c46`; other dependency pins are inherited
-from main. No radio sequence or frozen diagnostic packet was changed by the
-rebase. The opt-in kernel rebuild passes with the current XSAVE, VM and
-allocation changes; one shadow warning is in unchanged `kernel/user/spawn.c`.
-No new QEMU or native qualification is claimed for this rebased head.
+`fdfa26cb`. The ABI-prefix helper update is `035b143a`; other dependency pins
+are inherited from main. This track targets 0.0.11 (chronium, 2026-10-26),
+not 0.0.10. The hardware sequence and frozen diagnostic packet/evidence are
+unchanged. Kernel/runtime/SDK and the Wi-Fi helper rebuild with the current
+XSAVE, VM and allocation changes. One shadow warning is in unchanged
+`kernel/user/spawn.c`.
 
-Release integration now needs attention before delivery: the draft grows
-WIFI_STATUS from 544 to 600 bytes, changes its published size assertion and
-requires the full new size. The [release ABI contract](../../interfaces/abi.md#keeping-a-releases-abi)
-requires preserving the released 544-byte prefix and accepting its capacity,
-returning only the prefix that fits. The ABI guard therefore currently fails
-for both 0.0.8 and 0.0.9. Apply that existing reply-growth contract without
-silently dropping a release from the supported list. This is an integration
-blocker, not new permission for RF work.
+The released `wifi_status_reply` remains exactly 544 bytes; the composed
+`wifi_status_full_reply` adds 56 bytes of PHY facts. The object path accepts
+the old minimum and copies/reports only the prefix fitting the caller's
+capacity, capped at 600 bytes. The helper's old query keeps the prefix; its
+full query requires a complete validated snapshot. Both 0.0.8 and 0.0.9 ABI
+checks pass without changing the supported-release list.
+
+The private four-CPU q35/KVM/OVMF absent-radio check exercises capacities 0,
+1, 543, 544, 545, 599, 600 and 608. Undersized requests return
+BUFFER_TOO_SMALL with no changed bytes; successful requests report the
+copied count and leave the tail sentinel intact. A consumer compiled with
+the actual 0.0.9 header works, as do current prefix/full helpers and the
+rebuilt command. GDB checks no startup attempt and zero PHY observations.
+An initial private-program launch omitted its required MEMORY grant and was
+refused before it ran; the corrected declared profile supplies that grant.
+Evidence and commands: `prefix-check/` under the existing record directory.
+This exercises reply delivery and absence behavior, not Realtek hardware.
 
 Hardware progress remains the recorded MAC-only refusal at `0x9c94` above.
 The accepted removal of its extra equality check has not yet been exercised on
 hardware. The Linux phase never armed its four terminal guards or sent the
 interface-up token. Its firmware/board output and clocksource timeout do not
 establish whether module probing or subsequent symbol enumeration stalled.
-Next diagnostic preparation should mark those phases separately and retain
-all-vCPU stacks on timeout, rehearsing checkpoint handling without VFIO first.
-A fresh exclusive VFIO window must be scheduled through the orchestrator; do
-not resume the failed invocation or reuse its consumed result directories.
-BB/RF programming, calibration, power enforcement and actual scan remain
-unqualified. Both PRs stay draft.
+Fresh diagnostic preparation separates those phases and retains all-vCPU
+stacks on timeout, rehearsing checkpoint handling without VFIO first. A new
+exclusive VFIO window goes through the orchestrator; never resume the failed
+invocation or reuse its consumed result directories. BB/RF programming,
+calibration, power enforcement and scan remain unqualified. Both PRs stay draft.

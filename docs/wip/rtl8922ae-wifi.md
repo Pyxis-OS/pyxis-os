@@ -1,11 +1,14 @@
 # Vela RTL8922AE Wi-Fi
 
-**Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified. The stage-2
-firmware-first cut is implemented for review; native firmware/reset
-qualification remains pending. Scan and later stages need a separate go. Native runs on vela go through the orchestrator. This expands
-[Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
-after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
-The three accepted decisions below define the initial scope.
+**Plan accepted (chronium, 2026-10-22). Target: 0.0.11, not 0.0.10
+(chronium, 2026-10-26).** Stage 1 and the stage-2 firmware-first/checked-stop
+cut are qualified. Request-driven one-PHY preparation remains a draft; actual
+PHY programming/calibration and passive scanning are not qualified. Native
+runs on vela go through the orchestrator. This expands
+[Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages), after the delivered
+[AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
+The accepted decisions below define the initial scope; this track must preserve
+the released status prefix and does not land as part of 0.0.10.
 
 **Fresh read-only inventory completed, 2026-10-22**, through Tailscale SSH after
 chronium approved its check. No known_hosts change or host-check bypass was

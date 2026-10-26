@@ -52,14 +52,20 @@ Selecting both Wi-Fi boot options refuses preparation without touching either.
 
 `WIFI_STATUS.boot` carries validity-tagged reset, live cut/security, selected
 firmware version, board facts and independent startup/stop observations.
-`WIFI_STATUS.phy` adds historical phase, selected channel/region, actual
+The extended `wifi_status_full_reply.phy` adds historical phase, selected channel/region, actual
 power-image readback count and path SAR bounds in quarter-dBm, attempted GPIO
 checks, RFK report/completion and checked-stop facts. They describe the attempt,
 not current radiated power or scan readiness. Invalid numeric groups are zero;
 stop-confirmed and stop-uncertain are exclusive. The final operation status is
 valid only at COMPLETE. RFKILL is the last successful pre-reset observation,
-not continuous monitoring after stop. Consumers rebuild with the current SDK
-when the status layout changes; READ authority is unchanged. Detailed facts
+not continuous monitoring after stop. `wifi_status_reply` keeps its released
+544-byte layout. WIFI_STATUS accepts that minimum, writes
+`min(capacity, sizeof(struct wifi_status_full_reply))` bytes and reports the
+copied size. A smaller capacity returns BUFFER_TOO_SMALL without a reply.
+The full reply composes the released prefix as `base` followed by the PHY facts;
+partial extensions cannot be treated as a complete PHY observation. Libpyxis
+`wifi_status()` requests the prefix, while `wifi_status_full()` requires and
+validates the complete snapshot. READ authority is unchanged. Detailed facts
 replace duplicate boot log lines.
 
 MAC refusal details retain the first failed substep, BAR offset/access width,
