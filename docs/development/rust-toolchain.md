@@ -145,7 +145,7 @@ uses [userland #384](https://git.internal/PyxisOS/pyxis-userland/pulls/384) at
 end-of-TLS-drain cleanup hook. Rebuild the SDK and affected Rust libraries and
 programs when these native interfaces change; libc still owns startup and FS. Native writable files and coherent authority
 metadata require [userland #388](https://git.internal/PyxisOS/pyxis-userland/pulls/388)
-at `9acda3e487af9bdaaed845f02ea4f26ff33e6a78`.
+at `e80f50f87b33733aca70efd7903063e3edb85690`.
 
 [fork-toolchain.json](../../toolchain/rust/fork-toolchain.json) pins the base
 Rust revision, CI LLVM, the three upstream stage0 beta archives, backtrace source

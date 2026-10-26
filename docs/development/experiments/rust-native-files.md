@@ -49,7 +49,11 @@ plus a confined host directory through virtiofsd. All following checks pass:
 
 After rebasing onto main `e13b8f35`, the rebuilt integration kernel `d8cc8910`
 repeats the one/four-CPU functional set successfully, including main's caller-CPU
-MEMORY transaction changes. The matched cost fixtures retain the original
+MEMORY transaction changes. The final userland head `e80f50f8` rebases the same helper/runtime blobs onto
+package/update main `e2c0ab4d`; rebuilt libc/libpyxis archives are byte-identical
+to the measured candidate. SDK/native programs rebuild and the one/four-CPU
+functional set repeats after that restack. Main `4108405e` adds no kernel-code
+change relative to `e13b8f35`. The matched cost fixtures retain the original
 baseline kernel to isolate this task.
 
 The existing std sample's former blanket writable-Unsupported expectation is
