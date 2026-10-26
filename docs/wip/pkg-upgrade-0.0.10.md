@@ -117,7 +117,10 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   option after verification, and add boot/`pkg` diagnostics. Qualify Install,
   unrecorded Update and representative refusal boundaries on disposable OVMF
   images. Native firmware and power-cut qualification remain open.
-- [ ] Settle the signing-floor source and qualify first repository contact.
+- [ ] Freeze the signing floor from chronium's controlled signing tree and
+  qualify the release artifact. The floor reader, build embedding, and QEMU
+  first-contact/used-volume checks are complete; the checked-in development
+  snapshot remains empty until the authoritative freeze.
 
 ## Task 3 qualification
 
@@ -143,10 +146,12 @@ boot-selection proof made boot-init enter core rescue before starting the
 installed space. These checks establish the refusal and negative proof path;
 they do not simulate power loss at every publication write.
 
-At the task-3 revision, the in-system `pkg upgrade` staging path and its final instruction built at
-this revision but were not run against a signed release repository: the
-signing-floor source is still an open decision. The 0.0.10 release notes must tell 0.0.9 users to use installer
-Update, because the 0.0.9 `pkg upgrade` client cannot stage this transition.
+At the task-3 revision, the in-system `pkg upgrade` staging path and its final
+instruction built but were not run against a signed release repository. The
+signing-floor decision is now accepted; the authoritative source tree for the
+release freeze has not yet been supplied. The 0.0.10 release notes must tell
+0.0.9 users to use installer Update, because the 0.0.9 `pkg upgrade` client
+cannot stage this transition.
 
 ## Owned Coexist qualification
 
@@ -174,6 +179,25 @@ synthetic migration fixture, not a released 0.0.9 image.
 OVMF does not qualify native UEFI variable behavior, firmware that ignores
 flushes, or every interrupted write boundary. The move-first BootOrder choice
 was inspected in code but was not exercised in QEMU.
+
+## Signing-floor qualification
+
+The full image built with userland #396 `aadc9de` on this branch. A 4-vCPU
+Q35/KVM/OVMF QEMU guest with a disposable RAM packages volume read a local
+signed repository fixture. A test-only embedded floor for `public` serial 2
+refused signed serial 1 on first contact. After serial 2 installed
+`clang-hosted` and its two dependencies as set 1, the same volume refused an
+update from serial 1 and retained set 1. The 281.2 MB archive's first displayed
+extracted-file count followed verification by 1.028 s in this QEMU run; the
+older 0.0.7a native stall did not reproduce, so debt issue #1496 was closed
+with the workload difference recorded. The exact fixture and timestamped
+output are in `/shared/present/pkg-upgrade-0.0.10/signing-floor/daybreak-qemu/`.
+
+The test floor was never committed. The source table still contains an empty
+development snapshot, which refuses first contact with a stock signed root.
+The release floor requires chronium's controlled signing-tree path and the
+freeze tool's comparison with the published copy before this task is complete.
+The copied 0.0.9 staging tree used for tool and QEMU tests is not that source.
 
 ## Open decisions for later rounds
 
