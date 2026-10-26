@@ -1,6 +1,6 @@
 # blurgtext
 
-The opt-in `blurgtext` package runs CallumDev's upstream text-rendering demo over
+The opt-in `blurgtext` 0.2.0 package runs CallumDev's upstream text-rendering demo over
 SDL2/OSMesa softpipe. It retains the demo's text, layout, colours, styled spans,
 UTF-16 cursor, SVG emoji and CJK fallback sample. Escape exits.
 
@@ -15,12 +15,15 @@ It reads the exact Roboto 2.137 and EmojiOne Color 1.000 demo fonts from
 coverage there. It reads no host font path. Noto Sans CJK SC supplies the Chinese
 fallback; unlike macOS CoreText, it uses the explicit package's regional glyphs.
 
-The first port keeps upstream's real bundled FreeType 2.15.0 and HarfBuzz 15.0.0,
+The port keeps upstream's real bundled FreeType 2.15.0 and HarfBuzz 15.0.0,
 accepted (chronium, 2026-10-24). It does not use Pyxis libfont in their place.
 The exact source archives, hashes, licences and ordered patches are in the
 [port recipe](../../ports/blurgtext/README.md). Reusable `freetype-dev` and
 `harfbuzz-dev` packages remain later work; their verified pins and build profile
-are recorded in the qualification record.
+are recorded in the qualification record. The 0.2.0 release identifies the same
+commit already used by the first port; Raqm 0.11.0 now comes from canonical
+HOST-Oman/libraqm, with identical source bytes. This refresh reduces the Pyxis
+patches rather than claiming a different rendering-library revision.
 
 ## Display and grants
 
@@ -58,7 +61,10 @@ font assets. No compiler-container rebuild is needed.
 The bundle retains upstream/dependency licences, provenance, local patches and
 covered modified sources. FreeType uses upstream blurgtext's stb PNG shim;
 EmojiOne uses its FreeType SVG hooks and plutosvg. No dynamic loader, fontconfig,
-host font scan or PlutoVG mmap-based font-cache loader is supplied. Separate
+host font scan or PlutoVG mmap-based font-cache loader is supplied. Core font
+manager/cache code and the public header remain upstream. The Pyxis backend
+uses existing internal loading functions without modifying the family cache
+during callbacks; demo startup, presentation, pacing and cleanup follow upstream. Separate
 font-library packages and a wider font/discovery profile remain outside this port.
 
 The [QEMU qualification](../development/experiments/blurgtext/README.md) records

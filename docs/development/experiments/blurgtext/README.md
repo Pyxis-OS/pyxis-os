@@ -107,3 +107,32 @@ Private/raw evidence is retained under `/shared/present/blurgtext/final/`:
 launch arguments, serial/HTTP logs, package and backend-check captures, read-only
 GDB output, exact artifact hashes and the supplied reference comparison. The
 shareable full and content-only PNGs are in the retained screenshot collection.
+
+## 0.2.0 minimal-patch refresh, 2026-10-26
+
+The release page and tag archive identify `e11c19f4`, already used by the first
+port. Raqm `08ee1537` is canonical upstream 0.11.0: fetching its archive from
+HOST-Oman/libraqm yields the same hash and 84 source files as the old CallumDev
+URL. The source's old `.gitmodules` URL did not establish fork-specific code.
+The recipe now names canonical upstream. Other release pins already match:
+FreeType 2.15.0, HarfBuzz 15.0.0, SheenBidi 3.0.0, libunibreak 8.0,
+plutosvg 0.0.8 and PlutoVG 1.3.3; no dependency-code upgrade is claimed.
+
+Three patches remain: static/cross build, package-backed Pyxis font discovery,
+and minimum SDL2/OSMesa/font-path/GLAD demo integration. The backend uses the
+existing byte loader and face constructor without registering callback faces
+in the family table. Public loaders would change canonical style selection.
+Thus the callback cannot resize that table and does not need the old core
+cache-copy patch. The remaining stock-backend issue has a source-inspected
+upstream draft; no new reproduction program or runtime result is claimed.
+The core font manager and public header are unchanged. Demo startup checks,
+presentation checks, vsync fallback, added pacing and cleanup changes were
+removed, retaining upstream behavior. Notices and covered platform/build
+sources remain staged.
+
+A fresh SDK from parent base `09a19c94`, normal builder `3d69e83`, and the
+mirror-only recipe build pass. The unchanged SDL2/Mesa static prefixes came
+from the 0.0.9 packages: their ports/userland pins and public ABI match this
+base exactly. Raw source-identity/build evidence and the upstream draft stay
+under `/shared/present/blurgtext-0.2.0/`. QEMU qualification is recorded in the
+follow-up once completed; no native result is claimed by this refresh.
