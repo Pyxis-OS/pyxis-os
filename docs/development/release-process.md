@@ -74,6 +74,14 @@ cannot advance the floor. An ordinary development build uses the last checked-in
 snapshot without fetching anything. The source snapshot must be frozen before
 the release tag; a missing or failed check stops the signed release build.
 
+Record the absolute `TREE` paths in each release's signing/publish record when
+chronium runs `tools/sign-repository.sh` and the upload. For 0.0.9, chronium
+confirmed that the signed and uploaded trees are
+`~/shared/present/release-0.0.9/staging/{public,releases}` on horse
+(`/shared/present/release-0.0.9/staging/{public,releases}` on the VMs), with
+published `current` serial 2. This location is evidence for that publish, not
+a default location to infer for later releases.
+
 Before signing, check each signing tree (seeded from the published tree, then
 packed) in three ways. `check --abi` alone is not enough, and `check --abi
 <previous>` must not be run: a release adds packages that have no build for the

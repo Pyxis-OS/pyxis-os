@@ -1,9 +1,9 @@
 # 0.0.10 package upgrades
 
-Status: **tasks 1–3 and owned Coexist publication merged; signing floor in progress
-(2026-10-26).**
-This milestone changes the delivered [updater](pkg-upgrade.md). The signing-floor
-implementation and qualification remain open; this plan does not claim a completed release.
+Status: **tasks 1–3 and owned Coexist publication merged; signing-floor task
+qualified in QEMU (2026-10-26).**
+This milestone changes the delivered [updater](pkg-upgrade.md). Release tagging,
+native qualification and the remaining candidate checks are separate work.
 
 ## Accepted contract
 
@@ -117,10 +117,9 @@ afterward. A failed new boot can require rescue, installer Update or reinstall.
   option after verification, and add boot/`pkg` diagnostics. Qualify Install,
   unrecorded Update and representative refusal boundaries on disposable OVMF
   images. Native firmware and power-cut qualification remain open.
-- [ ] Freeze the signing floor from chronium's controlled signing tree and
-  qualify the release artifact. The floor reader, build embedding, and QEMU
-  first-contact/used-volume checks are complete; the checked-in development
-  snapshot remains empty until the authoritative freeze.
+- [x] Freeze the signed-repository floor from chronium's confirmed signing
+  trees, compare with the published copies, and qualify first contact and a
+  used packages volume. Embed the reviewed source in both boot archives.
 
 ## Task 3 qualification
 
@@ -148,10 +147,10 @@ they do not simulate power loss at every publication write.
 
 At the task-3 revision, the in-system `pkg upgrade` staging path and its final
 instruction built but were not run against a signed release repository. The
-signing-floor decision is now accepted; the authoritative source tree for the
-release freeze has not yet been supplied. The 0.0.10 release notes must tell
-0.0.9 users to use installer Update, because the 0.0.9 `pkg upgrade` client
-cannot stage this transition.
+signing-floor source is now frozen, while a full in-system upgrade still needs
+release-candidate qualification. The 0.0.10 release notes must tell 0.0.9
+users to use installer Update, because the 0.0.9 `pkg upgrade` client cannot
+stage this transition.
 
 ## Owned Coexist qualification
 
@@ -193,11 +192,20 @@ older 0.0.7a native stall did not reproduce, so debt issue #1496 was closed
 with the workload difference recorded. The exact fixture and timestamped
 output are in `/shared/present/pkg-upgrade-0.0.10/signing-floor/daybreak-qemu/`.
 
-The test floor was never committed. The source table still contains an empty
-development snapshot, which refuses first contact with a stock signed root.
-The release floor requires chronium's controlled signing-tree path and the
-freeze tool's comparison with the published copy before this task is complete.
-The copied 0.0.9 staging tree used for tool and QEMU tests is not that source.
+Chronium confirmed that the 0.0.9 staging trees were the controlled trees he
+signed and uploaded from. The freeze tool compared their `current`, serial-2
+index, signature and signer bytes with the published `public` and `releases`
+copies, verified both signatures under the pinned Software Signing CA, then
+produced and rechecked the committed source table. The frozen `public` hash is
+`c1f08889a2b1fc071ea26bd79ed4b22e481dbc12b0f2bc1bb72f25eeb78088a6`;
+the `releases` hash is
+`c2185dc61d5772f42737d36826bb8d518f0656c176cb9871061d7f4f9325e243`.
+An image built with the production HTTPS roots booted in 4-vCPU QEMU; `pkg
+list --available` read the signed `public` index and exited successfully on
+first contact. The signed `releases` floor was verified by the host freeze
+tool; a full installed `pkg upgrade` is outside this QEMU check. Freeze input,
+image hash and guest output are in
+`/shared/present/pkg-upgrade-0.0.10/signing-floor/daybreak-release/`.
 
 ## Open decisions for later rounds
 
