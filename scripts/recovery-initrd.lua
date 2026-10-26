@@ -34,6 +34,8 @@ return function(inputs)
   -- The only certificate pkg trusts for signed repositories.
   entries[#entries + 1] = { file = "packages/signing/pyxis-signing-ca.pem",
     at = "share/pyxis/trust/software-signing-ca.pem" }
+  entries[#entries + 1] = { file = "packages/signing/repository-floors.lua",
+    at = "share/pyxis/trust/repository-floors.lua" }
   for _, name in ipairs({ "zoneinfo", "ca-certificates", "hwdata" }) do
     entries[#entries + 1] = { tree = inputs.ports .. "/share/" .. name, at = "share/" .. name }
   end

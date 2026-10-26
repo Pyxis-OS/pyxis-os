@@ -1,9 +1,9 @@
 # 0.0.10 package upgrades
 
-Status: **tasks 1–3 and owned Coexist publication merged; signing floor open
+Status: **tasks 1–3 and owned Coexist publication merged; signing floor in progress
 (2026-10-26).**
 This milestone changes the delivered [updater](pkg-upgrade.md). The signing-floor
-choice below remains open; this plan does not claim a completed release.
+implementation and qualification remain open; this plan does not claim a completed release.
 
 ## Accepted contract
 
@@ -76,6 +76,20 @@ choice below remains open; this plan does not claim a completed release.
    Multiple possible sources need an explicit console choice, batched by
    source; `--yes` cannot choose an ambiguous
    origin. Proposed removals need individual approval. *(chronium, 2026-10-26)*
+7. **Reviewed signed-index floor.** Freeze the latest published index for each
+   stock signed repository from chronium's controlled signing tree. Compare
+   `current` and exact index bytes with the published copy and verify the
+   signature and signer under the pinned Software Signing CA before recording
+   the snapshot in reviewed source. A network response alone never creates or
+   advances the floor. The version-1 archive table is bounded per repository
+   by name, canonical URL and signed policy, and holds the serial, signed UTC
+   time and exact index SHA-256. A signed index must pass both this embedded
+   floor and the packages volume's accepted-index record. Stock signed roots
+   without an embedded floor refuse first contact. Ordinary development images
+   carry the last checked-in snapshot without fetching; explicitly configured
+   unsigned local roots still work. User-added signed roots not in the stock
+   snapshot retain the current commit-time first-contact rule until a separate
+   reviewed-floor import is designed. *(chronium, 2026-10-26)*
 
 The pending transition is proof of the next selection, not a second active
 selection or rollback binding. An old set may occupy space until the first
@@ -163,37 +177,10 @@ was inspected in code but was not exercised in QEMU.
 
 ## Open decisions for later rounds
 
-- **Signing-floor snapshot authority and schema — proposal, not accepted:**
-  1. **Source (default):** chronium freezes the latest *published* `current`
-     from each stock signed repository using his controlled signing tree. The
-     release preparation tool compares that tree's `current` and exact index
-     bytes with the published endpoint, verifies the index signature and signer
-     under the pinned Software Signing CA, then records the snapshot in a
-     reviewed source file before the release tag. A network response alone
-     cannot supply or advance the floor; a missing or disagreeing tree, server
-     or signature stops the release build. The chronium-signed release tag and
-     signed ISO bind the reviewed snapshot to the delivered core archive. This
-     needs no new private signing key in CI. The resulting floor proves the
-     owner-reviewed publish state at freeze time, not that no later publish
-     exists.
-  2. **Runtime schema (default):** ship a bounded version-1 repository-floor
-     table in `boot://share/pyxis/trust/`, separate from `os-release`. Each
-     entry has the configured repository name, canonical URL and signed policy,
-     plus the published serial, signed UTC time and SHA-256 of the exact
-     verified `index/N.lua`. Refuse duplicate names or identities, malformed
-     values and missing floors for the stock signed `public` and `releases`
-     roots. After normal CA/signature verification, apply both the embedded
-     floor and the durable per-volume accepted index: lower serial or time
-     refuses, and equal serial requires the floor's exact hash. A renamed or
-     reconfigured root gets no authority from another root's floor.
-  3. **Development images (default):** carry the last checked-in frozen
-     snapshot, without fetching a new floor during an ordinary build. If it is
-     absent, first contact with a stock signed root refuses; explicitly
-     configured unsigned local development repositories remain available.
-     User-added signed roots absent from the stock snapshot retain the current
-     explicit-add and commit-time first-contact rule, plus the durable accepted
-     index, until a separate reviewed-floor import is designed. Such a rule
-     does not prove that a newly added repository's index is its newest publish.
+- The reviewed floor proves the published state at freeze time, not that no
+  later index exists. A release must stop if the controlled tree, published
+  copy or signature disagree. A signed release tag and signed ISO bind the
+  checked-in table to the delivered core archive; CI needs no signing key.
 - **Reboot initiation:** keep a separate design open; this task gives `pkg` no
   power grant and no mediated restart action.
 

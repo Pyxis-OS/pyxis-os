@@ -61,6 +61,19 @@ shareable build.
 
 ## Checking the repository trees
 
+Before building a signed release, chronium freezes the last published signed
+index from his controlled `public` and `releases` signing trees into the source
+snapshot. From the release checkout, run `tools/freeze-repository-floors.py`
+with both `--repository NAME https://packages.pyxis.nexus/NAME/ TREE` arguments
+and `--write`, review the resulting
+`packages/signing/repository-floors.lua`, then repeat with `--check` on the
+exact candidate. The tool compares `current`, index, signature and signer bytes
+with the published endpoint, checks the signer and signature against the pinned
+Software Signing CA, and refuses any disagreement. A network response alone
+cannot advance the floor. An ordinary development build uses the last checked-in
+snapshot without fetching anything. The source snapshot must be frozen before
+the release tag; a missing or failed check stops the signed release build.
+
 Before signing, check each signing tree (seeded from the published tree, then
 packed) in three ways. `check --abi` alone is not enough, and `check --abi
 <previous>` must not be run: a release adds packages that have no build for the

@@ -37,6 +37,8 @@ return function(inputs)
     { file = "build/kernel-wifi-NOTICE", at = "share/licenses/kernel-wifi/NOTICE" },
     { file = "third_party/limine/BOOTX64.EFI", at = "share/installer/BOOTX64.EFI" },
     { file = "build/os-release", at = "os-release" },
+    { file = "packages/signing/repository-floors.lua",
+      at = "share/pyxis/trust/repository-floors.lua" },
     { file = "third_party/limine/LICENSE", at = "share/licenses/limine/LICENSE" },
   }
   if full then
