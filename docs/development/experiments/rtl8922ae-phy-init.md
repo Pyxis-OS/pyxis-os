@@ -212,3 +212,28 @@ same MAC-only boundary before advancing to full PHY/RFK qualification. No
 additional register relaxation, newer-source bit or reordered hardware step is
 justified by this result. It is not BB/RF, calibration, physical silence or
 passive-scan qualification.
+
+
+### Current-main rebase and MAC-only preparation (2026-10-27)
+
+Parent #1174 rebases onto main `297e48a4`, helper #367 onto userland
+`fd53bce4` as `83b06154`. The earlier `20820a68` CI build did not compile:
+its prerequisite pin check rejected helper `035b143a`, which no longer
+contained userland main. Repinning the rebased helper resolves that gate;
+no source/compiler fix was needed. Rebased code head `634c2169` passes all
+five CI checks and the local kernel/runtime/SDK/helper rebuild.
+
+Fresh absent-radio four-CPU q35/KVM checks repeat the released-header,
+544/partial/full-capacity and untouched-tail cases with the current kernel
+and helper. GDB still observes no attempt and zero PHY facts. Sources/logs:
+`prefix-current-20261027/` and `ci-20261027/` under the same evidence root.
+There is no new timing or hardware-performance claim.
+
+The next native image is a private MAC-only diagnostic derived from that
+rebased source. It retains native platform/SAR/rfkill admission and returns
+only after publishing MAC_CONFIGURED, before BB/RF tables, channel tuning,
+power programming or RFK. It must not merge or masquerade as a successful
+PHY/scan result. The packet checks the running kernel identity before its
+sole request, as well as the archive marker and sealed payload hashes.
+Qualification still requires the orchestrator's separately scheduled run;
+the successful Linux comparator is not a Pyxis hardware result.
