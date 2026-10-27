@@ -433,6 +433,7 @@ static bool terminal_stop(const char *detail)
   rtl8922ae_discovery_stop(&preparation.discovery);
   uint64_t flags = cpu_save_interrupts();
   preparation.status.base.flags &= ~WIFI_READY;
+  preparation.status.base.allowed_channels = 0;
   preparation.status.phy.phase = WIFI_PHY_STOPPING;
   cpu_restore_interrupts(flags);
   uint64_t deadline = task_deadline_after_ms(RTL8922AE_STOP_MS);
@@ -575,6 +576,7 @@ static void rtl8922ae_worker(void *argument)
     preparation.live = true;
     flags = cpu_save_interrupts();
     preparation.status.base.flags |= WIFI_READY;
+    preparation.status.base.allowed_channels = UINT32_C(1) << (preparation.channel - 1);
     set_detail("RTL8922AE one-channel passive discovery; healthy context retained");
     cpu_restore_interrupts(flags);
     enum call_status result = preparation.abort_status != CALL_OK ? preparation.abort_status :
