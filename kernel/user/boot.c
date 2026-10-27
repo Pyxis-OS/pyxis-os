@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <kernel/boot/options.h>
 #include <kernel/keyboard.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/net/log_udp.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
@@ -23,12 +24,21 @@ static void launch_initial(void *argument)
   while (initial_input_pending()) {
     kernel_task_sleep_until(task_deadline_after_ms(BOOT_INPUT_POLL_MS));
   }
-  /* Keep boot image allocation/publication in its original BSP/IF=0 context.
-   * Discovery waits above run preemptibly, without holding any input lock. */
+  /* A delayed USB boot launch runs after scheduler publication. Retain its
+   * complete preparation through publication; temporary contention cannot make
+   * the one-shot boot-init path fail. The immediate path has bootstrap proof. */
+  struct vm_kernel_owner owner = {0};
+  bool runtime = vm_kernel_runtime();
+  if (runtime) {
+    vm_kernel_owner_cleanup(&owner);
+  }
   uint64_t flags = cpu_save_interrupts();
   user_launch_boot_init(options->init, &options->mount, options->pool_partition,
       options->pool_malformed, options->install, options->default_config,
       options->remote_beacon);
+  if (runtime) {
+    vm_kernel_owner_release(&owner);
+  }
   cpu_restore_interrupts(flags);
 }
 

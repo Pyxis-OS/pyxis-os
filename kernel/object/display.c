@@ -1,3 +1,4 @@
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/object/clipboard.h>
 #include <arch/smp.h>
 #include <arch/cpu.h>
@@ -34,17 +35,68 @@ struct display_object *display_create(struct space *space)
   return display;
 }
 
+/* Every link change is BSP IF=0; the reaper retains a removed frame privately. */
+static struct display_frame *retired_frames;
+
+bool display_retire_pending(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  return retired_frames != NULL;
+}
+
 void display_frame_release(struct display_frame *frame)
 {
-  KASSERT(arch_cpu_index() == 0 && frame->references);
-  if (--frame->references == 0) {
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled() && frame->references);
+  if (--frame->references) {
+    return;
+  }
+  /* Process teardown already holds exclusion: unleased backing must be gone
+   * before its completion is published. */
+  if (vm_kernel_owner_held()) {
     struct execution_group *group = frame->cleanup_group;
     KASSERT(vm_free(vm_kernel_space(), frame->fb.address, frame->fb.size) == MM_OK);
     kfree(frame);
     if (group) {
       execution_group_cleanup_end(group);
     }
+    return;
   }
+  if (!frame->cleanup_group) {
+    frame->cleanup_group = object_cleanup_defer();
+  }
+  frame->retire_next = retired_frames;
+  retired_frames = frame;
+  process_cleanup_notify();
+}
+
+void display_reap_frames(void)
+{
+  KASSERT(arch_cpu_index() == 0 && cpu_interrupts_enabled());
+  struct vm_kernel_owner owner = {0};
+  vm_kernel_owner_cleanup(&owner);
+  uint64_t flags = cpu_save_interrupts();
+  struct display_frame *frame = retired_frames;
+  if (!frame) {
+    vm_kernel_owner_release(&owner);
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  retired_frames = frame->retire_next;
+  struct execution_group *group = frame->cleanup_group;
+  struct execution_group *previous = object_cleanup_enter(group);
+  struct vm_reclaim reclaim = {0};
+  KASSERT(vm_free_begin(vm_kernel_space(), frame->fb.address, frame->fb.size,
+      &reclaim) == MM_OK);
+  while (!vm_free_step(&reclaim, 64)) {
+    kernel_task_yield_masked();
+  }
+  kfree(frame);
+  object_cleanup_leave(previous);
+  if (group) {
+    execution_group_cleanup_end(group);
+  }
+  vm_kernel_owner_release(&owner);
+  cpu_restore_interrupts(flags);
 }
 
 static void retain_frame(struct display_frame *frame)
@@ -94,19 +146,22 @@ static size_t slot_size(const struct framebuffer *layout)
   return (layout->size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 }
 
-static struct display_frame *allocate_frame(const struct framebuffer *layout)
+static enum call_status allocate_frame(const struct framebuffer *layout,
+    struct display_frame **result)
 {
   struct display_frame *frame = kmalloc(sizeof(*frame));
   if (!frame) {
-    return NULL;
+    return CALL_NO_MEMORY;
   }
   *frame = (struct display_frame){.fb = *layout, .references = 1};
-  if (vm_alloc(vm_kernel_space(), slot_size(layout), PAGE_SIZE, PAGE_WRITE,
-      &frame->fb.address) != MM_OK) {
+  enum mm_result allocated = vm_alloc(vm_kernel_space(), slot_size(layout), PAGE_SIZE,
+      PAGE_WRITE, &frame->fb.address);
+  if (allocated != MM_OK) {
     kfree(frame);
-    return NULL;
+    return allocated == MM_BUSY ? CALL_BUSY : CALL_NO_MEMORY;
   }
-  return frame;
+  *result = frame;
+  return CALL_OK;
 }
 
 static enum call_status map_frame(struct process *process, const struct display_frame *frame,
@@ -116,10 +171,11 @@ static enum call_status map_frame(struct process *process, const struct display_
   for (size_t mapped = 0; mapped < size; mapped += PAGE_SIZE) {
     struct page_translation page;
     KASSERT(vm_query(vm_kernel_space(), frame->fb.address + mapped, &page) == MM_OK);
-    if (vm_map(process->address_space, address + mapped, page.physical,
-        PAGE_USER | PAGE_WRITE) != MM_OK) {
+    enum mm_result result = vm_map(process->address_space, address + mapped,
+        page.physical, PAGE_USER | PAGE_WRITE);
+    if (result != MM_OK) {
       unmap_pixels(process, address, mapped);
-      return CALL_NO_MEMORY;
+      return result == MM_BUSY ? CALL_BUSY : CALL_NO_MEMORY;
     }
   }
   return CALL_OK;
@@ -138,17 +194,20 @@ static enum call_status prepare_slots(struct display_object *display,
   }
   size_t size = slot_size(layout);
   size_t prepared = 0;
+  enum call_status status = CALL_OK;
   for (; prepared < DISPLAY_SLOT_COUNT; ++prepared) {
-    slots[prepared] = allocate_frame(layout);
-    if (!slots[prepared]) {
+    status = allocate_frame(layout, &slots[prepared]);
+    if (status != CALL_OK) {
       break;
     }
   }
   uintptr_t address = 0;
-  enum call_status status = prepared == DISPLAY_SLOT_COUNT ? CALL_OK : CALL_NO_MEMORY;
-  if (status == CALL_OK && vm_reserve(process->address_space, size * DISPLAY_SLOT_COUNT,
-      PAGE_SIZE, &address) != MM_OK) {
-    status = CALL_NO_MEMORY;
+  if (status == CALL_OK) {
+    enum mm_result result = vm_reserve(process->address_space, size * DISPLAY_SLOT_COUNT,
+        PAGE_SIZE, &address);
+    if (result != MM_OK) {
+      status = result == MM_BUSY ? CALL_BUSY : CALL_NO_MEMORY;
+    }
   }
   size_t mapped = 0;
   for (; status == CALL_OK && mapped < DISPLAY_SLOT_COUNT; ++mapped) {
@@ -378,6 +437,15 @@ void display_request_execute(struct display_request *request)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->request.state == BSP_REQUEST_SERVICING ||
       request->request.state == BSP_REQUEST_FORWARDED);
+  struct vm_kernel_owner owner = {0};
+  bool mutating = request->operation == DISPLAY_ACQUIRE ||
+      request->operation == DISPLAY_REPLACE || request->operation == DISPLAY_RELEASE;
+  if (mutating && !vm_kernel_owner_try(&owner)) {
+    request->result = CALL_BUSY;
+    request->loan = NULL;
+    request->display = NULL;
+    return;
+  }
   if (request->operation == DISPLAY_ACQUIRE || request->operation == DISPLAY_REPLACE ||
       request->operation == DISPLAY_RELEASE) {
     process_vm_require_mutation(request->loan);
@@ -385,6 +453,7 @@ void display_request_execute(struct display_request *request)
         !process_vm_buffer_check(request->loan, request->reply_address,
           sizeof(struct display_buffer), true)) {
       request->result = CALL_BAD_BUFFER;
+      vm_kernel_owner_release(&owner);
       request->loan = NULL;
       request->display = NULL;
       return;
@@ -392,6 +461,9 @@ void display_request_execute(struct display_request *request)
   }
   if (!task_operation_start()) {
     request->result = CALL_DENIED;
+    if (mutating) {
+      vm_kernel_owner_release(&owner);
+    }
     request->loan = NULL;
     request->display = NULL;
     return;
@@ -399,6 +471,9 @@ void display_request_execute(struct display_request *request)
   request->result = service_display(request->display, request->loan,
       request->operation, request->generation, request->slot, request->reply_address,
       &request->reply);
+  if (mutating) {
+    vm_kernel_owner_release(&owner);
+  }
   request->loan = NULL;
   request->display = NULL;
 }

@@ -1,3 +1,4 @@
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/object/screenshot_saver.h>
 #include <kernel/object/clipboard.h>
 //
@@ -188,7 +189,9 @@ static struct framebuffer *fb_alloc(const struct framebuffer *layout,
 static void fb_free(struct framebuffer *fb)
 {
   if (fb) {
-    KASSERT(vm_free(vm_kernel_space(), fb->address, fb->size) == MM_OK);
+    /* Candidate buffers are unpublished. Old published TTY buffers reach this
+     * helper only after writers stop and the shared flush is acknowledged. */
+    vm_kernel_retire(fb->address, fb->size);
     kfree(fb);
   }
 }
@@ -439,6 +442,7 @@ bool space_name_taken(const char *name)
 
 struct space *space_create(const char *name, const char *title, uint64_t *ceiling_cpus)
 {
+  KASSERT(vm_kernel_owner_held());
   KASSERT(!space_name_taken(name));
   struct space *space = space_alloc(name, title, ceiling_cpus, false);
   /* The presenter may be preempted mid-walk on this CPU; it only ever sees a
@@ -917,12 +921,30 @@ static bool resize_buffers_prepare(struct resize_buffers *buffers,
       tty_render_try_alloc(&buffers->render, layout->width, layout->height - SPACES_NAV_HEIGHT);
 }
 
+/* Old TTY ranges may still have remote translations after an uncertain ACK.
+ * Seal each VM range before allowing any other structural owner to proceed. */
+static void resize_buffers_quarantine(const struct resize_buffers *buffers)
+{
+  for (struct resize_space *entry = buffers->spaces; entry; entry = entry->next) {
+    vm_kernel_quarantine(entry->fb->address, entry->fb->size);
+  }
+  vm_kernel_quarantine(buffers->navigation->address, buffers->navigation->size);
+  vm_kernel_quarantine(buffers->cursor->address, buffers->cursor->size);
+}
+
 /* Sole presenter, between frame leases. Device waits retain the published
  * TTY set, including output that APs write while scanout is being changed. */
 static void resize_display(void)
 {
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_acquire(&owner)) {
+    return;
+  }
   const struct framebuffer *layout = display_resize_prepare();
   if (!layout) {
+    uint64_t flags = cpu_save_interrupts();
+    vm_kernel_owner_release(&owner);
+    cpu_restore_interrupts(flags);
     return;
   }
   struct resize_buffers buffers = {0};
@@ -938,6 +960,9 @@ static void resize_display(void)
   if (!prepared) {
     display_resize_cancel();
     kwarn("display: resize refused; cannot prepare all space buffers\n");
+    flags = cpu_save_interrupts();
+    vm_kernel_owner_release(&owner);
+    cpu_restore_interrupts(flags);
     return;
   }
 
@@ -950,6 +975,7 @@ static void resize_display(void)
     display_resize_defer();
     flags = cpu_save_interrupts();
     resize_buffers_free(&buffers);
+    vm_kernel_owner_release(&owner);
     cpu_restore_interrupts(flags);
     return;
   }
@@ -957,6 +983,7 @@ static void resize_display(void)
     display_resize_cancel();
     flags = cpu_save_interrupts();
     resize_buffers_free(&buffers);
+    vm_kernel_owner_release(&owner);
     cpu_restore_interrupts(flags);
     return;
   }
@@ -970,6 +997,7 @@ static void resize_display(void)
     display_resize_defer();
     flags = cpu_save_interrupts();
     resize_buffers_free(&buffers);
+    vm_kernel_owner_release(&owner);
     cpu_restore_interrupts(flags);
     return;
   }
@@ -980,6 +1008,7 @@ static void resize_display(void)
     display_resize_cancel();
     flags = cpu_save_interrupts();
     resize_buffers_free(&buffers);
+    vm_kernel_owner_release(&owner);
     cpu_restore_interrupts(flags);
     return;
   }
@@ -1036,10 +1065,16 @@ static void resize_display(void)
     cpu_restore_interrupts(flags);
   } else {
     KASSERT(!retained_resize.spaces);
+    flags = cpu_save_interrupts();
+    resize_buffers_quarantine(&buffers);
     retained_resize = buffers;
+    cpu_restore_interrupts(flags);
     display_resize_disable();
     kerror("display: remote TLB flush timed out; old buffers retained, resizing stopped\n");
   }
+  flags = cpu_save_interrupts();
+  vm_kernel_owner_release(&owner);
+  cpu_restore_interrupts(flags);
   kinfo("display: resized to %lux%lu; copied %lu TTYs' cells in %lu ns\n",
       screen->width, screen->height, count, elapsed);
 }

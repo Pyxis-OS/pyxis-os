@@ -573,8 +573,8 @@ and thread-context changes remain BSP clients of the same gate. All use
 [process quiescence](memory.md#execution): the caller leaves its root before the
 transaction begins. The general kernel VM area still
 requires separate quiescence and acknowledged invalidation for reused ranges.
-A BSP kernel task must disable interrupts around mutation; pinning alone does
-not prevent reentry. RAM-file backing and the layers below remain usable on the
+A kernel-root actor retains the CPU-neutral structural owner and disables
+interrupts for each mutation step; pinning alone does not prevent reentry. RAM-file backing and the layers below remain usable on the
 writing CPU under their existing contracts.
 
 Three lower layers are safe on any CPU with interrupts disabled,
@@ -637,9 +637,13 @@ No caller of `kmalloc()` or `pmm_alloc()` may hold the queue or pressure lock.
 
 Active-root user-buffer checks remain separate: the executing CPU can inspect its active private root through recursive mappings, with IF=0
 and stable user mappings. They use no scratch slots or VM metadata.
-General queries and private mutation require a stable exclusive owner; MEMORY
-uses its drained process token on the calling CPU. Unpublished preparation,
-retirement, DISPLAY/thread clients and general kernel VM remain BSP-owned.
+Private queries/mutation require stable ownership; MEMORY uses its drained
+process token on the calling CPU. Shared queries use short guarded snapshots,
+which are not resource leases. General kernel mutation requires a retained
+CPU-neutral logical owner; it never holds a spinlock across allocation or waits.
+Unpublished preparation, retirement and DISPLAY/thread clients still run on the
+BSP, enrolling in that same owner rather than gaining ownership from CPU identity.
+See the [shared-VM contract](../wip/vm-invalidation.md#decision-6--shared-ownership-queries-and-safe-admission).
 
 Private spaces are built before publication. Dispatch reserves root activity
 under the process VM guard before CR3 activation. Scheduler departure reloads the
@@ -672,8 +676,8 @@ This task-stack protocol does not permit arbitrary shared mapping changes.
 
 `vm_kernel_flush_remote()` permits a separate quiescent retirement. The caller
 must first end every remote access and prevent refills, including through cached
-pointers, until unmapping finishes. It runs in a BSP kernel task with IF=1,
-the kernel root active, and no output, queue or allocator locks held. The helper
+pointers, until unmapping finishes. It runs in the retained structural owner's
+kernel-root task on any CPU, with IF=1 and no output, queue or allocator locks held. The helper
 keeps page tables, frames and VM ownership unchanged while requesting a new
 flush generation from every online CPU. Each CPU reloads its current CR3,
 including when running a private root, before acknowledging that generation.
@@ -683,7 +687,7 @@ device waits. CPU membership stays fixed after boot.
 
 The implementation uses one one-second deadline for IPI dispatch and all
 acknowledgements; this timeout is not a public ABI promise. Success permits
-ordinary BSP `vm_free()` with IF=0 while refills remain prohibited. Failure
+owner-held `vm_free()` with IF=0 while refills remain prohibited. Failure
 requires keeping the original mappings and backing until reboot; a late
 acknowledgement does not authorize reclamation. This is not concurrent shared
 unmapping or permission mutation: the flush itself changes no mappings.
@@ -732,8 +736,9 @@ shared services.
 
 Kernel workers have fixed owner CPUs: they never migrate or get stolen by another
 CPU (owner, 2026-10-13). Placing one on an AP needs its own accepted IRQ, request
-and lifetime ownership; VM and object mutation, GPE methods and firmware actions
-stay on the BSP. These stay on the BSP:
+and lifetime ownership; shared kernel VM now has a CPU-neutral owner. Device
+callbacks, object mutation, GPE methods and firmware actions stay on the BSP.
+These stay on the BSP:
 
 - the request executor and every service in its catalog: pipe and terminal
   creation, capability growth, process-environment mutation and capture,
@@ -742,7 +747,7 @@ stay on the BSP. These stay on the BSP:
   native filesystem admission, readiness waits and system-info memory;
 - the network, native filesystem, HOST transport, virtio-blk, USB, ACPI, audio
   and presentation workers;
-- task reaping, the process reaper, object retirement and the general kernel VM;
+- task reaping, the process reaper and object retirement;
 - device interrupt routing.
 
 Physical allocation covers addresses below 64 GiB. Boot intersects every usable

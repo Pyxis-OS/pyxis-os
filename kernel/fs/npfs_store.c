@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
+#include <kernel/mm/kernel_owner.h>
 #include "npfs_store.h"
 #include "npfs_ram.h"
 
@@ -195,10 +196,15 @@ static void store_free(void *pointer)
 
 static enum call_status store_vm_allocate(size_t bytes, uintptr_t *address)
 {
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_acquire(&owner)) {
+    return CALL_BUSY;
+  }
   uint64_t flags = cpu_save_interrupts();
   enum mm_result result = vm_alloc(vm_kernel_space(), bytes, PAGE_SIZE, PAGE_WRITE, address);
+  vm_kernel_owner_release(&owner);
   cpu_restore_interrupts(flags);
-  return result == MM_OK ? CALL_OK : CALL_NO_MEMORY;
+  return result == MM_OK ? CALL_OK : result == MM_BUSY ? CALL_BUSY : CALL_NO_MEMORY;
 }
 
 static void store_vm_free(uintptr_t address, size_t bytes)
@@ -207,7 +213,9 @@ static void store_vm_free(uintptr_t address, size_t bytes)
     return;
   }
   uint64_t flags = cpu_save_interrupts();
-  KASSERT(vm_free(vm_kernel_space(), address, bytes) == MM_OK);
+  /* Store workers alone access these temporary/cache/pool mappings. Their
+   * descriptors are detached before any next store turn can reach the range. */
+  vm_kernel_retire(address, bytes);
   cpu_restore_interrupts(flags);
 }
 
@@ -1851,11 +1859,16 @@ static enum call_status cache_reserve(struct npfs_store_context *context,
 {
   struct npfs_store_pool *pool = inode->volume->pool;
   struct store_cache_entry *slot = NULL;
+  bool owner_busy = false;
   for (unsigned chunk = 0; chunk < STORE_CACHE_CHUNKS && !slot; chunk++) {
     if (!pool->cache[chunk]) {
+      if (owner_busy) {
+        continue;
+      }
       uintptr_t address;
       enum call_status status = store_vm_allocate(sizeof(struct store_cache_chunk), &address);
       if (status != CALL_OK) {
+        owner_busy |= status == CALL_BUSY;
         continue;
       }
       pool->cache[chunk] = (void *)address;
@@ -1898,7 +1911,7 @@ static enum call_status cache_reserve(struct npfs_store_context *context,
     }
   }
   if (!slot) {
-    return CALL_NO_MEMORY;
+    return owner_busy ? CALL_BUSY : CALL_NO_MEMORY;
   }
   struct npfs_store_inode *previous_owner = slot->inode;
   slot->inode = NULL;

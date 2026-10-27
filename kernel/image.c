@@ -1,3 +1,4 @@
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/image.h>
 #include <kernel/memory.h>
 #include <kernel/mm/vm.h>
@@ -110,7 +111,7 @@ static enum mm_result load_segment(struct vm_space *space, uintptr_t scratch,
   return MM_OK;
 }
 
-enum image_result image_load(const void *bytes, size_t size,
+static enum image_result image_load_owned(const void *bytes, size_t size,
     uintptr_t reserved_base, uintptr_t reserved_end,
     struct vm_space **space, uintptr_t *entry)
 {
@@ -137,7 +138,8 @@ enum image_result image_load(const void *bytes, size_t size,
   struct vm_space *loaded;
   enum mm_result status = vm_space_create(&loaded);
   if (status != MM_OK) {
-    return status == MM_NO_MEMORY ? IMAGE_NO_MEMORY : IMAGE_INVALID;
+    return status == MM_BUSY ? IMAGE_BUSY :
+        status == MM_NO_MEMORY ? IMAGE_NO_MEMORY : IMAGE_INVALID;
   }
 
   uintptr_t scratch;
@@ -156,10 +158,31 @@ enum image_result image_load(const void *bytes, size_t size,
 
   if (status != MM_OK) {
     KASSERT(vm_space_destroy(loaded) == MM_OK);
-    return status == MM_NO_MEMORY ? IMAGE_NO_MEMORY : IMAGE_INVALID;
+    return status == MM_BUSY ? IMAGE_BUSY :
+        status == MM_NO_MEMORY ? IMAGE_NO_MEMORY : IMAGE_INVALID;
   }
 
   *space = loaded;
   *entry = header.entry;
   return IMAGE_OK;
+}
+
+enum image_result image_load(const void *bytes, size_t size,
+    uintptr_t reserved_base, uintptr_t reserved_end,
+    struct vm_space **space, uintptr_t *entry)
+{
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    if (space) {
+      *space = NULL;
+    }
+    if (entry) {
+      *entry = 0;
+    }
+    return IMAGE_BUSY;
+  }
+  enum image_result result = image_load_owned(bytes, size, reserved_base,
+      reserved_end, space, entry);
+  vm_kernel_owner_release(&owner);
+  return result;
 }

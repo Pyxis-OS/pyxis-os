@@ -1,3 +1,4 @@
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/object/wifi.h>
 #include <abi/startup.h>
 #include <arch/smp.h>
@@ -226,7 +227,7 @@ static enum mm_result copy_startup_pages(struct vm_space *space, uintptr_t addre
   return result;
 }
 
-enum mm_result process_prepare_startup(struct process *process,
+static enum mm_result process_prepare_startup_owned(struct process *process,
     const struct process_startup *source)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -311,4 +312,16 @@ enum mm_result process_prepare_startup(struct process *process,
   }
   process->startup_address = address;
   return MM_OK;
+}
+
+enum mm_result process_prepare_startup(struct process *process,
+    const struct process_startup *source)
+{
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    return MM_BUSY;
+  }
+  enum mm_result result = process_prepare_startup_owned(process, source);
+  vm_kernel_owner_release(&owner);
+  return result;
 }

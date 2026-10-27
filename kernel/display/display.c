@@ -10,6 +10,7 @@
 #include <kernel/pci.h>
 #include <kernel/memory.h>
 #include <kernel/mm/vm.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/user/wait.h>
 #include <stdatomic.h>
 #include "boot.h"
@@ -142,7 +143,7 @@ static void allocate_staging(void)
   cpu_restore_interrupts(flags);
 }
 
-bool display_start(void)
+static bool start_display(void)
 {
   bool ready = false;
   switch (driver) {
@@ -166,6 +167,19 @@ bool display_start(void)
   if (ready && driver == DISPLAY_BOOT && staging && !flip_enabled) {
     display_timing_start();
   }
+  return ready;
+}
+
+bool display_start(void)
+{
+  /* One-shot kernel preparation retains its startup state on contention;
+   * don't permanently lose a working backend to a temporary VM owner. */
+  struct vm_kernel_owner owner = {0};
+  vm_kernel_owner_cleanup(&owner);
+  bool ready = start_display();
+  uint64_t flags = cpu_save_interrupts();
+  vm_kernel_owner_release(&owner);
+  cpu_restore_interrupts(flags);
   return ready;
 }
 

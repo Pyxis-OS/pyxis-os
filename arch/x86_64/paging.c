@@ -16,8 +16,10 @@
 #include <kernel/memory.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/spinlock.h>
 #include <kernel/net/debug.h>
 #include <kernel/pci/registers.h>
 
@@ -98,6 +100,40 @@ enum scratch_slot {
 };
 
 static struct arch_address_space kernel_space;
+/* General shared VM: snapshot/commit only, never allocation or a wait. Heap
+ * growth owns disjoint, pre-established ancestors and its never-reused arena. */
+static struct spinlock kernel_mapping_guard;
+
+static bool general_kernel_address(uintptr_t address)
+{
+  return address >= KERNEL_VM_BASE && address - KERNEL_VM_BASE < KERNEL_VM_SIZE;
+}
+
+static void require_kernel_mutator(const struct arch_address_space *space,
+    uintptr_t address)
+{
+  if (space == &kernel_space && general_kernel_address(address)) {
+    KASSERT(vm_kernel_owner_held());
+  }
+}
+
+static bool lock_kernel_mapping(const struct arch_address_space *space,
+    uintptr_t address)
+{
+  /* Private roots share these same retained kernel ancestors. */
+  bool locked = space && general_kernel_address(address);
+  if (locked) {
+    spin_lock(&kernel_mapping_guard);
+  }
+  return locked;
+}
+
+static void unlock_kernel_mapping(bool locked)
+{
+  if (locked) {
+    spin_unlock(&kernel_mapping_guard);
+  }
+}
 static uint64_t physical_limit;
 static uint64_t bootstrap_offset;
 static bool active;
@@ -1466,16 +1502,26 @@ static enum mm_result walk_to_leaf(const struct arch_address_space *space,
       }
 
       arch_frame_zero(child);
-      value = child | PTE_PRESENT | PTE_WRITE;
-      if (virtual <= LOWER_HALF_MAX) {
-        value |= PTE_USER;
+      /* Prepare outside the snapshot guard; publishing a fully initialized
+       * ancestor is bounded and allocation-free. Retained ancestors never
+       * disappear underneath a walker. Structural ownership is separate. */
+      bool locked = lock_kernel_mapping(space, virtual);
+      value = read_table_entry(physical, index);
+      bool installed = !(value & PTE_PRESENT);
+      if (installed) {
+        value = child | PTE_PRESENT | PTE_WRITE;
+        if (virtual <= LOWER_HALF_MAX) {
+          value |= PTE_USER;
+        }
+        write_table_entry(physical, index, value);
+        /* New ancestors also change recursive aliases. Flush the actual root. */
+        if (affects_active_space(space, virtual)) {
+          write_cr3(cpu_current()->active_space->root);
+        }
       }
-      write_table_entry(physical, index, value);
-
-      /* New ancestors also change recursive aliases. Reload the actual active
-       * root, including when modifying kernel tables shared with that root. */
-      if (affects_active_space(space, virtual)) {
-        write_cr3(cpu_current()->active_space->root);
+      unlock_kernel_mapping(locked);
+      if (!installed) {
+        pmm_free(child, 1);
       }
     }
 
@@ -1493,7 +1539,8 @@ static enum mm_result walk_to_leaf(const struct arch_address_space *space,
 
 static enum mm_result map_page(struct arch_address_space *space,
                                uintptr_t virtual, phys_addr_t physical,
-                               unsigned permissions, uint64_t cache_flags)
+                               unsigned permissions, uint64_t cache_flags,
+                               bool create)
 {
   if (!mutable_address(space, virtual) || !physical_valid(physical) ||
       !permissions_valid(permissions) ||
@@ -1503,36 +1550,39 @@ static enum mm_result map_page(struct arch_address_space *space,
 
   phys_addr_t table;
   unsigned allowed;
-  enum mm_result result = walk_to_leaf(space, virtual, true, &table, &allowed);
+  enum mm_result result = walk_to_leaf(space, virtual, create, &table, &allowed);
   if (result != MM_OK) {
     return result;
   }
   unsigned index = index_at(virtual, LEVEL_PT);
+  bool locked = lock_kernel_mapping(space, virtual);
   if (read_table_entry(table, index) & PTE_PRESENT) {
-    return MM_COLLISION;
+    result = MM_COLLISION;
+  } else if (permissions & ~allowed) {
+    result = MM_INVALID;
+  } else {
+    write_table_entry(table, index, physical | leaf_flags(permissions) | cache_flags);
+    if (affects_active_space(space, virtual)) {
+      invlpg(virtual);
+    }
   }
-  if (permissions & ~allowed) {
-    return MM_INVALID;
-  }
-
-  write_table_entry(table, index, physical | leaf_flags(permissions) | cache_flags);
-  if (affects_active_space(space, virtual)) {
-    invlpg(virtual);
-  }
-  return MM_OK;
+  unlock_kernel_mapping(locked);
+  return result;
 }
 
 enum mm_result arch_page_map(struct arch_address_space *space,
                              uintptr_t virtual, phys_addr_t physical,
                              unsigned permissions)
 {
-  return map_page(space, virtual, physical, permissions, 0);
+  require_kernel_mutator(space, virtual);
+  return map_page(space, virtual, physical, permissions, 0, true);
 }
 
 enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t virtual,
                                  size_t count, const phys_addr_t *physical,
                                  unsigned permissions, size_t *mapped)
 {
+  require_kernel_mutator(space, virtual);
   *mapped = 0;
   if (!count || !physical || !permissions_valid(permissions) ||
       (space == &kernel_space && (permissions & PAGE_USER)) ||
@@ -1562,6 +1612,7 @@ enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t vir
     return MM_INVALID;
   }
   /* Check the whole run before installing any of it. */
+  bool locked = lock_kernel_mapping(space, virtual);
   volatile uint64_t *entries = map_scratch(table, SCRATCH_TABLE);
   bool vacant = true;
   for (size_t i = 0; i < count && vacant; ++i) {
@@ -1573,6 +1624,7 @@ enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t vir
     }
   }
   unmap_scratch(SCRATCH_TABLE);
+  unlock_kernel_mapping(locked);
   if (!vacant) {
     return MM_COLLISION;
   }
@@ -1587,11 +1639,55 @@ enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t vir
 
 enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical)
 {
+  require_kernel_mutator(&kernel_space, virtual);
   if (paging_display_aperture_overlaps(physical, PAGE_SIZE)) {
     return MM_INVALID;
   }
   return map_page(&kernel_space, virtual, physical, PAGE_WRITE,
-                  PTE_CACHE_DISABLE | PTE_WRITE_THROUGH);
+                  PTE_CACHE_DISABLE | PTE_WRITE_THROUGH, true);
+}
+
+enum mm_result arch_kernel_prepare_range(uintptr_t virtual, size_t bytes)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(active && !arch_cpu_count());
+  if (!bytes || (bytes & (PAGE_SIZE - 1)) ||
+      !mutable_address(&kernel_space, virtual) || !general_kernel_address(virtual) ||
+      bytes > KERNEL_VM_SIZE - (virtual - KERNEL_VM_BASE)) {
+    return MM_INVALID;
+  }
+  size_t remaining = bytes;
+  while (remaining) {
+    phys_addr_t table;
+    unsigned allowed;
+    enum mm_result result = walk_to_leaf(&kernel_space, virtual, true, &table, &allowed);
+    if (result != MM_OK) {
+      return result;
+    }
+    if (!(allowed & PAGE_WRITE)) {
+      return MM_INVALID;
+    }
+    size_t span = UINT64_C(1) << PD_INDEX_SHIFT;
+    size_t step = span - (virtual & (span - 1));
+    if (step > remaining) {
+      step = remaining;
+    }
+    virtual += step;
+    remaining -= step;
+  }
+  return MM_OK;
+}
+
+enum mm_result arch_kernel_map_prepared(uintptr_t virtual, phys_addr_t physical,
+    bool mmio)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!general_kernel_address(virtual) ||
+      (mmio && paging_display_aperture_overlaps(physical, PAGE_SIZE))) {
+    return MM_INVALID;
+  }
+  uint64_t cache = mmio ? PTE_CACHE_DISABLE | PTE_WRITE_THROUGH : 0;
+  return map_page(&kernel_space, virtual, physical, PAGE_WRITE, cache, false);
 }
 
 enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical)
@@ -1603,7 +1699,8 @@ enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical)
       paging_display_aperture_overlaps(physical, PAGE_SIZE)) {
     return MM_INVALID;
   }
-  return map_page(&kernel_space, virtual, physical, PAGE_WRITE, PTE_PAT_4K | PTE_WRITE_THROUGH);
+  return map_page(&kernel_space, virtual, physical, PAGE_WRITE,
+      PTE_PAT_4K | PTE_WRITE_THROUGH, true);
 }
 
 bool paging_display_aperture_overlaps(phys_addr_t physical, size_t bytes)
@@ -1710,7 +1807,7 @@ void paging_pci_config_writable(uintptr_t virtual, bool writable)
   invlpg(virtual);
 }
 
-enum mm_result arch_page_unmap(struct arch_address_space *space,
+static enum mm_result unmap_page(struct arch_address_space *space,
                                uintptr_t virtual, phys_addr_t *physical)
 {
   if (!mutable_address(space, virtual) || !physical) {
@@ -1737,7 +1834,29 @@ enum mm_result arch_page_unmap(struct arch_address_space *space,
   return MM_OK;
 }
 
-size_t arch_page_unmap_run(struct arch_address_space *space, uintptr_t virtual,
+enum mm_result arch_page_unmap(struct arch_address_space *space,
+    uintptr_t virtual, phys_addr_t *physical)
+{
+  require_kernel_mutator(space, virtual);
+  bool locked = lock_kernel_mapping(space, virtual);
+  enum mm_result status = unmap_page(space, virtual, physical);
+  unlock_kernel_mapping(locked);
+  return status;
+}
+
+enum mm_result arch_kernel_unmap_prepared(uintptr_t virtual, phys_addr_t *physical)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!general_kernel_address(virtual)) {
+    return MM_INVALID;
+  }
+  bool locked = lock_kernel_mapping(&kernel_space, virtual);
+  enum mm_result status = unmap_page(&kernel_space, virtual, physical);
+  unlock_kernel_mapping(locked);
+  return status;
+}
+
+static size_t unmap_run(struct arch_address_space *space, uintptr_t virtual,
                            size_t count, phys_addr_t *physical)
 {
   if (!count || !physical || !mutable_address(space, virtual)) {
@@ -1772,6 +1891,16 @@ size_t arch_page_unmap_run(struct arch_address_space *space, uintptr_t virtual,
     }
   }
   return count;
+}
+
+size_t arch_page_unmap_run(struct arch_address_space *space, uintptr_t virtual,
+    size_t count, phys_addr_t *physical)
+{
+  require_kernel_mutator(space, virtual);
+  bool locked = lock_kernel_mapping(space, virtual);
+  size_t unmapped = unmap_run(space, virtual, count, physical);
+  unlock_kernel_mapping(locked);
+  return unmapped;
 }
 
 static uintptr_t next_boundary(uintptr_t address, unsigned shift)
@@ -1827,7 +1956,7 @@ enum mm_result arch_range_vacant(const struct arch_address_space *space,
   return MM_OK;
 }
 
-enum mm_result arch_page_protect(struct arch_address_space *space,
+static enum mm_result protect_page(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions)
 {
   if (!mutable_address(space, virtual) || !permissions_valid(permissions) ||
@@ -1862,7 +1991,17 @@ enum mm_result arch_page_protect(struct arch_address_space *space,
   return MM_OK;
 }
 
-enum mm_result arch_page_query(const struct arch_address_space *space,
+enum mm_result arch_page_protect(struct arch_address_space *space,
+    uintptr_t virtual, unsigned permissions)
+{
+  require_kernel_mutator(space, virtual);
+  bool locked = lock_kernel_mapping(space, virtual);
+  enum mm_result status = protect_page(space, virtual, permissions);
+  unlock_kernel_mapping(locked);
+  return status;
+}
+
+static enum mm_result query_page(const struct arch_address_space *space,
                                uintptr_t virtual, struct page_translation *result)
 {
   if (!space_valid(space) || !canonical(virtual) || !result) {
@@ -1889,6 +2028,15 @@ enum mm_result arch_page_query(const struct arch_address_space *space,
     .permissions = allowed & entry_permissions(value),
   };
   return MM_OK;
+}
+
+enum mm_result arch_page_query(const struct arch_address_space *space,
+    uintptr_t virtual, struct page_translation *result)
+{
+  bool locked = lock_kernel_mapping(space, virtual);
+  enum mm_result status = query_page(space, virtual, result);
+  unlock_kernel_mapping(locked);
+  return status;
 }
 
 bool arch_user_buffer_accessible(const struct arch_address_space *space,

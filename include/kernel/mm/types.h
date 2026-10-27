@@ -24,6 +24,7 @@ enum mm_result {
   MM_NO_MEMORY,
   MM_COLLISION,
   MM_NOT_MAPPED,
+  MM_BUSY,
 };
 
 #endif

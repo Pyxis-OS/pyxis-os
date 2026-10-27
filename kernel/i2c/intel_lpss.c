@@ -7,6 +7,7 @@
 #include <kernel/i2c/designware.h>
 #include <kernel/input/hid_i2c.h>
 #include <kernel/log.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
 #include <kernel/pci/assignment.h>
@@ -51,6 +52,7 @@ static struct {
   struct acpi_hid_i2c_pci companion;
   struct hid_i2c_descriptor descriptor;
   const struct gpio_input *interrupt;
+  struct task_wait *descriptor_wait;
   enum lpss_state state;
   bool reset_started, assignment_pending;
 } lpss;
@@ -252,16 +254,30 @@ static bool get_timing(struct dw_i2c_timing *timing)
 static void descriptor_worker(void *argument)
 {
   (void)argument;
+  /* BSP IF=0 joins the state check/park with ACPI's endpoint publication. */
+  uint64_t wait_flags = cpu_save_interrupts();
+  while (lpss.state != LPSS_BOUND) {
+    lpss.descriptor_wait = task_wait_prepare();
+    task_wait_sleep(lpss.descriptor_wait);
+    lpss.descriptor_wait = NULL;
+  }
+  cpu_restore_interrupts(wait_flags);
   if (lpss.assignment_pending) {
+    /* Keep the whole pending preparation across admission, before any attempt
+     * record or hardware effect. Contention cannot declare it unsupported. */
+    struct vm_kernel_owner owner = {0};
+    vm_kernel_owner_cleanup(&owner);
     uint64_t flags = cpu_save_interrupts();
     uintptr_t address;
     if (!pci_assign_memory_bar(&lpss.claim, 0, &lpss.assignment_window, &address)) {
       preparation_refused("PCI memory assignment; see resource refusal");
+      vm_kernel_owner_release(&owner);
       cpu_restore_interrupts(flags);
       return;
     }
     if (lpss.claim.bars[0].bytes < LPSS_MAPPING_BYTES) {
       preparation_refused("assigned BAR0 is smaller than the LPSS register extent");
+      vm_kernel_owner_release(&owner);
       cpu_restore_interrupts(flags);
       return;
     }
@@ -269,6 +285,7 @@ static void descriptor_worker(void *argument)
      * proof. Complete it before enabling MMIO; iDMA is never enabled. */
     if (!pci_complete_claim(&lpss.claim)) {
       preparation_refused("assigned PCI claim completion");
+      vm_kernel_owner_release(&owner);
       cpu_restore_interrupts(flags);
       return;
     }
@@ -281,10 +298,12 @@ static void descriptor_worker(void *argument)
         PCI_COMMAND_IO | PCI_COMMAND_INTX_DISABLE)) !=
         (PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE)) {
       preparation_refused("assigned PCI memory-decode enable readback");
+      vm_kernel_owner_release(&owner);
       cpu_restore_interrupts(flags);
       return;
     }
     lpss.mapping.address = address;
+    vm_kernel_owner_release(&owner);
     initialize_controller(true);
     cpu_restore_interrupts(flags);
     if (lpss.state != LPSS_PREPARED) {
@@ -322,6 +341,19 @@ static void descriptor_worker(void *argument)
   }
 }
 
+void intel_lpss_i2c_start(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled() && !vm_kernel_runtime());
+  if (lpss.state != LPSS_PREPARED && lpss.state != LPSS_ASSIGNMENT_PENDING) {
+    return;
+  }
+  enum mm_result result = kernel_task_create(descriptor_worker, NULL);
+  if (result != MM_OK) {
+    lpss.state = LPSS_REFUSED;
+    kinfo("i2c-lpss: cannot create descriptor worker (error %u)\n", result);
+  }
+}
+
 void intel_lpss_i2c_attach(const struct acpi_hid_i2c_endpoint *endpoint,
     const struct acpi_hid_i2c_pci *companion, const struct gpio_input *interrupt)
 {
@@ -342,9 +374,9 @@ void intel_lpss_i2c_attach(const struct acpi_hid_i2c_endpoint *endpoint,
   lpss.companion = *companion;
   lpss.interrupt = interrupt;
   lpss.state = LPSS_BOUND;
-  enum mm_result result = kernel_task_create(descriptor_worker, NULL);
-  if (result != MM_OK) {
-    lpss.state = LPSS_REFUSED;
-    kinfo("i2c-lpss: cannot create descriptor worker (error %u)\n", result);
+  struct task_wait *wait = lpss.descriptor_wait;
+  lpss.descriptor_wait = NULL;
+  if (wait) {
+    task_wait_wake(wait);
   }
 }

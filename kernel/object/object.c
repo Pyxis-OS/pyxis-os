@@ -55,6 +55,7 @@
 #include <kernel/object/environment.h>
 #include <kernel/object/command_search.h>
 #include <kernel/panic.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/task.h>
 #include <kernel/net/tcp.h>
 #include <kernel/user/readiness_set.h>
@@ -601,6 +602,10 @@ bool object_reap_pending(void)
 void object_reap(void)
 {
   KASSERT(arch_cpu_index() == 0);
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    return;
+  }
   lock_retired();
   struct kernel_object *object = retired_objects;
   retired_objects = NULL;
@@ -617,4 +622,5 @@ void object_reap(void)
     }
     object = next;
   }
+  vm_kernel_owner_release(&owner);
 }

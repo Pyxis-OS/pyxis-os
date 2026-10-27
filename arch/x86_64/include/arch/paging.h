@@ -38,9 +38,10 @@ bool arch_space_release_step(struct arch_address_space *space, size_t *budget);
 
 /* Kernel mutations are limited to its shared allocation area and the heap
  * arena; other spaces permit lower-half mutations. IF=0. General kernel ranges
- * remain BSP-owned; any-CPU heap growth owns unpublished arena pages. A private
- * space may be mutated on its recorded exclusive owner CPU after process root
- * and borrower drainage, with kernel CR3 active. Walks use local scratch slots.
+ * require their logical structural owner; any-CPU heap growth owns unpublished
+ * arena pages. A private space may be mutated on its recorded exclusive owner
+ * CPU after process root and borrower drainage, with kernel CR3 active. Walks
+ * use local scratch slots.
  * Kernel ranges still used by another CPU must not be unmapped or protected;
  * the separate quiescent kernel-flush protocol does not permit live mutation.
  * Private root departure/reentry flushes CR3 locally, without a shootdown.
@@ -62,6 +63,16 @@ enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t vir
                                  unsigned permissions, size_t *mapped);
 /* Supervisor RW/NX/UC mapping in the kernel allocation area. */
 enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical);
+/* Permanent firmware/native windows in the general kernel area. Preparation
+ * is BSP IF=0 before AP startup and installs only retained ancestors. Filling
+ * is fixed BSP IF=0, allocation-free, RW/NX, at a fresh unpublished address;
+ * the domain owner prevents generic unmap/protect/reuse. */
+enum mm_result arch_kernel_prepare_range(uintptr_t virtual, size_t bytes);
+enum mm_result arch_kernel_map_prepared(uintptr_t virtual, phys_addr_t physical,
+    bool mmio);
+/* Same permanent owner, only rollback of an unpublished partial fill. The
+ * consumed addresses may never be filled or published afterward. */
+enum mm_result arch_kernel_unmap_prepared(uintptr_t virtual, phys_addr_t *physical);
 /* BSP IF=0 before AP startup, caller-proven driver-owned scanout page.
  * No generic RAM use; PAT[5] must remain WC. */
 enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical);
@@ -84,6 +95,11 @@ size_t arch_page_unmap_run(struct arch_address_space *space, uintptr_t virtual,
                            size_t count, phys_addr_t *physical);
 enum mm_result arch_page_protect(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions);
+/* IF=0. General shared kernel mappings use a short allocation-free snapshot
+ * guard shared with ancestor/leaf publication. No structural-owner admission;
+ * callers retain the mapped consumer beyond this scalar snapshot. Private
+ * queries keep their exclusive/stable-root proof. Panic/debugger best-effort
+ * recursive inspection uses its separate path, without this normal guard. */
 enum mm_result arch_page_query(const struct arch_address_space *space,
                                uintptr_t virtual, struct page_translation *result);
 /* IF=0 on the CPU exclusively executing this private space. Checks a lower-half

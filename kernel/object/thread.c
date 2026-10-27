@@ -1,3 +1,4 @@
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/object/forwarder.h>
 #include <abi/wait.h>
 #include <arch/cpu.h>
@@ -150,7 +151,16 @@ void thread_request_execute(struct thread_request *request)
   if (request->operation == THREAD_SET_FS) {
     request->status = task_thread_bind_fs(request->caller,
         request->fs.identity, request->fs.fs_base);
-    goto done;
+    request->process = NULL;
+    request->caller = NULL;
+    return;
+  }
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    request->status = CALL_BUSY;
+    request->process = NULL;
+    request->caller = NULL;
+    return;
   }
   if (!process_vm_buffer_check(process, request->reply_address, sizeof(request->reply), true)) {
     request->status = CALL_BAD_BUFFER;
@@ -199,6 +209,7 @@ void thread_request_execute(struct thread_request *request)
     task_thread_discard(task);
   }
 done:
+  vm_kernel_owner_release(&owner);
   request->process = NULL;
   request->caller = NULL;
 }
