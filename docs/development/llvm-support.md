@@ -39,7 +39,7 @@ without replacing unknown values with zero or unchecked optional dereferences.
 
 Inputs use copied `MemoryBuffer` reads. Descriptor opens adopt the original held
 native FILE, preserving identity across name replacement. Default creation uses
-native authority, not Unix modes; explicit restrictive modes, append/CRLF,
+native authority, not Unix modes; explicit restrictive modes, CRLF,
 links, advisory locks and attribute mutations refuse. The legacy named/descriptor
 `ToolOutputFile` wrapper refuses before taking ownership or changing a name;
 optional thin-link/DWO output needs the staged backend before use. Native directory defaults
@@ -114,3 +114,23 @@ still needs C++ streams/wide/random facilities, real synchronization/TLS and the
 reached libc names recorded in the milestone. Compiler/linker integration waits
 for threads gates 5–8. Retained-handle, memory and stack budgets need actual native
 compiler artifacts; no compiler admission or performance claim follows here.
+
+## Native append
+
+Support `OF_Append` uses libc's native-FILE-only open route and FILE_APPEND.
+LLVM's Unix compatibility rule applies: append selects create-or-open without
+truncation, including when the supplied disposition was CreateAlways/CreateNew.
+Write access is required; READ-only append, CRLF and other unsupported mode flags
+still refuse before effects. HOST append is unsupported. Each native mutation
+is atomic only up to 4,080 bytes; larger raw-stream writes can interleave between
+operations. `raw_fd_ostream::pwrite` uses libc
+positioned writes, preserving both its stream position and the shared descriptor
+cursor even when APPEND is selected; a seek/write/seek emulation would append
+instead. Append adds no durability or append-only authority.
+
+The staged VirtualOutput backend still refuses append: it publishes a temporary
+by replacement. `AtomicLineLogger` also remains unavailable, with its existing
+warning rather than an open: its public API promises an arbitrary-length atomic
+line, which bounded native append does not provide. PID-based coverage output
+retains its independent refusal. No new per-record locking or native PID is
+invented to enable those features.

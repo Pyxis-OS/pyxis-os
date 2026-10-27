@@ -1,9 +1,9 @@
 # Native atomic append
 
 Status: assigned to codex-beta (chronium, 2026-10-26). The first-round contract
-is accepted. Native APPEND/SDK implementation is qualified in QEMU; libc, shell
-and language migrations remain. The libc/shell slice is built and qualified in
-QEMU; the language adapters and final native qualification remain.
+is accepted. Native APPEND/SDK and the libc/shell slice are built and qualified
+in QEMU. Go and LLVM adapters are qualified; Rust migration and final native
+qualification remain.
 
 ## Accepted contract (chronium, 2026-10-26)
 
@@ -132,6 +132,36 @@ Lua 5.5.1, Lua 5.1/LPeg/luv, libuv/relay and all selected sbase tools build/link
 No native hardware, injected I/O/short-write fault or teardown heap-leak proof is
 claimed. Existing append debts remain open until their remaining language and
 native scope is resolved.
+
+## Language adapters
+
+Go's pinned syscall/runtime adapter uses APPEND for `O_APPEND`, inherited FILE
+output, diagnostics and crash-output targets. Empty ordinary writes preserve the
+cursor; `Pwrite` remains positioned. The runtime retains its allocation-free
+serialized output buffer and nosplit path. Required-support CREATE or a held-FILE
+zero probe refuses unsupported backing before create/truncate.
+
+LLVM Support accepts `OF_Append` through the native-FILE libc route. Its upstream
+Unix compatibility rule selects create-or-open without truncation, even with
+CreateAlways/CreateNew. `raw_fd_ostream::pwrite` uses real positioned I/O, including
+buffered and multi-operation patches; seeking around an ordinary write would
+append instead. Staged VirtualOutput still refuses append because it publishes
+by replacement. AtomicLineLogger retains its explicit refusal: arbitrary-length
+whole-line atomicity exceeds the native operation contract. The PID-based
+coverage-output refusal is independent and remains.
+
+The Go prefix and affected Git/Caddy consumers were rebuilt with the existing
+bootstrap. QEMU checks passed for Go on RAM/npfs/FAT32, concurrent writers,
+inherited/runtime/crash output and HOST refusal; Git init also passed. Caddy was
+built/linked but not run: its ordinary bundle requires TCP authority absent from
+this fixture. LLVM's 55-archive development prefix and direct Support qualifier
+build/link; QEMU covers RAM/npfs/FAT32 and HOST admission, append disposition,
+positioned overwrite, buffered patches and multi-operation patches. No native
+language-adapter result is claimed.
+
+The Go fork pin changes require rebuilding affected Go prefixes and programs.
+The LLVM pin changes require rebuilding hosted Clang/LLD/clangd payloads and the
+LLVM development prefix. The cross-compiler/container pin stays unchanged.
 
 ## Ordered tasks
 
