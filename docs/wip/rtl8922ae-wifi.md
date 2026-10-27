@@ -357,17 +357,12 @@ prepares all supported messages masked and enables only message zero. BAR
 sizing, insufficient BAR2 extent, mapping, MSI layout/programming and command
 readback failures have separate status details. Extended Message Data Enable
 is cleared and checked; the message uses only the programmed 16-bit data.
-Download-mode DMAC failure detail identifies the substep, register, observed
-value, mask and expected bits before checked stop resets the device. Quota
-failures retain the actual readback; readiness failures snapshot the register
-when the wait fails, rather than claiming it was the final polling sample.
-This reporting leaves programming order, checks and deadlines unchanged.
-The DMAC clock RMW accepts its observed all-ones pre-read and uses bounded
-WDE/PLE functional readiness instead of a sentinel post-read check
-(chronium, 2026-10-22). The DCPU platform RMW at `0x0888` accepts the observed
-`0xdeadbeef` value for that access only: successful Linux startup performs the
-same RMW. Every other sentinel check, quota and deadline remains. This does not
-establish the undocumented meaning of either register's read value.
+Download-mode readiness failures retain the substep, register, sampled value,
+mask and expected condition before stop. Ordinary RMW, ring/quota programming,
+and table writes follow the pinned reference without value whitelists or
+blanket write/read equality. `0x8404`, `0x0888` and `0x9c94` no longer need
+individual exceptions to a generic refusal rule. This does not establish the
+undocumented meaning of their read values.
 
 VFIO and three native warm-reboot cohorts confirm firmware 0.35.80.3
 initialization, live board observations and completed MAC-off/FLR. The trace
@@ -377,18 +372,25 @@ regulatory permission. The independent native wired controls complete without
 a material regression in this run. See the
 [qualification record](../development/experiments/rtl8922ae-firmware-first.md#native-warm-reboot-qualification-2026-10-23).
 
-Two deliberate differences from the Linux reference remain: power-on requires
-MAC state zero, whereas Linux rejects only active state one and its wrapper
-powers off/retries after failure (`mac.c:1484–1488,1517–1527`). This first cut
-keeps its one-attempt policy, so other inherited states refuse startup. After
-the off handshake and scoreboard write, it additionally polls for MAC state
-zero; Linux's power-off sequence does not make that final observation. A
-timeout therefore reports an unconfirmed MAC stop even if the subsequent PCI
-reset succeeds. If both startup and shutdown fail, status retains the startup
-failure detail; independent completed-action bits show which stop steps
-confirmed. The unobserved initial-state and failure cases remain limits despite
-the successful native warm-reboot profile. Stage 2 remains incomplete until
-separately authorized scan work and qualification are delivered.
+Register access and readiness checks follow pinned rtw89 predicates
+(chronium, 2026-10-27). Power-on rejects active WLMAC state one, not every
+nonzero state. Power-off uses the reference handshakes without a final
+`0x03f0 == 0` requirement. DMA pre-deinit posts the reference sequence; terminal
+PCI reset supplies the DMA-halt proof. Request cancellation, rfkill, outer
+budgets and backing retention remain native lifetime constraints. The
+power-off/retry wrapper is still deferred under the one-attempt policy.
+
+The exceptions protect specific admitted hardware effects: PCI/MSI/DMA
+ownership and bounds, suppression of autonomous packet TX, factory-board input
+validity without defaults, and the numeric SAR/regulatory ceiling with its
+force/additive bypass controls. They are not general register-integrity tests.
+Broad by-rate, reference, shape, TSSI and MACID equality checks are removed;
+only enforcement fields are checked before and after TX-capable RFK. RFK
+reports use the latest completion as in Linux, and semantic helper failures do
+not skip later reference-ordered helpers while native safety gates hold.
+Qualification still records failure if any required RFK helper failed; an
+attempt is never described as verified calibration merely because writes ran.
+See the [register audit and native limit](../development/experiments/rtl8922ae-phy-init.md#register-refusal-audit-2026-10-27).
 
 ### Qualification and next review point
 

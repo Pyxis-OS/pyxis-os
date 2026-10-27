@@ -229,11 +229,63 @@ and helper. GDB still observes no attempt and zero PHY facts. Sources/logs:
 `prefix-current-20261027/` and `ci-20261027/` under the same evidence root.
 There is no new timing or hardware-performance claim.
 
-The next native image is a private MAC-only diagnostic derived from that
-rebased source. It retains native platform/SAR/rfkill admission and returns
-only after publishing MAC_CONFIGURED, before BB/RF tables, channel tuning,
-power programming or RFK. It must not merge or masquerade as a successful
-PHY/scan result. The packet checks the running kernel identity before its
-sole request, as well as the archive marker and sealed payload hashes.
-Qualification still requires the orchestrator's separately scheduled run;
-the successful Linux comparator is not a Pyxis hardware result.
+The private MAC-only probe `09a397b5a501` retained native admission and a
+return after MAC_CONFIGURED, before downstream BB/radio/channel/power/RFK.
+The native attempt verified that running identity before and after its one
+request, but failed earlier at the initial power-state guard. It did not
+qualify MAC completion.
+
+### Register refusal audit (2026-10-27)
+
+The native probe reported PHY state `0x20` (STOP_UNCERTAIN), boot state `0x19`
+(ATTEMPTED, MAC_OFF, PCI_STOP), and OUTCOME_UNKNOWN/status 27. Firmware readiness
+and PRE_DEINIT were absent. The raw `0x03f0` value was not retained, so this
+cannot distinguish a nonzero inherited state from an inaccessible read. No
+firmware download or downstream host RFK was reached. The sealed firmware has
+no optional AFE element; cleanup still performed power-off/analog operations.
+This is not evidence of physical RF silence. The orchestrator verified menu
+restoration and booted the standard default afterward. That attempt is frozen.
+
+**Direction (chronium, 2026-10-27):** remove register refusals that the pinned
+Linux path does not make, except checks protecting an identified hardware or
+native-authority hazard. Audited all RTL8922AE hardware/transport, MAC/PHY,
+power/RFK and supervisor paths against Linux v6.18 commit
+`7d0a66e4bb9081d75c82ec4957c50034cb0ea449`; the hash-checked reference archive is
+recorded in [firmware provenance](../../../firmware/rtl8922ae/UPSTREAM.md).
+Linux paths below are relative to `drivers/net/wireless/realtek/rtw89/`.
+
+| Register or group | Added refusal | Reference behavior and disposition |
+| --- | --- | --- |
+| Ordinary 8/16/32-bit RMW and MAC/table writes | Sentinel-value or write-equality rejection | `core.h` write helpers post the operation; remove blanket checks and infallible boolean wrappers. |
+| `0x03f0` WLMAC admission | Require state zero | `mac.c:1484–1488` rejects active state one only; match it. |
+| `0x03f0` after MAC-off | Extra state-zero poll | `rtw8922a.c:413–500` uses off handshakes, no final state-zero poll; remove. |
+| `0xb030`/`0xb050`, `0xb200`/`0xb300` ring groups | Count/base equality | `pci.c` ring initialization writes without equality; remove. DMA address/index bounds remain. |
+| `0xb000` pre-deinit | Stop-master equality poll | `pci_be.c:392–406` posts stop/index updates without that poll; remove. PCI reset remains mandatory. |
+| `0xb01c` DMA idle | Extra busy bits 15/31; combined 1 ms | `pci_be.c:185–201` checks TX channels then RX, 1 ms each; match masks and separate waits. |
+| Shared completion polling | Early timeout refusal before the final sample | Linux `include/linux/iopoll.h` samples the condition at expiry; match, with native request/cancellation limits retained and a 1 µs default poll interval. |
+| `0x8404`, `0x0888` | Sentinel exceptions | Plain reference RMW, with functional WDE/PLE and firmware waits; remove value classification. |
+| WDE/PLE quota groups | Min/max equality | `mac_be.c:298–334` writes quotas without comparison; remove. Keep WDE/PLE-ready waits. |
+| `0x0270` XTAL | Post-read sentinel and crystal XI/XO equality | Reference checks serial completion, not XI/XO equality; remove added refusals and warning-only caller aborts. |
+| `0x9c94` and MAC enable words | Extra enable/readback equality | Reference ordinary writes/software-state checks; no hardware enable equality. |
+| `0x7164` PHY mailbox | Require bit 0 within 1 ms | `fw.c:6965–6987`, `fw.h:117`: any nonzero byte within 1 s; match. |
+| `0x0068` eFuse-state conversion | Extra idle readback; abort on converter return | `efuse_be.c:143–192`, `mac.c:2950–2992`: idle write only; dump/PHY-cap callers ignore converter return. Match. |
+| RF table, crystal and PLL callers | Abort outer initialization on ignored helper results | Reference warning-only/void callers continue; match, retaining native cancellation and actual DMA/transport failure gates. |
+| RFK reports/acknowledgments | Global DONE_ACK refusal, duplicate equality, START suppression | Reference assigns latest RFK report/completes; unrelated ack errors do not globally fail RFK. Match, preserving buffer bounds and truthful success facts. |
+| RFK timeout/non-OK | Skip remaining helpers | `phy.c:3631–3659` checks helper completion; `rtw8922a.c` continues callers. Continue reference order, retain actual failures for qualification. |
+| Broad power image | By-rate/reference/shape/TSSI/MACID identity comparisons | `phy_be.c`/`rtw8922a.c` write without those comparisons; remove. |
+
+Retained exceptions are narrow: exact PCI/BAR/MSI and DMA ownership protect
+mapped memory and interrupt delivery; scheduler/ACK/BA/null/CTS gates prevent
+forbidden autonomous TX. SAR/normal/RU cap pages and force/additive selectors
+protect the admitted RF envelope during TX-capable calibration (`reg.h`
+TX-power fields, `phy_be.c` power-limit writers, `fw.c` RFK command semantics).
+Unrelated power-selector bit 16 is no longer compared. Factory eFuse validity,
+real board/antenna capabilities and malformed/unknown regulatory/SAR inputs
+remain admission requirements without invented defaults. These exceptions are
+native policy and safety checks, not claims that Linux validates register
+identity. Complete per-register/callsite inventories and source evidence are
+under `/shared/present/rtl8922ae-readback-audit/`.
+
+No new native or VFIO run accompanies this audit. The consumed MAC-only packet
+is unchanged; a fresh packet and scheduled native check are required before
+claiming MAC completion or proceeding to full PHY/RFK.
