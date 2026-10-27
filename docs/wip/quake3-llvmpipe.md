@@ -6,8 +6,7 @@ OpenArena and local corresponding-source publication. The
 records an attended Vela timedemo and listening observation; broader native/audio
 qualification and public recipient access remain separate. The JIT grant is
 implemented; the LLVM adapter is merged and QEMU-qualified in pyxis-llvm #20
-and Pyxis #1523. llvmpipe implementation is assigned, with the CPU-query authority
-choice below still pending.
+and Pyxis #1523. llvmpipe implementation is assigned, with the startup CPU-count prerequisite described below.
 Remaining direction and decisions follow. The
 softpipe delivery is in the [0.0.9 release notes](../releases.md#009-2026-10-25);
 llvmpipe follows the JIT grant and its LLVM library adapter. Its sources are
@@ -108,40 +107,38 @@ worker selection), `lp_limits.h:69` (pool bound),
 The existing Pyxis profile's unavailable physical-memory queries and disabled
 disk shader cache remain unavailable; do not advertise invented memory facts.
 
-### Decision 4 — CPU-count observation (proposed)
+### Decision 4 — usable CPU count at startup (accepted, chronium, 2026-10-27)
 
-The current non-POSIX Pyxis path in Mesa reports its one-CPU fallback, which
-makes the default worker count zero. CPUID topology cannot identify which CPUs
-Pyxis brought online or which CPUs a space permits. Startup, THREAD and SPACE
-currently expose no CPU-count/affinity observation. The existing accurate query
-is `SYSTEM_INFO_CPU.online_count`, under the explicitly held `system_info/read`
-capability. That right also exposes the other global hardware/system inventory;
-it is not a CPU-only right. The affected bundle manifests do not declare it,
-and bundle launch withholds undeclared native resources.
+Every process receives its usable logical CPU count in kernel-prepared,
+read-only startup metadata, like its arguments and environment. The count is
+from the process/space CPU allowance, not global hardware inventory or CPUID
+topology. It requires no grant. No `system_info` declaration or ambient
+inventory query is added to Mesa consumers.
 
-**Recommended default:** add optional `system_info/read` declarations to the
-same authorized Mesa consumer bundles. Implement reusable libc
-`sysconf(_SC_NPROCESSORS_ONLN)` through that already-held resource, without an
-ambient acquisition or query. Mesa's Pyxis platform branch consumes the result,
-leaving its worker selection unchanged. The query reports online logical CPUs,
-not physical cores or the space's affinity allowance. Do not invent a
-`_SC_NPROCESSORS_CONF` result from a count that reports only online CPUs.
-If the resource is absent or the query fails, libc returns an explicit error;
-Mesa retains its existing one-CPU fallback. The qualification launches supply
-the resource and record both the detected count and actual CPU allowance.
+Append a `uint64_t usable_cpu_count` to `startup_info` (offset 72, total size
+80 bytes). Existing field offsets stay unchanged. This is a startup ABI addition;
+`STARTUP_VERSION` remains 1 under the development ABI's in-place-change policy,
+without a compatibility reader or a new ABI identity. Kernel startup construction
+and matching SDK/runtime consumers are rebuilt together. The count describes the
+allowance at process startup; children receive their own kernel-prepared value.
 
-This broadens observational authority, so it needs chronium's decision before
-implementation. The narrower alternative is a new process/space CPU-observation
-interface, followed by its libc adapter; that requires kernel/ABI design rather
-than merely a Mesa platform branch. Do not silently supply the broader grant,
-pretend the fallback is the real count, or infer OS state from CPUID.
+Expose the count through libpyxis startup access and libc
+`sysconf(_SC_NPROCESSORS_ONLN)` / `_SC_NPROCESSORS_CONF` for Pyxis's boot-fixed
+usable CPU population. These do not reveal a global configured CPU count.
+Rust `available_parallelism`, C++ `std::thread::hardware_concurrency` and Go's
+startup CPU count consume the same fact. Go retains its explicit `GOMAXPROCS`
+override, but ordinary experiments no longer need to set it by hand.
 
-Source basis: `include/abi/system_info.h` and
-[system information](../interfaces/system-information.md#queries-and-meaning);
-`userspace/lib/bundle_launch.c` `prepare_context` filters nondeclared native
-resources; `include/abi/startup.h`, `thread.h` and `space.h` expose no existing
-local count getter. This is the next just-in-time decision, separate from the
-three accepted runtime-profile decisions.
+C++ already has an upstream `sysconf(_SC_NPROCESSORS_ONLN)` branch: rebuild its
+runtime archive against the updated SDK header rather than patch LLVM or move
+the compiler pin. Rebuild libc/libpyxis/startup clients, Rust's target standard
+library, and Go's target runtime/programs (including its raw startup layout).
+Update the runtime source pins and dependent consumers as needed for qualification;
+no compiler-container rebuild is required for this startup/libc change.
+
+Mesa's Pyxis platform CPU-count input uses the standard libc result. Its worker
+selection and upstream cap stay unchanged. Qualify distinct CPU allowances so a
+one-CPU process in a four-CPU guest reports one, not four.
 
 ### Delivery and qualification
 
