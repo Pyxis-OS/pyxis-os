@@ -126,6 +126,13 @@
   kernel/mm. Place new files with their subsystem rather than growing a flat
   kernel directory. Early initialization and fault reporting cannot use the heap.
   Do not link kernel or target userspace against host libc; host tools are native.
+- Drivers make no assumptions about hardware beyond what its specification or
+  the reference driver (Linux or the vendor's) relies on. Do not silently depend
+  on properties the tested machines happen to share, such as alignment, address
+  ranges, legacy devices or firmware defaults. Do not add strictness of our own
+  either: check what the reference driver checks, plus any check that guards a
+  documented hardware hazard; no write-then-readback equality checks, refusals on
+  unexpected values or warnings turned into aborts.
 - Physical addresses are not C pointers. Keep ownership, overflow checks and
   failure unwinding explicit. BSP-owned allocation and VM mutation
   (docs/kernel/smp.md, docs/kernel/memory.md) is being removed: it is an interim
