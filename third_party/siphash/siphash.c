@@ -65,8 +65,8 @@
         v2 = ROTL(v2, 32);                                                     \
     } while (0)
 
-#ifdef DEBUG
-#error "The kernel SipHash import does not support hosted debug output"_SIPHASH
+#ifdef DEBUG_SIPHASH
+#error "The kernel SipHash import does not support hosted debug output"
 #include <stdio.h>
 
 #define TRACE                                                                  \
