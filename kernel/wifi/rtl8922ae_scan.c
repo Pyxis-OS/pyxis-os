@@ -4,6 +4,7 @@
  * 7d0a66e4bb9081d75c82ec4957c50034cb0ea449; BSD alternative.
  * Complete notice: kernel/wifi/NOTICE.
  */
+#include <kernel/format.h>
 #include <kernel/memory.h>
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_scan.h"
@@ -101,9 +102,10 @@
 static struct {
   bool ready, running, ended, end_ok, fault, uncertain;
   bool waiting, acked, ack_ok;
-  uint8_t wait_function, channel;
+  uint8_t wait_function, channel, ack_return, ack_sequence;
   uint8_t cam[CAM_COMMAND_BYTES];
 } scan;
+static char ack_detail[WIFI_DETAIL_BYTES];
 
 static uint32_t get32(const uint8_t *bytes)
 {
@@ -160,7 +162,9 @@ bool rtl8922ae_scan_receive(const void *data, size_t bytes)
     unsigned ack_function = ack >> 8 & 255u;
     if (ack_category != H2C_CATEGORY_MAC || ack_class != H2C_CLASS_OFFLOAD ||
         !scan.waiting || ack_function != scan.wait_function) return true;
-    scan.ack_ok = !(ack >> 16 & C2H_SCAN_RETURN_MASK);
+    scan.ack_return = ack >> 16;
+    scan.ack_sequence = ack >> 24;
+    scan.ack_ok = !(scan.ack_return & C2H_SCAN_RETURN_MASK);
     if (!scan.ack_ok) scan.uncertain = true;
     scan.acked = true;
   } else if (class_id == C2H_CLASS_OFFLOAD && function == C2H_SCAN_REPORT) {
@@ -204,10 +208,15 @@ static bool acknowledged_command(uint8_t function, const void *payload, size_t b
 {
   scan.wait_function = function;
   scan.acked = false;
+  scan.ack_return = 0;
+  scan.ack_sequence = 0;
   scan.waiting = true;
-  uint64_t local = rtl8922ae_deadline(deadline, FIRMWARE_WAIT_NS);
   bool submitted = rtl8922ae_transport_h2c(H2C_CATEGORY_MAC, H2C_CLASS_OFFLOAD,
-      function, true, true, payload, bytes, NULL, local, detail);
+      function, true, true, payload, bytes, NULL, deadline, detail);
+  /* Like the reference, install the condition before TX, then give the
+   * completion its 100 ms window after TX returns. Native TX also retires
+   * its borrowed DMA slot; that must not consume the completion window. */
+  uint64_t local = rtl8922ae_deadline(deadline, FIRMWARE_WAIT_NS);
   bool transport_ok = submitted;
   if (submitted) {
     do {
@@ -222,9 +231,20 @@ static bool acknowledged_command(uint8_t function, const void *payload, size_t b
   if (!transport_ok || !scan.acked || !scan.ack_ok) {
     scan.uncertain = true;
     if (!submitted) return false;
-    return fail(detail, function == H2C_ADD_SCAN_CHANNEL ?
-        "RTL8922AE scan channel ACK failed/timed out" :
-        "RTL8922AE scan START ACK failed/timed out");
+    const char *step = function == H2C_ADD_SCAN_CHANNEL ? "ADD" : "START";
+    if (scan.fault) {
+      sprintf(ack_detail, "RTL scan %s malformed C2H while awaiting DONE_ACK", step);
+    } else if (!transport_ok) {
+      sprintf(ack_detail, "RTL scan %s transport failed while awaiting DONE_ACK", step);
+    } else if (scan.acked) {
+      sprintf(ack_detail, "RTL scan %s DONE_ACK rejected raw=%02x code=%02x seq=%u",
+          step, (unsigned)scan.ack_return,
+          (unsigned)(scan.ack_return & C2H_SCAN_RETURN_MASK), (unsigned)scan.ack_sequence);
+    } else {
+      sprintf(ack_detail, "RTL scan %s DONE_ACK %s", step,
+          rtl8922ae_operation_continue() ? "timeout" : "interrupted");
+    }
+    return fail(detail, ack_detail);
   }
   return true;
 }
@@ -328,6 +348,9 @@ static void scan_configuration(uint8_t payload[SCAN_CONFIG_BYTES], unsigned oper
   put32(payload + 12, SCAN_PACKET_NONE << 24);
   put32(payload + 16, SCAN_PACKET_NONE | SCAN_PACKET_NONE << 8);
   put32(payload + 20, SCAN_MLO_2_PLUS_0_1RF);
+  /* Reference scan_get_6g_disabled_chan: this profile exposes no 6 GHz band. */
+  put32(payload + 24, ALL_WORD_BITS);
+  put32(payload + 28, ALL_WORD_BITS);
   put32(payload + 36, SCAN_CONFIG_BYTES / 4 | SCAN_MACC_ROLE_WORDS << 8 |
       SCAN_OP_CHANNEL_WORDS << 16);
 }
