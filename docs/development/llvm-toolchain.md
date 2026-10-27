@@ -37,7 +37,7 @@ how applications use it.
     signature help that parse the whole file without a preamble. Clang and LLD
     stay threads off.
 - **The pin:** `toolchain/build.sh` fetches one commit shallowly, currently
-  `3d69e83c443e`. The SDK builds its [C++ runtime](sdk.md#c) from the same
+  `8a4d001d5480`. The SDK builds its [C++ runtime](sdk.md#c) from the same
   commit. Moving to a new LLVM release is a rebase onto its tag in a new
   `pyxis-VERSION` branch. Hosted tool sources have their own pin in
   `toolchain/build-hosted.sh`; hosted-only changes do not move the compiler pin.

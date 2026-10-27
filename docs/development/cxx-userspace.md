@@ -46,7 +46,9 @@ in the [SDK's C++ section](sdk.md#c). The accepted
 
 ## Decisions
 
-Accepted by the owner on 2026-10-08, after the probe:
+Original gate-7 decisions accepted on 2026-10-08, after the probe. The feature
+profile below records that gate, not the current SDK; streams, locale, wide
+characters, threads and random_device were enabled by later milestones.
 
 1. **Where the runtime is built: in the SDK build.** It uses the fork commit
    the installed toolchain records, so the libc++ headers always match the
@@ -73,6 +75,14 @@ Choices made while implementing:
   spuriously.
 - **fmt follows libc++'s feature macros.** Two patches turn off its locale
   support and leave out one `std::wstring` helper.
+
+The C++ filesystem milestone enables the native `<filesystem>` subset described
+in the [SDK](sdk.md#c). Its path parser treats `scheme://` as one root component,
+preserves bytes, and refuses leading `/` when performing I/O. Metadata and
+directory operations use only native held roots; a provider URI does not issue
+a request through `status` or iteration. Unsupported metadata setters,
+symlinks, free-space reporting and metadata-preserving `copy_file` report an
+error. The native FILE-backed `<fstream>` round trip is checked in QEMU.
 
 The hosted-Clang [task 2](hosted-tools.md#delivery)
 extends the fork with a real C-only locale, streams, wide UTF-8/FILE facilities

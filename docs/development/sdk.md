@@ -189,7 +189,8 @@ include path so `-MMD` tracks them.
 | --- | --- |
 | Exceptions, RTTI, static constructors/destructors, local statics, executable-only `thread_local`, joinable and detached threads (`std::thread::detach`), `std::async` workers on detached siblings and synchronization; exiting with live workers skips orderly finalization ([threads](../userland/threads.md#creation-and-collection)) | Non-lock-free compiler atomic helpers |
 | Containers, algorithms, strings, `<format>`, `<print>`, `<charconv>`, streams, C-only locale, wide facilities | Non-C locales |
-| `system_clock`, `steady_clock`, native `random_device` | `<filesystem>`, time zones |
+| Native `<filesystem>` path parsing, status, directory iteration, create/remove, rename, resize, counted recursive operations, hard links where supported, `canonical` and valid metadata reads | Provider-backed filesystem operations, `copy_file` until metadata preservation exists, symlinks, permission/time setters and free-space reporting |
+| `system_clock`, `steady_clock`, native `random_device` | Time zones |
 | Aligned `new` up to 4096 bytes | Most of `<cmath>`, which follows libc's [math subset](../kernel/userspace.md#foundational-libc) |
 
 The matching gate 7 compiler adopts the hosted-Clang
