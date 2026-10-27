@@ -46,8 +46,8 @@ consumers use `find_package(SDL2OSMesa CONFIG REQUIRED)` and the static target
 `SDL2::SDL2-osmesa-static`, carrying Mesa's real C++ closure. Building the SDL
 recipe requires the Mesa development prefix; `make image` builds both profiles
 but puts no GL application in the archive. Host dependencies include Mesa's
-Meson/Ninja, Mako/PyYAML/packaging, flex and bison; no compiler rebuild or pin
-change is required.
+Meson/Ninja, Mako/PyYAML/packaging, flex and bison. The compiler container supplies
+Mesa's matching target LLVM libraries; ordinary SDL/image builds do not build LLVM.
 
 SDL's ordinary double-buffer default creates independent GL front/back
 attachments. `glDrawBuffer(GL_BACK)` works; `SDL_GL_SwapWindow` finishes rendering,
@@ -57,7 +57,9 @@ are undefined. Front-only requests also work. Attributes report the current GL
 context and actual buffers. Static library loading accepts only NULL/empty paths;
 procedure lookup uses `OSMesaGetProcAddress`. Multisample, stereo, ES, unsupported
 context flags/precision and nonzero swap intervals fail explicitly. There is no
-vblank feedback, GPU or JIT; softpipe is not formally GL-conformance qualified.
+vblank feedback or GPU. Mesa selects llvmpipe when optional JIT authority is
+available and softpipe otherwise; neither profile is formally GL-conformance
+qualified.
 
 One native window covers the space. GL window dimensions are the app-selected
 logical canvas, including fullscreen requests; output resize preserves that
