@@ -1,5 +1,5 @@
 #!/bin/bash
-# Opt-in target libraries and a host configuration tool; not a compiler rebuild.
+# Native target libraries and a host config tool, shared with the container build.
 set -euo pipefail
 export LC_ALL=C
 

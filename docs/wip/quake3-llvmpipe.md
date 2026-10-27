@@ -513,9 +513,11 @@ remain unqualified, and no guard is weakened.
 
 Implemented [producer/interfaces/limits](../development/llvm-development.md)
 and [qualification](../development/experiments/llvm-development.md). The
-development-only source pin is separate from hosted Clang and the installed
-compiler; no container rebuild is needed. Luna builds published output,
-chronium publishes it.
+native-library producer can run independently. For llvmpipe delivery, accepted
+(chronium, 2026-10-27): the compiler container builds these target libraries from
+the same pin as the compiler, using a disposable SDK from a fixed published
+snapshot. Normal image/CI builds consume that prefix and never build LLVM.
+Luna builds the container; chronium publishes it. Hosted Clang remains separate.
 
 Accepted (chronium, 2026-10-23): narrow LLVM-fork portability changes on that
 separate pin, explicitly refusing unsupported FD-based ORC remote execution

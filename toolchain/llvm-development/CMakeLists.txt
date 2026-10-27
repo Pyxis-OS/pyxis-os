@@ -1,4 +1,4 @@
-# Part of the opt-in target LLVM development build, not the compiler container.
+# Target LLVM closure built into the compiler container and by the manual producer.
 # CMake's legacy engine alias adds the removed LLVMjit archive. Name the
 # concrete libraries used by the config-tool's engine group instead.
 set(LLVM_LINK_COMPONENTS
