@@ -28,6 +28,7 @@
 #define RTL_BD_BYTES 8u
 #define RTL_RX_BYTES 11498u
 #define RTL_RX_STRIDE 11520u
+#define RTL_RX_DRAIN_BUDGET 32u
 #define RTL_DATA_WD_BYTES (512u * 128u)
 #define RTL_COMMAND_DESCRIPTOR 24u
 #define RTL_COMMAND_STRIDE 2048u
@@ -110,6 +111,7 @@
 #define R_SECURE_MALLOC 0x0184u
 #define RTL_SECURE_MALLOC 0x20248000u
 #define RTL_PACKET_H2C 13u
+#define RTL_PACKET_WIFI 0u
 #define RTL_PACKET_C2H 10u
 #define RTL_PACKET_DOWNLOAD 14u
 #define RTL_H2C_HEADER_BYTES 8u
@@ -249,23 +251,30 @@ void rtl8922ae_transport_interrupt(void)
   rtl8922ae_write32(R_PCIE_STATUS, cause);
 }
 
-/* Firmware startup can produce unsolicited C2H/diagnostic packets. Validate
- * their bounded envelopes and return every buffer; this slice consumes no RF
- * results and exposes no borrowed DMA storage. */
-static void drain_receive(void)
+static bool receive_producers(unsigned producers[RTL_RX_QUEUES])
+{
+  for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
+    uint32_t indices = rtl8922ae_read32(R_RX_INDEX + queue * 4);
+    producers[queue] = (indices >> 16) & B_RING_DEVICE_INDEX;
+    if (producers[queue] >= RTL_RING_ENTRIES) {
+      transport.fault = true;
+      return false;
+    }
+  }
+  return true;
+}
+
+/* Never consume past these endpoints, including when a delayed completion tag
+ * requires another worker step. Each ring keeps its normal per-step budget. */
+static void drain_receive_to(const unsigned producers[RTL_RX_QUEUES])
 {
   if (!transport.active || transport.fault) {
     return;
   }
   for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
-    uint32_t indices = rtl8922ae_read32(R_RX_INDEX + queue * 4);
-    if (((indices >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES) {
-      transport.fault = true;
-      return;
-    }
-    unsigned pending = (((indices >> 16) & B_RING_DEVICE_INDEX) + RTL_RING_ENTRIES - transport.rx_read[queue]) %
-      RTL_RING_ENTRIES;
-    for (unsigned i = 0; i < pending && i < 32; ++i) {
+    unsigned pending = (producers[queue] + RTL_RING_ENTRIES - transport.rx_read[queue]) %
+        RTL_RING_ENTRIES;
+    for (unsigned i = 0; i < pending && i < RTL_RX_DRAIN_BUDGET; ++i) {
       unsigned slot = transport.rx_read[queue];
       uint8_t *buffer = (void *)(transport.receive.address +
           (queue * RTL_RING_ENTRIES + slot) * RTL_RX_STRIDE);
@@ -301,6 +310,8 @@ static void drain_receive(void)
           transport.fault = true;
           return;
         }
+      } else if (((descriptor >> RTL_RX_PACKET_TYPE_SHIFT) & RTL_RX_PACKET_TYPE_MASK) == RTL_PACKET_WIFI) {
+        rtl8922ae_runtime_frame(buffer + 4, offset - 4, buffer + offset, payload);
       } else {
         ++transport.dropped;
       }
@@ -319,6 +330,17 @@ static void drain_receive(void)
     enable_interrupts();
   }
   cpu_restore_interrupts(flags);
+}
+
+static void drain_receive(void)
+{
+  if (!transport.active || transport.fault) {
+    return;
+  }
+  unsigned producers[RTL_RX_QUEUES];
+  if (receive_producers(producers)) {
+    drain_receive_to(producers);
+  }
 }
 
 bool rtl8922ae_sleep(uint64_t interval, uint64_t deadline)
@@ -348,6 +370,40 @@ bool rtl8922ae_transport_poll(void)
   }
   drain_receive();
   return !transport.fault;
+}
+
+bool rtl8922ae_transport_retire_receive(uint64_t deadline, const char **detail)
+{
+  KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
+  *detail = "RTL8922AE RX retirement unavailable";
+  if (!transport.active || transport.fault || transport.stopping || task_deadline_expired(deadline)) {
+    return false;
+  }
+  unsigned producers[RTL_RX_QUEUES];
+  if (!receive_producers(producers)) {
+    return false;
+  }
+  for (;;) {
+    drain_receive_to(producers);
+    if (transport.fault) {
+      *detail = "RTL8922AE RX retirement transport failed";
+      return false;
+    }
+    bool retired = true;
+    for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
+      retired &= transport.rx_read[queue] == producers[queue];
+    }
+    if (retired) {
+      return true;
+    }
+    if (task_deadline_expired(deadline)) {
+      *detail = "RTL8922AE RX retirement timed out";
+      return false;
+    }
+    /* rtl8922ae_sleep also drains moving producers, which could pass a fixed
+     * endpoint. Cleanup instead waits directly, independent of cancellation. */
+    kernel_task_sleep_until(rtl8922ae_deadline(deadline, RTL_POLL_NS));
+  }
 }
 
 bool rtl8922ae_poll32_observe(unsigned offset, uint32_t mask, uint32_t expected,

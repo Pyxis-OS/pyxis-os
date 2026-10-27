@@ -25,9 +25,20 @@ bool rtl8922ae_transport_h2c(uint8_t category, uint8_t class_id, uint8_t functio
     bool receive_ack, bool done_ack, const void *payload, size_t bytes,
     uint8_t *sequence, uint64_t deadline, const char **detail);
 bool rtl8922ae_transport_poll(void);
+/* Sole worker, IF=1. Drain only through one producer snapshot per ring, with
+ * ordinary poll budgets and the supplied cleanup deadline. Does not follow
+ * later arrivals or consult the operation cancellation gate. The caller owns
+ * collection admission; failures retain every DMA buffer and mapping. */
+bool rtl8922ae_transport_retire_receive(uint64_t deadline, const char **detail);
 /* Direct worker-only delivery of a checked complete C2H envelope. Borrowed DMA
- * storage is valid only for this call; false latches a transport fault. */
+ * storage is valid only for this call; false latches a transport fault.
+ * Neither RX callback may poll, sleep or reenter delivery. */
 bool rtl8922ae_runtime_receive(const void *data, size_t bytes);
+/* Ordinary BE RX only, after envelope validation. Descriptor spans RXD and
+ * inline metadata up to frame; frame retains its FCS. Both spans are borrowed
+ * only for this call. */
+void rtl8922ae_runtime_frame(const uint8_t *descriptor, size_t descriptor_bytes,
+    const uint8_t *frame, size_t frame_bytes);
 bool rtl8922ae_transport_stop(uint64_t deadline, const char **detail);
 void rtl8922ae_transport_interrupt(void);
 void rtl8922ae_transport_status(struct wifi_status_reply *status);
