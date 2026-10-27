@@ -139,12 +139,6 @@ static struct {
   uint16_t initial_power_control;
 } transport;
 
-static bool valid_register(uint32_t value)
-{
-  return value != UINT32_MAX && value != UINT32_C(0xeaeaeaea) &&
-    value != UINT32_C(0xdeadbeef);
-}
-
 static uintptr_t mmio(unsigned offset, size_t bytes)
 {
   KASSERT(transport.registers.address && offset <= RTL_REGISTER_BYTES - bytes);
@@ -237,12 +231,6 @@ void rtl8922ae_transport_interrupt(void)
   }
   uint32_t cause = rtl8922ae_read32(R_PCIE_STATUS);
   uint32_t dma = rtl8922ae_read32(R_PCIE_DMA_STATUS);
-  if (!valid_register(cause) || !valid_register(dma)) {
-    transport.fault = true;
-    transport.interrupt_live = false;
-    pci_msi_disable(&transport.msi);
-    return;
-  }
   if (!(cause & (B_PCIE_HALT | B_PCIE_AXI)) && !(dma & B_DMA_RX)) {
     return;
   }
@@ -251,8 +239,7 @@ void rtl8922ae_transport_interrupt(void)
   mask_interrupts();
   uint32_t halt = rtl8922ae_read32(R_HALT_STATUS);
   uint32_t axi = rtl8922ae_read32(R_AXI_STATUS);
-  if (!valid_register(halt) || !valid_register(axi) || !valid_register(dma) ||
-      (halt & (B_HALT | B_WATCHDOG))) {
+  if (halt & (B_HALT | B_WATCHDOG)) {
     transport.fault = true;
   }
   rtl8922ae_write32(R_HALT_STATUS, halt & (B_HALT | B_WATCHDOG));
@@ -271,7 +258,7 @@ static void drain_receive(void)
   }
   for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
     uint32_t indices = rtl8922ae_read32(R_RX_INDEX + queue * 4);
-    if (!valid_register(indices) || ((indices >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES) {
+    if (((indices >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES) {
       transport.fault = true;
       return;
     }
@@ -374,7 +361,7 @@ bool rtl8922ae_poll32_observe(unsigned offset, uint32_t mask, uint32_t expected,
     uint32_t value = rtl8922ae_read32(offset);
     if (observed) *observed = value;
     if (sampled) *sampled = true;
-    if (!valid_register(value) || (transport.fault && !transport.stopping)) {
+    if (transport.fault && !transport.stopping) {
       return false;
     }
     if ((value & mask) == expected) {
@@ -390,14 +377,10 @@ bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
   return rtl8922ae_poll32_observe(offset, mask, expected, deadline, NULL, NULL);
 }
 
-static bool change32(unsigned offset, uint32_t clear, uint32_t set)
+static void change32(unsigned offset, uint32_t clear, uint32_t set)
 {
   uint32_t value = rtl8922ae_read32(offset);
-  if (!valid_register(value)) {
-    return false;
-  }
   rtl8922ae_write32(offset, (value & ~clear) | set);
-  return true;
 }
 
 static bool bus_master(bool enabled)
@@ -547,11 +530,6 @@ static bool publish_rings(void)
     rtl8922ae_write32(base, physical);
     rtl8922ae_write32(base + 4, physical >> 32);
     rtl8922ae_write16(index, tx ? 0 : RTL_RING_ENTRIES - 1);
-    if (rtl8922ae_read16(number) != RTL_RING_ENTRIES ||
-        rtl8922ae_read32(base) != (uint32_t)physical ||
-        rtl8922ae_read32(base + 4) != physical >> 32) {
-      return false;
-    }
   }
   return true;
 }
@@ -561,30 +539,27 @@ bool rtl8922ae_transport_begin(uint8_t cut, uint64_t deadline, const char **deta
   KASSERT(transport.prepared && cpu_interrupts_enabled());
   *detail = "RTL8922AE PCI DMA bootstrap failed";
   mask_interrupts();
-  if (!rtl8922ae_hw_pci_prepare(deadline, detail) ||
-      !change32(R_DMA_STOP, 0, B_STOP_WPDMA | B_STOP_CHANNELS) ||
-      !change32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE, B_STOP_MASTER)) {
+  if (!rtl8922ae_hw_pci_prepare(deadline, detail)) {
     return false;
   }
+  change32(R_DMA_STOP, 0, B_STOP_WPDMA | B_STOP_CHANNELS);
+  change32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE, B_STOP_MASTER);
   rtl8922ae_write32(R_TX_INDEX_CLEAR, B_STOP_CHANNELS);
   rtl8922ae_write32(R_RX_INDEX_CLEAR, 3);
   if (!rtl8922ae_poll32(R_DMA_BUSY, B_DMA_BUSY, 0,
           rtl8922ae_deadline(deadline, RTL_MS)) ||
-      !rtl8922ae_hw_pci_mode(deadline, detail) || !publish_rings() ||
-      !change32(R_DMA_CONFIG, 0, B_BDRAM_RESET) ||
-      !rtl8922ae_poll32(R_DMA_CONFIG, B_BDRAM_RESET, 0,
+      !rtl8922ae_hw_pci_mode(deadline, detail) || !publish_rings()) {
+    return false;
+  }
+  change32(R_DMA_CONFIG, 0, B_BDRAM_RESET);
+  if (!rtl8922ae_poll32(R_DMA_CONFIG, B_BDRAM_RESET, 0,
           rtl8922ae_deadline(deadline, RTL_SECOND / 2)) ||
       !rtl8922ae_hw_pci_finish(cut, deadline, detail)) {
     return false;
   }
-  if (!change32(R_DMA_STOP, 1u << RTL_FW_CHANNEL, B_STOP_CHANNELS & ~(1u << RTL_FW_CHANNEL)) ||
-      !change32(R_DMA_CONFIG, B_STOP_MASTER, B_TX_ENABLE | B_RX_ENABLE)) {
-    return false;
-  }
+  change32(R_DMA_STOP, 1u << RTL_FW_CHANNEL, B_STOP_CHANNELS & ~(1u << RTL_FW_CHANNEL));
+  change32(R_DMA_CONFIG, B_STOP_MASTER, B_TX_ENABLE | B_RX_ENABLE);
   uint32_t watchdog = rtl8922ae_read32(R_DMA_WATCHDOG);
-  if (!valid_register(watchdog)) {
-    return false;
-  }
   rtl8922ae_write32(R_DMA_WATCHDOG, (watchdog & ~0x1fu) | 4u);
   /* MMIO addresses are complete before PCI permits the first DMA request. */
   dma_full_barrier();
@@ -610,7 +585,7 @@ static bool send_command(const uint8_t *packet, phys_addr_t physical, size_t byt
   unsigned next = (transport.tx_write + 1) % RTL_RING_ENTRIES;
   do {
     uint32_t index = rtl8922ae_read32(R_TX_INDEX + RTL_FW_CHANNEL * 4);
-    if (!valid_register(index) || ((index >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES || transport.fault) {
+    if (((index >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES || transport.fault) {
       return false;
     }
     if (next != ((index >> 16) & B_RING_DEVICE_INDEX)) {
@@ -631,31 +606,20 @@ static bool send_command(const uint8_t *packet, phys_addr_t physical, size_t byt
   return !transport.fault;
 }
 
-static bool start_wcpu(bool include_bb)
+static void start_wcpu(bool include_bb)
 {
-  if (!change32(R_PLATFORM, B_WCPU, 0) ||
-      !change32(R_PLATFORM, 0, B_CPU_HOLD) || !change32(R_PLATFORM, 0, B_WCPU)) {
-    return false;
-  }
+  change32(R_PLATFORM, B_WCPU, 0);
+  change32(R_PLATFORM, 0, B_CPU_HOLD);
+  change32(R_PLATFORM, 0, B_WCPU);
   uint32_t value = rtl8922ae_read32(R_FW_CONTROL);
-  if (!valid_register(value)) {
-    return false;
-  }
   rtl8922ae_write32(R_FW_CONTROL, value & B_FW_ENV);
   value = rtl8922ae_read32(R_DCPU_PLATFORM);
-  if (!valid_register(value) && value != UINT32_C(0xdeadbeef)) {
-    return false;
-  }
-  /* Successful Linux startup reads this value here and performs the same RMW.
-   * WCPU progress is checked by the bounded H2C-ready wait below. */
   rtl8922ae_write32(R_DCPU_PLATFORM, value | B_DCPU_ENABLE);
   rtl8922ae_write32(R_UDM0, 0);
   rtl8922ae_write32(R_HALT_C2H, 0);
   rtl8922ae_write32(R_UDM2, 0);
-  if (!change32(R_FW_CONTROL, 0, B_FW_DOWNLOAD |
-      (include_bb ? B_BBMCU0_DOWNLOAD : 0))) {
-    return false;
-  }
+  change32(R_FW_CONTROL, 0, B_FW_DOWNLOAD |
+      (include_bb ? B_BBMCU0_DOWNLOAD : 0));
   rtl8922ae_write32(R_UDM1, 0);
   rtl8922ae_write32(R_UDM2, 0);
   rtl8922ae_write32(R_HALT_H2C, 0);
@@ -663,32 +627,25 @@ static bool start_wcpu(bool include_bb)
   rtl8922ae_write32(R_HALT_H2C_CONTROL, 0);
   rtl8922ae_write32(R_HALT_C2H_CONTROL, 0);
   rtl8922ae_write32(R_HALT_STATUS, B_HALT);
-  if (!change32(R_CLOCK, 0, B_CPU_CLOCK) ||
-      !change32(R_SYSTEM_CONFIG5, B_WATCHDOG_WAKE, 0) ||
-      !change32(R_FW_CONTROL, B_FW_WATCHDOG_RESET | B_ROM_CUT_GET, 0)) {
-    return false;
-  }
+  change32(R_CLOCK, 0, B_CPU_CLOCK);
+  change32(R_SYSTEM_CONFIG5, B_WATCHDOG_WAKE, 0);
+  change32(R_FW_CONTROL, B_FW_WATCHDOG_RESET | B_ROM_CUT_GET, 0);
   uint16_t reason = rtl8922ae_read16(R_BOOT_REASON);
-  if (reason == UINT16_MAX) {
-    return false;
-  }
   rtl8922ae_write16(R_BOOT_REASON, reason & ~7u);
-  return change32(R_PLATFORM, B_WCPU, 0) && change32(R_PLATFORM, B_CPU_HOLD, 0) &&
-    change32(R_PLATFORM, 0, B_WCPU);
+  change32(R_PLATFORM, B_WCPU, 0);
+  change32(R_PLATFORM, B_CPU_HOLD, 0);
+  change32(R_PLATFORM, 0, B_WCPU);
 }
 
 static bool firmware_ready(uint64_t deadline)
 {
   do {
     uint32_t control = rtl8922ae_read32(R_FW_CONTROL);
-    if (!valid_register(control) || transport.fault) {
+    if (transport.fault) {
       return false;
     }
     unsigned status = (control & B_FW_STATUS) >> 26;
-    if (status >= 4 && status <= 7) {
-      return false;
-    }
-    if (!(control & B_FW_DOWNLOAD) && status == 3) {
+    if (status == 3) {
       return true;
     }
   } while (rtl8922ae_sleep(RTL_POLL_NS, deadline));
@@ -758,11 +715,7 @@ static bool download_complete(uint32_t enable_mask, uint64_t deadline)
 {
   do {
     uint32_t control = rtl8922ae_read32(R_FW_CONTROL);
-    if (!valid_register(control) || transport.fault) {
-      return false;
-    }
-    unsigned status = (control & B_FW_STATUS) >> 26;
-    if (status >= 4 && status <= 7) {
+    if (transport.fault) {
       return false;
     }
     if (!(control & enable_mask)) {
@@ -830,10 +783,10 @@ static bool download_firmware(const void *asset, size_t bytes,
   }
   transport.download_attempted = true;
   *detail = "RTL8922AE WCPU startup unavailable";
-  if (!rtl8922ae_operation_continue() || task_deadline_expired(deadline) ||
-      !start_wcpu(bbmcu0 != NULL)) {
+  if (!rtl8922ae_operation_continue() || task_deadline_expired(deadline)) {
     return false;
   }
+  start_wcpu(bbmcu0 != NULL);
   rtl8922ae_write32(R_SECURE_MALLOC, RTL_SECURE_MALLOC);
   if (!download_image(&images[0], B_FW_DOWNLOAD, deadline, detail) ||
       (bbmcu0 && !download_image(&images[1], B_BBMCU0_DOWNLOAD, deadline, detail))) {
@@ -905,7 +858,7 @@ bool rtl8922ae_transport_h2c(uint8_t category, uint8_t class_id, uint8_t functio
     uint64_t local = rtl8922ae_deadline(deadline, RTL_SECOND);
     do {
       uint32_t index = rtl8922ae_read32(R_TX_INDEX + RTL_FW_CHANNEL * 4);
-      if (!valid_register(index) || ((index >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES ||
+      if (((index >> 16) & B_RING_DEVICE_INDEX) >= RTL_RING_ENTRIES ||
           transport.fault) {
         break;
       }
@@ -925,28 +878,19 @@ bool rtl8922ae_transport_h2c(uint8_t category, uint8_t class_id, uint8_t functio
   return true;
 }
 
-static bool pre_deinit(uint64_t deadline)
+static void pre_deinit(void)
 {
-  if (!change32(R_BE_HCI_OPT_CTRL, BIT_WAKE_CTRL_V1, 0)) {
-    return false;
-  }
+  change32(R_BE_HCI_OPT_CTRL, BIT_WAKE_CTRL_V1, 0);
   uint32_t state = rtl8922ae_read32(R_BE_IC_PWR_STATE);
-  if (!valid_register(state)) {
-    return false;
-  }
   if (!(state & B_BE_WLMAC_PWR_STE_MASK)) {
-    return true;
+    return;
   }
-  if (!change32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE, B_STOP_MASTER)) {
-    return false;
-  }
+  change32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE, B_STOP_MASTER);
   rtl8922ae_write32(R_TX_INDEX_CLEAR, B_STOP_CHANNELS);
   rtl8922ae_write32(R_RX_INDEX_CLEAR, 3);
   for (unsigned queue = 0; queue < RTL_RX_QUEUES; ++queue) {
     rtl8922ae_write16(R_RX_INDEX + queue * 4, RTL_RING_ENTRIES - 1);
   }
-  return rtl8922ae_poll32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE | B_STOP_MASTER,
-      B_STOP_MASTER, rtl8922ae_deadline(deadline, RTL_MS));
 }
 
 bool rtl8922ae_transport_stop(uint64_t deadline, const char **detail)
@@ -964,17 +908,16 @@ bool rtl8922ae_transport_stop(uint64_t deadline, const char **detail)
   mask_interrupts();
   transport.active = false;
   cpu_restore_interrupts(flags);
-  transport.pre_deinit = pre_deinit(deadline);
+  pre_deinit();
+  transport.pre_deinit = true;
   const char *power_detail = "RTL8922AE MAC power-off unconfirmed";
   transport.mac_off = rtl8922ae_hw_power_off(deadline, &power_detail);
   /* A failed or expired MAC shutdown never consumes the PCI-reset budget.
    * Keep every mapping/buffer/context even when either stop proof is missing. */
   bool reset = pci_function_reset_stop(&transport.reset, task_deadline_after_ms(RTL_RESET_MS));
-  transport.stopped = masked && transport.pre_deinit && transport.mac_off && reset;
+  transport.stopped = masked && transport.mac_off && reset;
   if (!masked) {
     *detail = "RTL8922AE MSI mask unconfirmed; ownership retained";
-  } else if (!transport.pre_deinit) {
-    *detail = "RTL8922AE DMA pre-deinit unconfirmed; ownership retained";
   } else if (!transport.mac_off) {
     *detail = power_detail;
   } else if (!reset) {

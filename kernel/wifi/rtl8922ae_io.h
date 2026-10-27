@@ -14,8 +14,8 @@ void rtl8922ae_write8(unsigned offset, uint8_t value);
 void rtl8922ae_write16(unsigned offset, uint16_t value);
 void rtl8922ae_write32(unsigned offset, uint32_t value);
 
-/* Worker context, IF=1; no allocator or borrowed scratch storage. Polling
- * rejects known inaccessible-register values. Raw data reads may be all ones.
+/* Worker context, IF=1; no allocator or borrowed scratch storage. Polling uses
+ * the register-specific mask and expected value, without a sentinel filter.
  * Every local wait remains bounded by the operation's absolute deadline. */
 uint64_t rtl8922ae_deadline(uint64_t outer, uint64_t nanoseconds);
 bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
