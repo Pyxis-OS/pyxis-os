@@ -65,4 +65,8 @@ bool rtl8922ae_phy_rf_read(unsigned path, uint32_t address, uint32_t mask,
 bool rtl8922ae_phy_rf_write(unsigned path, uint32_t address, uint32_t mask,
     uint32_t value, uint64_t deadline, const char **detail);
 
+/* Reference scan-time DIG/EDCCA setup on the unassociated one-PHY context. */
+void rtl8922ae_phy_scan_edcca(bool scanning);
+void rtl8922ae_phy_scan_dig(void);
+
 #endif

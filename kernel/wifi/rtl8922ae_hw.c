@@ -9,9 +9,11 @@
 #include <kernel/memory.h>
 #include <kernel/format.h>
 #include "rtl8922ae_hw.h"
+
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_regs_hw.h"
 
+#define RTL8922AE_PCIE_MAC_ADDRESS 0x3104u
 #define NS_PER_US UINT64_C(1000)
 #define NS_PER_MS UINT64_C(1000000)
 #define EFUSE_PHYSICAL_BYTES 0x1300u
@@ -614,6 +616,12 @@ bool rtl8922ae_hw_board(struct rtl8922ae_board *board, uint8_t cut,
       !efuse_read(EFUSE_TRIM_ADDRESS, scratch.trim, sizeof(scratch.trim), cut, deadline)) {
     *detail = "RTL8922AE board/trim eFuse unavailable or malformed";
     goto failed;
+  }
+  /* PCIe MAC autoload window, rtw8922a_read_efuse_mac_addr. */
+  for (unsigned i = 0; i < sizeof(result.mac); i += 2) {
+    uint16_t value = rtl8922ae_read16(RTL8922AE_PCIE_MAC_ADDRESS + i);
+    result.mac[i] = value;
+    result.mac[i + 1] = value >> 8;
   }
   /* RF logical block layout: rtw8922a.h, 0x10000 page, 0x240 bytes. */
   result.country[0] = scratch.rf[0];

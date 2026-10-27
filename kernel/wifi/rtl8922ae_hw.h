@@ -7,6 +7,7 @@
 
 struct rtl8922ae_board {
   uint8_t rfe, xtal, country[2];
+  uint8_t mac[6];
   uint8_t tx_nss, rx_nss, tx_antennas, rx_antennas;
   uint8_t pa_bias[2], pad_bias[2];
   int8_t tssi_cck[2][6], tssi_ofdm_2g[2][5];

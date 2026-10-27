@@ -259,4 +259,10 @@
 #define XTAL_SI_XTAL_SC_XI 0x04
 #define XTAL_SI_XTAL_SC_XO 0x05
 
+/* Reference one-PHY scan DIG and EDCCA controls. */
+#define R_SEG0R_EDCCA_LVL_BE 0x69EC
+#define R_SEG0R_PPDU_LVL_BE 0x69F0
+#define B_EDCCA_LVL_MSK0 HW_MASK(7, 0)
+#define B_EDCCA_LVL_MSK1 HW_MASK(15, 8)
+
 #endif

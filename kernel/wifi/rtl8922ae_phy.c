@@ -18,6 +18,7 @@
 #define PHY_BYPASS_DATA UINT32_C(0xbabecafe)
 #define NS_PER_US UINT64_C(1000)
 #define RF_PAGE_WORDS 500u
+#define PHY_EDCCA_SCAN_MAX 249u
 #define RF_MAX_PAGES 3u
 #define RF_H2C_CATEGORY 2u
 #define RF_H2C_CLASS_A 8u
@@ -1060,4 +1061,34 @@ bool rtl8922ae_phy_channel_leave(const uint8_t slots[2], uint64_t deadline,
     }
   }
   return checkpoint(deadline, detail);
+}
+
+/* Linux rtw89_phy_dig_ctrl/config_edcca, unassociated PHY0. These are
+ * temporary receive thresholds, not RF power or regulatory substitutions. */
+static uint32_t scan_edcca, scan_ppdu;
+
+void rtl8922ae_phy_scan_dig(void)
+{
+  /* No associated DIG watchdog runs in this profile. Linux's saved lower
+   * bound is zero, both when suspending DIG and when resuming it. */
+  (void)bb_mask(R_SEG0R_PD_V2, B_SEG0R_PD_LOWER_BOUND_MSK, 0, NULL);
+  (void)bb_mask(R_SEG0R_PD_V2, B_SEG0R_PD_SPATIAL_REUSE_EN_MSK_V1, 0, NULL);
+}
+
+void rtl8922ae_phy_scan_edcca(bool scanning)
+{
+  uint32_t edcca = rtl8922ae_read32(PHY_BASE + R_SEG0R_EDCCA_LVL_BE);
+  uint32_t ppdu = rtl8922ae_read32(PHY_BASE + R_SEG0R_PPDU_LVL_BE);
+  if (scanning) {
+    scan_edcca = edcca & (B_EDCCA_LVL_MSK0 | B_EDCCA_LVL_MSK1);
+    scan_ppdu = ppdu & B_EDCCA_LVL_MSK1;
+    (void)bb_mask(R_SEG0R_EDCCA_LVL_BE, B_EDCCA_LVL_MSK0, PHY_EDCCA_SCAN_MAX, NULL);
+    (void)bb_mask(R_SEG0R_EDCCA_LVL_BE, B_EDCCA_LVL_MSK1, PHY_EDCCA_SCAN_MAX, NULL);
+    (void)bb_mask(R_SEG0R_PPDU_LVL_BE, B_EDCCA_LVL_MSK1, PHY_EDCCA_SCAN_MAX, NULL);
+  } else {
+    rtl8922ae_write32(PHY_BASE + R_SEG0R_EDCCA_LVL_BE,
+        (edcca & ~(B_EDCCA_LVL_MSK0 | B_EDCCA_LVL_MSK1)) | scan_edcca);
+    rtl8922ae_write32(PHY_BASE + R_SEG0R_PPDU_LVL_BE,
+        (ppdu & ~B_EDCCA_LVL_MSK1) | scan_ppdu);
+  }
 }

@@ -15,4 +15,10 @@ bool rtl8922ae_mac_channel(uint8_t channel, uint64_t deadline, const char **deta
  * Transport DMA/reset retirement remains the caller's responsibility. */
 bool rtl8922ae_mac_quiesce(uint64_t deadline, const char **detail);
 
+/* Reference port-zero NOLINK setup and scan RX filter lifetime. The caller
+ * has initialized CMAC0 and retains its role through healthy idle. */
+bool rtl8922ae_mac_scan_prepare(uint64_t deadline, const char **detail);
+void rtl8922ae_mac_scan_rx_sync(bool enable);
+void rtl8922ae_mac_scan_filter(bool scanning);
+
 #endif
