@@ -441,10 +441,17 @@ void display_request_execute(struct display_request *request)
   bool mutating = request->operation == DISPLAY_ACQUIRE ||
       request->operation == DISPLAY_REPLACE || request->operation == DISPLAY_RELEASE;
   if (mutating && !vm_kernel_owner_try(&owner)) {
-    request->result = CALL_BUSY;
-    request->loan = NULL;
-    request->display = NULL;
-    return;
+    /* The drained process gate remains owned; no mapping loan or short lock
+     * spans this pre-effect wait for a different kernel mutator. */
+    cpu_enable_interrupts();
+    bool admitted = vm_kernel_owner_acquire(&owner);
+    cpu_disable_interrupts();
+    if (!admitted) {
+      request->result = CALL_BUSY;
+      request->loan = NULL;
+      request->display = NULL;
+      return;
+    }
   }
   if (request->operation == DISPLAY_ACQUIRE || request->operation == DISPLAY_REPLACE ||
       request->operation == DISPLAY_RELEASE) {

@@ -151,6 +151,20 @@ granting parent access. The optional path describes the initial chain and confer
 no authority. URI prefixes resolve through the caller's live environment; relative
 paths use the retained cwd chain. Libpyxis retains its own cwd context.
 
+The read-only startup record also carries nonzero `usable_cpu_count`: the
+logical CPU allowance of this process's space when startup is prepared. It is
+kernel-prepared information supplied to every process without a grant, not a
+query of global hardware inventory. Children receive their own count. The
+trusted initial space process can still narrow its setup allowance; its already
+prepared record remains a startup snapshot, not a live affinity API.
+
+The CPU field is appended at offset 72; the record grows from 72 to 80 bytes
+without moving earlier fields. `STARTUP_VERSION` remains 1 under the in-place
+development ABI policy. Rebuild matching startup/runtime consumers; no older
+layout reader or compatibility identity is added. Runtime APIs can use this
+same grant-free value for parallelism hints rather than inventing one CPU or
+requesting global inventory authority.
+
 The kernel separately installs an owned `thread_fs` grant with
 `THREAD_RIGHT_SET_FS` only. It applies to the caller, is distinct from selected
 grants, and adds no thread-management authority. Libc closes it after once-only

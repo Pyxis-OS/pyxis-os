@@ -1139,6 +1139,20 @@ enum call_status task_space_set_affinity(struct space *space, const uint64_t *cp
   return CALL_OK;
 }
 
+size_t task_space_usable_cpu_count(struct space *space)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  lock_queues();
+  size_t count = 0;
+  for (size_t cpu = 0; cpu < arch_cpu_count(); ++cpu) {
+    if (space_allows_cpu(space, cpu)) {
+      ++count;
+    }
+  }
+  unlock_queues();
+  return count;
+}
+
 static enum mm_result prepare_user_task(struct process *process, uintptr_t entry,
                                  uintptr_t stack_top, size_t preferred_cpu,
                                  struct task **result)
