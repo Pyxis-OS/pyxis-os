@@ -294,10 +294,9 @@ static bool download(uint64_t deadline, const char **detail)
   return true;
 }
 
-static bool verify_power(bool full, uint64_t deadline, const char **detail)
+static bool verify_power(uint64_t deadline, const char **detail)
 {
-  enum rtl8922ae_power_result result = full ?
-      rtl8922ae_power_verify(&preparation.power, deadline, detail) :
+  enum rtl8922ae_power_result result =
       rtl8922ae_power_verify_limits(&preparation.power, deadline, detail);
   if (result != RTL8922AE_POWER_OK) return false;
   uint64_t flags = cpu_save_interrupts();
@@ -310,6 +309,20 @@ static bool verify_power(bool full, uint64_t deadline, const char **detail)
   }
   cpu_restore_interrupts(flags);
   return true;
+}
+
+static bool rfk_checkpoint(bool completed, uint64_t deadline,
+    const char **first_failure, const char **detail)
+{
+  if (!completed && !*first_failure) {
+    *first_failure = *detail ? *detail : "RTL8922AE RFK completion failed";
+  }
+  if (!rtl8922ae_operation_continue()) return false;
+  if (!rtl8922ae_transport_poll()) {
+    *detail = *first_failure ? *first_failure : "RTL8922AE RFK transport unavailable";
+    return false;
+  }
+  return verify_power(deadline, detail);
 }
 
 static bool initialize_phy(uint64_t deadline, const char **detail)
@@ -354,20 +367,28 @@ static bool initialize_phy(uint64_t deadline, const char **detail)
           &preparation.tables, &preparation.board, preparation.channel, deadline, detail)) return false;
   phase(WIFI_PHY_POWER);
   if (rtl8922ae_power_apply(&preparation.power, deadline, detail) != RTL8922AE_POWER_OK ||
-      !verify_power(true, deadline, detail)) return false;
+      !verify_power(deadline, detail)) return false;
   const uint8_t slots[2] = {0, 0};
   if (!rtl8922ae_phy_channel_leave(slots, deadline, detail)) return false;
-  /* The reference late-init order is PRE_NOTIFY -> DACK -> RXDCK before TSSI.
-   * Unlike its normal channel wrapper, no RFK precedes hard-limit readbacks. */
+  /* Linux continues this sequence after RFK helper errors. Keep every result
+   * observable and retain the first failure without skipping later RFK. Native
+   * request, transport and RF-ceiling gates still stop unsafe work. */
+  const char *rfk_failure = NULL;
   phase(WIFI_PHY_RFK);
-  if (!rtl8922ae_rfk_pre_notify(&preparation.rfk, deadline, detail) ||
-      !verify_power(false, deadline, detail) ||
-      !rtl8922ae_rfk_dack(deadline, detail) || !verify_power(false, deadline, detail) ||
-      !rtl8922ae_rfk_rxdck(&preparation.rfk, deadline, detail) ||
-      !verify_power(false, deadline, detail)) return false;
+  bool completed = rtl8922ae_rfk_pre_notify(&preparation.rfk, deadline, detail);
+  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  completed = rtl8922ae_rfk_dack(deadline, detail);
+  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  completed = rtl8922ae_rfk_rxdck(&preparation.rfk, deadline, detail);
+  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
   phase(WIFI_PHY_TSSI);
-  return rtl8922ae_rfk_tssi(&preparation.rfk, deadline, detail) &&
-      verify_power(false, deadline, detail) && rtl8922ae_operation_continue();
+  completed = rtl8922ae_rfk_tssi(&preparation.rfk, deadline, detail);
+  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  if (rfk_failure) {
+    *detail = rfk_failure;
+    return false;
+  }
+  return rtl8922ae_operation_continue();
 }
 
 static void finish_scan(struct wifi_scan_work *work, enum call_status result)

@@ -50,16 +50,16 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
 
 /* MAC0/PHY0 only, with the full first 0x40000 of BAR2 mapped and the MAC/BB
  * clocks enabled by the caller. Does not tune or request RFK. Apply writes the
- * image; verify checks every owned register field without modifying hardware.
- * Caller retains scheduler/RF admission control across both calls. */
+ * image. Caller retains scheduler/RF admission control across publication and
+ * limit verification. */
 enum rtl8922ae_power_result rtl8922ae_power_apply(
     const struct rtl8922ae_power_image *image, uint64_t deadline,
     const char **detail);
-enum rtl8922ae_power_result rtl8922ae_power_verify(
-    const struct rtl8922ae_power_image *image, uint64_t deadline,
-    const char **detail);
 
-/* After RFK, check the immutable effective limits and override/offset controls.
+/* Before and after TX-capable RFK, check effective limits and force/offset
+ * controls. This is an accepted Pyxis RF-safety policy, not a Linux readback
+ * contract: uncertain enforcement cannot authorize exceeding admitted SAR/regdb
+ * ceilings.
  * Calibration-owned power references/TSSI coefficients and routing/setup fields
  * are deliberately outside this check. It performs no MMIO writes. */
 enum rtl8922ae_power_result rtl8922ae_power_verify_limits(

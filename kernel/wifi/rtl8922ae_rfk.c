@@ -20,12 +20,10 @@
 #define C2H_DONE_ACK 1u
 #define C2H_CLASS_RFK_REPORT 9u
 #define C2H_RFK_STATE 0u
-#define RFK_STATE_START 0u
 #define RFK_STATE_OK 1u
 #define RFK_STATE_LAST 4u
 #define RFK_HEADER_BYTES 8u
 #define RFK_REPORT_BYTES 10u
-#define RFK_H2C_RETURN_MASK UINT32_C(0x00ff0000)
 #define RFK_BOTH_PATHS 3u
 #define RFK_TSSI_SCAN 1u
 #define RFK_MLO_SINGLE_PHY UINT32_C(0x1002)
@@ -80,7 +78,7 @@ bool rtl8922ae_runtime_receive(const void *data, size_t bytes)
   unsigned category = header & 3u, class_id = header >> 2 & 63u;
   unsigned function = header >> 8 & 255u;
   if (category == C2H_CATEGORY_MAC && class_id == C2H_CLASS_INFO && function == C2H_DONE_ACK) {
-    if (bytes < 12 || (get32(packet + 8) & RFK_H2C_RETURN_MASK)) {
+    if (bytes < 12) {
       rfk.fault = true;
       return false;
     }
@@ -88,22 +86,16 @@ bool rtl8922ae_runtime_receive(const void *data, size_t bytes)
   if (category != H2C_CATEGORY_RF || class_id != C2H_CLASS_RFK_REPORT || function != C2H_RFK_STATE) {
     return true;
   }
-  if (bytes < RFK_REPORT_BYTES || packet[8] > RFK_STATE_LAST) {
+  if (bytes < RFK_REPORT_BYTES) {
     rfk.fault = true;
     return false;
   }
-  /* Unsolicited bootstrap reports cannot satisfy an operation. Commands are
-   * strictly serialized and no next command is sent after uncertainty. */
-  if (!rfk.active) return true;
-  if (rfk.complete && (rfk.observations.state != packet[8] ||
-      rfk.observations.version != packet[9])) {
-    rfk.fault = true;
-    return false;
-  }
+  /* Every applicable report completes the current wait as in Linux. Unknown
+   * states remain internal failures and cannot extend the public ABI enum. */
   rfk.observations.state = packet[8];
   rfk.observations.version = packet[9];
-  rfk.observations.state_valid = true;
-  rfk.complete = packet[8] != RFK_STATE_START;
+  rfk.observations.state_valid = packet[8] <= RFK_STATE_LAST;
+  rfk.complete = true;
   return true;
 }
 
@@ -130,7 +122,6 @@ static bool run(unsigned function, const void *data, size_t bytes, unsigned time
   }
   rfk.active = false;
   if (!completed) {
-    rfk.fault = true;
     if (!submitted) return false;
     switch (function) {
     case H2C_RFK_PRE_NOTIFY: return fail(detail, "RTL8922AE PRE_NOTIFY completion failed/timed out");

@@ -436,21 +436,18 @@ static bool power_checkpoint(uint64_t deadline, const char **detail)
   return false;
 }
 
-static bool power_field(unsigned address, uint32_t mask, uint32_t value,
-    bool apply, const char *failure, const char **detail)
+static void power_write_field(unsigned address, uint32_t mask, uint32_t value)
 {
-  if (apply) {
-    if (mask != UINT32_MAX) {
-      uint32_t previous = rtl8922ae_read32(address);
-      if (previous == UINT32_MAX) {
-        *detail = failure;
-        return false;
-      }
-      value = (previous & ~mask) | (value & mask);
-    }
-    rtl8922ae_write32(address, value);
-    return true;
+  if (mask != UINT32_MAX) {
+    uint32_t previous = rtl8922ae_read32(address);
+    value = (previous & ~mask) | (value & mask);
   }
+  rtl8922ae_write32(address, value);
+}
+
+static bool power_verify_field(unsigned address, uint32_t mask, uint32_t value,
+    const char *failure, const char **detail)
+{
   if ((rtl8922ae_read32(address) & mask) != (value & mask)) {
     *detail = failure;
     return false;
@@ -458,23 +455,35 @@ static bool power_field(unsigned address, uint32_t mask, uint32_t value,
   return true;
 }
 
-static bool power_words(unsigned address, const uint8_t *data, size_t bytes,
-    bool apply, uint64_t deadline, const char *failure, const char **detail)
+static bool power_write_words(unsigned address, const uint8_t *data, size_t bytes,
+    uint64_t deadline, const char **detail)
 {
   for (size_t offset = 0; offset < bytes; offset += 4) {
     if (!(offset % 64) && !power_checkpoint(deadline, detail)) {
       return false;
     }
-    if (!power_field(address + offset, UINT32_MAX, pack_bytes(data + offset),
-        apply, failure, detail)) {
+    power_write_field(address + offset, UINT32_MAX, pack_bytes(data + offset));
+  }
+  return true;
+}
+
+static bool power_verify_words(unsigned address, const uint8_t *data, size_t bytes,
+    uint64_t deadline, const char *failure, const char **detail)
+{
+  for (size_t offset = 0; offset < bytes; offset += 4) {
+    if (!(offset % 64) && !power_checkpoint(deadline, detail)) {
+      return false;
+    }
+    if (!power_verify_field(address + offset, UINT32_MAX, pack_bytes(data + offset),
+        failure, detail)) {
       return false;
     }
   }
   return true;
 }
 
-static enum rtl8922ae_power_result power_transfer(
-    const struct rtl8922ae_power_image *image, bool apply, uint64_t deadline,
+enum rtl8922ae_power_result rtl8922ae_power_apply(
+    const struct rtl8922ae_power_image *image, uint64_t deadline,
     const char **detail)
 {
   if (!detail) {
@@ -491,10 +500,7 @@ static enum rtl8922ae_power_result power_transfer(
   }
   for (size_t i = 0; i < sizeof(power_controls) / sizeof(power_controls[0]); ++i) {
     const struct power_control *control = &power_controls[i];
-    if (!power_field(control->address, control->mask, control->value, apply,
-        "RTL8922AE power control readback mismatch", detail)) {
-      return RTL8922AE_POWER_READBACK;
-    }
+    power_write_field(control->address, control->mask, control->value);
   }
   /* Pinned onePHY BB-wrap defaults, 32 MACID entries. No MACID is allocated
    * or made eligible for packet TX here. */
@@ -502,32 +508,22 @@ static enum rtl8922ae_power_result power_transfer(
     if (!(i % 8) && !power_checkpoint(deadline, detail)) {
       return RTL8922AE_POWER_READBACK;
     }
-    if (!power_field(0x0ed00u + i * 4, UINT32_MAX, 0x03007f7f, apply,
-        "RTL8922AE MACID power limit readback mismatch", detail) ||
-        !power_field(0x0e500u + i * 4, UINT32_MAX, 0x03c86000, apply,
-        "RTL8922AE MACID path readback mismatch", detail)) {
-      return RTL8922AE_POWER_READBACK;
-    }
+    power_write_field(0x0ed00u + i * 4, UINT32_MAX, 0x03007f7f);
+    power_write_field(0x0e500u + i * 4, UINT32_MAX, 0x03c86000);
   }
-  if (!power_words(POWER_BYRATE_BASE, image->byrate, sizeof(image->byrate),
-      apply, deadline, "RTL8922AE by-rate power readback mismatch", detail) ||
-      !power_field(POWER_RATE_OFFSETS, UINT32_MAX, image->rate_offsets, apply,
-      "RTL8922AE rate offset readback mismatch", detail) ||
-      !power_field(POWER_RATE_OFFSETS + 4, UINT32_MAX, 0, apply,
-      "RTL8922AE rate offset padding readback mismatch", detail) ||
-      !power_field(POWER_RATE_OFFSETS + 8, UINT32_MAX, 0, apply,
-      "RTL8922AE rate offset padding readback mismatch", detail) ||
-      !power_field(POWER_SHAPE, 3u, image->shape, apply,
-      "RTL8922AE TX shape readback mismatch", detail)) {
+  if (!power_write_words(POWER_BYRATE_BASE, image->byrate, sizeof(image->byrate),
+      deadline, detail)) {
     return RTL8922AE_POWER_READBACK;
   }
+  power_write_field(POWER_RATE_OFFSETS, UINT32_MAX, image->rate_offsets);
+  power_write_field(POWER_RATE_OFFSETS + 4, UINT32_MAX, 0);
+  power_write_field(POWER_RATE_OFFSETS + 8, UINT32_MAX, 0);
+  power_write_field(POWER_SHAPE, 3u, image->shape);
   for (unsigned ntx = 0; ntx < 2; ++ntx) {
-    if (!power_words(POWER_NORMAL_BASE + ntx * RTL8922AE_POWER_LIMIT_BYTES,
-        image->normal[ntx], sizeof(image->normal[ntx]), apply, deadline,
-        "RTL8922AE normal power limit readback mismatch", detail) ||
-        !power_words(POWER_RU_BASE + ntx * RTL8922AE_POWER_RU_BYTES,
-        image->ru[ntx], sizeof(image->ru[ntx]), apply, deadline,
-        "RTL8922AE RU power limit readback mismatch", detail)) {
+    if (!power_write_words(POWER_NORMAL_BASE + ntx * RTL8922AE_POWER_LIMIT_BYTES,
+        image->normal[ntx], sizeof(image->normal[ntx]), deadline, detail) ||
+        !power_write_words(POWER_RU_BASE + ntx * RTL8922AE_POWER_RU_BYTES,
+        image->ru[ntx], sizeof(image->ru[ntx]), deadline, detail)) {
       return RTL8922AE_POWER_READBACK;
     }
   }
@@ -537,37 +533,20 @@ static enum rtl8922ae_power_result power_transfer(
     }
     unsigned offset = path * POWER_PATH_STRIDE;
     uint32_t sar = (uint32_t)(uint16_t)image->sar_quarter_dbm[path] & 0x1ffu;
-    if (!power_field(POWER_PATH_REFERENCE + offset, POWER_PATH_REFERENCE_MASK,
-        0, apply, "RTL8922AE path power reference readback mismatch", detail) ||
-        !power_field(POWER_PATH_TSSI_K + offset, POWER_TSSI_K_MASK,
-        POWER_TSSI_K << 20, apply,
-        "RTL8922AE TSSI reference readback mismatch", detail) ||
-        !power_field(POWER_PATH_MAX + offset, POWER_SAR_MAX_MASK,
-        sar << 12, apply, "RTL8922AE path SAR readback mismatch", detail)) {
-      return RTL8922AE_POWER_READBACK;
-    }
+    power_write_field(POWER_PATH_REFERENCE + offset, POWER_PATH_REFERENCE_MASK, 0);
+    power_write_field(POWER_PATH_TSSI_K + offset, POWER_TSSI_K_MASK,
+        POWER_TSSI_K << 20);
+    power_write_field(POWER_PATH_MAX + offset, POWER_SAR_MAX_MASK, sar << 12);
   }
   return RTL8922AE_POWER_OK;
 }
 
-enum rtl8922ae_power_result rtl8922ae_power_apply(
-    const struct rtl8922ae_power_image *image, uint64_t deadline,
-    const char **detail)
-{
-  return power_transfer(image, true, deadline, detail);
-}
-
-enum rtl8922ae_power_result rtl8922ae_power_verify(
-    const struct rtl8922ae_power_image *image, uint64_t deadline,
-    const char **detail)
-{
-  return power_transfer(image, false, deadline, detail);
-}
-
-/* phy_be.c:315-338,361-384 defines the additive offsets and force selectors;
+/* Linux does not perform these readback comparisons. Pyxis retains this narrow
+ * RF-safety gate: TX-capable RFK must not bypass the admitted SAR/regdb ceiling.
+ * phy_be.c:323-344,361-378 defines the additive offsets and force selectors;
  * rtw8922a.c:2238-2274 installs the numeric normal/RU and per-path SAR limits.
  * rtw8922a.c:2147-2207 separately installs power references and TSSI K values.
- * Only the enforcement fields belong to the post-RFK invariant. Disabled
+ * Only enforcement fields are compared before and after RFK. Disabled
  * override values are irrelevant, so MACID forced-value bits are not checked. */
 static const struct power_control power_limit_controls[] = {
   {0x11a28, 1u << 6, 0},
@@ -600,21 +579,21 @@ enum rtl8922ae_power_result rtl8922ae_power_verify_limits(
   for (size_t i = 0; i < sizeof(power_limit_controls) /
       sizeof(power_limit_controls[0]); ++i) {
     const struct power_control *control = &power_limit_controls[i];
-    if (!power_field(control->address, control->mask, control->value, false,
+    if (!power_verify_field(control->address, control->mask, control->value,
         "RTL8922AE power limit control readback mismatch", detail)) {
       return RTL8922AE_POWER_READBACK;
     }
   }
-  if (!power_field(POWER_RATE_OFFSETS, UINT32_MAX, image->rate_offsets, false,
+  if (!power_verify_field(POWER_RATE_OFFSETS, UINT32_MAX, image->rate_offsets,
       "RTL8922AE modulation power offset readback mismatch", detail)) {
     return RTL8922AE_POWER_READBACK;
   }
   for (unsigned ntx = 0; ntx < 2; ++ntx) {
-    if (!power_words(POWER_NORMAL_BASE + ntx * RTL8922AE_POWER_LIMIT_BYTES,
-        image->normal[ntx], sizeof(image->normal[ntx]), false, deadline,
+    if (!power_verify_words(POWER_NORMAL_BASE + ntx * RTL8922AE_POWER_LIMIT_BYTES,
+        image->normal[ntx], sizeof(image->normal[ntx]), deadline,
         "RTL8922AE normal power limit readback mismatch", detail) ||
-        !power_words(POWER_RU_BASE + ntx * RTL8922AE_POWER_RU_BYTES,
-        image->ru[ntx], sizeof(image->ru[ntx]), false, deadline,
+        !power_verify_words(POWER_RU_BASE + ntx * RTL8922AE_POWER_RU_BYTES,
+        image->ru[ntx], sizeof(image->ru[ntx]), deadline,
         "RTL8922AE RU power limit readback mismatch", detail)) {
       return RTL8922AE_POWER_READBACK;
     }
@@ -624,8 +603,8 @@ enum rtl8922ae_power_result rtl8922ae_power_verify_limits(
       return RTL8922AE_POWER_READBACK;
     }
     uint32_t sar = (uint32_t)(uint16_t)image->sar_quarter_dbm[path] & 0x1ffu;
-    if (!power_field(POWER_PATH_MAX + path * POWER_PATH_STRIDE,
-        POWER_SAR_MAX_MASK, sar << 12, false,
+    if (!power_verify_field(POWER_PATH_MAX + path * POWER_PATH_STRIDE,
+        POWER_SAR_MAX_MASK, sar << 12,
         "RTL8922AE path SAR readback mismatch", detail)) {
       return RTL8922AE_POWER_READBACK;
     }
