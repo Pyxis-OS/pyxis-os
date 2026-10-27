@@ -17,6 +17,8 @@
  * allocate nothing and never issue RF calibration or scan commands. BAR2's
  * first 0x40000 bytes must remain mapped and owned through checked stop.
  * Every failure leaves the partially configured device to its caller's stop.
+ * Initialization follows reference warning-only RF/XTAL error handling; a
+ * true result does not verify successful RF programming or calibration.
  */
 bool rtl8922ae_phy_afe(const void *asset, size_t bytes,
     const struct rtl8922ae_firmware_tables *tables, uint64_t deadline,

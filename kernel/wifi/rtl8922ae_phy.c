@@ -226,6 +226,9 @@ static bool apply_table(const void *asset, size_t bytes,
   bool matched = true, found = false;
   uint32_t target = 0;
   unsigned page = 0, page_words = 0;
+  /* Linux stops this path's upload on error but only warns. Still validate
+   * later records; checkpoint any sticky transport fault before buffer reuse. */
+  bool upload_failed = false;
   for (size_t i = table->headline_records; i < count; ++i) {
     if (!(i % 32) && !checkpoint(deadline, detail)) {
       return false;
@@ -277,9 +280,12 @@ static bool apply_table(const void *asset, size_t bytes,
       }
       break;
     case TABLE_RADIO:
-      if (!rtl8922ae_phy_rf_write(path, address, RF_MASK, value, deadline, detail)) {
-        return false;
+      if (path >= 2 || (address & ~(RF_ADSEL | UINT32_C(0xff)))) {
+        return fail(detail, "RTL8922AE RF write input invalid");
       }
+      /* The reference RF wrapper discards the primitive write result. */
+      rtl8922ae_phy_rf_write(path, address, RF_MASK, value, deadline, detail);
+      if (!checkpoint(deadline, detail)) return false;
       break;
     case TABLE_UPLOAD:
       /* Firmware-derived tables use the reference v1 executor: analog
@@ -290,10 +296,11 @@ static bool apply_table(const void *asset, size_t bytes,
       }
       put32(rf_page + page_words * sizeof(uint32_t), address << 20 | value);
       if (++page_words == RF_PAGE_WORDS) {
-        if (!rtl8922ae_transport_h2c(RF_H2C_CATEGORY, path ? RF_H2C_CLASS_B : RF_H2C_CLASS_A,
-            page, false, false,
-            rf_page, sizeof(rf_page), NULL, deadline, detail)) {
-          return false;
+        if (!upload_failed) {
+          upload_failed = !rtl8922ae_transport_h2c(RF_H2C_CATEGORY,
+              path ? RF_H2C_CLASS_B : RF_H2C_CLASS_A, page, false, false,
+              rf_page, sizeof(rf_page), NULL, deadline, detail);
+          if (!checkpoint(deadline, detail)) return false;
         }
         ++page;
         page_words = 0;
@@ -306,11 +313,10 @@ static bool apply_table(const void *asset, size_t bytes,
       break;
     }
   }
-  if (operation == TABLE_UPLOAD && page_words &&
-      !rtl8922ae_transport_h2c(RF_H2C_CATEGORY, path ? RF_H2C_CLASS_B : RF_H2C_CLASS_A,
-            page, false, false,
-          rf_page, page_words * sizeof(uint32_t), NULL, deadline, detail)) {
-    return false;
+  if (operation == TABLE_UPLOAD && page_words && !upload_failed) {
+    rtl8922ae_transport_h2c(RF_H2C_CATEGORY, path ? RF_H2C_CLASS_B : RF_H2C_CLASS_A,
+        page, false, false,
+        rf_page, page_words * sizeof(uint32_t), NULL, deadline, detail);
   }
   return checkpoint(deadline, detail);
 }
@@ -366,9 +372,10 @@ bool rtl8922ae_phy_rf_write(unsigned path, uint32_t address, uint32_t mask,
   }
   uint32_t raw = value;
   if (mask != RF_MASK) {
-    if (!rtl8922ae_phy_rf_read(path, address, RF_MASK, &raw, deadline, detail)) {
-      return false;
-    }
+    /* Linux merges INV_RF_DATA on a timed-out read before the busy-gated write. */
+    raw = UINT32_MAX;
+    rtl8922ae_phy_rf_read(path, address, RF_MASK, &raw, deadline, detail);
+    if (!checkpoint(deadline, detail)) return false;
     raw = (raw & ~mask) | (value << __builtin_ctz(mask) & mask);
   }
   uint32_t status = PHY_BASE + (path ? R_HWSI_VAL1 : R_HWSI_VAL0);
@@ -668,10 +675,11 @@ static bool static_receive_init(const struct rtl8922ae_board *board,
     return false;
   }
   uint8_t cap = board->xtal & B_AX_XTAL_SC_MASK;
-  if (!rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_SC_XO, cap, 0xff, deadline) ||
-      !rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_SC_XI, cap, 0xff, deadline)) {
-    return fail(detail, "RTL8922AE crystal capacitor programming unconfirmed");
-  }
+  /* Linux CFO initialization ignores serial-write errors for these caps. */
+  rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_SC_XO, cap, 0xff, deadline);
+  if (!checkpoint(deadline, detail)) return false;
+  rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_SC_XI, cap, 0xff, deadline);
+  if (!checkpoint(deadline, detail)) return false;
   static const struct phy_register receive[] = {
     {R_DCFO_OPT_V1, B_DCFO_OPT_EN_V1, 1},
     {R_DCFO_WEIGHT_V1, B_DCFO_WEIGHT_MSK_V1, 8},
@@ -685,6 +693,20 @@ static bool static_receive_init(const struct rtl8922ae_board *board,
     {R_CHINFO_TYPE_SCAL, B_CHINFO_SCAL, 0},
   };
   return registers(receive, sizeof(receive) / sizeof(*receive), true, deadline, detail);
+}
+
+/* Like rtw8922a_rfk_pll_init, a serial failure ends only this local sequence. */
+static void pll_init(uint64_t deadline)
+{
+  uint8_t value;
+  if (!rtl8922ae_hw_xtal_read(XTAL_SI_PLL_1, &value, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_PLL_1, value | 0xf8, 0xff, deadline) ||
+      !rtl8922ae_hw_xtal_read(XTAL_SI_APBT, &value, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_APBT, value & ~0x60, 0xff, deadline) ||
+      !rtl8922ae_hw_xtal_read(XTAL_SI_XTAL_PLL, &value, deadline) ||
+      !rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_PLL, value | 0x38, 0xff, deadline)) {
+    return;
+  }
 }
 
 bool rtl8922ae_phy_hardware(const void *asset, size_t bytes,
@@ -716,15 +738,8 @@ bool rtl8922ae_phy_hardware(const void *asset, size_t bytes,
       !static_receive_init(board, deadline, detail)) {
     return false;
   }
-  uint8_t value;
-  if (!rtl8922ae_hw_xtal_read(XTAL_SI_PLL_1, &value, deadline) ||
-      !rtl8922ae_hw_xtal_write(XTAL_SI_PLL_1, value | 0xf8, 0xff, deadline) ||
-      !rtl8922ae_hw_xtal_read(XTAL_SI_APBT, &value, deadline) ||
-      !rtl8922ae_hw_xtal_write(XTAL_SI_APBT, value & ~0x60, 0xff, deadline) ||
-      !rtl8922ae_hw_xtal_read(XTAL_SI_XTAL_PLL, &value, deadline) ||
-      !rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_PLL, value | 0x38, 0xff, deadline)) {
-    return fail(detail, "RTL8922AE RF PLL XTAL initialization failed");
-  }
+  pll_init(deadline);
+  if (!checkpoint(deadline, detail)) return false;
   static const struct phy_register nctl[] = {
     {R_GOTX_IQKDPK_C0, B_GOTX_IQKDPK, 3},
     {R_GOTX_IQKDPK_C1, B_GOTX_IQKDPK, 3},
@@ -743,20 +758,20 @@ bool rtl8922ae_phy_hardware(const void *asset, size_t bytes,
   }
   if (board->pa_bias_present) {
     for (unsigned path = 0; path < 2; ++path) {
-      if (!rtl8922ae_phy_rf_write(path, RR_BIASA, RR_BIASA_TXG_V1,
-              board->pa_bias[path] & 0xf, deadline, detail) ||
-          !rtl8922ae_phy_rf_write(path, RR_BIASA, RR_BIASA_TXA_V1,
-              board->pa_bias[path] >> 4, deadline, detail)) {
-        return false;
-      }
+      rtl8922ae_phy_rf_write(path, RR_BIASA, RR_BIASA_TXG_V1,
+          board->pa_bias[path] & 0xf, deadline, detail);
+      if (!checkpoint(deadline, detail)) return false;
+      rtl8922ae_phy_rf_write(path, RR_BIASA, RR_BIASA_TXA_V1,
+          board->pa_bias[path] >> 4, deadline, detail);
+      if (!checkpoint(deadline, detail)) return false;
     }
     for (unsigned path = 0; path < 2; ++path) {
-      if (!rtl8922ae_phy_rf_write(path, RR_BIASA, RR_BIASD_TXG_V1,
-              board->pad_bias[path] & 0xf, deadline, detail) ||
-          !rtl8922ae_phy_rf_write(path, RR_BIASA, RR_BIASD_TXA_V1,
-              board->pad_bias[path] >> 4, deadline, detail)) {
-        return false;
-      }
+      rtl8922ae_phy_rf_write(path, RR_BIASA, RR_BIASD_TXG_V1,
+          board->pad_bias[path] & 0xf, deadline, detail);
+      if (!checkpoint(deadline, detail)) return false;
+      rtl8922ae_phy_rf_write(path, RR_BIASA, RR_BIASD_TXA_V1,
+          board->pad_bias[path] >> 4, deadline, detail);
+      if (!checkpoint(deadline, detail)) return false;
     }
   }
   return rtl8922ae_phy_channel_enter(deadline, detail) &&
@@ -987,8 +1002,8 @@ bool rtl8922ae_phy_channel_tune(const void *asset, size_t bytes,
       uint32_t value = rf[path][i] &
           ~(RR_CFGCH_BAND1 | RR_CFGCH_BW_V2 | RR_CFGCH_BAND0 | RR_CFGCH_CH);
       value |= channel;
-      if (!rtl8922ae_phy_rf_write(path, rf_addresses[i], RF_MASK, value, deadline, detail) ||
-          !rtl8922ae_sleep(100 * NS_PER_US, deadline)) {
+      rtl8922ae_phy_rf_write(path, rf_addresses[i], RF_MASK, value, deadline, detail);
+      if (!rtl8922ae_sleep(100 * NS_PER_US, deadline)) {
         return fail(detail, "RTL8922AE RF channel tuning interrupted");
       }
     }
@@ -1032,11 +1047,12 @@ bool rtl8922ae_phy_channel_leave(const uint8_t slots[2], uint64_t deadline,
     uint32_t lut = path ? R_CFIR_LUT_C1 : R_CFIR_LUT;
     if (!bb_mask(coefficient, B_COEF_SEL_EN, 1, detail) ||
         !bb_mask(coefficient, B_COEF_SEL_IQC_V1, slots[path], detail) ||
-        !bb_mask(coefficient, B_COEF_SEL_MDPD_V1, slots[path], detail) ||
-        !rtl8922ae_phy_rf_write(path, RR_MODOPT, RR_TXG_SEL,
-            4 | slots[path], deadline, detail)) {
+        !bb_mask(coefficient, B_COEF_SEL_MDPD_V1, slots[path], detail)) {
       return false;
     }
+    rtl8922ae_phy_rf_write(path, RR_MODOPT, RR_TXG_SEL,
+        4 | slots[path], deadline, detail);
+    if (!checkpoint(deadline, detail)) return false;
     uint32_t selection = rtl8922ae_read32(PHY_BASE + coefficient);
     if (!bb_mask(lut, B_CFIR_LUT_G3, selection & 1, detail) ||
         !bb_mask(lut, B_CFIR_LUT_G5, selection >> 1 & 1, detail)) {
