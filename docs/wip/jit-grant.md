@@ -3,8 +3,8 @@
 Assigned to Codex alpha (chronium, 2026-10-27), after merged BSP-removal task 3
 (#1500), before tasks 4–5. This is the kernel/SDK/launcher task from
 [Quake 3 and llvmpipe](quake3-llvmpipe.md#decided-by-chronium-round-1-2026-10-23),
-not a decision to enable llvmpipe or JIT by default. The three choices below
-remain proposed; no implementation before chronium decides them.
+not a decision to enable llvmpipe or JIT by default. All three decisions below are accepted (chronium, 2026-10-27).
+Implementation is assigned, with a single-run baseline before code.
 
 ## Already accepted
 
@@ -43,7 +43,7 @@ remain stopped for each mutation; concurrent live-code patching is not supplied.
 
 ## Decision 1 — region operations and read-only data
 
-**Recommended default:** `ALLOCATE`, `PROTECT`, `RELEASE` on process-owned,
+**Accepted (chronium, 2026-10-27):** `ALLOCATE`, `PROTECT`, `RELEASE` on process-owned,
 non-reused identities. ALLOCATE takes a nonzero byte count, rounds to pages and
 returns identity/address/rounded size with eager zeroed RW/NX backing. An optional
 placement hint is advisory only, may be ignored, and never promises proximity or
@@ -65,13 +65,9 @@ require contained-range protection. Its optional `NearBlock` does not guarantee
 placement. Supporting the actual states avoids either making constants executable
 or silently leaving a requested read-only mapping writable.
 
-Alternative: retain only the two initially described states and refuse LLVM's
-read-only data request; the grant could be demonstrated but would not satisfy
-this first consumer's normal finalization path. No silent downgrade is proposed.
-
 ## Decision 2 — initial process budgets
 
-**Recommended default:** initial kernel tunables of **256 MiB total live JIT
+**Accepted (chronium, 2026-10-27):** initial kernel tunables of **256 MiB total live JIT
 backing** and **4096 live JIT regions per process**, across all three states.
 Charges are reserved before allocation effects and released only after actual
 reclamation, not handle close or cleanup queue acceptance. Ordinary MEMORY does
@@ -84,12 +80,9 @@ profile distinguishes JIT bytes/state and operation counts under its current
 profile authority. Initial values are tuning, not ABI or a claim about llvmpipe's
 measured shader high-water mark; measure that before enabling the real consumer.
 
-Alternative: rely only on general memory exhaustion. That provides no separate
-bound on code-generation storage/records under the newly declared authority.
-
 ## Decision 3 — transition failure and caller code lifetime
 
-**Recommended default:** keep the existing whole-process root/borrower drainage
+**Accepted (chronium, 2026-10-27):** keep the existing whole-process root/borrower drainage
 and absolute 1 s pre-effect quiescence budget. Before the first mapping effect,
 validate the complete identity/range/target and prepare any metadata and fresh
 address-wait incarnations required by a writable transition. BUSY or allocation
@@ -111,10 +104,6 @@ wait registrations before PTE changes; restoring write access gives fresh
 incarnations. Stale waiters cannot attach to rewritten/reused pages. JIT identities
 are not eligible as the guarded MEMORY identities required for native stack/TLS
 pins. There is no new authority to change those pinned regions.
-
-Alternative: track active generated-code entrants/return addresses in the kernel
-and defer transitions until those leases end. Current consumers provide no such
-registration protocol; that would add a separate execution/lifetime mechanism.
 
 ## Mechanism and proof obligations
 
@@ -172,6 +161,5 @@ executable file mappings, sparse JIT regions and strict-near placement are defer
 This adds executable-memory authority, gated twice and off by default. A declared
 grant does not grant live-code patch safety. Transitions may return unchanged
 BUSY while another mutation/borrower prevents quiescence, or LIMIT/NO_MEMORY
-before effects. The proposed quota and caller lifetime rules require chronium's
-decision. BSP preparation/reclamation and sibling-stop costs remain visible
+before effects. The accepted quota and caller lifetime rules apply to the first delivery. BSP preparation/reclamation and sibling-stop costs remain visible
 until the later work changes them; no new grant will hide those limits.

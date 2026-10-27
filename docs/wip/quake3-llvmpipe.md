@@ -48,7 +48,7 @@ design below is a proposal except where marked decided.
 3. **When the kernel JIT task lands.** **Sequencing revised (chronium,
    2026-10-27):** after BSP-removal task 3 (#1500), before tasks 4–5, using its
    common caller-CPU private transaction. The [kernel design](jit-grant.md)
-   records the remaining operation/budget/lifetime decisions. This does not
+   records the accepted operation/budget/lifetime decisions (2026-10-27). This does not
    declare BSP removal complete or enable llvmpipe by default.
 
 Smaller choices that I would apply unless chronium objects are listed under
@@ -61,8 +61,8 @@ explicit bundle declaration, process ownership and W^X transitions are accepted.
 Closing a handle does not release process-owned regions. Ordinary MEMORY never
 creates executable pages; dual views remain later work.
 
-The [first kernel delivery](jit-grant.md) proposes the exact operations, read-only
-data state needed by LLVM, budgets and caller code-lifetime rules. It uses the
+The [first kernel delivery](jit-grant.md) records the accepted operations,
+read-only data state needed by LLVM, budgets and caller code-lifetime rules. It uses the
 merged caller-CPU/quiescence machinery and native SDK wrappers; it adds no
 BSP-only executor or libc mmap/mprotect facade. Its focused qualification pulls
 the permission-range part of BSP-removal task 5 forward; tasks 4–5 resume afterward.
@@ -528,8 +528,8 @@ the pin, and a git mirror preserves it.
   range or closure of broader audio qualification. Public upload/recipient access,
   llvmpipe and JIT remain unqualified.
 - The [kernel JIT design](jit-grant.md) follows merged BSP-removal task 3.
-  Its remaining operation/budget/lifetime choices await chronium; tasks 4–5
-  resume afterward.
+  Its operation/budget/lifetime choices are accepted (chronium, 2026-10-27);
+  tasks 4–5 resume afterward.
 - The [XSAVE/AVX profile](../kernel/xsave-avx.md) is delivered separately. Its availability
   does not qualify llvmpipe or establish which vector features a future JIT
   selects; record those with the renderer measurements.
