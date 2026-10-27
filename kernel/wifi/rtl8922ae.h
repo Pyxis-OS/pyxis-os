@@ -6,8 +6,8 @@
 
 struct boot_info;
 struct wifi_scan_work;
-/* Opt-in boot reservation, followed by one request-driven preparation attempt.
- * No startup on READ, scan FILE or packet interface is provided in this cut. */
+/* Opt-in boot reservation, followed by request-driven preparation and bounded
+ * passive discovery. READ never starts hardware; no station/data interface. */
 void rtl8922ae_prepare(const struct boot_info *boot);
 void rtl8922ae_start(void);
 void rtl8922ae_interrupt(void);

@@ -7,6 +7,7 @@
 #include <kernel/memory.h>
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_rfk.h"
+#include "rtl8922ae_scan.h"
 #include "rtl8922ae_transport.h"
 
 #define H2C_CATEGORY_RF 2u
@@ -69,6 +70,7 @@ void rtl8922ae_rfk_observe(struct rtl8922ae_rfk_observations *out)
 
 bool rtl8922ae_runtime_receive(const void *data, size_t bytes)
 {
+  if (!rtl8922ae_scan_receive(data, bytes)) return false;
   if (bytes < RFK_HEADER_BYTES || rfk.fault) return false;
   const uint8_t *packet = data;
   uint32_t header = get32(packet);
