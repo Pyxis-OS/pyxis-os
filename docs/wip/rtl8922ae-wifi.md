@@ -693,11 +693,16 @@ See the [follow-up record](../development/experiments/rtl8922ae-scan-inputs.md#n
    facts, not measured radiated power. Source/QEMU checks cannot establish
    native programming, calibration outcome or a physical rfkill response.
    See the [source/QEMU qualification record](../development/experiments/rtl8922ae-phy-init.md).
-3. **Bounded unassociated passive discovery.** Use admitted channels only, no
+3. [ ] **Bounded unassociated passive discovery.** Use admitted channels only, no
    probe packets, no association/packet offloads; validate bounded records and
    preserve existing operation/FILE lifetime and cancellation semantics.
    **After this task chronium can:** request repeated explicit passive scans on
    the supported profile while wired management remains independent.
+
+The first explicit-channel firmware-offload slice is implemented, with target
+builds and absent-radio QEMU controls qualified; native discovery is pending.
+See the [passive-scan record](../development/experiments/rtl8922ae-passive-scan.md).
+The full admitted-channel-set task above remains unchecked.
 
 ### Next passive-results task — accepted direction (chronium, 2026-10-27)
 
