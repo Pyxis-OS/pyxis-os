@@ -88,6 +88,12 @@ ENOTSUP, including `fdopen("a")`, without taking descriptor ownership; PIPE,
 CONSOLE, STREAM and TRANSACTION append remain unsupported. A zero support probe
 reserves no future success. Append adds no durability or append-only authority.
 
+After an uncertain native FILE WRITE, APPEND or pwrite, subsequent data writes
+through that shared descriptor fail with EIO, including buffered stdio and dup
+aliases. `clearerr` does not reset this latch. Reads and ownership release remain
+available; close still releases the descriptor after a failed flush. A fresh open
+is a new intent. Known non-uncertain errors retain their ordinary recovery.
+
 ## Typed resources and transactions
 
 `fopen` dispatches on the attested result of [typed OPEN](../interfaces/file-providers.md).

@@ -353,6 +353,12 @@ shared object fopen's "a" policy. `fdopen` associates a FILE without changing th
 cursor or truncating; its selected access can narrow descriptor access.
 fileno exposes an existing FILE descriptor without adding an alias.
 
+After an uncertain native FILE WRITE, APPEND or pwrite, subsequent data writes
+through that shared descriptor fail with EIO, including buffered stdio and dup
+aliases. `clearerr` does not reset this latch. Reads and ownership release remain
+available; close still releases the descriptor after a failed flush. A fresh open
+is a new intent. Known non-uncertain errors retain their ordinary recovery.
+
 ### Read/write and exclusive-create qualification
 
 [Userland PR #171](https://git.internal/PyxisOS/pyxis-userland/pulls/171), commit

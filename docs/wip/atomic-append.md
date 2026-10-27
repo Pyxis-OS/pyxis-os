@@ -2,8 +2,8 @@
 
 Status: assigned to codex-beta (chronium, 2026-10-26). The first-round contract
 is accepted. Native APPEND/SDK and the libc/shell slice are built and qualified
-in QEMU. Go and LLVM adapters are qualified; Rust migration and final native
-qualification remain.
+in QEMU. Go, Rust and LLVM append adapters have built prefixes and QEMU
+qualification; uncertain-write finalization and native qualification remain.
 
 ## Accepted contract (chronium, 2026-10-26)
 
@@ -154,29 +154,37 @@ The Go prefix and affected Git/Caddy consumers were rebuilt with the existing
 bootstrap. QEMU checks passed for Go on RAM/npfs/FAT32, concurrent writers,
 inherited/runtime/crash output and HOST refusal; Git init also passed. Caddy was
 built/linked but not run: its ordinary bundle requires TCP authority absent from
-this fixture. LLVM's 55-archive development prefix and direct Support qualifier
-build/link; QEMU covers RAM/npfs/FAT32 and HOST admission, append disposition,
-positioned overwrite, buffered patches and multi-operation patches. No native
+this fixture. LLVM's rebuilt 71-archive development prefix and hosted Clang/LLD/clangd
+payloads build/link with the published `8a4d001` compiler. QEMU covers RAM/npfs/FAT32 and HOST admission, append disposition,
+positioned overwrite, buffered patches and multi-operation patches. Hosted Clang compiles a C file and separately launched LLD links a relocatable
+object. `clangd --version` works, but both ordinary and synchronous LSP sessions
+fail with `thread constructor failed: Resource busy`; this runtime failure is
+not attributed to append and is not a passed clangd check. No native
 language-adapter result is claimed.
+
+Rust's `.append(true)` selects writable native O_APPEND; read+append selects
+read/write access. Append+truncate is invalid unless exclusive create_new takes
+precedence. The rebuilt stage-2 compiler, host and Pyxis standard libraries passed
+normal export validation. QEMU on one and four CPUs covers RAM, RAM-/disk-backed
+npfs, FAT32, HOST refusal before effects, seek/read+append, empty writes, clones,
+exclusive create, a 12,257-byte write_all, four concurrent writers and inherited
+output/capture. No kernel or Rust API is added.
 
 The Go fork pin changes require rebuilding affected Go prefixes and programs.
 The LLVM pin changes require rebuilding hosted Clang/LLD/clangd payloads and the
 LLVM development prefix. The cross-compiler/container pin stays unchanged.
 
-## Pending buffered-error decision
+## Uncertain buffered output (chronium, 2026-10-27)
 
-Source inspection found a retry through retained output: `flush_output` keeps
-unconfirmed queued bytes after a failed descriptor write, then `fclose`, exit or
-another flush can send those bytes again. An uncertain APPEND may already have
-changed EOF, so that retry conflicts with the no-replay contract.
-
-Proposed default (awaiting chronium): a native FILE WRITE, APPEND or positioned
-WRITE returning OUTCOME_UNKNOWN permanently latches EIO on that shared libc
-descriptor's write side. Descriptor aliases share the latch; `clearerr` clears
-stdio indicators but cannot reset uncertain mutation state. Reads and ownership
-release remain available, and a newly opened descriptor is a new intent. Pending
-buffer drains cannot resubmit; known non-uncertain errors keep their existing
-recovery. This requires no new kernel status or public libc error slot.
+A native FILE WRITE, APPEND or positioned WRITE returning OUTCOME_UNKNOWN
+permanently latches EIO on the shared libc descriptor's data-write side.
+Descriptor aliases share the latch; `clearerr` clears stdio indicators but cannot
+reset uncertain mutation state. Reads, metadata and ownership release remain
+available; a newly opened descriptor is a new intent. This prevents retained
+stdio output and language buffers, including Rust BufWriter's Drop, from replaying
+an uncertain mutation during another flush, close or normal exit. Known
+non-uncertain errors keep their existing recovery. No new kernel status or public
+libc last-error slot is introduced.
 
 ## Ordered tasks
 
