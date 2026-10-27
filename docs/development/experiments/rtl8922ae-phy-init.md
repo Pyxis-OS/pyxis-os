@@ -9,7 +9,7 @@ The initial QEMU candidate was `b809d3ba` / `fc4bc24`, rebased on main
 `e334f159`; subsequent signing/documentation and helper-reporting changes do not
 change the exercised kernel paths. The updated helper and complete image were
 also rebuilt. The native packet manifest records its exact independent heads
-and hashes; native execution is pending.
+and hashes; the audited one-PHY native pass is recorded below (2026-10-27).
 
 Build: existing `pyxis-llvm23.1.3-3d69e83`, `make -j16 image LOG_LEVEL=info
 DISTRIBUTION=full LIVE_CONFIG=<private-read-scan-profile> REMOTE_BEACON=
@@ -289,3 +289,40 @@ under `/shared/present/rtl8922ae-readback-audit/`.
 No new native or VFIO run accompanies this audit. The consumed MAC-only packet
 is unchanged; a fresh packet and scheduled native check are required before
 claiming MAC completion or proceeding to full PHY/RFK.
+
+## Native audited one-PHY pass (2026-10-27)
+
+Vela, RTL8922AE cut 2/RFE 1, firmware 0.35.80.3, world rules/static SAR with
+TAS disabled and the accepted RFE-0 power-table fallback. Production kernel
+`eb92ab2b4e18a5f43c48dd8fea504db393bdf946`; helper
+`a1bece881e3c2bc833da3a1d71777d84d83ae487`. The one-shot packet verified the
+actual running kernel before and after its single explicit SCAN request.
+
+| Observation | Native result |
+| --- | --- |
+| Preparation | Complete, PHY historical state `0xdf`; WIFI_READY/WIFI_FAILED both clear |
+| RFK | PRE_NOTIFY, DACK, RXDCK and TSSI completed (`0xf`); final report OK, version 30 |
+| Power | Five narrow limit checks; reported path SAR 64/64 quarter-dBm (16 dBm), with lower per-rate/regional limits separate |
+| rfkill | 17 valid observations, unblocked; no physical toggle exercised |
+| Firmware RX/IRQ | Seven received firmware packets, four interrupts; not ordinary-frame RX qualification |
+| Cleanup | Boot valid/state `0x1f/0x1f`, confirmed MAC-off/FLR stop, status 6, no result FILE |
+| Controls | Wired management and running identity preserved; PXE restored byte-for-byte |
+
+This qualifies the implemented one-PHY preparation and normal checked-stop
+path, not passive discovery, radiated power, physical rfkill response or
+cancellation/fault recovery. RFK is TX-capable; no physical-silence claim.
+The request deliberately returns UNAVAILABLE until discovery is implemented.
+
+The preceding audited MAC-only probe `8aec6232` reached state `0x93` with no
+RFK and confirmed stop. An accidental comparison run of pre-audit `09a397b5`
+stopped at its added `0xa128` register-value refusal (`mlo_err_idct rd`, all-ones
+read); the source does not establish a write-only register or lost write. The
+PXE-down attempt never booted its candidate and supplied no driver evidence.
+Raw evidence stays under `/shared/present/rtl8922ae-phy-init/`, in the separate
+`native-phy-rfk-audited-20261027/results/run/`,
+`native-mac-audited-20261027/results/run/` and old packet result directories.
+
+The delivery branch subsequently rebases on current main and repins the
+rebase-only helper. RTL driver, Wi-Fi ABI and PCI code remain byte-identical to
+the natively exercised production revision; the native claim belongs to that
+recorded revision, with integration checks reported separately on the PR.

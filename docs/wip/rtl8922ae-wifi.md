@@ -2,8 +2,9 @@
 
 **Plan accepted (chronium, 2026-10-22). Target: 0.0.11, not 0.0.10
 (chronium, 2026-10-26).** Stage 1 and the stage-2 firmware-first/checked-stop
-cut are qualified. Request-driven one-PHY preparation remains a draft; actual
-PHY programming/calibration and passive scanning are not qualified. Native
+cut and request-driven one-PHY initialization/RFK/checked stop are native
+qualified on vela. The implementation remains a draft; passive discovery,
+physical rfkill response and radiated-power behavior are not qualified. Native
 runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages), after the delivered
 [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
@@ -651,14 +652,18 @@ See the [follow-up record](../development/experiments/rtl8922ae-scan-inputs.md#n
    complete. Hardware limit programming/readback and calibration enforcement
    remain task 2's gate before newly enabled RF. See the
    [source/QEMU record](../development/experiments/rtl8922ae-scan-inputs.md).
-2. [ ] **One-PHY receive initialization and checked stop.** Implement the required
+2. [x] **One-PHY receive initialization and checked stop.** Implement the required
    BBMCU/MAC/BB/RF path, power limits, regulatory-authorized RFK and ongoing
    rfkill/cancellation, with no scan result publication yet. Qualify firmware
    acknowledgments/completions, RX/IRQ ownership and stop before proceeding.
    **After this task chronium can:** boot an explicitly qualified radio-preparation
    profile and verify its inputs, calibration outcome and quiescence.
 
-   Assigned (chronium, 2026-10-23); implementation/native qualification pending.
+   Assigned (chronium, 2026-10-23); normal-path native qualification passed
+   (2026-10-27) on audited kernel `eb92ab2b` and helper `a1bece88`: PHY `df`,
+   all four RFK completions/final OK, five power checks and confirmed MAC-off/FLR.
+   Four interrupts and seven firmware packets were observed; wired management
+   survived. This does not qualify ordinary-frame RX, hopping or physical rfkill.
    Boot and READ now reserve/observe only; one SCAN operation owns startup,
    regulatory-authorized calibration and checked stop. This cut completes with
    UNAVAILABLE and no result FILE even after successful preparation, keeping
@@ -681,6 +686,57 @@ See the [follow-up record](../development/experiments/rtl8922ae-scan-inputs.md#n
    preserve existing operation/FILE lifetime and cancellation semantics.
    **After this task chronium can:** request repeated explicit passive scans on
    the supported profile while wired management remains independent.
+
+### Next passive-results task — proposal (2026-10-27)
+
+No implementation is authorized by this proposal. Keep the accepted native
+SCAN operation, deadlines, cancellation and immutable result FILE. The current
+transport consumes only C2H and drops ordinary RX packets; passive results need
+BE RX decoding and management-frame collection, not a new application API.
+
+Decisions for chronium, with proposed defaults:
+
+1. **Host-directed channel walk first.** Reuse the qualified MAC/PHY tuning and
+   power machinery with bounded passive dwell, no probe templates or packet
+   offload. Linux has both software scanning and BE firmware scan offload; the
+   latter adds role/channel-list/start-stop and packet-template state before
+   native management RX is qualified. Default: host control for this first
+   delivery; firmware offload can be considered from measured need later.
+2. **Keep calibration inside the request's channel authority.** Default: select
+   the initial calibration anchor from requested channels where the effective
+   rules permit its TX-capable calibration. A first request containing only
+   NO_IR channels refuses before startup; do not silently calibrate elsewhere.
+   A normal world-domain request includes legal anchors and may subsequently
+   listen on channels 12–13 after same-band receive-only retuning is qualified.
+   Match the reference's channel/power update and band/PHY-dependent TSSI hooks,
+   not full RFK on every hop. No probes or calibration TX on NO_IR channels.
+   Alternative: separately authorize initialization on an effective-profile
+   channel outside the requested discovery mask.
+3. **Drain idle RX on the retained healthy context.** Repeated explicit scans
+   on that context are already accepted; this settles its idle behavior.
+   Default: retain driver-owned firmware/DMA, continuously drain/drop RX outside
+   an active operation, keep autonomous TX disabled and monitor rfkill. No
+   background channel walk, calibration, result cache or retained caller pointer.
+   Confirmed healthy completion/cancellation retires the operation before reuse;
+   uncertain command/transport/stop or rfkill closes admission and uses checked
+   terminal stop, with no restart this boot. Real retry/reset recovery remains
+   a separate requirement before everyday use. Alternative: power off after
+   every scan, which would require a new repeated-start/recovery contract.
+
+Start with one explicitly selected legal channel: bounded RTL descriptor,
+CRC/ICV and management-frame decoding; reuse the native SSID/RSN accumulation
+semantics and publish an actual FILE after retiring collection. Then add the
+host channel walk and retained-context operation boundaries. Keep the existing
+128-record limit, BSSID/channel de-duplication, security-conflict handling and
+honest overflow/error outcomes. RTL signal/channel metadata must come from the
+Realtek descriptor/report, not Intel energy fields or the latest software
+channel variable. Drain/correlate frames across retunes before attribution.
+
+Qualification progresses from that one-channel result to a complete admitted
+channel set, repeated explicit requests, cancellation/timeout/final-close,
+rfkill where controllable, warm handoff and independent USB-wired controls.
+SSID/BSSID captures stay private/redacted. Successful initialization alone is
+not a passive-scan result, and an incomplete/failed scan publishes no success FILE.
 
 QEMU/source checks cover data bounds, narrowing and lifecycle, not RF. Separately
 scheduled VFIO/native checks must cover unknown/malformed inputs, channel/power
