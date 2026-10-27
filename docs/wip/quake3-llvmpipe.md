@@ -108,6 +108,41 @@ worker selection), `lp_limits.h:69` (pool bound),
 The existing Pyxis profile's unavailable physical-memory queries and disabled
 disk shader cache remain unavailable; do not advertise invented memory facts.
 
+### Decision 4 — CPU-count observation (proposed)
+
+The current non-POSIX Pyxis path in Mesa reports its one-CPU fallback, which
+makes the default worker count zero. CPUID topology cannot identify which CPUs
+Pyxis brought online or which CPUs a space permits. Startup, THREAD and SPACE
+currently expose no CPU-count/affinity observation. The existing accurate query
+is `SYSTEM_INFO_CPU.online_count`, under the explicitly held `system_info/read`
+capability. That right also exposes the other global hardware/system inventory;
+it is not a CPU-only right. The affected bundle manifests do not declare it,
+and bundle launch withholds undeclared native resources.
+
+**Recommended default:** add optional `system_info/read` declarations to the
+same authorized Mesa consumer bundles. Implement reusable libc
+`sysconf(_SC_NPROCESSORS_ONLN)` through that already-held resource, without an
+ambient acquisition or query. Mesa's Pyxis platform branch consumes the result,
+leaving its worker selection unchanged. The query reports online logical CPUs,
+not physical cores or the space's affinity allowance. Do not invent a
+`_SC_NPROCESSORS_CONF` result from a count that reports only online CPUs.
+If the resource is absent or the query fails, libc returns an explicit error;
+Mesa retains its existing one-CPU fallback. The qualification launches supply
+the resource and record both the detected count and actual CPU allowance.
+
+This broadens observational authority, so it needs chronium's decision before
+implementation. The narrower alternative is a new process/space CPU-observation
+interface, followed by its libc adapter; that requires kernel/ABI design rather
+than merely a Mesa platform branch. Do not silently supply the broader grant,
+pretend the fallback is the real count, or infer OS state from CPUID.
+
+Source basis: `include/abi/system_info.h` and
+[system information](../interfaces/system-information.md#queries-and-meaning);
+`userspace/lib/bundle_launch.c` `prepare_context` filters nondeclared native
+resources; `include/abi/startup.h`, `thread.h` and `space.h` expose no existing
+local count getter. This is the next just-in-time decision, separate from the
+three accepted runtime-profile decisions.
+
 ### Delivery and qualification
 
 - Capture the existing softpipe control first. Then build the static
