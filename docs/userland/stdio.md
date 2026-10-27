@@ -54,8 +54,8 @@ its caller; success transfers that slot's close responsibility to `fclose`.
 Invalid descriptors or unavailable access report EBADF; an otherwise compatible
 existing association reports EBUSY. Position and read-ahead stay intact; `w` does not truncate or create. FILE access is narrowed:
 `r` cannot write even when the underlying descriptor is read/write. `a` enables
-shared non-atomic append for every alias without moving the current cursor;
-other modes never clear the descriptor's append policy. `freopen` remains
+shared append for every alias after a zero APPEND support probe, without moving
+the current cursor; other modes never clear the descriptor's append policy. `freopen` remains
 unsupported; output buffering is selected separately before stream I/O.
 
 `dup2(source, target)` shares the source object at the requested target number.
@@ -81,9 +81,12 @@ seeking discards that read-ahead. Pread bypasses both without consuming them;
 pwrite discards descriptor read-ahead before a nonempty native write and leaves
 FILE pushback/indicators unchanged. `fstat` is unaffected.
 
-Append currently performs separate SIZE and WRITE calls. Concurrent appenders
-can choose the same end and overwrite one another. This is explicitly not an
-atomic append guarantee; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1370).
+Append uses native FILE_APPEND: EOF selection and mutation are atomic per
+operation of at most 4,080 bytes, including aliases/hard links. Larger writes,
+flushes and formatted lines may interleave between operations. HOST append is
+ENOTSUP, including `fdopen("a")`, without taking descriptor ownership; PIPE,
+CONSOLE, STREAM and TRANSACTION append remain unsupported. A zero support probe
+reserves no future success. Append adds no durability or append-only authority.
 
 ## Typed resources and transactions
 
@@ -197,9 +200,8 @@ It creates no FILE wrapper and grants no additional authority. Descriptor
 storage and path workspace are reserved before exclusive creation or truncation,
 with no fallible descriptor publication afterward. Read/write requests require
 both native rights. lseek uses the same process-local open-object position as
-stdio and every duplicate. O_APPEND moves each write() to the
-current end of the file, through the same non-atomic SIZE then WRITE as
-fopen's "a".
+stdio and every duplicate. O_APPEND selects the current EOF through native
+APPEND, as fopen's "a" does; pwrite remains explicitly positioned.
 
 With O_CREAT, the third argument has type mode_t (unsigned int in sys/types.h).
 Only 0666 is accepted, meaning native creation policy rather than Unix permission
@@ -314,8 +316,10 @@ an error, submitting only the remaining suffix. Zero progress or an excessive
 count is rejected; file position advances only for confirmed bytes. On a later
 failure, the position includes confirmed bytes of any partial final element,
 while `ferror`/`errno` retain the failure. Neither `fwrite` nor formatting helpers
-automatically retry an error. Append re-queries the end
-before each native write and remains non-atomic across all these calls.
+automatically retry an error. Append uses each operation's returned start and
+confirmed count to update the cursor; it does not issue a preceding SIZE call.
+An informational tell of buffered append output can still sample SIZE; that is
+not a mutation or a reservation.
 
 OUTCOME_UNKNOWN maps to EIO: the current native mutation may have taken effect
 without a trustworthy reply. The stream can account for earlier confirmed
@@ -515,11 +519,12 @@ capability entries. Each exposes
 handle with only READ authority for stdin or WRITE authority for stdout/stderr.
 An exported FILE additionally retains CALL transport; native streams retain zero.
 FILE output can pair with an exact TEXT `stdout.append=1` or `stderr.append=1`
-entry from that same startup snapshot. Libc adopts the declared non-atomic append
-policy; malformed policy or unavailable SIZE is an error. Stream-export and
+entry from that same startup snapshot. Libc adopts native APPEND policy;
+malformed policy or a failed zero APPEND support probe is an error. Stream-export and
 launch helpers preserve it and omit stale companions when replacing streams.
-The shell declares it for every redirected FILE output after truncating, so a
-program that launches commands passes append on to them. There is no stdin append
+The shell declares it for redirected append-capable FILE output after truncating,
+so a program that launches commands passes append on to them. Unsupported plain
+HOST output uses a positioned byte relay instead. There is no stdin append
 companion or extra authority implied by the text.
 HTTP input is a completed READ-only FILE snapshot, with no HTTP-specific
 standard-stream companion. Generic STREAM inputs retain their completion and

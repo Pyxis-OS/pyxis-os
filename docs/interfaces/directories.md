@@ -28,6 +28,19 @@ the ACPI worker, LOOKUP returns an immutable copied FILE, and one extra
 operation, `ACPI_TABLES_INFO`, describes a listed name. Other backings return
 BAD_OPERATION for it.
 
+## Append support before creation
+
+`DIRECTORY_APPEND_SUPPORT` takes the complete zeroed directory message and
+returns status only. It requires CREATE and WRITE_FILES together. RAM, npfs and
+FAT32 report OK; other native backings report BAD_OPERATION. The SDK helper
+`directory_append_support()` borrows a native directory. No name is resolved,
+reserved or created, and OK does not promise future mutation success. The shell
+uses it to prepare an unsupported-backing output relay before namespace effects;
+actual creation still checks `DIRECTORY_CREATE_REQUIRE_APPEND` when needed.
+Repeated shell redirects to a name created earlier in that command can perform
+one lookup through the later held parent, requiring matching live parent and
+FILE identities; they neither retry CREATE nor reuse the earlier FILE grant.
+
 ## Scoped filesystem information
 
 `DIRECTORY_FILESYSTEM_INFO` accepts a complete zeroed directory message and

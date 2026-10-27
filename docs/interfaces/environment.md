@@ -167,10 +167,12 @@ profile attenuation, without retaining another grant or live table. See the
 [shell contract](../userland/shell.md#typed-values-and-command-sequences).
 
 FILE stdout/stderr may have an exported TEXT companion `stdout.append` or
-`stderr.append`, exactly `1`. It declares consumer-side, non-atomic append; no
-extra FILE right is created. The companion is read from the same stream snapshot,
-requires writable FILE with usable SIZE, and is re-staged only with that selected
-stream. Missing means false; malformed values and stdin append are refused.
+`stderr.append`, exactly `1`. It declares native APPEND policy; no extra FILE
+right is created. The companion is read from the same stream snapshot, requires
+a writable FILE passing a zero APPEND support probe, and is re-staged only with
+that selected stream. Each operation appends at most 4,080 bytes atomically;
+application writes or flushes spanning operations can interleave. Missing means
+false; malformed values and stdin append are refused.
 Launch adapters discard stale companions when replacing a stream. Descriptor
 export propagates the adopted policy, including through Lua and libuv.
 
