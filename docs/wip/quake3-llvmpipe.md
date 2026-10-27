@@ -5,8 +5,9 @@ OpenArena and local corresponding-source publication. The
 [qualification record](../development/experiments/ioquake3-softpipe.md) also
 records an attended Vela timedemo and listening observation; broader native/audio
 qualification and public recipient access remain separate. The JIT grant is
-implemented; the LLVM adapter is QEMU-qualified in pyxis-llvm #20 and Pyxis #1523
-(awaiting merge). llvmpipe remains proposal-only.
+implemented; the LLVM adapter is merged and QEMU-qualified in pyxis-llvm #20
+and Pyxis #1523. llvmpipe implementation is assigned, with the CPU-query authority
+choice below still pending.
 Remaining direction and decisions follow. The
 softpipe delivery is in the [0.0.9 release notes](../releases.md#009-2026-10-25);
 llvmpipe follows the JIT grant and its LLVM library adapter. Its sources are
@@ -53,11 +54,11 @@ design below is a proposal except where marked decided.
    declare BSP removal complete or enable llvmpipe by default.
 
 The next assigned work is task 6, followed by task 7 and SoH qualification
-(chronium, 2026-10-27); BSP-removal tasks 4–5 wait. The three immediate choices
-below require acceptance before implementation. Earlier routine suggestions do
-not silently decide authority or runtime policy.
+(chronium, 2026-10-27); BSP-removal tasks 4–5 wait. The runtime profile below is
+accepted. Earlier routine suggestions do not override its authority or runtime
+policy.
 
-## Task 6 runtime profile — proposed (2026-10-27)
+## Task 6 runtime profile — accepted (chronium, 2026-10-27)
 
 Mesa patches remain build changes and Pyxis platform integration only. Keep
 upstream Gallium selection, shader compilation, rasterization and failure
@@ -68,7 +69,7 @@ first Mesa profile (`llvm-orcjit=false`), with explicit mappings for required ru
 [development prefix](../development/llvm-development.md)
 supplies the libraries; no compiler-container rebuild is part of this task.
 
-1. **Renderer and declared authority. Proposed default:** build softpipe and
+1. **Renderer and declared authority. Accepted:** build softpipe and
    llvmpipe together. Add optional `jit/manage` declarations to ioquake3's engine
    bundle (shared by OpenArena/Quake 3), the manual triangle and the SoH consumer
    manifests, including its LUS demonstration if used for qualification. Keep
@@ -80,26 +81,22 @@ supplies the libraries; no compiler-container rebuild is part of this task.
    softpipe when it is absent. An explicit `GALLIUM_DRIVER=llvmpipe` without
    authority fails context creation; `GALLIUM_DRIVER=softpipe` remains usable.
    This fallback happens before LLVM emission, not after a genuine JIT failure.
-   Alternatives are required-JIT bundles (refuse launch without the grant), or
-   keeping softpipe the renderer default even when JIT is supplied.
-2. **Workers. Proposed default:** retain Mesa's conservative Pyxis CPU-count
-   fallback: one reported CPU means `LP_NUM_THREADS=0`, synchronous rendering.
-   Preserve the ordinary override; qualify 0 then 4 workers in QEMU, and use
-   explicit 4 on both sides of the native timedemo. Do not invent an affinity
-   count or add a system-information grant to this slice. Revisit a nonzero
-   published default from measured results. `LP_NUM_THREADS=N` can create both
-   raster and compute pools, not N total process threads; upstream clamps each
-   pool to 32, and Pyxis's existing per-process task bound still applies.
-   Alternative: choose an initial nonzero Pyxis default now (for example 4),
-   explicitly as tuning rather than a claimed CPU count.
-3. **Instruction set. Proposed default:** let Mesa's existing CPUID/OSXSAVE/XCR0
+2. **Workers. Accepted with change:** use Mesa's upstream default, one worker
+   per reported CPU subject to its existing cap. Do not replace that default
+   with zero or a fixed count. Keep `LP_NUM_THREADS` as upstream's override.
+   Measure default, 0 and 4 once each in QEMU; use the default for both native
+   comparisons on vela (Pyxis and Fedora). `LP_NUM_THREADS=N` can create both
+   raster and compute pools, not N total process threads; upstream caps each
+   pool at 32, and Pyxis's existing per-process task bound still applies. Supply
+   a real CPU count through the Pyxis platform integration, not a fabricated
+   count chosen to force a worker policy. The required authority choice follows.
+3. **Instruction set. Accepted:** let Mesa's existing CPUID/OSXSAVE/XCR0
    checks select AVX2 and pass its feature enables/disables to LLVM. Keep the
    archive/native C/C++ baseline portable; do not force `-mavx2` or enable new
    XCR0 components. The merged kernel's `0x7` profile permits XMM/YMM, while
    its FXSAVE fallback clears OSXSAVE; AVX-512 remains unavailable. Qualify an
    AVX2-capable QEMU CPU and a CPU with AVX/AVX2 disabled before native use,
-   recording the actual renderer/feature path. Alternative: cap the initial
-   llvmpipe JIT at SSE until a separate AVX2 step.
+   recording the actual renderer/feature path.
 
 Source basis at Mesa 26.2.5: `src/util/os_misc.c:553` (`os_jit_allowed`),
 `src/gallium/drivers/llvmpipe/lp_screen.c:1023–1032` (pre-allocation refusal),
@@ -111,12 +108,13 @@ worker selection), `lp_limits.h:69` (pool bound),
 The existing Pyxis profile's unavailable physical-memory queries and disabled
 disk shader cache remain unavailable; do not advertise invented memory facts.
 
-### Delivery and qualification after acceptance
+### Delivery and qualification
 
 - Capture the existing softpipe control first. Then build the static
   softpipe+llvmpipe OSMesa prefix and its notice/provenance closure. QEMU triangle
   checks cover no grant/default softpipe, held grant/llvmpipe, explicit llvmpipe
-  refusal without grant, 0/4 workers and the two CPU feature profiles. Recheck
+  refusal without grant and the two CPU feature profiles. Measure the default,
+  0 and 4 worker settings once each. Recheck
   SDL front/back buffering and canvas presentation; no new benchmark framework.
 - Prepare the existing OpenArena demo as a roughly 30-second input by retaining
   whole demo messages and writing its end marker. Verify that exact trimmed
@@ -124,7 +122,7 @@ disk shader cache remain unavailable; do not advertise invented memory facts.
   Keep its digest, canvas, engine/data versions, renderer, worker count and CPU
   power state with the result. Do not trim by cutting inside a message.
 - Through the orchestrator, one hands-free Remote-driven Pyxis run and one
-  Fedora run on vela use that same input/settings and explicit 4 workers.
+  Fedora run on vela use that same input/settings and Mesa's default workers.
   Keep host, nested-QEMU and native numbers separate; report full-power CPU
   state and shader-startup cost rather than assuming them. No native staging or
   run is performed by this proposal.
