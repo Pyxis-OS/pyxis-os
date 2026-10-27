@@ -161,20 +161,15 @@ static void phase(uint32_t value)
 
 static bool rfkill_current(const char **detail)
 {
-  bool blocked;
-  bool valid = rtl8922ae_hw_rfkill(&blocked, detail);
+  bool blocked = rtl8922ae_hw_rfkill();
   uint64_t flags = cpu_save_interrupts();
   ++preparation.status.phy.rfkill_checks;
-  if (valid) {
-    preparation.status.phy.state |= WIFI_PHY_RFKILL_VALID;
-    if (blocked) preparation.status.base.flags |= WIFI_RFKILL;
-    else preparation.status.base.flags &= ~WIFI_RFKILL;
-  } else {
-    preparation.status.phy.state &= ~WIFI_PHY_RFKILL_VALID;
-  }
+  preparation.status.phy.state |= WIFI_PHY_RFKILL_VALID;
+  if (blocked) preparation.status.base.flags |= WIFI_RFKILL;
+  else preparation.status.base.flags &= ~WIFI_RFKILL;
   cpu_restore_interrupts(flags);
-  if (valid && blocked) *detail = "RTL8922AE current rfkill blocked";
-  return valid && !blocked;
+  if (blocked) *detail = "RTL8922AE current rfkill blocked";
+  return !blocked;
 }
 
 bool rtl8922ae_operation_continue(void)
@@ -210,7 +205,8 @@ bool rtl8922ae_operation_continue(void)
 static bool download(uint64_t deadline, const char **detail)
 {
   uint8_t security[4];
-  if (!rtl8922ae_operation_continue() || !rtl8922ae_hw_cut(&preparation.cut, detail)) return false;
+  if (!rtl8922ae_operation_continue()) return false;
+  preparation.cut = rtl8922ae_hw_cut();
   uint64_t flags = cpu_save_interrupts();
   preparation.status.base.boot.live_cut = preparation.cut;
   preparation.status.base.boot.valid |= WIFI_BOOT_CUT_VALID;
@@ -229,8 +225,8 @@ static bool download(uint64_t deadline, const char **detail)
   }
   if (!rtl8922ae_phy_afe(preparation.asset.data, preparation.asset.size,
           &preparation.tables, deadline, detail) ||
-      !rtl8922ae_hw_power_on(preparation.cut, deadline, detail) ||
-      !rtl8922ae_hw_rfkill_prepare(detail)) return false;
+      !rtl8922ae_hw_power_on(preparation.cut, deadline, detail)) return false;
+  rtl8922ae_hw_rfkill_prepare();
   preparation.rfkill_live = true;
   preparation.next_rfkill = 0;
   if (!rtl8922ae_operation_continue() ||

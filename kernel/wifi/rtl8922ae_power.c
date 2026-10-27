@@ -550,7 +550,7 @@ enum rtl8922ae_power_result rtl8922ae_power_apply(
  * override values are irrelevant, so MACID forced-value bits are not checked. */
 static const struct power_control power_limit_controls[] = {
   {0x11a28, 1u << 6, 0},
-  {0x11a40, (1u << 29) | (1u << 16), 0},
+  {0x11a40, 1u << 29, 0},
   {0x11a44, (1u << 28) | (1u << 18) | 0x0003fe00u, 0},
   {0x11a48, (1u << 9) | (1u << 19), 0},
   {0x11a54, 0x38000000u, 0},

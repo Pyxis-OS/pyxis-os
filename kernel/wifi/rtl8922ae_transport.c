@@ -36,7 +36,7 @@
 #define RTL_FW_CHANNEL 12u
 #define RTL_SECOND UINT64_C(1000000000)
 #define RTL_MS UINT64_C(1000000)
-#define RTL_POLL_NS UINT64_C(50000)
+#define RTL_POLL_NS UINT64_C(1000)
 #define RTL_RESET_MS 2000u
 #define B_RING_DEVICE_INDEX 0x0fffu
 
@@ -51,7 +51,8 @@
 #define R_TX_INDEX_CLEAR 0xb014u
 #define R_RX_INDEX_CLEAR 0xb018u
 #define R_DMA_BUSY 0xb01cu
-#define B_DMA_BUSY (B_STOP_CHANNELS | (1u << 15) | (3u << 16) | (1u << 31))
+#define B_DMA_TX_BUSY B_STOP_CHANNELS
+#define B_DMA_RX_BUSY (3u << 16)
 #define R_DMA_WATCHDOG 0xb02cu
 #define R_TX_NUMBER 0xb030u
 #define R_RX_NUMBER 0xb050u
@@ -354,10 +355,8 @@ bool rtl8922ae_poll32_observe(unsigned offset, uint32_t mask, uint32_t expected,
 {
   if (observed) *observed = 0;
   if (sampled) *sampled = false;
-  do {
-    if (task_deadline_expired(deadline)) {
-      return false;
-    }
+  for (;;) {
+    bool expired = task_deadline_expired(deadline);
     uint32_t value = rtl8922ae_read32(offset);
     if (observed) *observed = value;
     if (sampled) *sampled = true;
@@ -367,8 +366,15 @@ bool rtl8922ae_poll32_observe(unsigned offset, uint32_t mask, uint32_t expected,
     if ((value & mask) == expected) {
       return true;
     }
-  } while (rtl8922ae_sleep(RTL_POLL_NS, deadline));
-  return false;
+    if (expired) return false;
+    if (!rtl8922ae_sleep(RTL_POLL_NS, deadline)) {
+      if ((transport.fault && !transport.stopping) ||
+          (!transport.stopping && !rtl8922ae_operation_continue()) ||
+          !task_deadline_expired(deadline)) return false;
+      /* Linux iopoll samples the condition once more at timeout. Native
+       * cancellation/rfkill still ends the request before another sample. */
+    }
+  }
 }
 
 bool rtl8922ae_poll32(unsigned offset, uint32_t mask, uint32_t expected,
@@ -539,24 +545,25 @@ bool rtl8922ae_transport_begin(uint8_t cut, uint64_t deadline, const char **deta
   KASSERT(transport.prepared && cpu_interrupts_enabled());
   *detail = "RTL8922AE PCI DMA bootstrap failed";
   mask_interrupts();
-  if (!rtl8922ae_hw_pci_prepare(deadline, detail)) {
-    return false;
-  }
+  rtl8922ae_hw_pci_prepare();
   change32(R_DMA_STOP, 0, B_STOP_WPDMA | B_STOP_CHANNELS);
   change32(R_DMA_CONFIG, B_TX_ENABLE | B_RX_ENABLE, B_STOP_MASTER);
   rtl8922ae_write32(R_TX_INDEX_CLEAR, B_STOP_CHANNELS);
   rtl8922ae_write32(R_RX_INDEX_CLEAR, 3);
-  if (!rtl8922ae_poll32(R_DMA_BUSY, B_DMA_BUSY, 0,
+  if (!rtl8922ae_poll32(R_DMA_BUSY, B_DMA_TX_BUSY, 0,
           rtl8922ae_deadline(deadline, RTL_MS)) ||
-      !rtl8922ae_hw_pci_mode(deadline, detail) || !publish_rings()) {
+      !rtl8922ae_poll32(R_DMA_BUSY, B_DMA_RX_BUSY, 0,
+          rtl8922ae_deadline(deadline, RTL_MS))) {
     return false;
   }
+  rtl8922ae_hw_pci_mode();
+  if (!publish_rings()) return false;
   change32(R_DMA_CONFIG, 0, B_BDRAM_RESET);
   if (!rtl8922ae_poll32(R_DMA_CONFIG, B_BDRAM_RESET, 0,
-          rtl8922ae_deadline(deadline, RTL_SECOND / 2)) ||
-      !rtl8922ae_hw_pci_finish(cut, deadline, detail)) {
+          rtl8922ae_deadline(deadline, RTL_SECOND / 2))) {
     return false;
   }
+  rtl8922ae_hw_pci_finish(cut);
   change32(R_DMA_STOP, 1u << RTL_FW_CHANNEL, B_STOP_CHANNELS & ~(1u << RTL_FW_CHANNEL));
   change32(R_DMA_CONFIG, B_STOP_MASTER, B_TX_ENABLE | B_RX_ENABLE);
   uint32_t watchdog = rtl8922ae_read32(R_DMA_WATCHDOG);

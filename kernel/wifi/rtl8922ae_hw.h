@@ -23,29 +23,29 @@ struct rtl8922ae_board {
  * Output is cleared on failure; detail receives a static refusal string.
  * All waits are capped by the caller's absolute operation deadline. Failure
  * leaves hardware state for the caller's terminal standard PCI reset. */
-bool rtl8922ae_hw_cut(uint8_t *cut, const char **detail);
+uint8_t rtl8922ae_hw_cut(void);
 bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail);
 bool rtl8922ae_hw_xtal_read(uint8_t address, uint8_t *value, uint64_t deadline);
 bool rtl8922ae_hw_xtal_write(uint8_t address, uint8_t value, uint8_t mask,
     uint64_t deadline);
 /* After MAC power-on, before firmware/security and BB/RF startup. */
-bool rtl8922ae_hw_rfkill_prepare(const char **detail);
+void rtl8922ae_hw_rfkill_prepare(void);
 /* After GPIO setup, while the register domain is live.
- * A failed current read is never an unblocked observation. */
-bool rtl8922ae_hw_rfkill(bool *blocked, const char **detail);
+ * Observe GPIO9 directly, as in the reference rfkill_get path. */
+bool rtl8922ae_hw_rfkill(void);
 /* After transport pre-deinit, while BAR/decode and DMA backing remain owned.
  * Attempt once even after partial power-on. No firmware power-save mode may
  * have been entered. Shutdown polls must remain usable after a transport fault.
- * True means the reference shutdown completed and WLMAC power state read zero;
+ * True means the reference shutdown handshakes completed;
  * it does not replace the caller's unconditional terminal standard PCI reset. */
 bool rtl8922ae_hw_power_off(uint64_t deadline, const char **detail);
 bool rtl8922ae_hw_security(uint8_t bytes[4], uint8_t cut, uint64_t deadline,
     const char **detail);
 bool rtl8922ae_hw_download_prepare(uint64_t deadline, const char **detail);
 /* Fixed PCIe profile around the parent-owned DMA stop/index/publish steps. */
-bool rtl8922ae_hw_pci_prepare(uint64_t deadline, const char **detail);
-bool rtl8922ae_hw_pci_mode(uint64_t deadline, const char **detail);
-bool rtl8922ae_hw_pci_finish(uint8_t cut, uint64_t deadline, const char **detail);
+void rtl8922ae_hw_pci_prepare(void);
+void rtl8922ae_hw_pci_mode(void);
+void rtl8922ae_hw_pci_finish(uint8_t cut);
 /* First mailbox exchange after normal firmware readiness: raw board/trim eFuse, checked PHY mailbox
  * and GPIO9 observation. rfkill is an observation, not an RF-silence proof. */
 bool rtl8922ae_hw_board(struct rtl8922ae_board *board, uint8_t cut,
