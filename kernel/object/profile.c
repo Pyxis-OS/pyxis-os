@@ -3,6 +3,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/object/profile.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 #include <kernel/service/profile.h>
 #include <kernel/user_memory.h>
 
@@ -51,6 +52,16 @@ struct syscall_result profile_call(uint64_t rights, uint64_t operation,
       profile_memory_control(operation, &reply.memory);
   if (status != CALL_OK || !returns_snapshot) {
     return (struct syscall_result){status, 0};
+  }
+  if (!host) {
+    /* The live private-root syscall excludes drained process VM mutation. */
+    struct process *process = process_current();
+    reply.memory.jit.live_bytes = process->jit_bytes;
+    reply.memory.jit.live_regions = process->jit_regions;
+    reply.memory.jit.writable_bytes = process->jit_writable_bytes;
+    reply.memory.jit.executable_bytes = process->jit_executable_bytes;
+    reply.memory.jit.read_only_bytes = process->jit_bytes - process->jit_writable_bytes -
+        process->jit_executable_bytes;
   }
   if (!copy_to_user(reply_address, &reply, size)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};

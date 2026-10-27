@@ -40,6 +40,7 @@
 #include <abi/thread.h>
 #include <abi/launcher.h>
 #include <abi/memory.h>
+#include <abi/jit.h>
 #include <abi/directory.h>
 #include <abi/console.h>
 #include <abi/endpoint.h>
@@ -100,6 +101,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_DIRECTORY;
   case OBJECT_MEMORY:
     return PROTOCOL_MEMORY;
+  case OBJECT_JIT:
+    return PROTOCOL_JIT;
   case OBJECT_PROCESS_CONTROL:
     return PROTOCOL_PROCESS;
   case OBJECT_PROCESS_INTERRUPT:
@@ -328,6 +331,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~DIRECTORY_RIGHTS);
   case OBJECT_MEMORY:
     return !(rights & ~MEMORY_RIGHT_MANAGE);
+  case OBJECT_JIT:
+    return !(rights & ~JIT_RIGHT_MANAGE);
   case OBJECT_PROCESS_CONTROL:
     return !(rights & ~PROCESS_RIGHTS);
   case OBJECT_PROCESS_INTERRUPT:

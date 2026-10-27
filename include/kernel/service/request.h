@@ -46,6 +46,7 @@ enum bsp_service {
   BSP_SERVICE_WIFI,
   BSP_SERVICE_WIFI_CONNECTION,
   BSP_SERVICE_WIFI_AUTH,
+  BSP_SERVICE_JIT, /* Typed retained storage only; executes on caller CPU. */
   BSP_SERVICE_COUNT,
 };
 
@@ -65,7 +66,7 @@ enum bsp_request_state {
  * parked handoff. Queue publication and wait notification synchronize loans.
  * FORWARDED belongs to the HOST, native filesystem, readiness, audio or ACPI worker,
  * the USB worker, or the sole screen presenter until final completion.
- * MEMORY uses the same retained typed storage locally, without queue publication
+ * MEMORY/JIT use the same retained typed storage locally, without queue publication
  * or a completion notification; its kernel-root caller consumes the result.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {

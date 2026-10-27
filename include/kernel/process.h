@@ -49,7 +49,9 @@ struct process {
   struct endpoint *endpoints; /* BSP-owned weak list of receiving endpoints. */
   _Atomic(struct completion_gate *) completion_gate; /* Independently owned async admission. */
   _Atomic(struct bulk_gate *) bulk_gate; /* Data charge survives outstanding buffer owners. */
-  struct private_allocation *allocations; /* Private-memory service regions only. */
+  struct private_allocation *allocations; /* Owned MEMORY/JIT regions, distinct kinds. */
+  /* Process VM ownership protects gauges; live roots/borrowers provide snapshots. */
+  size_t jit_bytes, jit_regions, jit_writable_bytes, jit_executable_bytes;
   uintptr_t startup_address; /* Read-only record in address_space; zero until prepared. */
   /* Control/group -> lifetime -> parking bucket -> scheduler queues. No allocation or context
    * switch under this lock; detach control/group links only after unlocking. */

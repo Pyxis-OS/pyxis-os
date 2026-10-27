@@ -25,15 +25,22 @@ struct profile_memory_operation {
   uint64_t requests;
   uint64_t failures;
   uint64_t requested_bytes; /* Page-rounded bytes, including failed requests. */
-  uint64_t completed_bytes; /* Successful allocations or releases only. */
+  uint64_t completed_bytes; /* Bytes successfully processed by the operation. */
   struct profile_duration service;
   struct profile_duration total;
+};
+
+struct profile_jit_memory {
+  uint64_t live_bytes, live_regions;
+  uint64_t writable_bytes, read_only_bytes, executable_bytes;
+  struct profile_memory_operation allocate, protect, release;
 };
 
 struct profile_snapshot {
   uint64_t flags;
   struct profile_memory_operation allocate;
   struct profile_memory_operation release;
+  struct profile_jit_memory jit;
 };
 
 struct profile_host_operation {
@@ -73,13 +80,14 @@ struct profile_host_snapshot {
 _Static_assert(sizeof(struct profile_host_operation) == 200, "host operation layout");
 _Static_assert(sizeof(struct profile_host_snapshot) == 408, "host snapshot layout");
 
-/* All operations are header-only. BEGIN/SNAPSHOT/END require MEMORY authority. They always
- * act on the calling process, even through copied/delegated handles. One
- * collection per process, initially disabled; children start disabled too.
+/* All operations are header-only. BEGIN/SNAPSHOT/END require MEMORY authority.
+ * Collection belongs to the calling native thread, even through copied/delegated
+ * handles; other threads and newly created threads have independent collection,
+ * initially disabled.
  * BEGIN clears counters, enables collection and has no reply (BUSY if active).
  * SNAPSHOT returns current/last counters without resetting or stopping them.
  * END disables collection and returns final counters (BAD_REQUEST if inactive).
- * Closing a handle does not stop collection; END or process exit does.
+ * Closing a handle does not stop collection; END or thread exit does.
  *
  * Eager allocation/release and identity-release requests that reach the private
  * address space are counted, including failures there. Malformed/denied
@@ -91,9 +99,18 @@ _Static_assert(sizeof(struct profile_host_snapshot) == 408, "host snapshot layou
  * runs from syscall entry through reply copying, so total minus service is validation and copying. Counter
  * accumulation is excluded. No per-request clock reads when off.
  * Totals saturate at UINT64_MAX and set SATURATED. The reply contains no
- * addresses. Bad reply storage must not change collection state. */
+ * addresses. Bad reply storage must not change collection state.
+ *
+ * The JIT counters use the same BEGIN/END interval and ACTIVE/SATURATED flags.
+ * They cover admitted ALLOCATE/PROTECT/RELEASE requests, with page-rounded
+ * requested bytes and successful completed bytes, including idempotent PROTECT.
+ * JIT live byte/region and permission-state gauges describe the entire current
+ * process at snapshot time, including when this thread's counters are disabled.
+ * Read-only bytes are live bytes minus writable and executable bytes. Gauges
+ * follow actual reclamation; handle close does not release JIT regions. */
 _Static_assert(sizeof(struct profile_duration) == 16, "profile duration layout");
 _Static_assert(sizeof(struct profile_memory_operation) == 64, "profile operation layout");
-_Static_assert(sizeof(struct profile_snapshot) == 136, "profile snapshot layout");
+_Static_assert(sizeof(struct profile_jit_memory) == 232, "JIT memory profile layout");
+_Static_assert(sizeof(struct profile_snapshot) == 368, "profile snapshot layout");
 
 #endif

@@ -137,6 +137,7 @@ interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 | Resource | Rights |
 | --- | --- |
 | `memory` | `manage` |
+| `jit` | `manage` (explicit generated-code authority) |
 | `threads` | `manage` |
 | `keyboard`, `pointer` | `input` |
 | `job_work` | `create`, `remove`, `read-files`, `write-files` |
@@ -159,6 +160,13 @@ interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 
 Programs using libc allocation request `memory/manage` under its documented
 `memory` startup name; declaring an alias does not rewrite libc service lookups.
+
+Generated-code consumers separately declare `jit/manage`. Trusted launchers have
+a private source only when their space opts into `jit = true`; no shipped space
+does. Raw children do not inherit that source, including aliases captured from
+the environment. Explicit native grants/transfers remain possible and apply to
+the receiving process. See [JIT memory](../interfaces/jit.md) for ownership,
+permission transitions, quotas and caller code-lifetime obligations.
 
 Unknown classes/rights, system-only setup, space-factory and raw-device requests
 reject even when optional. Selected external native grants use the bounded

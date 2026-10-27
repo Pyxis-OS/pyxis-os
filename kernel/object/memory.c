@@ -206,7 +206,7 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   pending->result = MM_INVALID;
   pending->request.vm_process = process;
   pending->request.vm_mutator = task_current_user();
-  process_vm_memory_call(pending);
+  process_vm_private_call(&pending->request);
   region = pending->region;
   reservation = pending->reservation;
   enum mm_result result = pending->result;

@@ -163,7 +163,7 @@ static bool reserved_resource(const char *name)
 {
   static const char *const reserved[] = {
     "input", "output", "stdin", "stdout", "stderr", "keyboard", "gamepad", "pointer", "display", "audio", "space",
-    "terminal_pointer", "clipboard_local", "clipboard_shared", "screenshot_saver",
+    "terminal_pointer", "clipboard_local", "clipboard_shared", "screenshot_saver", "jit",
   };
   size_t length = strlen(name);
   for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); ++i) {
@@ -287,6 +287,7 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
     }
   }
   capture->space.screenshot_saver = request.flags & SPACE_CREATE_SCREENSHOT_SAVER;
+  capture->space.jit = request.flags & SPACE_CREATE_JIT;
   capture->space.terminal_control = request.flags & SPACE_CREATE_TERMINAL_CONTROL;
   capture->space.clipboard_local = request.flags & SPACE_CREATE_CLIPBOARD_LOCAL;
   capture->space.clipboard_shared = request.flags & SPACE_CREATE_CLIPBOARD_SHARED;

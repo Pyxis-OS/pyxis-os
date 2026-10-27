@@ -19,6 +19,7 @@ struct launch_space {
   const uint64_t *cpus;
   size_t cpu_count;
   bool terminal_control, clipboard_local, clipboard_shared, boot_focus, screenshot_saver;
+  bool jit;
 };
 
 /* Heap storage shared with BSP, never a remote task stack. Capability-valued
