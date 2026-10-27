@@ -180,8 +180,8 @@ verification and an immutable published revision.
 `build-llvm-development.sh SDK OUTPUT WORKDIR` builds a separate threaded static
 X86 library/header prefix for Mesa, with a Linux-host `llvm-config` reporting
 the target libraries. The development pin is separate; the compiler container and
-hosted tool bundles are unchanged. See [the prefix and manual object-emission
-check](../docs/development/llvm-development.md).
+hosted tool bundles are unchanged. See [the prefix, object-emission and explicit
+JIT checks](../docs/development/llvm-development.md).
 
 ## Installation
 

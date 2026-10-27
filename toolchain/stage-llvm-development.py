@@ -13,7 +13,7 @@ spec = importlib.util.spec_from_file_location("stage_hosted", Path(__file__).wit
 hosted = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hosted)
 COMPONENTS = ["bitwriter", "engine", "mcdisassembler", "core", "executionengine",
-              "scalaropts", "transformutils", "instcombine", "native", "mcjit"]
+              "scalaropts", "transformutils", "instcombine", "native", "mcjit", "orcjit"]
 
 
 def main():

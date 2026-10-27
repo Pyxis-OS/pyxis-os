@@ -18,7 +18,7 @@ fresh work directory; SDK changes invalidate affected objects by content.
 
 The target is X86, threads on, exceptions/RTTI off, static only, with optional
 host libraries disabled. The closure is `bitwriter engine mcdisassembler core
-executionengine scalaropts transformutils instcombine native mcjit`. Linking the
+executionengine scalaropts transformutils instcombine native mcjit orcjit`. Linking the
 manual object-emission program builds its archive dependencies. The export
 contains those archives, public/generated LLVM headers, the LLVM licence and
 SDK/build inventories under one immutable `llvm-development-SHA256` directory,
@@ -37,7 +37,7 @@ discovery, not a Pyxis executable. The prefix can move as one directory.
 
 Point a Meson cross file's `llvm-config` binary at that prefix and select the
 SDK's cross compilers/sysroot. Configure `toolchain/llvm-development/meson.build`;
-expect `LLVM_MESON_DISCOVERY COMPLETE`. This discovers all ten component groups
+expect `LLVM_MESON_DISCOVERY COMPLETE`. This discovers all eleven component groups
 through Meson's ordinary LLVM config-tool dependency.
 
 The build also produces `WORK/target/bin/pyxis-llvm-object-check`. Place it at
@@ -56,6 +56,42 @@ it never maps or executes generated instructions. Neither linking MCJIT nor
 this check qualifies executable-memory support. Luna builds published prefixes;
 chronium publishes them. No compiler-container rebuild is needed.
 
+## Explicit JIT sections
+
+**Accepted (chronium, 2026-10-27):** only SectionMemoryManager's default native
+mapper selects JIT allocation. Its native `MF_JIT` marker requires held
+`jit/manage`; ordinary mapped RW users stay on MEMORY even when that grant is
+held. Owning allocation descriptors retain a non-reused identity and native
+service; borrowed section views retain that provenance and cannot release the
+whole allocation. Protection rounds contained views to native pages and requests
+RW/NX, R/NX or R/X. No raw-address lookup grants authority over reused storage.
+The original owner outlives every borrowed view. `MemoryBlock` has additional
+native provenance fields: rebuild the library prefix and its native consumers
+together; do not mix old headers or archives with the new layout.
+
+The kernel's completed PROTECT supplies instruction visibility. The LLVM cache
+hook performs no additional raw-address operation or executable-memory grant.
+NearBlock is advisory and may be ignored. Missing JIT authority refuses; no
+compiler or shipped space newly acquires it.
+
+**Accepted (chronium, 2026-10-27):** Pyxis skips EngineBuilder's automatic
+process-image symbol scan. Callers register imports explicitly with LLVM's
+existing symbol mappings/resolvers. Implicit process/shared-library discovery
+waits for dynamic linker work; DynamicLibrary still refuses unsupported loads.
+
+**Accepted (chronium, 2026-10-27):** retain upstream MCJIT finalization behaviour,
+without adding an engine fence or fatal-error policy. The Pyxis protection
+adapter retries only definite pre-effect `BUSY`, up to eight attempts like
+libc's current VM admission tuning. Other failures, including unknown outcomes,
+return unchanged. This does not strengthen MCJIT's upstream error handling;
+executing unpublished NX code faults and reports `FAULTED` through normal native
+process observation. Callers still own logical code lifetime.
+
+[LLVM JIT checks](experiments/llvm-jit.md) qualify MCJIT with explicitly
+registered symbols and ORCv2 through an explicitly selected
+RuntimeDyld/SectionMemoryManager object layer. Default JITLink slab partial
+lifetimes and the other mapper/executor routes remain unsupported.
+
 ## Boundaries and qualification
 
 The development-only fork refuses ORC's FD-based remote-executor factory with
@@ -68,6 +104,8 @@ are unchanged.
 
 [Task-1 qualification](experiments/llvm-development.md) records host and target
 builds, relocated Meson discovery, an independently linked consumer of the
-exported prefix and four-CPU QEMU object emission. Native hardware, hosted
-compilation of the consumer on Pyxis and generated-code execution were not run.
+exported prefix and four-CPU QEMU object emission. That initial check executed
+no generated code. Native hardware and hosted compilation of the consumer on
+Pyxis remain unrun; the separate JIT record
+records later MCJIT and ORCv2 execution.
 The prefix is a config-tool export; it does not ship a CMake package.
