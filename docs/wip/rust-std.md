@@ -331,11 +331,13 @@ Native files are unbuffered at this layer, so `File::flush` has no pending data;
 progress, checked close failures and actual metadata validity. Directory
 enumeration and namespace mutation are delivered separately above.
 
-Append returns Unsupported in one Rust option-validation guard before lookup
-or effects. Replace that guard when the separately assigned native atomic-append
-operation exists; seek-to-end followed by write is not atomic append. This does
-not disable libc's existing non-atomic append behavior or change provider
-transaction contracts.
+The [native append milestone](atomic-append.md) replaces the Rust option guard
+with libc `O_APPEND`. Append implies write access; read plus append is read/write.
+Exclusive creation takes precedence, and append plus truncate remains invalid
+unless exclusive creation is selected. Native APPEND serializes EOF selection
+and mutation per operation up to 4,080 bytes. Larger writes can interleave;
+unsupported backings refuse before create/truncate. No seek-to-end emulation or
+provider transaction change is introduced.
 
 The writable slice is delivered by [userland #388](https://git.internal/PyxisOS/pyxis-userland/pulls/388),
 [libc #4](https://git.internal/PyxisOS/pyxis-libc/pulls/4),

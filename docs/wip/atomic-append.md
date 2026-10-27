@@ -1,9 +1,8 @@
 # Native atomic append
 
-Status: assigned to codex-beta (chronium, 2026-10-26). The first-round contract
-is accepted. Native APPEND/SDK implementation is qualified in QEMU; libc, shell
-and language migrations remain. The libc/shell slice is built and qualified in
-QEMU; the language adapters and final native qualification remain.
+Status: ready for review. Native APPEND/SDK, libc/shell and language adapters
+are qualified in QEMU. The vela native RAM smoke passed on 2026-10-27; final
+source/dependency adoption awaits the linked PR merges.
 
 ## Accepted contract (chronium, 2026-10-26)
 
@@ -129,9 +128,89 @@ a boot-declared source and an explicit bundle, not an ambient writable FAT root.
 
 Fresh SDK (including C++ runtime), kernel, selected native application closure,
 Lua 5.5.1, Lua 5.1/LPeg/luv, libuv/relay and all selected sbase tools build/link.
-No native hardware, injected I/O/short-write fault or teardown heap-leak proof is
-claimed. Existing append debts remain open until their remaining language and
+The native probe result below does not qualify the new shell implementation,
+persistent media, injected I/O/short-write faults or teardown heap reclamation. Existing append debts remain open until their remaining language and
 native scope is resolved.
+
+## Language adapters
+
+Go's pinned syscall/runtime adapter uses APPEND for `O_APPEND`, inherited FILE
+output, diagnostics and crash-output targets. Empty ordinary writes preserve the
+cursor; `Pwrite` remains positioned. The runtime retains its allocation-free
+serialized output buffer and nosplit path. Required-support CREATE or a held-FILE
+zero probe refuses unsupported backing before create/truncate.
+
+LLVM Support accepts `OF_Append` through the native-FILE libc route. Its upstream
+Unix compatibility rule selects create-or-open without truncation, even with
+CreateAlways/CreateNew. `raw_fd_ostream::pwrite` uses real positioned I/O, including
+buffered and multi-operation patches; seeking around an ordinary write would
+append instead. Staged VirtualOutput still refuses append because it publishes
+by replacement. AtomicLineLogger retains its explicit refusal: arbitrary-length
+whole-line atomicity exceeds the native operation contract. The PID-based
+coverage-output refusal is independent and remains.
+
+The Go prefix and affected Git/Caddy consumers were rebuilt with the existing
+bootstrap. QEMU checks passed for Go on RAM/npfs/FAT32, concurrent writers,
+inherited/runtime/crash output and HOST refusal; Git init also passed. Caddy was
+built/linked but not run: its ordinary bundle requires TCP authority absent from
+this fixture. LLVM's rebuilt 71-archive development prefix and hosted Clang/LLD/clangd
+payloads build/link with the published `8a4d001` compiler. QEMU covers RAM/npfs/FAT32 and HOST admission, append disposition,
+positioned overwrite, buffered patches and multi-operation patches. Hosted Clang compiles a C file and separately launched LLD links a relocatable
+object; host ELF inspection verifies the resulting function symbol. The final
+clangd initialize/shutdown round-trip passes. Earlier loaded runs returned
+`thread constructor failed: Resource busy`; that variation is observed and
+unattributed. The separate `--check` realpath/ExpandTilde refusal remains. The
+native result below covers append probes, not native compiler execution.
+
+Rust's `.append(true)` selects writable native O_APPEND; read+append selects
+read/write access. Append+truncate is invalid unless exclusive create_new takes
+precedence. The rebuilt stage-2 compiler, host and Pyxis standard libraries passed
+normal export validation. QEMU on one and four CPUs covers RAM, RAM-/disk-backed
+npfs, FAT32, HOST refusal before effects, seek/read+append, empty writes, clones,
+exclusive create, a 12,257-byte write_all, four concurrent writers and inherited
+output/capture. No kernel or Rust API is added.
+
+The Go fork pin changes require rebuilding affected Go prefixes and programs.
+The LLVM pin changes require rebuilding hosted Clang/LLD/clangd payloads and the
+LLVM development prefix. The cross-compiler/container pin stays unchanged.
+
+## Uncertain buffered output (chronium, 2026-10-27)
+
+A native FILE WRITE, APPEND or positioned WRITE returning OUTCOME_UNKNOWN
+permanently latches EIO on the shared libc descriptor's data-write side.
+Descriptor aliases share the latch; `clearerr` clears stdio indicators but cannot
+reset uncertain mutation state. Reads, metadata and ownership release remain
+available; a newly opened descriptor is a new intent. This prevents retained
+stdio output and language buffers, including Rust BufWriter's Drop, from replaying
+an uncertain mutation during another flush, close or normal exit. Known
+non-uncertain errors keep their existing recovery. No new kernel status or public
+libc last-error slot is introduced.
+
+## Native qualification (chronium, 2026-10-27)
+
+The orchestrator ran the sealed smoke hands-free on vela, booted on standard PXE
+main `297e48a4`, with beacon `vela`. It reported:
+
+```text
+APPEND_NATIVE COMPLETE C=PASS RUST=PASS GO=PASS LLVM=PASS CAPTURE=PASS CLEANUP=PASS
+```
+
+The probes used a uniquely named `tmp://` RAM leaf, removed at completion.
+C stdio, Rust, Go and LLVM validated append, positions, aliases and positioned
+writes; C/Rust/Go also checked concurrent records. Rust inherited output and held
+capture passed. The native result is correctness evidence, not a performance,
+persistent-media, durability or lost-reply fault-injection result. The stock image
+contains native APPEND (#1508), but predates #1515: its older shell ran this smoke;
+#1515's shell remains qualified by the separate QEMU checks.
+
+The tested payload records userland `1006c96`, Rust `e635120a`, LLVM `8bdf1360`
+and Go `7327791c`. Results and exact payload provenance are retained under
+`/shared/present/atomic-append/native-quick/results/20261027-165300/`.
+Final integration rebases retain identical libc latch changes and identical Rust
+append source/tests; their newer bases add independently delivered startup CPU,
+terminal and shell work. Main's Go descendant pin retains append. No pre-rebase
+compiler or probe artifact is relabelled: adopting the final heads requires the
+ordinary rebuild against the matching current SDK.
 
 ## Ordered tasks
 
@@ -144,11 +223,11 @@ native scope is resolved.
 - [x] libc, inheritance, shell and dependent ports in linked PRs; restore tee
   append and remove the obsolete workarounds/debt after qualification.
   After this task ordinary append modes/redirection use one native operation.
-- [ ] Go, Rust and LLVM adapters with focused fork PRs and affected prefix
+- [x] Go, Rust and LLVM adapters with focused fork PRs and affected prefix
   rebuilds. Report exact rebuild requirements when known; do not change the
   hosted compiler pin or rebuild its container implicitly.
   After this task supported language/compiler append users need no workaround.
-- [ ] QEMU concurrency/alias/large-write/short-error/rights/CUT/retention checks,
+- [x] QEMU concurrency/alias/large-write/short-error/rights/CUT/retention checks,
   matched costs, then one quick hands-free native scratch-volume qualification.
   Check SYNC separately; record source-only limits honestly.
   After this task the milestone can close with the old append restrictions gone.

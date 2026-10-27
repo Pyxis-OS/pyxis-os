@@ -93,13 +93,16 @@ or relative paths against the retained cwd directory chain. There is no ambient
 slash root. Standard streams preserve their supplied interfaces and grants.
 FILE-backed output shares confirmed positions with runtime diagnostics; independent
 opens remain independent. Supplied stdout/stderr append companions select
-non-atomic SIZE-before-WRITE behavior for ordinary output and diagnostics.
+native APPEND for ordinary output and diagnostics, with atomic EOF selection
+per operation of at most 4,080 bytes. Larger writes may interleave; no sync or
+append-only authority is implied. Unsupported backings (including HOST) refuse
+before create/truncate, using a zero probe or required CREATE admission.
 Malformed companions and unsupported streams fail I/O without stopping package
 initialization; duplicate adoption fails. Native metadata validity is visible in `FileInfo.Sys()`
 (`syscall.Stat_t.Valid`), without invented Unix permissions or timestamps.
 
 Open/create, read/write, positioned I/O, seek, truncate, sync, enumeration and
-native directory mutations work where granted. `O_APPEND`, `os.Root`, exported
+native directory mutations and `O_APPEND` work where granted. `os.Root`, exported
 providers and process execution fail explicitly in this slice. A native FILE
 value received through a supplied pipe is read to EOF before the next segment;
 exported FILE values fail before provider I/O and stay owned until close.
@@ -165,8 +168,9 @@ stop on the first press, as recorded in [debt](https://git.internal/PyxisOS/pyxi
 `runtime/debug.SetCrashOutput` owns a native copy independent of caller close.
 Replacement/disable joins actual runtime writes before release. FILE output
 shares confirmed positions and supplied append semantics; unsupported types or
-rights refuse before changing the current target. This does not add `O_APPEND`
-for ordinary opens or promise nonblocking fatal output.
+rights refuse before changing the current target. Crash output uses the same
+native APPEND policy when selected; fatal output is still blocking. Empty ordinary
+writes are no-ops and keep the cursor, while `Pwrite` remains positioned.
 
 Public roots are implemented as a lazy read of the held
 `boot://share/ca-certificates/cacert.pem`, with Go verification and no host/env
