@@ -59,10 +59,6 @@ The 0.0.9 release merge gate is lifted; new consumers need bulk-capable kernels.
 A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
 C (general capability pipes) remains planned.
 
-[C++ filesystem and streams](cxx-filesystem-streams.md): assigned to Daybreak
-(chronium, 2026-10-26). Native libc++ path/backend work, QEMU stream qualification,
-then removal of obsolete libultraship and SoH C-stdio replacement patches.
-
 [Controller support](controller-support.md): Edge-only wired input assigned to
 Codex delta (chronium, 2026-10-26); descriptor-checked dedicated decoder, native
 keyboard-style gamepad authority/focus and Pyxis SDL backend. Task 0 closes the

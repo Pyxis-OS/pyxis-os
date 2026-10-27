@@ -46,24 +46,23 @@ in the [SDK's C++ section](sdk.md#c). The accepted
 
 ## Decisions
 
-Original gate-7 decisions accepted on 2026-10-08, after the probe. The feature
-profile below records that gate, not the current SDK; streams, locale, wide
-characters, threads and random_device were enabled by later milestones.
+The original gate-7 runtime decision was accepted on 2026-10-08. Later
+milestones enabled streams, the C-only locale, wide characters, threads,
+`random_device` and native `<filesystem>`. The current API and limits are in
+the [SDK C++ profile](sdk.md#c) and the
+[filesystem reference](cxx-filesystem-streams.md).
 
 1. **Where the runtime is built: in the SDK build.** It uses the fork commit
    the installed toolchain records, so the libc++ headers always match the
    compiler.
    - A libc change never needs a container rebuild.
    - A runtime-only fork change does, because it moves the pin.
-2. **The configuration:**
-   - on: exceptions, RTTI and `steady_clock`, with a terminate handler that
-     does not demangle;
-   - off: threads, localization (`<iostream>`, `<locale>`, `<regex>`), wide
-     characters, `<filesystem>`, `random_device` and time zones.
-
-   libc grows only where the runtime or a consumer needs it.
-3. **The first consumer: fmt.** It is checked in QEMU with a program that is
-   not committed, so no C++ program ships yet.
+2. **The current configuration:** exceptions, RTTI, clocks, streams, native
+   filesystem operations, a C-only locale, wide UTF-8/FILE facilities,
+   `random_device` and threads are enabled. Other locales and the time-zone
+   database remain unavailable.
+3. **The first consumer was fmt.** Its initial QEMU probe was external to the
+   tree; later ports, including LibUltraShip and SoH, use the runtime.
 
 Choices made while implementing:
 - **libunwind runs in bare-metal mode.** It finds the tables through the
@@ -76,13 +75,8 @@ Choices made while implementing:
 - **fmt follows libc++'s feature macros.** Two patches turn off its locale
   support and leave out one `std::wstring` helper.
 
-The C++ filesystem milestone enables the native `<filesystem>` subset described
-in the [SDK](sdk.md#c). Its path parser treats `scheme://` as one root component,
-preserves bytes, and refuses leading `/` when performing I/O. Metadata and
-directory operations use only native held roots; a provider URI does not issue
-a request through `status` or iteration. Unsupported metadata setters,
-symlinks, free-space reporting and metadata-preserving `copy_file` report an
-error. The native FILE-backed `<fstream>` round trip is checked in QEMU.
+The native filesystem and stream behavior is described in the
+[filesystem reference](cxx-filesystem-streams.md).
 
 The hosted-Clang [task 2](hosted-tools.md#delivery)
 extends the fork with a real C-only locale, streams, wide UTF-8/FILE facilities
