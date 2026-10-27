@@ -183,7 +183,8 @@ heap storage: do not copy it, and release it with `regfree` after use.
 `regerror` returns readable English messages and the required buffer size
 including NUL, supports a zero-size query, and terminates truncated output.
 
-`stdlib.h` provides stateless UTF-8 `mbtowc`, `mbstowcs` and `wcstombs`.
+`stdlib.h` provides stateless UTF-8 `mbtowc`, `mblen`, `mbstowcs` and `wcstombs`.
+`mblen` is `mbtowc` with no output; NULL text returns zero.
 The string wrappers use a fresh state per call; NULL output counts the entire
 string, output limits never split a scalar, and invalid input fails with EILSEQ.
 `wcwidth` follows the C locale: NUL is zero columns, printable ASCII one and
@@ -254,6 +255,42 @@ The accepted case-insensitive back-reference limit was also observed.
 Read-only GDB at `regexec` confirmed one explicit capture and two engine
 submatches for the BRE capture case. The libc/SDK rebuild had no warnings;
 the full source image build passed with warnings in unchanged third-party ports.
+
+## Option parsing
+
+`unistd.h` declares `getopt` with `optarg`, `optind`, `opterr` and `optopt`, and
+`getopt.h` adds `struct option`, `getopt_long`, `getopt_long_only` and musl's
+`optreset`. They are musl 1.2.5's parsers, imported unmodified; two small local headers
+stand in for musl's private locale and stdio headers (see the
+[upstream record](../../userspace/third_party/musl/UPSTREAM.md)).
+A port that parses options calls these instead of carrying its own copy.
+
+Behavior is musl's. A leading `+` in the option string stops at the first operand
+and `-` returns each operand as option 1; a leading `:` silences diagnostics and
+reports a missing argument as `:`. Unknown options and missing arguments return `?`
+with `optopt` set. `getopt_long` permutes `argv` so operands follow the options,
+accepts unique prefixes of long names, and takes `--name=value`, or `--name value`
+for a required argument only. Setting `optind` to 0 (or `optreset` to 1) restarts
+parsing. Diagnostics go to `stderr`, prefixed by `argv[0]`, when `opterr` is
+nonzero. Option characters decode as UTF-8 through `mbtowc`, and
+`getopt_long_only` measures them with `mblen`.
+
+The parser state is process-wide, as in POSIX, and is not synchronized: threads
+must not parse concurrently. Messages are English; libc has no message catalogs.
+
+The 2026-10-27 validation used an uncommitted program, built with the SDK for
+the pinned compiler (8a4d001) and run once as the development space's init in a
+two-CPU QEMU/KVM guest, on the final tree. It parsed `-ab`, `-o value`, `-ovalue`,
+`--`, an unknown option, a missing argument (with and without a leading `:`), `+`
+and plain operand ordering, and, with `getopt_long`, `--name=value`, `--name value`,
+permutation, an optional argument, a unique prefix, an unknown long option, a
+missing long argument, an argument to a no-argument option and `--`. With
+`getopt_long_only` it parsed `-verbose`, `-name=q`, `-name q`, a single letter that
+is also a short option, a two-byte long name and an unknown name; `mblen` returned
+2, 0, 0 and -1 for a two-byte scalar, an empty string, NULL and an invalid byte.
+Return values, `optarg`, `optopt`, operand order and the `stderr` messages matched
+musl's documented behavior. The program redirected its output through a memory
+stream to the kernel log.
 
 ## Public descriptor interface
 
