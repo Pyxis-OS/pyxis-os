@@ -15,9 +15,6 @@
 #define H2C_RFK_DACK 5u
 #define H2C_RFK_RXDCK 6u
 #define H2C_RFK_PRE_NOTIFY 8u
-#define C2H_CATEGORY_MAC 1u
-#define C2H_CLASS_INFO 0u
-#define C2H_DONE_ACK 1u
 #define C2H_CLASS_RFK_REPORT 9u
 #define C2H_RFK_STATE 0u
 #define RFK_STATE_OK 1u
@@ -77,12 +74,6 @@ bool rtl8922ae_runtime_receive(const void *data, size_t bytes)
   uint32_t header = get32(packet);
   unsigned category = header & 3u, class_id = header >> 2 & 63u;
   unsigned function = header >> 8 & 255u;
-  if (category == C2H_CATEGORY_MAC && class_id == C2H_CLASS_INFO && function == C2H_DONE_ACK) {
-    if (bytes < 12) {
-      rfk.fault = true;
-      return false;
-    }
-  }
   if (category != H2C_CATEGORY_RF || class_id != C2H_CLASS_RFK_REPORT || function != C2H_RFK_STATE) {
     return true;
   }

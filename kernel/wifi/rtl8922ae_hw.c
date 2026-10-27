@@ -164,10 +164,6 @@ uint8_t rtl8922ae_hw_cut(void)
 
 bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
 {
-  if (cut > 15) {
-    return fail(detail, "RTL8922AE unsupported chip cut");
-  }
-
   /* mac.c:rtw89_mac_power_switch rejects the active state only. This cut
    * still makes one attempt, without the wrapper's power-off/retry. */
   uint32_t power = rtl8922ae_read32(R_BE_IC_PWR_STATE);
