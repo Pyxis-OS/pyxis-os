@@ -1,5 +1,6 @@
 #include <kernel/mm/kernel_owner.h>
 #include <kernel/object/screenshot_saver.h>
+#include <kernel/object/jit.h>
 #include <kernel/object/clipboard.h>
 #include <abi/console.h>
 #include <abi/display.h>
@@ -150,7 +151,7 @@ enum capability_result launcher_batch_reserve(struct launch_preparation *group, 
 }
 
 /* Kernel-added resources for a new space's first process. */
-#define SPACE_DEVICE_RESOURCES 12
+#define SPACE_DEVICE_RESOURCES 13
 
 /* BSP, IF=0. Installs the new space's devices in CHILD and points STARTUP at
  * an owned resource array that appends them, plus console streams. */
@@ -159,7 +160,7 @@ static enum call_status install_space_devices(struct process *child, struct spac
 {
   struct kernel_object *console = &space->console->object;
   handle_t input, output, keyboard, gamepad, pointer, display, audio, control;
-  handle_t terminal_pointer = HANDLE_INVALID, saver = HANDLE_INVALID;
+  handle_t terminal_pointer = HANDLE_INVALID, saver = HANDLE_INVALID, jit = HANDLE_INVALID;
   handle_t local_clipboard = HANDLE_INVALID, shared_clipboard = HANDLE_INVALID;
   handle_t streams[3];
   enum capability_result result = capability_install(&child->capabilities, console,
@@ -208,6 +209,14 @@ static enum call_status install_space_devices(struct process *child, struct spac
         SPACE_RIGHT_SET_TITLE | SPACE_RIGHT_SET_AFFINITY, 0, &control);
     object_release(space_control);
   }
+  if (result == CAP_OK && space->jit_enabled) {
+    struct kernel_object *object = jit_create();
+    if (!object) {
+      return CALL_NO_MEMORY;
+    }
+    result = capability_install(&child->capabilities, object, JIT_RIGHT_MANAGE, 0, &jit);
+    object_release(object);
+  }
   if (result == CAP_OK && space->screenshot_saver_enabled) {
     struct kernel_object *object = screenshot_saver_create(space);
     if (!object) {
@@ -233,6 +242,9 @@ static enum call_status install_space_devices(struct process *child, struct spac
   }
 
   size_t count = startup->entry_count;
+  if (count > SIZE_MAX / sizeof(struct process_environment_entry) - SPACE_DEVICE_RESOURCES - 3) {
+    return CALL_LIMIT;
+  }
   struct process_environment_entry *entries = kmalloc((count + SPACE_DEVICE_RESOURCES + 3) *
       sizeof(*entries));
   if (!entries) {
@@ -249,6 +261,9 @@ static enum call_status install_space_devices(struct process *child, struct spac
   entries[count++] = (struct process_environment_entry){"display", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, display, 0};
   entries[count++] = (struct process_environment_entry){"audio", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, audio, 0};
   entries[count++] = (struct process_environment_entry){"space", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, control, 0};
+  if (jit != HANDLE_INVALID) {
+    entries[count++] = (struct process_environment_entry){"jit", ENVIRONMENT_CAP, 0, jit, 0};
+  }
   if (saver != HANDLE_INVALID) {
     entries[count++] = (struct process_environment_entry){"screenshot_saver", ENVIRONMENT_CAP, 0, saver, 0};
   }
@@ -541,6 +556,7 @@ static enum call_status launcher_create_space_owned(struct launch_capture *captu
   struct space *space = space_create(request->name, request->title, ceiling);
   space->terminal_control_enabled = request->terminal_control;
   space->screenshot_saver_enabled = request->screenshot_saver;
+  space->jit_enabled = request->jit;
   space->clipboard_local_enabled = request->clipboard_local;
   space->clipboard_shared_enabled = request->clipboard_shared;
   if (!capture->image) {

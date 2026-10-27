@@ -49,7 +49,8 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
 #define SPACE_CREATE_CLIPBOARD_SHARED (UINT64_C(1) << 2)
 #define SPACE_CREATE_BOOT_FOCUS (UINT64_C(1) << 3)
 #define SPACE_CREATE_SCREENSHOT_SAVER (UINT64_C(1) << 4)
-#define SPACE_CREATE_FLAGS (SPACE_CREATE_TERMINAL_CONTROL | SPACE_CREATE_CLIPBOARD_LOCAL | SPACE_CREATE_CLIPBOARD_SHARED | SPACE_CREATE_BOOT_FOCUS | SPACE_CREATE_SCREENSHOT_SAVER)
+#define SPACE_CREATE_JIT (UINT64_C(1) << 5)
+#define SPACE_CREATE_FLAGS (SPACE_CREATE_TERMINAL_CONTROL | SPACE_CREATE_CLIPBOARD_LOCAL | SPACE_CREATE_CLIPBOARD_SHARED | SPACE_CREATE_BOOT_FOCUS | SPACE_CREATE_SCREENSHOT_SAVER | SPACE_CREATE_JIT)
 #define SPACE_NAME_MAX 31
 #define SPACE_REASON_MAX 96
 
@@ -67,7 +68,7 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
  * initial_stack_bytes obeys the same bounds and default as LAUNCHER_LAUNCH.
  * The request's streams must be NONE, and its resources must not use the names
  * the kernel adds: input, output, keyboard, pointer, display, space,
- * terminal_pointer and screenshot_saver. The
+ * terminal_pointer, screenshot_saver and jit. The
  * kernel gives the child the new space's console as input (READ|INTERRUPT),
  * output (WRITE) and all three streams, its keyboard and pointer (INPUT), its
  * display (DRAW) and the space itself (SET_TITLE|SET_AFFINITY). Everything else
@@ -77,6 +78,11 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
  * or terminal creation and must be withheld from ordinary children.
  * SCREENSHOT_SAVER additionally gives the first process a private per-space
  * screenshot_saver (SERVE). It adds no CAPTURE or directory authority.
+ * JIT additionally enables JIT for this space and gives its first process a
+ * private jit (MANAGE) provisioning source. Trusted launchers delegate it only
+ * for an explicit bundle declaration; ordinary children never inherit it.
+ * The gate is fixed at creation and defaults off. Ordinary MEMORY never grants
+ * executable allocation or permission changes.
  * Success replies with one WAIT process-control handle.
  * BOOT_FOCUS nominates one successful initial launch for the one-time boot
  * selection, when its first terminal content or submitted graphics frame is

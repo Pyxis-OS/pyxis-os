@@ -37,6 +37,7 @@ struct space
   bool clipboard_local_enabled, clipboard_shared_enabled;
   struct kernel_object *screenshot_saver; /* Weak; cleared on final BSP retirement. */
   bool screenshot_saver_enabled;
+  bool jit_enabled; /* Immutable space creation gate; defaults off. */
   bool terminal_control_enabled; /* Trusted first-process startup opt-in. */
   bool pointer_activation_required; /* Survives graphics/pointer owner lifetimes. */
   struct display_object *display; /* Space retains the initial reference. */
