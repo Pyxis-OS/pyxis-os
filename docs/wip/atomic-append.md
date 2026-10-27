@@ -2,8 +2,8 @@
 
 Status: assigned to codex-beta (chronium, 2026-10-26). The first-round contract
 is accepted. Native APPEND/SDK implementation is qualified in QEMU; libc, shell
-and language migrations remain. The plain-output policy below is accepted;
-the libc/shell slice is a source checkpoint, not runtime-qualified.
+and language migrations remain. The libc/shell slice is built and qualified in
+QEMU; the language adapters and final native qualification remain.
 
 ## Accepted contract (chronium, 2026-10-26)
 
@@ -96,7 +96,7 @@ The detailed inventory with fork revisions and line evidence is retained in
 `/shared/present/atomic-append/PROPOSAL.md`; implementation PRs update the public
 interfaces beside code, not that private proposal.
 
-## Libc/shell checkpoint
+## Libc/shell integration
 
 The held-directory `DIRECTORY_APPEND_SUPPORT` query lets the shell classify an
 absent output before helper preparation or creation. It requires CREATE and
@@ -110,12 +110,28 @@ before redirect creation/truncation. Independent explicit redirects retain their
 own cursors; lexical `2>&1` shares its selected sink. Background redirects remain
 unsupported, including on later pipeline stages.
 
-At the 2026-10-26 wind-down this is **not ready to merge**: focused translation-unit
-checks passed, but complete builds, QEMU and matched stdio measurements remain.
-Qualification must cover HOST/native script descendants, both `2>&1` orders,
-independent redirects to the same missing name and concurrent creators, aliases,
-failed captures and VALUE-mode capture probes. Existing append debt stays open
-until the adapters and qualification are complete.
+Repeated redirects to one initially absent native name keep independent bindings.
+After an earlier redirect creates it, a later redirect may look it up once through
+its own retained parent, only after matching parent identity and final component.
+The returned live FILE identity must match the held created FILE; replacement,
+missing comparison metadata, authority loss or lookup failure is final. No earlier
+FILE grant substitutes for the later parent's authority, and no mutation is retried.
+
+QEMU checks passed on four CPUs for RAM and RAM-/disk-backed npfs: stdio `a`/`a+`,
+returned position, positioned `pwrite`, `fdopen` ownership/access, shared read-ahead,
+dup aliases and four concurrent writers. Shell checks cover script descendants,
+both `2>&1` orders, independent/reversed/mixed redirects to new targets, root
+aliases, input-alias refusal, capture bytes/value handoff, failed captures, `tee -a`
+and HOST refusal before create/truncate. HOST plain output and independent worker
+cursors passed. A one-CPU guest passed FAT32's same libc checks and Lua/luv child
+inheritance through both a native FILE and the HOST relay. FAT authority came from
+a boot-declared source and an explicit bundle, not an ambient writable FAT root.
+
+Fresh SDK (including C++ runtime), kernel, selected native application closure,
+Lua 5.5.1, Lua 5.1/LPeg/luv, libuv/relay and all selected sbase tools build/link.
+No native hardware, injected I/O/short-write fault or teardown heap-leak proof is
+claimed. Existing append debts remain open until their remaining language and
+native scope is resolved.
 
 ## Ordered tasks
 
@@ -125,7 +141,7 @@ until the adapters and qualification are complete.
 - [x] Native APPEND, canonical RAM/npfs/FAT/capture serialization, required-support
   CREATE, SDK helper, completion/export integration and interface docs.
   After this task chronium can append concurrently through native capabilities.
-- [ ] libc, inheritance, shell and dependent ports in linked PRs; restore tee
+- [x] libc, inheritance, shell and dependent ports in linked PRs; restore tee
   append and remove the obsolete workarounds/debt after qualification.
   After this task ordinary append modes/redirection use one native operation.
 - [ ] Go, Rust and LLVM adapters with focused fork PRs and affected prefix
@@ -236,10 +252,42 @@ language append adapters remain in their pending task.
 HOST's accepted refusal and revisit point are tracked in
 [debt #1506](https://git.internal/PyxisOS/pyxis-os/issues/1506).
 
+### Libc/shell slice
+
+The same QEMU profile and commands as the before run, rebased onto main
+`297e48a4`, userland `79af144` and ports `24e7d6a`, gave these single samples.
+The new directory is held and all outputs were checked. No SYNC is timed.
+
+| Workload | RAM-npfs before / after | Disk npfs before / after |
+| --- | ---: | ---: |
+| iobench 1 MiB, 4,080-byte WRITE | 6.905 / 8.922 ms | 6.983 / 2.521 ms |
+| iobench 1 MiB, 64-byte WRITE | 305.390 / 319.368 ms | 338.981 / 321.084 ms |
+| Lua `w`, 8,192 × 64-byte line + flush | 166.154 / 173.276 ms | 158.862 / 73.357 ms |
+| Lua `a`, same loop | 304.126 / 176.525 ms | 318.062 / 180.099 ms |
+
+The retained before binary and rebuilt binary were then paired on the **same new
+kernel and fresh scratch pools**, one sample each, because main changed overnight
+and the ordinary WRITE control varied. This isolates the client append change:
+
+| Same-kernel Lua loop | RAM-npfs before / after | Disk npfs before / after |
+| --- | ---: | ---: |
+| `a`, native EOF placement replacing SIZE+WRITE | 300.520 / 171.352 ms | 306.926 / 168.757 ms |
+| `w`, ordinary WRITE control | 89.270 / 172.016 ms | 103.520 / 156.532 ms |
+
+Append improves about 43–45% in that pair. The apparent ordinary-write slowdown
+was checked once with reversed execution order and fresh names: RAM before/after
+170.757/172.085 ms; disk 173.986/156.965 ms. It did not reproduce. The ordinary
+WRITE path still submits one WRITE, whereas append removes its former per-chunk
+SIZE call. Short intervals and scheduling/cache variation prevent a stronger
+throughput claim from these samples; they are not native performance numbers.
+Both Lua binaries are 5.5.1 with the same compiler/profile; open/close and content
+verification remain outside the timed loop. Raw build, commands, hashes and
+qualification records are under `/shared/present/atomic-append/task2/`.
+
 ## You should know
 
 Atomicity is per bounded native operation, not per `printf` or `fwrite`, and it
 does not add durability or append-only security. HOST append will refuse;
 ordinary HOST `>` remains supported through a PIPE-backed positioned relay.
 That fallback needs the existing declared helper grants and is not seekable.
-No libc/shell runtime or after-measurement result is claimed by the checkpoint.
+Language adapter and native-hardware delivery remain pending.
