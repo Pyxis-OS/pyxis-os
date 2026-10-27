@@ -9,7 +9,7 @@ building the SDK.
 
 ## Contents and ownership
 
-Libc headers include `regex.h`, the minimal `wchar.h` type interface, and ASCII
+Libc headers include `regex.h`, `getopt.h`, the minimal `wchar.h` type interface, and ASCII
 `wctype.h`. The four POSIX regex functions and UTF-8 `mbtowc` live in `libc.a`;
 there is no extra link library. See
 [interfaces and limits](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion).

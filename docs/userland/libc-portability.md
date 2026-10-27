@@ -255,6 +255,37 @@ Read-only GDB at `regexec` confirmed one explicit capture and two engine
 submatches for the BRE capture case. The libc/SDK rebuild had no warnings;
 the full source image build passed with warnings in unchanged third-party ports.
 
+## Option parsing
+
+`unistd.h` declares `getopt` with `optarg`, `optind`, `opterr` and `optopt`, and
+`getopt.h` adds `struct option`, `getopt_long`, `getopt_long_only` and musl's
+`optreset`. They are musl 1.2.5's parsers, imported with only their private-header
+plumbing changed (see the
+[upstream record](../../userspace/third_party/musl/UPSTREAM.md)).
+A port that parses options calls these instead of carrying its own copy.
+
+Behavior is musl's. A leading `+` in the option string stops at the first operand
+and `-` returns each operand as option 1; a leading `:` silences diagnostics and
+reports a missing argument as `:`. Unknown options and missing arguments return `?`
+with `optopt` set. `getopt_long` permutes `argv` so operands follow the options,
+accepts unique prefixes of long names, and takes `--name=value`, or `--name value`
+for a required argument only. Setting `optind` to 0 (or `optreset` to 1) restarts
+parsing. Diagnostics go to `stderr`, prefixed by `argv[0]`, when `opterr` is
+nonzero. Option characters decode as UTF-8 through `mbtowc`.
+
+The parser state is process-wide, as in POSIX, and is not synchronized: threads
+must not parse concurrently. Messages are English; libc has no message catalogs.
+
+The 2026-10-27 validation used an uncommitted program, built with the SDK and run
+once as the development space's init in a two-CPU QEMU/KVM guest. It parsed `-ab`,
+`-o value`, `-ovalue`, `--`, an unknown option, a missing argument (with and
+without a leading `:`), `+` and plain operand ordering, and `--name=value`,
+`--name value`, permutation, an optional argument, a unique prefix, an unknown
+long option, a missing long argument, an argument to a no-argument option and `--`
+with `getopt_long`. Return values, `optarg`, `optopt`, operand order and the
+`stderr` messages matched musl's documented behavior; `getopt_long_only` was not
+exercised. The program redirected its output through a memory stream to the kernel log.
+
 ## Public descriptor interface
 
 The SDK exports nested libc headers, including `sys/types.h`. Its current
