@@ -1,10 +1,8 @@
 # Native atomic append
 
-Status: assigned to codex-beta (chronium, 2026-10-26). The first-round contract
-is accepted. Native APPEND/SDK and the libc/shell slice are built and qualified
-in QEMU. Go, Rust and LLVM append adapters have built prefixes and QEMU
-qualification. The shared uncertain-write latch is implemented; final native
-qualification remains.
+Status: ready for review. Native APPEND/SDK, libc/shell and language adapters
+are qualified in QEMU. The vela native RAM smoke passed on 2026-10-27; final
+source/dependency adoption awaits the linked PR merges.
 
 ## Accepted contract (chronium, 2026-10-26)
 
@@ -130,8 +128,8 @@ a boot-declared source and an explicit bundle, not an ambient writable FAT root.
 
 Fresh SDK (including C++ runtime), kernel, selected native application closure,
 Lua 5.5.1, Lua 5.1/LPeg/luv, libuv/relay and all selected sbase tools build/link.
-No native hardware, injected I/O/short-write fault or teardown heap-leak proof is
-claimed. Existing append debts remain open until their remaining language and
+The native probe result below does not qualify the new shell implementation,
+persistent media, injected I/O/short-write faults or teardown heap reclamation. Existing append debts remain open until their remaining language and
 native scope is resolved.
 
 ## Language adapters
@@ -161,8 +159,8 @@ positioned overwrite, buffered patches and multi-operation patches. Hosted Clang
 object; host ELF inspection verifies the resulting function symbol. The final
 clangd initialize/shutdown round-trip passes. Earlier loaded runs returned
 `thread constructor failed: Resource busy`; that variation is observed and
-unattributed. The separate `--check` realpath/ExpandTilde refusal remains. No
-native language-adapter result is claimed.
+unattributed. The separate `--check` realpath/ExpandTilde refusal remains. The
+native result below covers append probes, not native compiler execution.
 
 Rust's `.append(true)` selects writable native O_APPEND; read+append selects
 read/write access. Append+truncate is invalid unless exclusive create_new takes
@@ -188,6 +186,32 @@ an uncertain mutation during another flush, close or normal exit. Known
 non-uncertain errors keep their existing recovery. No new kernel status or public
 libc last-error slot is introduced.
 
+## Native qualification (chronium, 2026-10-27)
+
+The orchestrator ran the sealed smoke hands-free on vela, booted on standard PXE
+main `297e48a4`, with beacon `vela`. It reported:
+
+```text
+APPEND_NATIVE COMPLETE C=PASS RUST=PASS GO=PASS LLVM=PASS CAPTURE=PASS CLEANUP=PASS
+```
+
+The probes used a uniquely named `tmp://` RAM leaf, removed at completion.
+C stdio, Rust, Go and LLVM validated append, positions, aliases and positioned
+writes; C/Rust/Go also checked concurrent records. Rust inherited output and held
+capture passed. The native result is correctness evidence, not a performance,
+persistent-media, durability or lost-reply fault-injection result. The stock image
+contains native APPEND (#1508), but predates #1515: its older shell ran this smoke;
+#1515's shell remains qualified by the separate QEMU checks.
+
+The tested payload records userland `1006c96`, Rust `e635120a`, LLVM `8bdf1360`
+and Go `7327791c`. Results and exact payload provenance are retained under
+`/shared/present/atomic-append/native-quick/results/20261027-165300/`.
+Final integration rebases retain identical libc latch changes and identical Rust
+append source/tests; their newer bases add independently delivered startup CPU,
+terminal and shell work. Main's Go descendant pin retains append. No pre-rebase
+compiler or probe artifact is relabelled: adopting the final heads requires the
+ordinary rebuild against the matching current SDK.
+
 ## Ordered tasks
 
 - [x] Capture before-code QEMU costs with existing tools, single runs unless a
@@ -203,7 +227,7 @@ libc last-error slot is introduced.
   rebuilds. Report exact rebuild requirements when known; do not change the
   hosted compiler pin or rebuild its container implicitly.
   After this task supported language/compiler append users need no workaround.
-- [ ] QEMU concurrency/alias/large-write/short-error/rights/CUT/retention checks,
+- [x] QEMU concurrency/alias/large-write/short-error/rights/CUT/retention checks,
   matched costs, then one quick hands-free native scratch-volume qualification.
   Check SYNC separately; record source-only limits honestly.
   After this task the milestone can close with the old append restrictions gone.
