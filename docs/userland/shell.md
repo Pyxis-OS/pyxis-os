@@ -1314,8 +1314,7 @@ and so does a name the shell supplies itself:
 
 An existing TEXT value, such as an inherited `TERM`, is replaced. Every check
 and alias allocation runs before one environment SET batch, so a refused file
-applies neither settings nor aliases. The
-shell prints the reason and continues with its ordinary settings:
+applies neither settings nor aliases. The shell prints the reason and continues with its ordinary settings:
 
 ```text
 shell: home://.config/shell/startup.lua: tmp holds a capability; none applied
