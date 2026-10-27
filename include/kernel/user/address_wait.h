@@ -44,7 +44,7 @@ enum call_status address_wake(const struct thread_address_wake *request, uint64_
 void address_wait_cancel(struct address_wait_record *record, size_t bucket,
     enum address_wait_result result);
 
-/* BSP, drained VM mutation after validation/preflight, before mapping/frame reuse.
+/* Drained private VM owner after validation/preflight, before mapping/frame reuse.
  * Only registrations on affected pages withdraw. No user access or allocation. */
 void address_wait_withdraw(struct vm_space *space, uintptr_t base, size_t bytes);
 

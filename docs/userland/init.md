@@ -161,6 +161,12 @@ return {
   can opt in.
   The setting does not enable ordinary launch when `launch` is false. See
   [declared contexts](program-bundles.md#private-job-contexts).
+- **Generated code.** `jit` is an optional boolean, defaulting to false. True
+  provisions a private JIT source through trusted startup/session/mux/Remote
+  handoffs. Only explicitly declaring bundles receive it automatically; ordinary
+  children do not. No shipped space enables it. This source gate does not revoke
+  capabilities explicitly transferred by a native caller. See
+  [JIT memory](../interfaces/jit.md).
 - **Multiplexer.** `multiplexer` is an optional boolean, defaulting to false.
   It supplies a distinct trusted `mux_terminal` grant. After configuration and
   service setup, the session launcher selects `bin://mux.pxe`, giving it

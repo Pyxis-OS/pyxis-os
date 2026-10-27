@@ -190,6 +190,10 @@ Qualification and measured limits: [caller-CPU MEMORY](../development/experiment
 
 ## Native use
 
+Generated code uses the separate [JIT interface](../interfaces/jit.md), not an
+execute flag on ordinary MEMORY. Its identity-owned allocations and contained
+permission changes share the caller-CPU private transaction and final teardown.
+
 [Libpyxis](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/memory.h) exposes `memory_allocate()` and
 `memory_release()`, returning native statuses and validating allocation replies.
 Allocation clears its output on failure. Release takes the region by value and
