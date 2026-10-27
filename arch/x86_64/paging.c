@@ -44,6 +44,8 @@
 #define PAT_DEVICE_INDEX 3
 #define PAT_UNCACHEABLE 0
 
+#define EFI_BOOT_SERVICES_CODE 3u
+#define EFI_BOOT_SERVICES_DATA 4u
 #define EFI_RUNTIME_CODE 5u
 #define EFI_RUNTIME_DATA 6u
 #define EFI_MEMORY_UC UINT64_C(1)
@@ -364,6 +366,13 @@ static uintptr_t efi_pointer_virtual(const struct boot_info *boot, uint64_t poin
   return 0;
 }
 
+static bool efi_temporary_boot_services(const struct efi_map_descriptor *descriptor)
+{
+  return !(descriptor->attributes & EFI_MEMORY_RUNTIME) &&
+      (descriptor->type == EFI_BOOT_SERVICES_CODE ||
+          descriptor->type == EFI_BOOT_SERVICES_DATA);
+}
+
 static void efi_runtime_prepare(struct boot_info *boot)
 {
   if (!boot->efi_map_valid || !boot->efi_system_table_physical ||
@@ -380,6 +389,16 @@ static void efi_runtime_prepare(struct boot_info *boot)
        offset += boot->efi_descriptor_size) {
     struct efi_map_descriptor descriptor;
     memcpy(&descriptor, map + offset, sizeof(descriptor));
+    if (efi_temporary_boot_services(&descriptor)) {
+      if (!descriptor.pages || (descriptor.physical & (PAGE_SIZE - 1)) ||
+          descriptor.physical >= physical_limit ||
+          descriptor.pages > (physical_limit - descriptor.physical) / PAGE_SIZE ||
+          descriptor.physical > LOWER_HALF_MAX ||
+          descriptor.pages > (LOWER_HALF_MAX - descriptor.physical) / PAGE_SIZE) {
+        kwarn("UEFI: boot-services transition range unsupported; variables unavailable\n");
+        return;
+      }
+    }
     if (!(descriptor.attributes & EFI_MEMORY_RUNTIME)) continue;
     if (!descriptor.pages || descriptor.pages > EFI_RUNTIME_BYTES / PAGE_SIZE ||
         (descriptor.physical & (PAGE_SIZE - 1)) ||
@@ -420,6 +439,19 @@ static void efi_runtime_prepare(struct boot_info *boot)
        offset += boot->efi_descriptor_size) {
     struct efi_map_descriptor descriptor;
     memcpy(&descriptor, mutable_map + offset, sizeof(descriptor));
+    if (efi_temporary_boot_services(&descriptor)) {
+      /* Like Linux's EFI boot-services quirk, retain these physical aliases
+       * through SetVirtualAddressMap's firmware callbacks, then remove them.
+       * Limine keeps their backing BOOT_LOADER, outside the PMM's usable set. */
+      unsigned permissions = descriptor.type == EFI_BOOT_SERVICES_CODE ?
+          PAGE_WRITE | PAGE_EXEC : PAGE_WRITE;
+      uint64_t cache_flags = efi_cache_flags(descriptor.attributes);
+      size_t bytes = descriptor.pages * PAGE_SIZE;
+      for (size_t page = 0; page < bytes; page += PAGE_SIZE) {
+        bootstrap_map_efi(descriptor.physical + page, descriptor.physical + page,
+            permissions, cache_flags);
+      }
+    }
     if (!(descriptor.attributes & EFI_MEMORY_RUNTIME)) continue;
     descriptor.virtual = EFI_RUNTIME_BASE + used;
     memcpy(mutable_map + offset, &descriptor, sizeof(descriptor));
@@ -455,6 +487,25 @@ static void efi_runtime_prepare(struct boot_info *boot)
   efi_prepared = true;
 }
 
+static void efi_boot_services_unmap(const struct boot_info *boot)
+{
+  const uint8_t *map = (const uint8_t *)boot->efi_map_words;
+  for (size_t offset = 0; offset < boot->efi_map_size;
+       offset += boot->efi_descriptor_size) {
+    struct efi_map_descriptor descriptor;
+    memcpy(&descriptor, map + offset, sizeof(descriptor));
+    if (!efi_temporary_boot_services(&descriptor)) continue;
+    size_t bytes = descriptor.pages * PAGE_SIZE;
+    for (size_t page = 0; page < bytes; page += PAGE_SIZE) {
+      uintptr_t identity = descriptor.physical + page;
+      active_table(identity, LEVEL_PT)[index_at(identity, LEVEL_PT)] = 0;
+      invlpg(identity);
+    }
+  }
+  /* Release only temporary aliases. Bootloader-owned backing stays reserved;
+   * their still-linked bootstrap page tables remain owned by the kernel. */
+}
+
 static void efi_runtime_seal(const struct boot_info *boot)
 {
   const uint8_t *map = (const uint8_t *)boot->efi_map_words;
@@ -469,8 +520,8 @@ static void efi_runtime_seal(const struct boot_info *boot)
     for (size_t page = 0; page < bytes; page += PAGE_SIZE) {
       uintptr_t identity = descriptor.physical + page;
       uintptr_t virtual = descriptor.virtual + page;
-      *active_table(identity, LEVEL_PT) &= ~PTE_WRITE;
-      *active_table(virtual, LEVEL_PT) &= ~PTE_WRITE;
+      active_table(identity, LEVEL_PT)[index_at(identity, LEVEL_PT)] &= ~PTE_WRITE;
+      active_table(virtual, LEVEL_PT)[index_at(virtual, LEVEL_PT)] &= ~PTE_WRITE;
       invlpg(identity);
       invlpg(virtual);
     }
@@ -484,6 +535,7 @@ static void efi_runtime_activate(struct boot_info *boot)
       efi_set_map_physical;
   uint64_t status = set_map(boot->efi_map_size, boot->efi_descriptor_size,
       boot->efi_descriptor_version, (void *)(uintptr_t)efi_map_physical);
+  efi_boot_services_unmap(boot);
   efi_runtime_seal(boot);
   if (status) {
     kwarn("UEFI: SetVirtualAddressMap status=0x%lx; variables unavailable\n", status);
