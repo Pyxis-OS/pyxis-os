@@ -99,9 +99,10 @@
 /* The worker owns these flags. C2H delivery is synchronous with transport poll;
  * like Linux's fw_ofld_wait, completion matches the command, not H2C sequence. */
 static struct {
-  bool ready, running, ended, end_ok, fault;
+  bool ready, running, ended, end_ok, fault, uncertain;
   bool waiting, acked, ack_ok;
   uint8_t wait_function, channel;
+  uint8_t cam[CAM_COMMAND_BYTES];
 } scan;
 
 static uint32_t get32(const uint8_t *bytes)
@@ -131,9 +132,18 @@ uint8_t rtl8922ae_scan_channel(void)
   return scan.channel;
 }
 
+bool rtl8922ae_scan_reusable(void)
+{
+  return scan.ready && !scan.running && !scan.uncertain && !scan.fault;
+}
+
 bool rtl8922ae_scan_receive(const void *data, size_t bytes)
 {
-  if (bytes < C2H_HEADER_BYTES || scan.fault) return false;
+  if (bytes < C2H_HEADER_BYTES || scan.fault) {
+    scan.uncertain = true;
+    scan.fault = true;
+    return false;
+  }
   const uint8_t *packet = data;
   uint32_t header = get32(packet);
   unsigned category = header & 3u, class_id = header >> 2 & 63u;
@@ -142,6 +152,7 @@ bool rtl8922ae_scan_receive(const void *data, size_t bytes)
   if (class_id == C2H_CLASS_INFO && function == C2H_DONE_ACK) {
     if (bytes < C2H_ACK_BYTES) {
       scan.fault = true;
+      scan.uncertain = true;
       return false;
     }
     uint32_t ack = get32(packet + C2H_HEADER_BYTES);
@@ -150,10 +161,12 @@ bool rtl8922ae_scan_receive(const void *data, size_t bytes)
     if (ack_category != H2C_CATEGORY_MAC || ack_class != H2C_CLASS_OFFLOAD ||
         !scan.waiting || ack_function != scan.wait_function) return true;
     scan.ack_ok = !(ack >> 16 & C2H_SCAN_RETURN_MASK);
+    if (!scan.ack_ok) scan.uncertain = true;
     scan.acked = true;
   } else if (class_id == C2H_CLASS_OFFLOAD && function == C2H_SCAN_REPORT) {
     if (bytes < C2H_SCAN_BYTES) {
       scan.fault = true;
+      scan.uncertain = true;
       return false;
     }
     uint32_t report = get32(packet + C2H_HEADER_BYTES);
@@ -161,6 +174,7 @@ bool rtl8922ae_scan_receive(const void *data, size_t bytes)
     if (scan.running && reason == SCAN_ENTER_CHANNEL_NOTIFY) scan.channel = report & 255u;
     if (scan.running && reason == SCAN_END_NOTIFY) {
       scan.end_ok = status == SCAN_STATUS_SUCCESS;
+      if (!scan.end_ok) scan.uncertain = true;
       scan.ended = true;
     }
   }
@@ -170,8 +184,19 @@ bool rtl8922ae_scan_receive(const void *data, size_t bytes)
 static bool command(uint8_t class_id, uint8_t function, bool done_ack,
     const void *payload, size_t bytes, uint64_t deadline, const char **detail)
 {
-  return rtl8922ae_transport_h2c(H2C_CATEGORY_MAC, class_id, function,
+  bool submitted = rtl8922ae_transport_h2c(H2C_CATEGORY_MAC, class_id, function,
       false, done_ack, payload, bytes, NULL, deadline, detail);
+  if (!submitted) scan.uncertain = true;
+  return submitted;
+}
+
+bool rtl8922ae_scan_refresh_cam(uint64_t deadline, const char **detail)
+{
+  if (!rtl8922ae_scan_reusable()) {
+    return fail(detail, "RTL8922AE scan CAM refresh unavailable");
+  }
+  return command(H2C_CLASS_ADDRESS_CAM, H2C_CAM_UPDATE, true,
+      scan.cam, sizeof(scan.cam), deadline, detail);
 }
 
 static bool acknowledged_command(uint8_t function, const void *payload, size_t bytes,
@@ -183,15 +208,20 @@ static bool acknowledged_command(uint8_t function, const void *payload, size_t b
   uint64_t local = rtl8922ae_deadline(deadline, FIRMWARE_WAIT_NS);
   bool submitted = rtl8922ae_transport_h2c(H2C_CATEGORY_MAC, H2C_CLASS_OFFLOAD,
       function, true, true, payload, bytes, NULL, local, detail);
+  bool transport_ok = submitted;
   if (submitted) {
     do {
-      if (!rtl8922ae_transport_poll() || scan.fault) break;
+      if (!rtl8922ae_transport_poll() || scan.fault) {
+        transport_ok = false;
+        break;
+      }
       if (scan.acked) break;
     } while (rtl8922ae_sleep(SCAN_POLL_NS, local));
   }
   scan.waiting = false;
-  if (!submitted) return false;
-  if (!scan.acked || !scan.ack_ok) {
+  if (!transport_ok || !scan.acked || !scan.ack_ok) {
+    scan.uncertain = true;
+    if (!submitted) return false;
     return fail(detail, function == H2C_ADD_SCAN_CHANNEL ?
         "RTL8922AE scan channel ACK failed/timed out" :
         "RTL8922AE scan START ACK failed/timed out");
@@ -240,15 +270,22 @@ static bool default_control_tables(uint64_t deadline, const char **detail)
 
 bool rtl8922ae_scan_setup(const uint8_t mac[6], uint64_t deadline, const char **detail)
 {
-  if (scan.ready || scan.fault || !rtl8922ae_transport_poll()) {
+  if (scan.ready || scan.uncertain || scan.fault) {
     return fail(detail, "RTL8922AE scan role setup unavailable");
+  }
+  if (!rtl8922ae_transport_poll()) {
+    scan.uncertain = true;
+    return fail(detail, "RTL8922AE scan role setup transport unavailable");
   }
   uint8_t unpause[MACID_PAUSE_SLEEP_BYTES] = {0};
   put32(unpause + MACID_PAUSE_MASK_OFFSET, MACID_ZERO_MASK);
   put32(unpause + MACID_SLEEP_MASK_OFFSET, MACID_ZERO_MASK);
   if (!rtl8922ae_transport_h2c(H2C_CATEGORY_MAC, H2C_CLASS_OFFLOAD,
       H2C_MACID_PAUSE_SLEEP, true, false, unpause, sizeof(unpause), NULL,
-      deadline, detail)) return false;
+      deadline, detail)) {
+    scan.uncertain = true;
+    return false;
+  }
 
   uint8_t role[4] = {0};
   /* CREATE, client self-role, NOLINK, port0/MACID0/CMAC0; no station peer. */
@@ -263,7 +300,7 @@ bool rtl8922ae_scan_setup(const uint8_t mac[6], uint64_t deadline, const char **
   if (!command(H2C_CLASS_MEDIA, H2C_JOIN_INFO, true,
       join, sizeof(join), deadline, detail)) return false;
 
-  uint8_t cam[CAM_COMMAND_BYTES] = {0};
+  uint8_t *cam = scan.cam;
   /* First free address/BSSID entries are index0. BSSID/TMA and all security
    * entries stay zero for the unassociated role; SMA is the board address. */
   uint8_t hash = 0;
@@ -275,7 +312,7 @@ bool rtl8922ae_scan_setup(const uint8_t mac[6], uint64_t deadline, const char **
   put32(cam + 48, CAM_BSSID_BYTES << 16);
   put32(cam + 52, CAM_VALID | CAM_BSSID_MATCH_ALL);
   if (!command(H2C_CLASS_ADDRESS_CAM, H2C_CAM_UPDATE, true,
-      cam, sizeof(cam), deadline, detail)) return false;
+      cam, sizeof(scan.cam), deadline, detail)) return false;
   if (!default_control_tables(deadline, detail)) return false;
   scan.ready = true;
   return true;
@@ -299,6 +336,7 @@ static bool wait_end(uint64_t deadline, const char **detail)
 {
   do {
     if (!rtl8922ae_transport_poll() || scan.fault) {
+      scan.uncertain = true;
       return fail(detail, "RTL8922AE scan completion transport failed");
     }
     if (scan.ended) {
@@ -311,8 +349,12 @@ static bool wait_end(uint64_t deadline, const char **detail)
 
 bool rtl8922ae_scan_run(uint8_t channel, uint64_t deadline, const char **detail)
 {
-  if (!scan.ready || scan.running || scan.fault || !rtl8922ae_transport_poll()) {
+  if (!rtl8922ae_scan_reusable()) {
     return fail(detail, "RTL8922AE scan context unavailable");
+  }
+  if (!rtl8922ae_transport_poll()) {
+    scan.uncertain = true;
+    return fail(detail, "RTL8922AE scan context transport unavailable");
   }
   uint8_t list[SCAN_LIST_BYTES] = {0};
   /* Linux CHAN_ACTIVE with zero SSIDs: 20 MHz, no probe, null or random SN.
@@ -341,6 +383,7 @@ bool rtl8922ae_scan_stop(uint64_t deadline, const char **detail)
 {
   if (!scan.running) return true;
   if (scan.fault || !rtl8922ae_transport_poll()) {
+    scan.uncertain = true;
     return fail(detail, "RTL8922AE scan STOP transport unavailable");
   }
   if (scan.ended) return wait_end(deadline, detail);
@@ -348,6 +391,11 @@ bool rtl8922ae_scan_stop(uint64_t deadline, const char **detail)
   scan_configuration(payload, SCAN_STOP);
   /* STOP's DONE_ACK is not its completion. Linux waits for END_SCAN instead. */
   if (!rtl8922ae_transport_h2c(H2C_CATEGORY_MAC, H2C_CLASS_OFFLOAD, H2C_SCAN_BE,
-      true, true, payload, sizeof(payload), NULL, deadline, detail)) return false;
-  return wait_end(rtl8922ae_deadline(deadline, FIRMWARE_WAIT_NS), detail);
+      true, true, payload, sizeof(payload), NULL, deadline, detail)) {
+    scan.uncertain = true;
+    return false;
+  }
+  bool ended = wait_end(rtl8922ae_deadline(deadline, FIRMWARE_WAIT_NS), detail);
+  if (!ended) scan.uncertain = true;
+  return ended;
 }
