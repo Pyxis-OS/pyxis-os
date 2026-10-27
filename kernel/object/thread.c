@@ -157,10 +157,16 @@ void thread_request_execute(struct thread_request *request)
   }
   struct vm_kernel_owner owner = {0};
   if (!vm_kernel_owner_try(&owner)) {
-    request->status = CALL_BUSY;
-    request->process = NULL;
-    request->caller = NULL;
-    return;
+    /* Keep the drained process gate while admitting shared-kernel effects. */
+    cpu_enable_interrupts();
+    bool admitted = vm_kernel_owner_acquire(&owner);
+    cpu_disable_interrupts();
+    if (!admitted) {
+      request->status = CALL_BUSY;
+      request->process = NULL;
+      request->caller = NULL;
+      return;
+    }
   }
   if (!process_vm_buffer_check(process, request->reply_address, sizeof(request->reply), true)) {
     request->status = CALL_BAD_BUFFER;
