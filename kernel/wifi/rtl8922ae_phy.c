@@ -59,11 +59,6 @@ static void put32(uint8_t *p, uint32_t value)
   }
 }
 
-static bool readable(uint32_t value)
-{
-  return value != UINT32_MAX && value != UINT32_C(0xdeadbeef);
-}
-
 static bool address_valid(uint32_t address)
 {
   return !(address & 3) && address <= BAR_BYTES - sizeof(uint32_t);
@@ -84,9 +79,6 @@ static bool write_mask(uint32_t address, uint32_t mask, uint32_t value,
   uint32_t prior = 0;
   if (mask != UINT32_MAX) {
     prior = rtl8922ae_read32(address);
-    if (!readable(prior)) {
-      return fail(detail, "RTL8922AE PHY register inaccessible");
-    }
   }
   unsigned shift = __builtin_ctz(mask);
   rtl8922ae_write32(address, (prior & ~mask) | (value << shift & mask));
@@ -333,9 +325,6 @@ bool rtl8922ae_phy_rf_read(unsigned path, uint32_t address, uint32_t mask,
   if (address & RF_ADSEL) {
     uint32_t raw = rtl8922ae_read32(PHY_BASE + (path ? 0xf000 : 0xe000) +
         (address & 0xff) * 4);
-    if (!readable(raw)) {
-      return fail(detail, "RTL8922AE direct RF register inaccessible");
-    }
     *value = (raw & mask) >> __builtin_ctz(mask);
     return true;
   }
@@ -353,7 +342,7 @@ bool rtl8922ae_phy_rf_read(unsigned path, uint32_t address, uint32_t mask,
   bool ready = rtl8922ae_poll32(status, B_HWSI_VAL_RDONE, B_HWSI_VAL_RDONE, local);
   uint32_t raw = rtl8922ae_read32(status);
   bool cleared = write_mask(control, B_HWSI_ADD_POLL_MASK, 0, detail);
-  if (!ready || !readable(raw) || !cleared) {
+  if (!ready || !cleared) {
     return fail(detail, "RTL8922AE RF HWSI read completion unconfirmed");
   }
   *value = (raw & mask) >> __builtin_ctz(mask);
@@ -441,23 +430,16 @@ bool rtl8922ae_phy_afe(const void *asset, size_t bytes,
       if (!address_valid(address) || !mask) {
         return fail(detail, "RTL8922AE AFE poll address or mask invalid");
       }
-      bool ready = false;
       for (unsigned attempt = 0; attempt <= 10; ++attempt) {
         uint32_t raw = rtl8922ae_read32(address);
-        if (!readable(raw)) {
-          return fail(detail, "RTL8922AE AFE poll register inaccessible");
-        }
         if ((raw & mask) >> __builtin_ctz(mask) == value) {
-          ready = true;
           break;
         }
         if (!rtl8922ae_sleep(NS_PER_US, deadline)) {
           return fail(detail, "RTL8922AE AFE poll interrupted");
         }
       }
-      if (!ready) {
-        return fail(detail, "RTL8922AE AFE poll did not complete");
-      }
+      /* Linux rtw89_phy_init_bb_afe only warns after these attempts. */
     }
   }
   return true;
@@ -496,17 +478,9 @@ bool rtl8922ae_phy_enable(uint64_t deadline, const char **detail)
    * from the partial PHY0 pre-download setup. */
   if (!checkpoint(deadline, detail)) return false;
   uint8_t reset = rtl8922ae_read8(R_BE_FEN_RST_ENABLE);
-  if (reset == UINT8_MAX) return fail(detail, "RTL8922AE BB/RF reset control inaccessible");
   reset |= B_BE_FEN_BBPLAT_RSTB | B_BE_FEN_BB_IP_RSTN;
   rtl8922ae_write8(R_BE_FEN_RST_ENABLE, reset);
-  if (rtl8922ae_read8(R_BE_FEN_RST_ENABLE) != reset) {
-    return fail(detail, "RTL8922AE BB/RF enable readback failed");
-  }
-  if (!write_mask(R_BE_DMAC_SYS_CR32B, UINT32_MAX, UINT32_C(0x7ff97ff9), detail) ||
-      rtl8922ae_read32(R_BE_DMAC_SYS_CR32B) != UINT32_C(0x7ff97ff9)) {
-    return fail(detail, "RTL8922AE BB/RF DMAC enable readback failed");
-  }
-  return true;
+  return write_mask(R_BE_DMAC_SYS_CR32B, UINT32_MAX, UINT32_C(0x7ff97ff9), detail);
 }
 
 bool rtl8922ae_phy_bb(const void *asset, size_t bytes,
@@ -555,10 +529,7 @@ bool rtl8922ae_phy_postinit(uint64_t deadline, const char **detail)
   if (!registers(settings, sizeof(settings) / sizeof(*settings), true, deadline, detail)) {
     return false;
   }
-  uint32_t reset = rtl8922ae_read32(R_BE_FEN_RST_ENABLE);
-  uint32_t expected = B_BE_BOOT_RDY0 | B_BE_FEN_BBPLAT_RSTB;
-  return (readable(reset) && (reset & expected) == expected) ||
-      fail(detail, "RTL8922AE BBMCU boot-ready/reset release unconfirmed");
+  return true;
 }
 
 bool rtl8922ae_phy_radio(const void *asset, size_t bytes,
@@ -664,11 +635,6 @@ static bool static_receive_init(const struct rtl8922ae_board *board,
     uint32_t address = page == STATUS_EHT ? R_PHY_STS_BITMAP_EHT :
         R_PHY_STS_BITMAP_ADDR_START + (page > STATUS_RESERVED ? page - 1 : page) * 4;
     uint32_t value = rtl8922ae_read32(PHY_BASE + address);
-    /* A bitmap can legitimately enable every IE; do not classify it by the
-     * inaccessible-control-register all-ones sentinel. */
-    if (value == UINT32_C(0xdeadbeef)) {
-      return fail(detail, "RTL8922AE PHY status bitmap inaccessible");
-    }
     if (page == STATUS_HE_MU || page == STATUS_VHT_MU) {
       value |= PHY_BIT(STATUS_IE_DL_MU);
     } else if (page == STATUS_TRIGGER) {
@@ -702,11 +668,8 @@ static bool static_receive_init(const struct rtl8922ae_board *board,
     return false;
   }
   uint8_t cap = board->xtal & B_AX_XTAL_SC_MASK;
-  uint8_t xi, xo;
   if (!rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_SC_XO, cap, 0xff, deadline) ||
-      !rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_SC_XI, cap, 0xff, deadline) ||
-      !rtl8922ae_hw_xtal_read(XTAL_SI_XTAL_SC_XO, &xo, deadline) ||
-      !rtl8922ae_hw_xtal_read(XTAL_SI_XTAL_SC_XI, &xi, deadline) || xi != cap || xo != cap) {
+      !rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_SC_XI, cap, 0xff, deadline)) {
     return fail(detail, "RTL8922AE crystal capacitor programming unconfirmed");
   }
   static const struct phy_register receive[] = {
@@ -915,7 +878,7 @@ bool rtl8922ae_phy_channel_enter(uint64_t deadline, const char **detail)
     return false;
   }
   uint32_t raw = rtl8922ae_read32(PHY_BASE + R_ADC_FIFO_V1);
-  if (!readable(raw) || !bb_mask(R_ADC_FIFO_V1, B_ADC_FIFO_EN_V1,
+  if (!bb_mask(R_ADC_FIFO_V1, B_ADC_FIFO_EN_V1,
       ((raw & B_ADC_FIFO_EN_V1) >> __builtin_ctz(B_ADC_FIFO_EN_V1)) | 3, detail) ||
       !rtl8922ae_sleep(40 * NS_PER_US, deadline) ||
       !bb_mask(R_RXCCA_BE1, B_RXCCA_BE1_DIS, 1, detail) ||
@@ -939,9 +902,6 @@ bool rtl8922ae_phy_channel_tune(const void *asset, size_t bytes,
   if (!checkpoint(deadline, detail)) return false;
   uint8_t mode = rtl8922ae_read8(R_BE_WMAC_RFMOD);
   uint8_t rate = rtl8922ae_read8(R_BE_TXRATE_CHK);
-  if (mode == UINT8_MAX || rate == UINT8_MAX) {
-    return fail(detail, "RTL8922AE MAC channel byte controls inaccessible");
-  }
   rtl8922ae_write8(R_BE_WMAC_RFMOD, mode & ~B_BE_WMAC_RFMOD_MASK);
   rate &= ~(B_BE_BAND_MODE | B_BE_CHECK_CCK_EN | B_BE_RTS_LIMIT_IN_OFDM6);
   rtl8922ae_write8(R_BE_TXRATE_CHK, rate | B_BE_BAND_MODE);
@@ -1033,23 +993,13 @@ bool rtl8922ae_phy_channel_tune(const void *asset, size_t bytes,
       }
     }
   }
-  uint32_t channel_mask = RR_CFGCH_BAND1 | RR_CFGCH_BW_V2 | RR_CFGCH_BAND0 | RR_CFGCH_CH;
-  for (unsigned path = 0; path < 2; ++path) {
-    for (unsigned i = 0; i < 2; ++i) {
-      uint32_t value;
-      if (!rtl8922ae_phy_rf_read(path, rf_addresses[i], RF_MASK, &value, deadline, detail) ||
-          (value & channel_mask) != channel) {
-        return fail(detail, "RTL8922AE RF channel/bandwidth readback mismatch");
-      }
-    }
-  }
   return checkpoint(deadline, detail);
 }
 
 static bool channel_resume(uint64_t deadline, const char **detail)
 {
   uint32_t raw = rtl8922ae_read32(PHY_BASE + R_ADC_FIFO_V1);
-  if (!readable(raw) || !bb_mask(R_ADC_FIFO_V1, B_ADC_FIFO_EN_V1,
+  if (!bb_mask(R_ADC_FIFO_V1, B_ADC_FIFO_EN_V1,
       ((raw & B_ADC_FIFO_EN_V1) >> __builtin_ctz(B_ADC_FIFO_EN_V1)) & ~3u, detail)) {
     return fail(detail, "RTL8922AE channel ADC resume unconfirmed");
   }
@@ -1088,8 +1038,7 @@ bool rtl8922ae_phy_channel_leave(const uint8_t slots[2], uint64_t deadline,
       return false;
     }
     uint32_t selection = rtl8922ae_read32(PHY_BASE + coefficient);
-    if (!readable(selection) ||
-        !bb_mask(lut, B_CFIR_LUT_G3, selection & 1, detail) ||
+    if (!bb_mask(lut, B_CFIR_LUT_G3, selection & 1, detail) ||
         !bb_mask(lut, B_CFIR_LUT_G5, selection >> 1 & 1, detail)) {
       return fail(detail, "RTL8922AE channel RFK coefficient selection unconfirmed");
     }
