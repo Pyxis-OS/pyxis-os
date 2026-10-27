@@ -27,8 +27,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AX200_RSN_PRIVATE_H
-#define AX200_RSN_PRIVATE_H
+#ifndef WIFI_RSN_PRIVATE_H
+#define WIFI_RSN_PRIVATE_H
 
 #include <abi/wifi.h>
 #include <kernel/memory.h>
@@ -46,7 +46,7 @@ static inline uint16_t ax200_rsn_get16(const uint8_t *bytes)
 
 /* The scan and station paths use the same bounded RSN v1 interpretation.
  * Malformed elements expose PRESENT alone, never a partial supported profile. */
-static inline uint32_t ax200_rsn_security(const uint8_t *ie, size_t bytes)
+static inline uint32_t wifi_rsn_security(const uint8_t *ie, size_t bytes)
 {
   static const uint8_t ccmp[4] = {0, 0x0f, 0xac, 4};
   static const uint8_t psk[4] = {0, 0x0f, 0xac, 2};

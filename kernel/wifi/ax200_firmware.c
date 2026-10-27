@@ -10,7 +10,7 @@
 #include <kernel/wifi/ax200_transport.h>
 #include "ax200_firmware.h"
 #include "ax200_station.h"
-#include "ax200_rsn.h"
+#include "wifi_rsn.h"
 #include "rtl8922ae.h"
 
 #define AX200_PREPARATION_MS 10000u
@@ -575,7 +575,7 @@ static void collect_beacon(const uint8_t *payload, size_t bytes)
       ssid_bytes = length;
     } else if (id == AX_RSN_ELEMENT_ID) {
       duplicate_rsn |= (security_flags & WIFI_BSS_RSN_PRESENT) != 0;
-      security_flags |= ax200_rsn_security(value - 2, (size_t)length + 2);
+      security_flags |= wifi_rsn_security(value - 2, (size_t)length + 2);
     } else if (id == AX200_IE_RATES) {
       if (!length || length > 8) {
         return;
