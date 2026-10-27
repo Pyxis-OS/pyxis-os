@@ -165,6 +165,16 @@ layout reader or compatibility identity is added. Runtime APIs can use this
 same grant-free value for parallelism hints rather than inventing one CPU or
 requesting global inventory authority.
 
+Libpyxis exposes `startup_usable_cpu_count()`. Libc's
+`sysconf(_SC_NPROCESSORS_ONLN)` and `_SC_NPROCESSORS_CONF` return that same
+nonzero allowance; unsupported selectors fail with `EINVAL`. Rebuilt libc++
+uses its existing sysconf branch for `hardware_concurrency()`. Rust target std
+uses the native getter for `available_parallelism()`; Go uses its own startup
+reader for `NumCPU()` and the default `GOMAXPROCS`. An explicit Go override
+still takes precedence. These are parallelism hints, not authority to widen
+the scheduler allowance. See the
+[runtime qualification](../development/experiments/startup-usable-cpus.md).
+
 The kernel separately installs an owned `thread_fs` grant with
 `THREAD_RIGHT_SET_FS` only. It applies to the caller, is distinct from selected
 grants, and adds no thread-management authority. Libc closes it after once-only
