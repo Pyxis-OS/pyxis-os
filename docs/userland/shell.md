@@ -137,12 +137,13 @@ editor; `--no-echo` and script mode have no history search.
 parser's quoting rules.
 
 - **Command names:** the first word of the line or pipeline stage after `|`,
-  typed bare. Candidates are builtins and names offered by the held command-list
-  entries, sorted without duplicates. Conventional entries offer `NAME.pxe`
+  typed bare. Candidates are builtins, interactive aliases and names offered by
+  the held command-list entries, sorted without duplicates. Conventional entries offer `NAME.pxe`
   files and complete `NAME.pxb` directories as `NAME`; package entries offer
   indexed logical names. Names needing quotes are not offered. Completion is a
   hint: launch performs its own retained lookup and reports selected errors.
-- **Paths:** any other word, including a redirection target. Everything up to the
+- **Paths:** an explicitly path-shaped command word (`./`, `../`, a nested
+  relative path or `root://...`), or any other word including a redirection target. Everything up to the
   last `/` is the directory, opened as `cd` and `ls` open one: relative to the
   working directory, or by a `scheme://` root, with the shell's own grants. A
   directory it cannot open offers nothing. Files and directories are offered,
@@ -168,9 +169,9 @@ Matches behave the same for both kinds:
   Otherwise Tab lists them in columns under the line and draws the prompt and
   line again. Tab on an empty command position lists every command, and on an
   empty argument position the working directory and the roots.
-- **Nothing** happens after a background `&`, for a command word that is quoted
-  or holds `/`, `:` or another byte a bare name cannot hold, and when nothing
-  matches.
+- **Nothing** happens after a background `&`, for a bare command name that is
+  quoted or holds a byte a bare name cannot hold, and when nothing matches.
+  Explicit command paths use the same quoting rules as argument paths.
 - A completion that would exceed the line limit changes nothing and marks the
   line as full. The shell lists `bin://` and `boot://` and path directories with
   its own grants; what it cannot list it leaves out.
@@ -1266,25 +1267,44 @@ supervision or terminal ownership mechanism is added.
 
 ## Startup settings
 
-Trusted interactive startup applies per-home text settings from
+Trusted interactive startup applies per-home text settings and aliases from
 `home://.config/shell/startup.lua`:
 
 ```lua
 return {
   variables = { cc = "home://toolchain/clang/payload/clang.pxb" },
   exported = { EDITOR = "boot://vi.pxe" },
+  aliases = { ll = { "ls", "-l" } },
 }
 ```
 
 `variables` entries act like `name=value` and stay private to the shell.
 `exported` entries act like `export name=value`, so children inherit them. Both
-tables are optional, and `return {}` changes nothing.
+tables and `aliases` are optional, and `return {}` changes nothing.
 
-The file is strict literal data. It is never run as Lua or shell code. Each
-value is a string of at most 4,096 bytes without NUL. Each name is a valid
-environment name and appears once across both tables. The file holds at most 16
-settings, because one environment SET batch applies them all, and at most
-64 KiB. Any other key, value type or table shape refuses the whole file.
+An alias value is a nonempty array of literal argument strings; its first string
+is the command name or path and must not be empty. Alias names use ASCII letters,
+digits, `.`, `_`, `+` and `-`; they are distinct from environment names. On an
+unquoted, unescaped literal command word, the shell substitutes the alias's fixed
+argument prefix once and appends the user's arguments. This applies to each
+pipeline stage and to command substitutions in an interactive line. Configured
+strings are never reparsed or expanded: `$name`, `*`, `;` and `|` stay argument
+bytes, and an alias target is not expanded as another alias.
+
+Aliases take precedence over external commands and builtins. Quote or escape the
+command word to bypass them (`'ls'`, `\ls`), or use an explicit path. Tab offers
+alias names, and `which NAME` prints an alias's literal argument prefix. Aliases
+stay private to the interactive shell; child programs and script interpreters
+receive no alias table. There is no executable startup hook or runtime alias
+command.
+
+The file is strict literal data. It is never run as Lua or shell code. Setting
+values and alias arguments are strings of at most 4,096 bytes without NUL. Each
+variable/exported name is a valid environment name and appears once across those
+two tables. At most 16 variable/exported settings fit the existing environment
+SET batch. Aliases are bounded by the same 64 KiB file and literal-parser limits;
+expanded commands retain ordinary argument limits. Any other key, value type or
+table shape refuses the whole file.
 
 A name that currently holds a CAP, such as `tmp`, also refuses the whole file,
 and so does a name the shell supplies itself:
@@ -1293,8 +1313,8 @@ and so does a name the shell supplies itself:
 - the stdio `.append` names.
 
 An existing TEXT value, such as an inherited `TERM`, is replaced. Every check
-runs before one environment SET batch, so a refused file applies nothing. The
-shell prints the reason and continues with its ordinary settings:
+and alias allocation runs before one environment SET batch, so a refused file
+applies neither settings nor aliases. The shell prints the reason and continues with its ordinary settings:
 
 ```text
 shell: home://.config/shell/startup.lua: tmp holds a capability; none applied
@@ -1316,9 +1336,10 @@ load the file. A `shell` started from a prompt receives no file. There is no
 opt-out flag: a bad file applies nothing, so recovery is to edit or rename it, or
 to start a manual `shell`.
 
-Loading runs no command and acquires no authority, so a writer of the file gains
-none of the shell's authority. Its text can still influence a command the user
-later enters explicitly, such as `$cc`. The READ grant pins the file object, not
+Loading runs no command and acquires no authority. A writer of the file can
+change the meaning of a command the user later enters, including builtin names
+through aliases, or a value such as `$cc`. Alias targets still resolve with the
+shell's current held command/path authority. The READ grant pins the file object, not
 its bytes or its author.
 
 Exported settings reach every child, and some children treat particular
