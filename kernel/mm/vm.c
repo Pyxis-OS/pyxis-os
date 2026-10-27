@@ -1494,6 +1494,105 @@ enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
   return MM_OK;
 }
 
+enum mm_result vm_protect_begin(struct vm_space *space, uintptr_t base,
+    size_t bytes, unsigned permissions, struct vm_protection *protection)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  if (!protection) {
+    return MM_INVALID;
+  }
+  *protection = (struct vm_protection){
+    .phase = VM_PROTECTION_DONE, .status = MM_INVALID,
+  };
+  if (!space || space == &kernel_space || space->retired || !bytes ||
+      (base & (PAGE_SIZE - 1)) || (bytes & (PAGE_SIZE - 1)) ||
+      !permissions_valid(space, permissions)) {
+    return MM_INVALID;
+  }
+  struct vm_range *range = range_containing(space, base);
+  if (!range || range->state != RANGE_BACKED || !range->wait_tokens ||
+      base < backing_base(range)) {
+    return MM_INVALID;
+  }
+  size_t offset = (base - backing_base(range)) / PAGE_SIZE;
+  size_t pages = bytes / PAGE_SIZE;
+  if (pages > range->backed_pages - offset) {
+    return MM_INVALID;
+  }
+  *protection = (struct vm_protection){
+    .space = space, .base = base, .tokens = range->wait_tokens + offset,
+    .pages = pages, .permissions = permissions,
+    .phase = VM_PROTECTION_PREPARE, .status = MM_OK,
+  };
+  return MM_OK;
+}
+
+bool vm_protect_step(struct vm_protection *protection, size_t budget)
+{
+  KASSERT(!cpu_interrupts_enabled() && protection && budget);
+  while (protection->phase == VM_PROTECTION_PREPARE && budget) {
+    uintptr_t address = protection->base + protection->cursor * PAGE_SIZE;
+    struct page_translation mapping;
+    enum mm_result status = arch_page_query(page_space(protection->space),
+        address, &mapping);
+    if (status == MM_OK && (!permissions_valid(protection->space,
+          mapping.permissions) || !!(mapping.permissions & PAGE_WRITE) !=
+          !!protection->tokens[protection->cursor])) {
+      status = MM_INVALID;
+    }
+    if (status != MM_OK) {
+      protection->status = status;
+      protection->phase = VM_PROTECTION_DONE;
+      return true;
+    }
+    protection->old_writable_pages += !!(mapping.permissions & PAGE_WRITE);
+    protection->old_executable_pages += !!(mapping.permissions & PAGE_EXEC);
+    if ((protection->permissions & PAGE_WRITE) &&
+        !protection->tokens[protection->cursor]) {
+      ++protection->fresh_tokens;
+    }
+    ++protection->cursor;
+    --budget;
+    if (protection->cursor == protection->pages) {
+      if (protection->fresh_tokens) {
+        protection->status = reserve_wait_tokens(protection->fresh_tokens,
+            &protection->next_token);
+        if (protection->status != MM_OK) {
+          protection->phase = VM_PROTECTION_DONE;
+          return true;
+        }
+      }
+      /* This is the first observable effect. All remaining work is nonfallible
+       * under the same drained owner, including after a native stop request. */
+      if (!(protection->permissions & PAGE_WRITE) && protection->old_writable_pages) {
+        withdraw_wait_pages(protection->space, protection->base,
+            protection->pages * PAGE_SIZE);
+      }
+      protection->cursor = 0;
+      protection->phase = VM_PROTECTION_COMMIT;
+    }
+  }
+  while (protection->phase == VM_PROTECTION_COMMIT && budget) {
+    size_t page = protection->cursor;
+    uintptr_t address = protection->base + page * PAGE_SIZE;
+    /* Eager owned RAM has permissive ancestors and no device cache flags;
+     * the full validation above makes each leaf update nonfailing. */
+    KASSERT(arch_page_protect(page_space(protection->space), address,
+        protection->permissions) == MM_OK);
+    if (!(protection->permissions & PAGE_WRITE)) {
+      protection->tokens[page] = 0;
+    } else if (!protection->tokens[page]) {
+      protection->tokens[page] = protection->next_token++;
+    }
+    ++protection->cursor;
+    --budget;
+    if (protection->cursor == protection->pages) {
+      protection->phase = VM_PROTECTION_DONE;
+    }
+  }
+  return protection->phase == VM_PROTECTION_DONE;
+}
+
 enum mm_result vm_query(struct vm_space *space, uintptr_t address,
                         struct page_translation *result)
 {

@@ -176,6 +176,38 @@ enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
 /* Protect one mapped page in a reservation or VM-owned allocation. */
 enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
                           unsigned permissions);
+
+enum vm_protection_phase {
+  VM_PROTECTION_PREPARE,
+  VM_PROTECTION_COMMIT,
+  VM_PROTECTION_DONE,
+};
+
+/* IF=0, drained exclusive private-space owner retained through completion.
+ * Begin accepts a nonempty page-aligned interval contained in one VM-owned
+ * eager backing, with PAGE_USER and RW/NX, R/NX or R/X permissions. Step checks
+ * or commits at most budget pages in total per call. All page
+ * validation and fresh wait-incarnation reservation precede any withdrawal or
+ * PTE effect. Preparation failure leaves mappings/tokens/waits unchanged;
+ * commit cannot fail and must finish even if a stop request arrives. No other
+ * VM operation may interleave, including across yields between steps.
+ * Caller owns this storage; no finish/cancel operation or heap storage exists.
+ * True from step means DONE; status and old page counts describe the completed
+ * operation. Old counts are valid only on successful completion. */
+struct vm_protection {
+  struct vm_space *space;
+  uintptr_t base;
+  uint64_t *tokens, next_token;
+  size_t pages, cursor, fresh_tokens;
+  size_t old_writable_pages, old_executable_pages;
+  unsigned permissions;
+  enum vm_protection_phase phase;
+  enum mm_result status;
+};
+enum mm_result vm_protect_begin(struct vm_space *space, uintptr_t base,
+    size_t bytes, unsigned permissions, struct vm_protection *protection);
+bool vm_protect_step(struct vm_protection *protection, size_t budget);
+
 /* IF=0. Shared kernel snapshots use only the short mapping-publication guard,
  * not structural mutator admission: unrelated preparation cannot return BUSY.
  * This scalar snapshot is not a mapping lease; caller retains its consumer's
