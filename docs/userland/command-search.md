@@ -1,6 +1,7 @@
 # Command search
 
-Bare command names use the ordered directory capabilities held in the exported
+After the interactive shell's [one-time alias substitution](shell.md#startup-settings),
+bare command names use the ordered directory capabilities held in the exported
 `commands` environment entry. The shell, Lua run/jobs and libuv/Neovim use the
 same owned resolver. Finding code supplies no launcher, network, writable root
 or package-management authority. See the [native interface](../interfaces/command-search.md)
