@@ -98,6 +98,9 @@ bool task_space_setup_open(struct space *space);
  * set while setup is open, else ENDPOINT_CLOSED. If the caller's CPU is now
  * excluded, it moves at syscall return, before any user instruction runs. */
 enum call_status task_space_set_affinity(struct space *space, const uint64_t *cpus);
+/* IF=0; coherent snapshot of the space's effective CPU allowance, including
+ * while setup is open. No allocation or global inventory observation. */
+size_t task_space_usable_cpu_count(struct space *space);
 
 /* Current user task or BSP kernel task, in task context with IF=0. Prepare its
  * wait record before publishing it under the resource lock, after checking the

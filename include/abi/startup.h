@@ -27,11 +27,15 @@ struct startup_info {
   /* Caller-only SET_FS, distinct from every selected grant. Libc closes this
    * after initial bind; it confers no MANAGE/CREATE authority. */
   handle_t thread_fs;
+  /* Usable logical CPUs in this process's space at startup, always nonzero.
+   * Kernel-prepared information, not authority or global hardware inventory. */
+  uint64_t usable_cpu_count;
 };
 
-_Static_assert(sizeof(struct startup_info) == 72, "startup record layout");
+_Static_assert(sizeof(struct startup_info) == 80, "startup record layout");
 _Static_assert(offsetof(struct startup_info, environment_handle) == 16, "startup environment offset");
 _Static_assert(offsetof(struct startup_info, argv) == 56, "startup argv offset");
 _Static_assert(offsetof(struct startup_info, thread_fs) == 64, "startup FS grant offset");
+_Static_assert(offsetof(struct startup_info, usable_cpu_count) == 72, "startup CPU count offset");
 
 #endif

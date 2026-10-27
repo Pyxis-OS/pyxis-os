@@ -11,6 +11,7 @@
 #include <kernel/object/environment.h>
 #include <kernel/object/thread.h>
 #include <kernel/string.h>
+#include <kernel/task.h>
 #include <kernel/user/startup.h>
 
 struct startup_sizes {
@@ -174,7 +175,7 @@ static uint64_t copy_string(uint8_t *buffer, size_t *offset, uintptr_t address,
 
 static void fill_startup(uint8_t *buffer, uintptr_t address,
     const struct process_startup *source, const struct startup_sizes *sizes,
-    handle_t environment, handle_t thread_fs)
+    handle_t environment, handle_t thread_fs, size_t usable_cpu_count)
 {
   struct startup_info *info = (struct startup_info *)buffer;
   *info = (struct startup_info){
@@ -182,6 +183,7 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
     .read_only_size = sizes->metadata, .environment_handle = environment,
     .working_directory_count = source->working_directory_count,
     .argc = source->argc, .argv = address + sizes->metadata, .thread_fs = thread_fs,
+    .usable_cpu_count = usable_cpu_count,
   };
   size_t offset = sizeof(*info);
   if (source->working_directory_count) {
@@ -235,6 +237,10 @@ static enum mm_result process_prepare_startup_owned(struct process *process,
   if (!process || process->startup_address || !measure_startup(process, source, &sizes)) {
     return MM_INVALID;
   }
+  size_t usable_cpu_count = task_space_usable_cpu_count(process->space);
+  if (!usable_cpu_count) {
+    return MM_INVALID;
+  }
   enum mm_result result = seed_environment(process, source);
   if (result != MM_OK) {
     return result;
@@ -271,7 +277,8 @@ static enum mm_result process_prepare_startup_owned(struct process *process,
   uintptr_t address;
   result = vm_alloc(process->address_space, total, PAGE_SIZE, PAGE_USER, &address);
   if (result == MM_OK) {
-    fill_startup(buffer, address, source, &sizes, environment_handle, thread_fs);
+    fill_startup(buffer, address, source, &sizes, environment_handle, thread_fs,
+        usable_cpu_count);
     result = copy_startup_pages(process->address_space, address, buffer, total);
     if (result == MM_OK) {
       for (size_t offset = sizes.metadata; offset < total; offset += PAGE_SIZE) {
