@@ -45,216 +45,29 @@ design below is a proposal except where marked decided.
    restores the OSMesa frontend from Mesa 25.0.7, the last series that has it.
    The game renders into a buffer SDL already owns, so no window-system platform
    is needed. See [the window-system path](#the-window-system-path).
-3. **When the kernel JIT task lands.** After the milestone for
-   [removing BSP-owned allocation and VM mutation](boot-sdk-ports.md#planned-next-kernel-milestone),
-   which leads the next kernel push from 2026-10-27 and is not in 0.0.9, as a
-   user of its VM mutation interface. The Mesa, SDL2 glue and ioquake3
-   tasks on softpipe need no JIT and can precede it.
+3. **When the kernel JIT task lands.** **Sequencing revised (chronium,
+   2026-10-27):** after BSP-removal task 3 (#1500), before tasks 4–5, using its
+   common caller-CPU private transaction. The [kernel design](jit-grant.md)
+   records the remaining operation/budget/lifetime decisions. This does not
+   declare BSP removal complete or enable llvmpipe by default.
 
 Smaller choices that I would apply unless chronium objects are listed under
 [Routine choices](#routine-choices).
 
 ## The JIT contract
 
-Decision 1 fixes the resource, its right, the `jit = true` space gate, the
-bundle declaration, the writable/executable region states and the later
-dual-view operation. The operations, postconditions, budgets and mechanism below
-remain a proposal for the kernel design PR.
+The separate `jit/manage` resource, off-by-default `jit = true` space gate,
+explicit bundle declaration, process ownership and W^X transitions are accepted.
+Closing a handle does not release process-owned regions. Ordinary MEMORY never
+creates executable pages; dual views remain later work.
 
-### What exists today
-
-- **Executable mappings come from one place.** The kernel loader maps a P1F
-  segment executable only if the segment says so (`kernel/image.c:101`), and
-  both loader and LLD refuse a segment that is writable and executable
-  (`kernel/image.c:44-46`; [P1F output](../development/llvm-toolchain.md#p1f-output)).
-  The `memory` service returns "readable/writable and non-executable" backing
-  (`include/abi/memory.h:60`); nothing a program holds can make a page
-  executable.
-- **W^X is already a mapping invariant.** The generic VM and the x86-64 page
-  code each reject write plus execute (`kernel/mm/vm.c:77-78`,
-  `arch/x86_64/paging.c:163-164`), so an ABI that can request both is
-  unreachable by construction.
-- **No permission change for programs.** "There is no resize, fixed-address
-  request, permission change, shared memory or per-region capability object"
-  ([memory](../kernel/memory.md), end of the operations section). The kernel has
-  a single-page `vm_protect` (`include/kernel/mm/vm.h:135`) used by the loader
-  and by kernel mappings; programs cannot reach it.
-- **Authority.** `memory` is a kernel object whose only right is `manage`
-  (`kernel/object/object.c:321`); `memory_call` checks it per call
-  (`kernel/object/memory.c:142`), then hands the work to the BSP
-  (`kernel/object/memory.c:217`). A copied or transferred grant manages only
-  the receiver's own regions ([memory](../kernel/memory.md#authority-and-lifetime)).
-- **Launch.** A bundle manifest names resources and rights
-  ([manifest grants](../userland/program-bundles.md#app-views-grants-and-lifetime));
-  under the temporary grant-all policy every requested grant the launcher can
-  delegate is delivered ([debt](https://git.internal/PyxisOS/pyxis-os/issues/1480)).
-  Spaces gate services with fields such as `launch = true` and `jobs = true`
-  ([space configuration](../development/hosted-tools.md#pool-and-authority),
-  [private job contexts](../userland/program-bundles.md#private-job-contexts)).
-- **The LLVM seam already exists.** The hosted LLVM fork has a
-  `llvm/lib/Support/Pyxis/Memory.inc` (pyxis-llvm `819c2b7`, the hosted pin in
-  `toolchain/build-hosted.sh`). It allocates read/write memory through the
-  `memory` capability, but `protectMappedMemory` returns not-supported and
-  `InvalidateInstructionCache` calls `report_fatal_error("Pyxis does not support
-  generated executable memory")`, and a `NearBlock` is rejected. Those three
-  functions are where a JIT grant plugs into LLVM.
-- **How the consumers use memory.** Checked in their sources:
-  - LLVM's `SectionMemoryManager` (used by Mesa's MCJIT path) allocates
-    read/write sections with the previous block as a placement hint, then in
-    `finalizeMemory` protects code read+execute, read-only data read-only, and
-    invalidates the instruction cache
-    (`llvm/lib/ExecutionEngine/SectionMemoryManager.cpp:194-196, 239-267`).
-  - ioquake3's x86 QVM compiler maps `PROT_WRITE`, copies the code, then
-    `mprotect`s it read+execute (`code/qcommon/vm_x86.c`, `VM_CompileX86`,
-    under `VM_X86_MMAP`).
-  - LuaJIT keeps its machine-code area read+execute and flips it to read/write
-    only while assembling, and uses address hints to place the area
-    (`src/lj_mcode.c`, `LUAJIT_SECURITY_MCODE`).
-  - The brief says V8, .NET and the JVMs can use dual mapping. I did not check
-    those runtimes in this round; the design PR for the kernel task should.
-
-All four use the same shape: obtain writable pages, write, make them executable,
-later release or rewrite. A transition-based region serves all of them. A
-dual-view region is an optimization for runtimes that change code often.
-
-### Proposed contract
-
-A `jit` kernel object, with its own right mask beside `OBJECT_MEMORY`'s
-(`kernel/object/object.c:321`). Operations, as request/reply messages in a new
-`include/abi/jit.h`, following `include/abi/memory.h`:
-
-- **ALLOCATE** takes a nonzero size and an optional placement hint. It returns
-  an opaque identity and a page-aligned range, zero-filled, in the *writable*
-  state (read/write, non-executable). The hint is advisory, never a fixed
-  address; LLVM's near block and LuaJIT's retry loop both tolerate a different
-  answer. Identities are never reused, so a stale identity is refused even if
-  the address is reused, as for `memory_reservation`
-  ([memory](../kernel/memory.md#operations)).
-- **PROTECT** takes an identity, a page-aligned contained range and a target
-  state, *writable* or *executable* (read+execute, never writable). The request
-  names a state rather than permission bits, so write plus execute cannot be
-  expressed. This is the single publication point. On return:
-  - no CPU can still write through, or execute through, the old permissions of
-    those pages;
-  - code written before the call is visible to execution on every CPU;
-  - architecture instruction-cache maintenance is done. x86-64 needs none for
-    the writing CPU, and the cross-CPU serialization requirement is met by the
-    quiescence or shootdown below. Putting the cache step here keeps a future
-    architecture from needing a second call. I have not re-read the Intel
-    cross-modifying-code rules (SDM volume 3, "Handling Self- and
-    Cross-Modifying Code") for this proposal; the kernel design PR must.
-- **RELEASE** takes an identity and removes the whole region. Backing and
-  address range are reused only after no CPU can hold a translation.
-- **Not provided:** executable file mappings, executable `memory` regions,
-  permission changes on image segments or on `memory` backing, and any state
-  with write plus execute.
-
-**Lifetime.** Regions belong to the process, not the handle, exactly as for
-`memory`: closing the service unmaps nothing, and final process teardown
-reclaims what is left ([memory](../kernel/memory.md#authority-and-lifetime)).
-A copied or transferred `jit` grant manages only the receiver's regions.
-
-**Budgets.** The kernel bounds per-process executable bytes and region count;
-values are tuning, not ABI, and exhaustion returns the ordinary limit or
-no-memory status before any effect. A transition that cannot quiesce within the
-mutation budget returns BUSY before effects, as MEMORY does
-([memory](../kernel/memory.md#execution)). A `jit` region counts in the existing memory
-profile (the `profile` resource's `memory` right), with separate totals.
-
-**Which right is checked where.**
-
-1. *Manifest.* `jit` becomes a recognized resource class with the right `manage`;
-   unknown classes and rights still reject, optional or not.
-2. *Space.* The launcher can only delegate what it holds. A space receives a
-   `jit` source grant only when its configuration sets `jit = true`, so the
-   grant-all policy cannot hand it to an arbitrary bundle; the default is off
-   and the Development space is the first candidate to enable it. A new gate is
-   needed because `memory` and `jit` are different authorities: holding
-   `memory/manage` must not imply code generation.
-3. *Call.* The kernel checks `JIT_RIGHT_MANAGE` on every operation, the same
-   place and shape as `kernel/object/memory.c:142`. This is the enforcement
-   point; steps 1 and 2 decide who can ever hold the handle.
-4. *Mapping.* Only the `jit` operations create executable user pages after the
-   loader. The VM-level invariant (`kernel/mm/vm.c:77-78`) stays as a second
-   line.
-
-### TLB and instruction-cache maintenance on SMP
-
-The contract above is stated in terms of what is true on return, so it does not
-depend on the mechanism.
-
-- **Today.** A process mapping change runs on the BSP, closes admission, drains
-  active roots and borrowers, mutates, and the process resumes with a CR3
-  reload (PCID and global pages are off) ([memory](../kernel/memory.md#execution),
-  [threads](../interfaces/threads.md#shared-capability-and-vm-ownership),
-  `include/kernel/process_vm.h`). Sibling threads are not running during the
-  change, so no stale translation or stale permission survives, and a
-  transition would be correct on this path. The cost is that every transition
-  stops all of the process's threads and queues behind the BSP, and a
-  one-second budget can return BUSY.
-- **After the BSP-removal milestone.** The direction is "per-address-space
-  mutation on the caller's CPU, per-CPU frame allocation, IPI shootdown for
-  shared mappings" ([milestone](boot-sdk-ports.md#planned-next-kernel-milestone)).
-  The `jit` operations keep their contract and become: change the page tables on
-  the caller's CPU, then shoot down the CPUs currently running the space.
-- **Why direction matters.** A page made executable must have no CPU still
-  writing through a stale writable translation; a page made writable must have
-  none still executing. I propose flushing in both directions and not relying
-  on the CPU to refault on a stale restrictive entry. Whether the
-  read/write-to-execute direction could skip a flush is a possible later
-  optimization, not assumed here.
-- **Cost drivers to measure, not assume.** One transition per finalized LLVM
-  module (llvmpipe, one per newly seen shader state); two per trace for LuaJIT;
-  one per QVM load for ioquake3. The llvmpipe worker threads run rasterization
-  in sibling threads, so a drain-based transition stalls rendering. The
-  [measurement plan](#measurement) records this per frame.
-
-### Fit with the BSP-removal milestone
-
-The `jit` operations are process VM mutations. They must enter through the same
-transaction as MEMORY and DISPLAY (`process_vm_mutation_forward`,
-`include/kernel/process_vm.h:56`) and must not add a new BSP-only service with
-its own page-table code. The kernel needs a range-level "set page state" helper
-under `vm_protect`, whose caller then moves with the rest of the mutations to the
-caller's CPU. Dependencies:
-
-- the milestone's proposal should name `jit` as a consumer, so its mutation
-  interface covers a permission change with remote invalidation, which MEMORY's
-  allocate/release do not exercise today;
-- until it lands, the BSP transaction is the only correct implementation, which
-  is why the kernel task waits for the milestone (decision 3).
-
-### Dual-view regions (later, additive)
-
-One backing mapped twice, a permanent read/write view that is never executable
-and a permanent read+execute view that is never writable. After creation nothing
-changes, so a code update needs no page-table change, no shootdown and no
-quiescence; only allocate and release mutate. The price is a writable alias of
-executable code, a weaker form of W^X than a transition (which has its own
-window while another thread can write during the writable state). It needs one
-backing owned by two ranges, which the VM's per-range ownership and per-page
-wait identity do not provide today ([memory](../kernel/memory.md#address-wait-mapping-identity)).
-LLVM's `SectionMemoryManager` cannot use it without a patched memory manager, so
-it serves the other runtimes, not llvmpipe. It is additive (a flag on ALLOCATE
-or a second operation), so deferring it costs nothing in the ABI.
-
-### Userland surface
-
-- The LLVM fork's `Pyxis/Memory.inc` calls native libpyxis functions directly
-  already; its three refusing functions change to `jit` calls
-  ([`Memory.inc`](https://git.internal/PyxisOS/pyxis-llvm/src/commit/819c2b770271807f4436dcf76e435c0727c4a1ad/llvm/lib/Support/Pyxis/Memory.inc)).
-- libpyxis gains thin `jit_*` wrappers beside `memory_allocate`, returning
-  native statuses.
-- Libc gains no `mmap` or `mprotect` for this. They are not ISO C, libc has
-  neither today (`userspace/libc`), and the one real user so far (LLVM) is
-  native. ioquake3's compiled QVM and LuaJIT are patched to the native calls
-  when they are ported. Revisit if a second POSIX-shaped consumer makes a
-  narrow anonymous `mmap`/`mprotect` subset worth proposing under the
-  [libc rules](../userland/libc-portability.md#which-standard-functions-belong-in-libc).
-
-Lands in: pyxis-os (`include/abi/jit.h`, `kernel/object/`, launch and space
-configuration, docs), pyxis-userland (libpyxis wrappers, bundle manifest
-parsing, space gate), pyxis-llvm (`Pyxis/Memory.inc`).
+The [first kernel delivery](jit-grant.md) proposes the exact operations, read-only
+data state needed by LLVM, budgets and caller code-lifetime rules. It uses the
+merged caller-CPU/quiescence machinery and native SDK wrappers; it adds no
+BSP-only executor or libc mmap/mprotect facade. Its focused qualification pulls
+the permission-range part of BSP-removal task 5 forward; tasks 4–5 resume afterward.
+LLVM's existing platform memory adapter is the first consumer, followed by Mesa
+llvmpipe. Earlier LLVM object-emission checks executed no generated instructions.
 
 ## The Mesa llvmpipe port
 
@@ -341,7 +154,8 @@ container is not affected.
   `xgetbv` agreement (`src/util/u_cpu_detect.c:894-896`); record llvmpipe's
   actual chosen features, not just hardware AVX2 support. This kernel work
   adds no JIT authority. Chronium's sequencing (2026-10-26) is XSAVE/AVX,
-  then the BSP-removal proposal, then the accepted JIT grant.
+  then BSP-removal tasks 1–3, then the accepted JIT grant before tasks 4–5
+  (sequencing revised 2026-10-27).
 - **Code model.** LLVM's x86-64 JIT defaults to the large code model
   (`llvm/lib/Target/X86/X86TargetMachine.cpp:180-181`), so generated code can
   call libc and Mesa without being placed near them.
@@ -540,7 +354,7 @@ Small tasks, each with a first check. Repositories in parentheses.
    at a small canvas, with the missing-authority errors from the manifest
    checks, in QEMU. Mouse look, sound and quit are part of the check.
 5. **The `jit` grant** (pyxis-os kernel and docs, pyxis-userland, pyxis-llvm).
-   Starts after the BSP-removal milestone (decision 3). *Check:* a manual
+   Starts after BSP-removal task 3, before tasks 4–5 (revised decision 3). *Check:* a manual
    program obtains the grant through a
    `jit = true` space, writes a function, transitions it, calls it, and shows
    refusal without the grant, a writable-plus-executable request, a stale
@@ -713,10 +527,10 @@ the pin, and a git mirror preserves it.
   records a native timedemo and listening observation, without a repeated sample
   range or closure of broader audio qualification. Public upload/recipient access,
   llvmpipe and JIT remain unqualified.
-- The kernel design for the `jit` transitions waits for the BSP-removal
-  proposal; the contract above is stated in terms of its postconditions so it
-  survives that change.
-- The [XSAVE/AVX profile](xsave-avx.md) is delivered separately. Its availability
+- The [kernel JIT design](jit-grant.md) follows merged BSP-removal task 3.
+  Its remaining operation/budget/lifetime choices await chronium; tasks 4–5
+  resume afterward.
+- The [XSAVE/AVX profile](../kernel/xsave-avx.md) is delivered separately. Its availability
   does not qualify llvmpipe or establish which vector features a future JIT
   selects; record those with the renderer measurements.
 - Privately, the Steam data is unread, and the retail QVM claim is unchecked.

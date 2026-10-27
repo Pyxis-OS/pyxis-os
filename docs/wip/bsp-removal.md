@@ -5,10 +5,12 @@ tasks 1/2 hands-free native A/B/C qualification is recorded in
 [#1266](https://git.internal/PyxisOS/pyxis-os/pulls/1266). Task 2 measurement and
 bounded-batch implementation are merged in #1260/#1263.
 Task 3 [decisions 5–9](vm-invalidation.md) are accepted (chronium, 2026-10-26);
-shared-owner integration and QEMU qualification are in #1500 for review. Later
+shared-owner integration and QEMU qualification are merged in #1500. Later
 tasks raise decisions when reached. XSAVE/AVX is merged and natively qualified; its qualification
 record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
-The accepted JIT grant remains after this milestone.
+Chronium revised the sequence (2026-10-27): the [JIT grant](jit-grant.md)
+follows merged task 3 (#1500), before tasks 4–5 resume. This does not complete
+BSP removal; JIT uses the conservative caller-CPU quiesced path.
 
 ## Goal and boundary
 
@@ -165,9 +167,9 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 | --- | --- | --- |
 | 1. Private MEMORY on its caller CPU | Per-space owner proof, stable queries, counters/identities and pin synchronization; kernel-root continuations; all existing ordinary/guarded/sparse MEMORY operations. Preserve the BSP clients' use of the same gate. Check real AP execution, unrelated processes mutating concurrently, same-process competition, parked I/O and stop/unwind. | Run memory-heavy processes on APs without CPU0 servicing their MEMORY bodies; sibling quiescence still applies. |
 | 2. Frame allocation on each CPU | First measure PMM lock/search/zero/map costs with the routing bottleneck gone and bring chronium the decision whether to move frame allocation out. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
-| 3. Invalidation and shared kernel VM (implemented, #1500 review) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
+| 3. Invalidation and shared kernel VM (merged, #1500) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
 | 4. Preparation and reclamation | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
-| 5. Remaining VM consumers and JIT gate | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Start the separately accepted JIT kernel task as a consumer of the common VM transaction, rather than add a BSP-only JIT service. |
+| 5. Remaining VM consumers | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Complete the remaining VM-client audit and migration; the earlier JIT task already uses the common caller-CPU transaction. |
 
 ## Proof obligations, not shortcuts
 
