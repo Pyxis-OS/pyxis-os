@@ -14,9 +14,10 @@ It accepts a zero-deadline poll or a bounded absolute monotonic deadline.
 Re-query SIZE after RESIZED; events can coalesce and readiness reserves nothing.
 
 `pyxis_terminal_get_state` allocates a snapshot of the open object's private raw
-request. `pyxis_terminal_make_raw` saves that preceding state and ensures one
-owned PASSTHROUGH grant; it requires READ even if already raw. Restore changes
-only that owner's request. Repeated restores are idempotent, reverse-order
+request and noncanonical MIN/TIME settings. `pyxis_terminal_make_raw` saves
+that preceding state, selects MIN=1/TIME=0 and ensures one owned PASSTHROUGH
+grant; it requires READ even if already raw. Restore changes only that owner's
+raw request and timing. Repeated restores are idempotent, reverse-order
 nested restores work, and out-of-order restoration applies the selected state.
 An output-only console can snapshot/restore inactive state but cannot acquire raw.
 The bytes are already unechoed; raw additionally makes Ctrl+C byte 3 rather than
@@ -30,14 +31,18 @@ each snapshot with `pyxis_terminal_state_free`; freeing does not restore mode.
 open object without acquiring or changing mode. It returns EBADF for closure or
 replacement; dup aliases of the same open object qualify. It is not an I/O
 lease: callers still exclude concurrent descriptor replacement during later I/O.
-Mode operations serialize with close. Waits hold storage without holding the
-mode/table/read lock and reject descriptor replacement before returning events.
+Mode operations serialize with close. An admitted drain can hold mode
+exclusion for its bounded wait, so final close can wait for that operation.
+Readiness waits hold storage without holding the mode/table/read lock and reject descriptor replacement before returning events.
 An active descriptor reader can report BUSY; closing an fd need not wake a
 bounded native wait immediately if other owners keep that terminal alive.
 Uncertain mode operations are never replayed or reported as restored.
 
 Native input loss, EOF and hangup remain distinct read outcomes. There is no
-termios state, signal emulation, or presentation reset in this API. Full-screen
+signal emulation or presentation reset in this API. It shares mode ownership
+with the [raw termios subset](#raw-termios-subset). Cooperative signal
+compatibility remains a [parked proposal](../wip/terminal-ui.md#libc-compatibility-follow-up),
+to be considered only for a real consumer. Full-screen
 programs still need their supervisor's retirement/restoration boundary. See
 [qualification](../development/experiments/terminal-raw.md) and the
 [terminal UI milestone](../wip/terminal-ui.md).
@@ -48,6 +53,52 @@ backend in its pinned cmd-vendored `golang.org/x/term`. External module consumer
 must select that ported source explicitly; merely enabling Unix build tags is
 incorrect. Go's native resize observation currently polls once; a blocking,
 cancellable resize subscription needs integration with its Go event-loop consumer.
+
+## Raw termios subset
+
+Libc provides `tcgetattr`, `tcsetattr`, `cfmakeraw`, `tcdrain` and read-only
+`ioctl(TIOCGWINSZ)` on the supplied console descriptor. Files/pipes return
+ENOTTY; closed/replaced descriptors return EBADF. There is no named-terminal
+fallback. Winsize reports character rows/columns; pixel fields are unavailable
+and zero. The interface grants no resize authority.
+
+Attributes describe one libc open object, shared by `dup` aliases, not a Unix
+terminal-wide mode. Copies of `struct termios` retain a private object identity
+without allocating a lease: preserve that identity when modifying a snapshot.
+Native and termios APIs share the same raw owner and timing. A snapshot cannot
+restore into a replacement descriptor, and last-alias close releases raw even
+while native snapshots retain storage.
+
+The byte profile has fixed CS8, no input/output transformations, canonical
+editing or echo. ISIG withdraws this owner's PASSTHROUGH request; clearing it
+requests PASSTHROUGH. It neither arms foreground interruption nor delivers a
+signal, and another owner's PASSTHROUGH retains precedence. Unsupported flags,
+control-character remapping, serial operations and resize requests refuse with
+ENOTSUP. No successful placeholders are provided.
+
+MIN/TIME defaults to 1/0. With MIN=0/TIME=0, read polls and returns zero when
+empty. With MIN>0/TIME=0, it waits for the smaller of MIN and the requested
+count. With MIN=0/TIME>0, a read timer returns available input or zero at expiry.
+With both positive, the first byte has no deadline, then an inter-byte timer
+resets after received input. TIME is in deciseconds. EOF/errors can return
+partial progress; deferred native errors remain visible to the next read.
+Existing descriptor try-read calls bypass MIN/TIME and return EAGAIN when empty;
+this adds no `fcntl` or O_NONBLOCK interface.
+
+TCSANOW applies immediately. TCSADRAIN and `tcdrain` fence the current output
+prefix through [native drain](terminal-sessions.md#output-drain-and-input-flush),
+with a 30-second bound. TCSAFLUSH drains, then discards pending ordinary input
+and libc read-ahead without waiting for future input. EOF and FILE pushback/EOF
+indicators are not cleared. Modes stay unchanged if drain or flush fails; input
+already discarded by a completed flush is not restored. Active byte consumption
+can return EBUSY. Detached/closed session endpoints return EPIPE and a drain
+timeout returns ETIMEDOUT. Local framebuffer drain completes immediately.
+
+A timed zero-byte read is not native EOF, but stdio interprets it as EOF and
+keeps that indicator until `clearerr`; changing terminal mode does not clear it.
+Timed raw consumers should use `read`. Native EOF, input loss and hangup remain
+distinct internally. A mode change does not rewrite the timing snapshot of an
+already admitted native read.
 
 ## Line and key helpers
 
@@ -156,10 +207,13 @@ changes as distinct events. It requires an explicitly delegated clock READ
 handle; stock sessions provide one. Line helpers fall back to ordinary key
 reading when that resource is absent, preserving existing grants.
 
-Kilo uses the event reader with a remaining monotonic deadline to expire
-transient status messages while idle. Resize redraws the editor or active
-search prompt without a key; search prompts do not expire. It retains its
-minimum of two columns and three rows. No periodic redraw or polling is needed.
+Kilo uses the raw termios subset and upstream byte/escape parser. A small
+native wait hook observes input and resize together while signals remain
+unavailable, retaining a single Escape deadline across resize. Its status
+messages expire on a later keypress, as upstream does. It retains its minimum
+of two columns and three rows and the native viewport rules. Pinned upstream
+Home/End soft keys are not dispatched by its keypress handler; End can insert
+byte 0xee rather than moving the cursor. This application defect is unchanged.
 
 ## Tab completion
 

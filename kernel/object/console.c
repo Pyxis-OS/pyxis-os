@@ -660,9 +660,11 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
     required = CONSOLE_RIGHT_WRITE;
     break;
   case CONSOLE_READ:
+  case CONSOLE_FLUSH_INPUT:
     required = CONSOLE_RIGHT_READ;
     break;
   case CONSOLE_SIZE:
+  case CONSOLE_DRAIN:
     required = CONSOLE_RIGHTS;
     break;
   case CONSOLE_ARM_INTERRUPT:
@@ -698,6 +700,35 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   }
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == CONSOLE_DRAIN) {
+    if (request.drain.timeout_ms > CONSOLE_DRAIN_TIMEOUT_MAX_MS) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!tty_lock(console->tty)) {
+      return (struct syscall_result){CALL_UNAVAILABLE, 0};
+    }
+    bool initialized = console->tty->initialized;
+    tty_unlock(console->tty);
+    enum call_status status = initialized ?
+        (task_operation_start() ? CALL_OK : CALL_DENIED) : CALL_UNAVAILABLE;
+    return (struct syscall_result){status, 0};
+  }
+  if (operation == CONSOLE_FLUSH_INPUT) {
+    lock_input(console);
+    enum call_status status = CALL_OK;
+    if (console->reader_active || !clipboard_ordinary_allowed(&console->object)) {
+      status = CALL_BUSY;
+    } else if (!task_operation_start()) {
+      status = CALL_DENIED;
+    } else {
+      console->input_head = console->input_count = 0;
+      console->input_lost = false;
+    }
+    unlock_input(console);
+    readiness_source_notify(&console->readiness);
+    readiness_notify();
+    return (struct syscall_result){status, 0};
   }
   if (operation == CONSOLE_WRITE || operation == CONSOLE_TRY_WRITE) {
     return write_console(console, &request.write, reply_address, reply_capacity);

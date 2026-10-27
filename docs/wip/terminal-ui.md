@@ -7,6 +7,30 @@ hexcurse, qualification) target 0.0.9.
 Provide reusable raw terminal access, then one curses library and one application.
 The installer remains a consumer of that library, not the prerequisite for it.
 
+## Libc compatibility follow-up
+
+- [x] Step 1 (chronium, 2026-10-27): raw termios over the native terminal API
+  and covered upstream Kilo code; ordinary full build and representative QEMU
+  qualification completed. Accepted: the byte-only CS8/MIN/TIME/winsize profile and shared native/termios
+raw-plus-timing snapshots. TCSADRAIN/TCSAFLUSH use a real bounded native
+output-prefix drain and pending-input flush; Kilo retains its upstream calls.
+See the [implemented contract](../userland/terminal.md#raw-termios-subset). This assignment does not change the accepted
+native raw/cbreak or foreground-interruption contracts below.
+
+**Proposed and parked, not accepted:** cooperative libc `signal`/`sigaction`
+compatibility at audited blocking-call safe points, including resize/SIGWINCH
+and optional foreground SIGINT. Consider it only when a real port needs it;
+handler routing, masks, restart rules and receiver ownership remain undecided.
+Later mappings of control-channel stop/reload, child completion and clock
+expiry are also proposals for their first real consumers. Broken pipes already
+return EPIPE. No asynchronous compute-loop interruption, fault handlers or
+arbitrary-process `kill` is assigned. Native applications retain the
+[control/events/faults direction](control-events-faults.md).
+
+Ncurses already observes native resize and generates KEY_RESIZE inside the
+library; Hexcurse consumes that key. Preserve this existing path rather than
+adding signals for curses resize.
+
 ## What exists
 
 Source inspection at Pyxis `59e8d64d`, userland `96d2430b`, ports `22c4afb6`:

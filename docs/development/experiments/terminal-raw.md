@@ -63,3 +63,44 @@ Raw logs and ordinary caller sources remain under
 Input loss/hangup propagation is source-inspected here; fault, forced-stop,
 descendant, pane-close and Remote-disconnect restoration belong to the next
 integration gate. No native terminal or crash-restoration result is claimed.
+
+## Raw termios and attachment drain, 2026-10-27
+
+The ordinary full image passed at Pyxis
+`64f611662ecd6c1e811d9a01ecb6b9b411eecfd7`, userland
+`1a6d2f9328fc03b125c29be09b356be501a96c62`, ports
+`54c6e591846f88570605cc348151b7de2a92b36a`, existing LLVM
+`8a4d001d54806d48dc599ec9e658ba6113567c51`. Later reporting edits change no
+target code. Q35/KVM, host CPU, four vCPUs, 4 GiB, VirtIO GPU/network, HDA null
+sink and virtio-fs; normal RAM-live PXE command line. No native hardware result.
+
+One boot exercised Kilo edit/save/reopen and normal exit directly and through
+the Multiplexer space. Raw setup/restoration retained upstream TCSAFLUSH.
+GDB observed session drain with a 30,000 ms budget, one DRAIN authority and
+PASSTHROUGH changing from zero before setup to one before restoration. The
+attachment had already consumed the captured prefixes (17,955 and 18,589
+record bytes), so this checks the completed-fence path, not a forced blocked
+wait, detach/timeout case or failure matrix. No target data was mutated by
+the debugger. The four timing cases and snapshot/close contracts were reviewed
+in source; this Kilo run uses MIN=0/TIME=1.
+
+Existing `top -b -d 1 -n 6 -p PID` recorded five interval samples after dropping
+the first cumulative sample, with no debugger during measurement. Baseline
+Pyxis `a497e825` is source-tree-identical to merged main `aa03ef2e`; userland
+`4269b599`, ports `9fb1a085`, same device configuration and two-line file.
+
+| Whole-QEMU CPU, percent of one host CPU | Baseline mean (range) | After mean (range) |
+| --- | --- | --- |
+| Kilo idle | 6.6 (6–8) | 3.2 (2–4) |
+| Shell idle | 6.2 (6–7) | 3.2 (3–4) |
+
+These include all guest services and uncontrolled concurrent nested-host load;
+the lower whole-VM values establish no attributable Kilo speedup or regression.
+The matched manual edit/save/reopen sequence passed. All owned runtime and
+build processes were stopped. A first build on the shared export failed with
+ENFILE; a fresh local-disk build eliminated that environmental failure.
+
+End exposed an unchanged upstream application defect: the parser returns soft
+code 1006, but the keypress switch inserts its truncated byte 0xee. The saved
+byte was inspected; it is not a termios decoder failure. The short upstream
+report remains unfiled. No generic key handling fix was added to the port.
