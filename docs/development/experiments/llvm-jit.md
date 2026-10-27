@@ -9,8 +9,16 @@ Baseline development libraries `a63ce5822d3b5319a568b499dba8f3172633eaf9`;
 updated fork `60aa4d7687d51b99998332bb5f82638a61650d3d` (pyxis-llvm #20).
 Kernel/SDK build uses parent `1da64367` with the development-prefix producer
 changes, based on merged JIT stack `d180f7eb`; kernel runtime code is unchanged.
-Userland `79035bb9`, ports `f209c917`. Compiler remains
+Userland `79035bb9`, ports `f209c917`. These runs used compiler
 `3d69e83c443e2acf7cf83db35037899f99cf76b3`; no compiler/container rebuild.
+
+After the host crash, the unchanged adapter commits were rebased onto fork
+`8a4d001d` as `67d37ab3a9a098c03d395f1b9e25c42d0c6e1fbf`, and parent integration
+onto main `b1fd5a32`. The intervening fork changes concern libc++ filesystem,
+not these LLVM files. Main independently moved its compiler to `8a4d001d`;
+the hosted-Clang pin remains `819c2b77`. The runtime results below belong to
+the earlier exact inputs, not a rebuilt/retested rebased prefix. MCJIT decisions
+remain pending; final exact-head qualification follows their implementation.
 
 ## Build and commands
 
