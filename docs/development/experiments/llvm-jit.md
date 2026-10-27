@@ -3,42 +3,31 @@
 2026-10-27, disposable nested-KVM QEMU, four vCPUs, Q35, `host,+invtsc`, 4 GiB
 preallocated RAM, VirtIO display/network/RNG and OVMF. Diskless live archive;
 only the temporary Remote space enables JIT. `nvme.write=0`,
-`display.timing=off`, `log.level=info`. No native-hardware or performance result.
+`display.timing=off`, `log.level=info`. Functional qualification only; no native
+hardware or performance claim.
+
+## Inputs and build
 
 Baseline development libraries `a63ce5822d3b5319a568b499dba8f3172633eaf9`;
-updated fork `60aa4d7687d51b99998332bb5f82638a61650d3d` (pyxis-llvm #20).
-Kernel/SDK build uses parent `1da64367` with the development-prefix producer
-changes, based on merged JIT stack `d180f7eb`; kernel runtime code is unchanged.
-Userland `79035bb9`, ports `f209c917`. These runs used compiler
-`3d69e83c443e2acf7cf83db35037899f99cf76b3`; no compiler/container rebuild.
+final fork `2b3a3a41df746cc0ee3d4bfccc5dba495d232f0e` (pyxis-llvm #20), based on
+`8a4d001d`. Final kernel build revision `702be811`, collector `ad4d1242`, parent
+base `b1fd5a32`; changes between build and collector concern only library pin/docs.
+Userland `333b094d`, ports `f209c917`. Final compiler/SDK `8a4d001d`; baseline
+used compiler `3d69e83c`. This task does not move the compiler or hosted-Clang pin
+or require an additional compiler-container rebuild.
 
-After the host crash, the unchanged adapter commits were rebased onto fork
-`8a4d001d` as `67d37ab3a9a098c03d395f1b9e25c42d0c6e1fbf`, and parent integration
-onto main `b1fd5a32`. The intervening fork changes concern libc++ filesystem,
-not these LLVM files. Main independently moved its compiler to `8a4d001d`;
-the hosted-Clang pin remains `819c2b77`. The runtime results below belong to
-the earlier exact inputs, not a rebuilt/retested rebased prefix. MCJIT decisions
-remain pending; final exact-head qualification follows their implementation.
-
-## Build and commands
-
-The normal `toolchain/build-llvm-development.sh` rebuilds the complete target
-closure, adding `orcjit` to the producer's component list. Its Linux host
-generators and native target archives build successfully. The ORC C header
-needed its own `<stddef.h>` include, as the execution-engine header did earlier.
-The independent native consumer uses only exported headers, archives and
-`llvm-config` flags, not source/build-tree include paths.
-
-Exported prefix identity
-`0d36f168e87e531aaef47d11855de5b4f619c21b46e64603a5b757769b947cf5` contains
-71 native archives and the existing notices/provenance inventories. This is a
-library-prefix rebuild, not a hosted-Clang or compiler-container update.
+Normal `toolchain/build-llvm-development.sh` builds the complete target closure,
+including `orcjit`. Final prefix identity
+`128535ce7630e0c16fbbb9794ae05aa513dd21ba6e2db7e0e4a36ca6366e00df` contains
+71 native archives with the normal notices/provenance inventories. Its relocated
+Meson config-tool discovery passes all eleven required component groups. A fresh
+native consumer compiles/links using only exported headers, archives and
+`llvm-config` flags, not source/build-tree include paths. Current kernel/SDK and
+focused launcher/userland builds also pass.
 
 External manual source, manifests, compile commands, hashes and captured results:
-`/shared/present/jit-grant/llvm-check/`. The normal/deny bundles use the same
-consumer, with/without an explicit JIT declaration. The baseline consumer is
-compiled against the old prefix without its absent OrcJIT component. Run via
-Remote:
+`/shared/present/jit-grant/llvm-check/`, with baseline `before-llvm-4cpu` and final
+`final-llvm-4cpu`. Remote commands:
 
 ```text
 boot://llvm-baseline.pxb baseline
@@ -47,30 +36,29 @@ boot://llvm-check.pxb mcjit
 boot://llvm-check.pxb orc
 ```
 
-## Results and remaining gates
+## Results and limits
 
-- Old-prefix baseline PASS: SMM allocation/finalization refuses, no generated
-  code executes and JIT gauges remain zero, despite held JIT authority.
-- Missing-grant PASS: SMM code and read-only-section allocation refuse, no JIT
-  backing is charged. It does not enter LLVM's fatal allocation-failure path.
-- New ORCv2 PASS: ordinary mapped RW allocation remains on MEMORY while JIT is
-  held. Direct SMM sections execute 42/43 after finalization, later sections
-  finalize on the same manager, and earlier code remains usable. ORCv2 then
-  compiles two IR modules whose functions volatile-load separate constant data
-  and compute 35+7=42 and 36+7=43. Executable and read-only gauges are positive
-  while live; every JIT byte/region/state gauge returns to zero on destruction.
-- MCJIT is **not qualified**: after the same direct SMM checks, EngineBuilder
-  refuses with `dlopen() not supported on this platform` and the process exits with status 1.
-  No MCJIT-generated function is called. Its unconditional process-symbol scan
-  needs the [open decision](../../wip/jit-llvm.md#open-decision-1--mcjit-process-symbol-bootstrap).
-- Source review also found MCJIT discards permission-finalization errors. ORC's
-  RuntimeDyld path propagates them. The MCJIT correction remains undecided and
-  must precede an execution-success claim; it was not exercised by inventing a
-  successful native permission call or bypassing the standard engine builder.
+- Baseline PASS: old SMM allocation/finalization refuses, no generated code
+  executes and JIT gauges stay zero despite held JIT authority.
+- Missing-grant PASS: code and read-only section allocations refuse with zero
+  JIT backing. The qualifier does not enter MCJIT's fatal allocation path.
+- Direct SMM PASS: ordinary mapped RW stays on MEMORY while JIT is held.
+  Separate code/RO sections execute 42/43; later publication on the same manager
+  preserves earlier code. Borrowed descriptors retain native provenance.
+- MCJIT PASS: two IR modules volatile-load separate constant globals and call a
+  host function registered with `LLVMAddSymbol`, producing 35+7=42 and 36+7=43.
+  Adding the second module preserves the first function. The standard engine
+  builder now skips only its unsupported automatic process scan on Pyxis.
+- ORCv2 PASS: two IR modules produce the same values through an explicit
+  RuntimeDyldObjectLinkingLayer/SMM factory, no process-symbol linking, inactive
+  platform and no compiler workers. Both engines use baseline x86-64 CPU, static
+  relocation and the large code model.
+- Every live execution check observes executable and read-only JIT backing.
+  Destruction returns all byte/region/state gauges to zero. Both engines and
+  the missing-grant process exit successfully; the QEMU guest/helpers stop.
 
-ORC explicitly selects RuntimeDyldObjectLinkingLayer with SectionMemoryManager,
-baseline x86-64 CPU, large code model, no process-symbol linking, inactive
-platform and no compiler workers. This does not qualify default JITLink, ORC
-stubs, remote transport or shared-library discovery. No llvmpipe, native
-performance, live patching, strict-near placement or allocation-failure claim is
-added. No native packet was staged.
+Upstream MCJIT finalization-error behaviour is unchanged. Native protection
+retries definite pre-effect BUSY only; this run does not claim retry exhaustion,
+unknown-outcome or finalization-failure coverage. No fault is fabricated.
+Default JITLink, remote transport, shared-library discovery, strict-near
+placement, live patching, llvmpipe workers and native hardware remain unqualified.

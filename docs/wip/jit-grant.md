@@ -130,12 +130,12 @@ that boundary; SYSRET alone is not the proof. Check the equivalent AMD behavior
 and keep architecture maintenance behind the native PROTECT completion contract.
 No assumption that a local INVLPG flushes another CPU's instruction stream.
 
-LLVM's platform adapter follows in its own focused change. Its pending section
+LLVM's [platform adapter](../development/llvm-development.md#explicit-jit-sections)
+is implemented and QEMU-qualified in its separate library prefix. Its pending section
 blocks are address/size sub-blocks, not copies of the original owning MemoryBlock;
 the adapter must retain the original identity/service through sub-block calls and
-must not turn a stale address into authority over a new allocation. Preserve
-ordinary non-JIT LLVM RW allocation without requiring the new grant. Settle any
-actual adapter lifetime choice when that task reaches it. Dual-view regions,
+must not turn a stale address into authority over a new allocation. It preserves
+ordinary non-JIT LLVM RW allocation without requiring the new grant. Dual-view regions,
 executable file mappings, sparse JIT regions and strict-near placement are deferred.
 
 ## Delivery and qualification
@@ -152,7 +152,8 @@ executable file mappings, sparse JIT regions and strict-near placement are defer
    Ordinary boot, existing memory/Go/display checks remain controls. Capture the
    baseline before implementation and record matched transition/closure costs;
    nested QEMU and native results stay separate. No new benchmark framework.
-4. LLVM adapter and a real MCJIT-generated function using code plus read-only data;
+4. LLVM adapter and a real MCJIT-generated function using code plus read-only data
+   are QEMU-qualified in the [LLVM record](../development/experiments/llvm-jit.md);
    then the separate llvmpipe task. Native/PXE qualification goes through the
    orchestrator; no native action is authorized by this design PR.
 

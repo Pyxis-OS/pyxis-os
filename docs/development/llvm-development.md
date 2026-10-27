@@ -74,10 +74,23 @@ hook performs no additional raw-address operation or executable-memory grant.
 NearBlock is advisory and may be ignored. Missing JIT authority refuses; no
 compiler or shipped space newly acquires it.
 
-[LLVM JIT checks](experiments/llvm-jit.md) qualify generated ORCv2 functions through
-an explicitly selected RuntimeDyld/SectionMemoryManager object layer. They do
-not qualify default JITLink or MCJIT. MCJIT's unsupported process bootstrap and
-ignored finalization failures remain [open decisions](../wip/jit-llvm.md).
+**Accepted (chronium, 2026-10-27):** Pyxis skips EngineBuilder's automatic
+process-image symbol scan. Callers register imports explicitly with LLVM's
+existing symbol mappings/resolvers. Implicit process/shared-library discovery
+waits for dynamic linker work; DynamicLibrary still refuses unsupported loads.
+
+**Accepted (chronium, 2026-10-27):** retain upstream MCJIT finalization behaviour,
+without adding an engine fence or fatal-error policy. The Pyxis protection
+adapter retries only definite pre-effect `BUSY`, up to eight attempts like
+libc's current VM admission tuning. Other failures, including unknown outcomes,
+return unchanged. This does not strengthen MCJIT's upstream error handling;
+executing unpublished NX code faults and reports `FAULTED` through normal native
+process observation. Callers still own logical code lifetime.
+
+[LLVM JIT checks](experiments/llvm-jit.md) qualify MCJIT with explicitly
+registered symbols and ORCv2 through an explicitly selected
+RuntimeDyld/SectionMemoryManager object layer. Default JITLink slab partial
+lifetimes and the other mapper/executor routes remain unsupported.
 
 ## Boundaries and qualification
 
@@ -94,5 +107,5 @@ builds, relocated Meson discovery, an independently linked consumer of the
 exported prefix and four-CPU QEMU object emission. That initial check executed
 no generated code. Native hardware and hosted compilation of the consumer on
 Pyxis remain unrun; the separate JIT record
-reports the later ORCv2 execution and current MCJIT refusal.
+records later MCJIT and ORCv2 execution.
 The prefix is a config-tool export; it does not ship a CMake package.
