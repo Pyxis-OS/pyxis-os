@@ -498,12 +498,12 @@ static void efi_boot_services_unmap(const struct boot_info *boot)
     size_t bytes = descriptor.pages * PAGE_SIZE;
     for (size_t page = 0; page < bytes; page += PAGE_SIZE) {
       uintptr_t identity = descriptor.physical + page;
-      *active_table(identity, LEVEL_PT) = 0;
+      active_table(identity, LEVEL_PT)[index_at(identity, LEVEL_PT)] = 0;
       invlpg(identity);
     }
   }
-  /* Only our temporary aliases are released. Bootloader-owned storage and
-   * the bootstrap page tables are not PMM allocations we may free here. */
+  /* Release only temporary aliases. Bootloader-owned backing stays reserved;
+   * their still-linked bootstrap page tables remain owned by the kernel. */
 }
 
 static void efi_runtime_seal(const struct boot_info *boot)
@@ -520,8 +520,8 @@ static void efi_runtime_seal(const struct boot_info *boot)
     for (size_t page = 0; page < bytes; page += PAGE_SIZE) {
       uintptr_t identity = descriptor.physical + page;
       uintptr_t virtual = descriptor.virtual + page;
-      *active_table(identity, LEVEL_PT) &= ~PTE_WRITE;
-      *active_table(virtual, LEVEL_PT) &= ~PTE_WRITE;
+      active_table(identity, LEVEL_PT)[index_at(identity, LEVEL_PT)] &= ~PTE_WRITE;
+      active_table(virtual, LEVEL_PT)[index_at(virtual, LEVEL_PT)] &= ~PTE_WRITE;
       invlpg(identity);
       invlpg(virtual);
     }
