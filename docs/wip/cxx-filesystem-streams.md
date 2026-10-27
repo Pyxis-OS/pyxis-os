@@ -38,11 +38,18 @@ the standard library. It does not grant new roots to any program.
 
 ## Current qualification and limits
 
-The unpublished parent branch built a complete image with the userland helper
-revision. A target libc++ archive with filesystem enabled built and linked;
-on a 4-CPU Q35/KVM guest, an external probe passed native status, iteration,
-recursive create/remove counts, rename, resize, read-only refusal, `canonical`,
-`absolute`, and iostream/fstream I/O. A host Pyxis-parser build passed the
-accepted path cases and 200,000 deterministic forward/reverse iterator paths.
-These are QEMU and host checks, not a native-hardware result. The parent SDK
-pin and exact-head CI remain pending the compiler-container rebuild.
+The published compiler image records fork commit `8a4d001d5480`. The parent
+draft builds a complete full-distribution ISO with it, and the SDK's libc++
+cache records `LIBCXX_ENABLE_FILESYSTEM=ON`. In one 4-CPU Q35/KVM boot with
+4 GiB RAM, VirtIO net and a disposable writable virtio-fs export, an external
+program built by that compiler against the SDK passed 27 checks: native
+status and iteration, recursive create/remove counts, rename, resize,
+read-only refusal, `canonical`, `absolute`, and iostream/ifstream/ofstream/
+fstream read, seek, write, flush and close. `copy_file` returned the intended
+unsupported error. The Remote profile did not have an HTTP root, so its
+provider status probe proves only missing-root refusal; source inspection
+confirms the native-only route never opens a provider.
+
+A host Pyxis-parser build passed the accepted path cases and 200,000
+deterministic forward/reverse iterator paths. These are QEMU and host checks,
+not a native-hardware result. Exact-head CI is still required before merge.
