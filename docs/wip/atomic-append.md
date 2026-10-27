@@ -3,7 +3,8 @@
 Status: assigned to codex-beta (chronium, 2026-10-26). The first-round contract
 is accepted. Native APPEND/SDK and the libc/shell slice are built and qualified
 in QEMU. Go, Rust and LLVM append adapters have built prefixes and QEMU
-qualification; uncertain-write finalization and native qualification remain.
+qualification. The shared uncertain-write latch is implemented; final native
+qualification remains.
 
 ## Accepted contract (chronium, 2026-10-26)
 
@@ -157,10 +158,11 @@ built/linked but not run: its ordinary bundle requires TCP authority absent from
 this fixture. LLVM's rebuilt 71-archive development prefix and hosted Clang/LLD/clangd
 payloads build/link with the published `8a4d001` compiler. QEMU covers RAM/npfs/FAT32 and HOST admission, append disposition,
 positioned overwrite, buffered patches and multi-operation patches. Hosted Clang compiles a C file and separately launched LLD links a relocatable
-object. `clangd --version` works, but both ordinary and synchronous LSP sessions
-fail with `thread constructor failed: Resource busy`; this runtime failure is
-not attributed to append and is not a passed clangd check. No native
-language-adapter result is claimed.
+object; host ELF inspection verifies the resulting function symbol. The final
+clangd initialize/shutdown round-trip passes. Earlier loaded runs returned
+`thread constructor failed: Resource busy`; that variation is observed and
+unattributed. The separate `--check` realpath/ExpandTilde refusal remains. No
+native language-adapter result is claimed.
 
 Rust's `.append(true)` selects writable native O_APPEND; read+append selects
 read/write access. Append+truncate is invalid unless exclusive create_new takes
@@ -197,7 +199,7 @@ libc last-error slot is introduced.
 - [x] libc, inheritance, shell and dependent ports in linked PRs; restore tee
   append and remove the obsolete workarounds/debt after qualification.
   After this task ordinary append modes/redirection use one native operation.
-- [ ] Go, Rust and LLVM adapters with focused fork PRs and affected prefix
+- [x] Go, Rust and LLVM adapters with focused fork PRs and affected prefix
   rebuilds. Report exact rebuild requirements when known; do not change the
   hosted compiler pin or rebuild its container implicitly.
   After this task supported language/compiler append users need no workaround.
