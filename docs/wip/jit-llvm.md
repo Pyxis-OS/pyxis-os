@@ -8,8 +8,8 @@ pins. Main already selects compiler `8a4d001d` for its C++ filesystem delivery.
 
 The selector and borrowed-section adapter are implemented in pyxis-llvm #20.
 The refreshed development prefix builds; ORCv2 with RuntimeDyld/SMM executes
-generated code in QEMU. MCJIT remains blocked on the two decisions below; it
-is not qualified or ready to merge. No compiler/container pin moves.
+generated code in QEMU. MCJIT qualification is being repeated with the accepted platform behaviour
+below. No compiler/container pin moves.
 
 ## Decision — explicit allocation intent
 
@@ -51,44 +51,24 @@ paths reconstruct descriptors from raw addresses. Whole-identity RELEASE does
 not authorize those partial releases; they need a separate lifetime adaptation
 before support is claimed. The first consumer remains SectionMemoryManager.
 
-## Open decision 1 — MCJIT process-symbol bootstrap
+## Decided — process symbols and protection failures
 
-**Proposed default:** on Pyxis, skip only EngineBuilder's unconditional
-`LoadLibraryPermanently(nullptr)` process scan. Resolve imports through existing
-explicit `LLVMAddSymbol`/global mappings or the caller's resolver. Named shared
-libraries and implicit process-image symbol lookup remain unsupported. Do not
-return fake success from DynamicLibrary, add a symbol table to P1F or create a
-new loader service.
+**Accepted (chronium, 2026-10-27):** on Pyxis, skip only EngineBuilder's
+unconditional `LoadLibraryPermanently(nullptr)` process scan. Callers register
+symbols explicitly through existing LLVM symbol mappings/resolvers. Implicit
+process/shared-library lookup waits for the dynamic linker work. DynamicLibrary
+continues to report unsupported operations; no P1F symbol table or loader service
+is added here.
 
-`EngineBuilder::create` currently attempts that unsupported operation even for
-IR containing no imports. QEMU confirms it refuses with `dlopen() not supported
-on this platform`. Explicit-symbol lookup already precedes library lookup; it
-does not need process loading. The alternative is to retain refusal and leave
-MCJIT unavailable; ORCv2's explicit RuntimeDyld/SMM layer works without that scan.
+**Accepted (chronium, 2026-10-27):** retain upstream MCJIT finalization behaviour;
+add no engine fence, fatal-error policy or defensive finalization rewrite. The
+Pyxis memory-protection adapter retries definite pre-effect `BUSY` refusals
+(eight attempts, matching libc's current VM admission tuning). All other native
+errors, including unknown outcomes, propagate without retries or a fallback.
+Ordinary native W^X enforcement remains in force: executing unpublished NX code
+faults and the process reports `FAULTED`. This does not make MCJIT's upstream
+error reporting stronger or provide a code-entry lifetime lease.
 
-## Open decision 2 — permission-finalization failure
-
-**Proposed default:** a failed native memory finalization ends the program
-through LLVM's existing fatal-error path, with a clear permission-publication
-diagnostic. Never execute code after a failed transition, retry publication or
-invent a successful result. Kernel/process teardown retains its normal ownership
-and reclamation guarantees. MCJIT already uses fatal errors for relocation and
-other execution failures; this is the smallest correction that also covers its
-legacy execution helpers without an error result.
-
-MCJIT currently ignores `finalizeMemory()` failure, unlike ORC's RuntimeDyld
-path. An error-message-only guard is insufficient: the C error getter clears
-that message as part of reading it. The fence must survive diagnostic clearing.
-This correction must accompany enabling MCJIT; otherwise a refused native
-permission transition can be treated as finalized code. The recoverable
-alternative is a persistent engine fence with its existing error API and
-zero/null executable-address lookups, surviving diagnostic clearing until
-destruction; legacy execution helpers still need a fatal error. That adds
-engine state and checks across its execution entry points. Previously returned
-raw pointers retain the caller's code-lifetime obligation in either design.
-
-No code for these two decisions has been implemented. Source references are
-`llvm/lib/ExecutionEngine/ExecutionEngine.cpp:510`,
-`MCJIT/MCJIT.cpp:253` and `ExecutionEngineBindings.cpp:309–317` at development
-base `a63ce582`. Qualification and the exact updated pin are recorded in the
+The old exact-input QEMU run refused MCJIT creation because of its process scan;
+the refreshed run and pin are recorded in the
 [experiment](../development/experiments/llvm-jit.md).
