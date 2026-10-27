@@ -35,6 +35,7 @@
 #include <kernel/object/process.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/memory.h>
+#include <kernel/object/jit.h>
 #include <kernel/object/thread.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/capability.h>
@@ -478,6 +479,12 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return display_call((struct display_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_JIT:
+    if (header.protocol != PROTOCOL_JIT) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return jit_call(rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
   case OBJECT_MEMORY:
     if (header.protocol != PROTOCOL_MEMORY) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

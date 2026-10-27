@@ -2,6 +2,7 @@
 #define KERNEL_MM_PRIVATE_H
 
 #include <abi/memory.h>
+#include <abi/jit.h>
 #include <abi/syscall.h>
 #include <kernel/mm/types.h>
 
@@ -68,6 +69,14 @@ enum call_status private_context_pin(struct process *process, uint64_t identity,
  * before completion. No VM access or mutation. Zero/unacquired context is safe;
  * clears storage. */
 void private_context_unpin(struct private_context *context);
+
+/* Caller CPU, IF=0, retained drained process mutation. Sizes are whole pages;
+ * separate kinds prevent MEMORY/context grants from changing JIT allocations. */
+enum call_status private_jit_allocate(struct process *process, size_t size,
+    struct jit_region *region);
+enum call_status private_jit_protect(struct process *process, uint64_t identity,
+    size_t offset, size_t size, enum jit_state state);
+enum call_status private_jit_release(struct process *process, uint64_t identity, size_t *bytes);
 
 /* BSP, IF=0, after vm_space_destroy reclaimed all backing. Frees only records. */
 void private_memory_discard_records(struct process *process);

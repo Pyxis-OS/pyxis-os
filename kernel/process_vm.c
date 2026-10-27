@@ -3,6 +3,7 @@
 #include <arch/smp.h>
 #include <kernel/object/display.h>
 #include <kernel/object/memory.h>
+#include <kernel/object/jit.h>
 #include <kernel/object/thread.h>
 #include <kernel/process.h>
 #include <kernel/process_vm.h>
@@ -107,7 +108,8 @@ void process_vm_root_depart(struct process *process, struct process_vm_root_epoc
   process->vm.resident_cpus[cpu / 64] &= ~(UINT64_C(1) << (cpu % 64));
   --process->vm.roots;
   bool pending = process->vm.pending &&
-    process->vm.pending->service != BSP_SERVICE_MEMORY;
+    (process->vm.pending->service == BSP_SERVICE_DISPLAY ||
+     process->vm.pending->service == BSP_SERVICE_THREAD);
   if (process->vm.local_wait) {
     struct task_wait *wait = process->vm.local_wait;
     process->vm.local_wait = NULL;
@@ -215,6 +217,10 @@ static void refuse_mutation(struct bsp_request *request, enum call_status status
     struct memory_request *memory = (void *)request;
     memory->status = status;
     memory->process = NULL;
+  } else if (request->service == BSP_SERVICE_JIT) {
+    struct jit_request *jit = (void *)request;
+    jit->status = status;
+    jit->process = NULL;
   } else if (request->service == BSP_SERVICE_THREAD) {
     struct thread_request *thread = (void *)request;
     thread->status = status;
@@ -399,6 +405,8 @@ static void finish_mutation(struct process *process, bool expired, bool local)
     struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
     if (request->service == BSP_SERVICE_MEMORY) {
       memory_request_execute((struct memory_request *)request);
+    } else if (request->service == BSP_SERVICE_JIT) {
+      jit_request_execute((struct jit_request *)request);
     } else if (request->service == BSP_SERVICE_THREAD) {
       thread_request_execute((struct thread_request *)request);
     } else {
@@ -438,12 +446,11 @@ static void finish_mutation(struct process *process, bool expired, bool local)
   }
 }
 
-void process_vm_memory_call(struct memory_request *memory)
+void process_vm_private_call(struct bsp_request *request)
 {
-  struct bsp_request *request = &memory->request;
   struct process *process = request->vm_process;
   struct task *mutator = request->vm_mutator;
-  KASSERT(request->service == BSP_SERVICE_MEMORY &&
+  KASSERT((request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_JIT) &&
       request->state == BSP_REQUEST_PREPARED && mutator == task_current_user());
   task_vm_kernel_enter();
   spin_lock(&process->vm.lock);

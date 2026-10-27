@@ -75,6 +75,7 @@
 #define PROTOCOL_PROCESS_INTERRUPT UINT64_C(70)
 #define PROTOCOL_GAMEPAD UINT64_C(71)
 #define PROTOCOL_UEFI UINT64_C(72)
+#define PROTOCOL_JIT UINT64_C(73)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

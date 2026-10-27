@@ -12,6 +12,7 @@ enum private_kind {
   PRIVATE_ORDINARY,
   PRIVATE_GUARDED,
   PRIVATE_SPARSE,
+  PRIVATE_JIT,
 };
 
 struct private_allocation {
@@ -20,6 +21,7 @@ struct private_allocation {
   size_t size;
   uint64_t identity; /* Zero for ordinary address/size allocations. */
   enum private_kind kind;
+  size_t jit_writable_pages, jit_executable_pages;
   atomic_bool pinned; /* Pin acquisition under VM owner; retirement release is any-CPU safe. */
 };
 
@@ -255,6 +257,9 @@ enum call_status private_memory_release_reservation(struct process *process,
   while (*link) {
     struct private_allocation *allocation = *link;
     if (allocation->identity == identity) {
+      if (allocation->kind != PRIVATE_GUARDED && allocation->kind != PRIVATE_SPARSE) {
+        return CALL_BAD_REQUEST;
+      }
       if (atomic_load_explicit(&allocation->pinned, memory_order_acquire)) {
         return CALL_BUSY;
       }
@@ -331,6 +336,141 @@ void private_context_unpin(struct private_context *context)
     atomic_store_explicit(&context->allocation->pinned, false, memory_order_release);
   }
   *context = (struct private_context){0};
+}
+
+/* Initial per-process policy, not ABI. All JIT states spend the same allowance. */
+#define JIT_BACKING_LIMIT (UINT64_C(256) * 1024 * 1024)
+#define JIT_REGION_LIMIT 4096
+
+static enum call_status jit_mm_status(enum mm_result status)
+{
+  return status == MM_OK ? CALL_OK : status == MM_NO_MEMORY ? CALL_NO_MEMORY :
+      status == MM_BUSY ? CALL_BUSY : CALL_BAD_REQUEST;
+}
+
+enum call_status private_jit_allocate(struct process *process, size_t size,
+    struct jit_region *region)
+{
+  KASSERT(process && region && size && !(size & (PAGE_SIZE - 1)));
+  process_vm_require_mutation(process);
+  *region = (struct jit_region){0};
+  KASSERT(process->jit_bytes <= JIT_BACKING_LIMIT);
+  if (process->jit_regions == JIT_REGION_LIMIT || size > JIT_BACKING_LIMIT - process->jit_bytes) {
+    return CALL_LIMIT;
+  }
+  uint64_t identity = reserve_identity();
+  if (!identity) {
+    return CALL_NO_MEMORY;
+  }
+  struct private_allocation *allocation = kmalloc(sizeof(*allocation));
+  if (!allocation) {
+    return CALL_NO_MEMORY;
+  }
+  /* The exclusive process token reserves quota through preparation/unwind. */
+  process->jit_bytes += size;
+  ++process->jit_regions;
+  uintptr_t address = 0;
+  enum mm_result result = vm_reserve(process->address_space, size, PAGE_SIZE, &address);
+  if (result == MM_OK) {
+    result = back_private(process, address, size);
+    if (result != MM_OK) {
+      KASSERT(vm_release(process->address_space, address, size) == MM_OK);
+    }
+  }
+  if (result != MM_OK) {
+    process->jit_bytes -= size;
+    --process->jit_regions;
+    kfree(allocation);
+    return jit_mm_status(result);
+  }
+  *allocation = (struct private_allocation){.next = process->allocations,
+    .address = address, .size = size, .identity = identity, .kind = PRIVATE_JIT,
+    .jit_writable_pages = size / PAGE_SIZE};
+  process->allocations = allocation;
+  process->jit_writable_bytes += size;
+  *region = (struct jit_region){identity, address, size};
+  return CALL_OK;
+}
+
+enum call_status private_jit_protect(struct process *process, uint64_t identity,
+    size_t offset, size_t size, enum jit_state state)
+{
+  process_vm_require_mutation(process);
+  if (!identity || !size || (offset & (PAGE_SIZE - 1)) || (size & (PAGE_SIZE - 1)) ||
+      (state != JIT_WRITABLE && state != JIT_READ_ONLY && state != JIT_EXECUTABLE)) {
+    return CALL_BAD_REQUEST;
+  }
+  struct private_allocation *allocation = process->allocations;
+  while (allocation && (allocation->kind != PRIVATE_JIT || allocation->identity != identity)) {
+    allocation = allocation->next;
+  }
+  if (!allocation || offset > allocation->size || size > allocation->size - offset) {
+    return CALL_BAD_REQUEST;
+  }
+  unsigned permissions = PAGE_USER | (state == JIT_WRITABLE ? PAGE_WRITE :
+      state == JIT_EXECUTABLE ? PAGE_EXEC : 0);
+  struct vm_protection protection;
+  enum mm_result result = vm_protect_begin(process->address_space,
+      allocation->address + offset, size, permissions, &protection);
+  if (result != MM_OK) {
+    return jit_mm_status(result);
+  }
+  while (!vm_protect_step(&protection, PRIVATE_MEMORY_STEP_PAGES)) {
+    task_yield_masked();
+    process_vm_require_mutation(process);
+  }
+  if (protection.status != MM_OK) {
+    return jit_mm_status(protection.status);
+  }
+  size_t writable = protection.old_writable_pages;
+  size_t executable = protection.old_executable_pages;
+  KASSERT(allocation->jit_writable_pages >= writable &&
+      allocation->jit_executable_pages >= executable);
+  allocation->jit_writable_pages -= writable;
+  allocation->jit_executable_pages -= executable;
+  process->jit_writable_bytes -= writable * PAGE_SIZE;
+  process->jit_executable_bytes -= executable * PAGE_SIZE;
+  if (state == JIT_WRITABLE) {
+    allocation->jit_writable_pages += size / PAGE_SIZE;
+    process->jit_writable_bytes += size;
+  } else if (state == JIT_EXECUTABLE) {
+    allocation->jit_executable_pages += size / PAGE_SIZE;
+    process->jit_executable_bytes += size;
+  }
+  return CALL_OK;
+}
+
+enum call_status private_jit_release(struct process *process, uint64_t identity, size_t *bytes)
+{
+  process_vm_require_mutation(process);
+  *bytes = 0;
+  if (!identity) {
+    return CALL_BAD_REQUEST;
+  }
+  struct private_allocation **link = &process->allocations;
+  while (*link && ((*link)->kind != PRIVATE_JIT || (*link)->identity != identity)) {
+    link = &(*link)->next;
+  }
+  struct private_allocation *allocation = *link;
+  if (!allocation) {
+    return CALL_BAD_REQUEST;
+  }
+  *bytes = allocation->size;
+  struct vm_reclaim reclaim;
+  KASSERT(vm_free_begin(process->address_space, allocation->address, allocation->size,
+      &reclaim) == MM_OK);
+  while (!vm_free_step(&reclaim, PRIVATE_MEMORY_STEP_PAGES)) {
+    task_yield_masked();
+    process_vm_require_mutation(process);
+  }
+  /* Only actual reclamation returns quota; a stop cannot skip this boundary. */
+  process->jit_bytes -= allocation->size;
+  --process->jit_regions;
+  process->jit_writable_bytes -= allocation->jit_writable_pages * PAGE_SIZE;
+  process->jit_executable_bytes -= allocation->jit_executable_pages * PAGE_SIZE;
+  *link = allocation->next;
+  kfree(allocation);
+  return CALL_OK;
 }
 
 void private_memory_discard_records(struct process *process)

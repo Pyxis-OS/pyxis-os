@@ -25,6 +25,7 @@
 #include <kernel/object/endpoint.h>
 #include <kernel/object/display.h>
 #include <kernel/object/memory.h>
+#include <kernel/object/jit.h>
 #include <kernel/object/thread.h>
 #include <kernel/object/process.h>
 #include <kernel/process_vm.h>
@@ -109,6 +110,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct display_request, request)},
   [BSP_SERVICE_MEMORY] = {sizeof(struct memory_request), alignof(struct memory_request),
       offsetof(struct memory_request, request)},
+  [BSP_SERVICE_JIT] = {sizeof(struct jit_request), alignof(struct jit_request),
+      offsetof(struct jit_request, request)},
   [BSP_SERVICE_CAPABILITY_GROW] = {sizeof(struct capability_growth_request), alignof(struct capability_growth_request),
       offsetof(struct capability_growth_request, request)},
   [BSP_SERVICE_ENVIRONMENT] = {sizeof(struct environment_request), alignof(struct environment_request),
@@ -278,7 +281,8 @@ void bsp_request_submit_and_wait(struct bsp_request *request)
 {
   KASSERT(initialized && request && request->state == BSP_REQUEST_PREPARED);
   KASSERT(request == task_bsp_request_current());
-  KASSERT(request->service != BSP_SERVICE_MEMORY); /* Typed storage only; caller CPU executes it. */
+  KASSERT(request->service != BSP_SERVICE_MEMORY && request->service != BSP_SERVICE_JIT);
+  /* Both typed local services execute on their retained caller CPU. */
   struct task_wait *wait = request->wait;
   KASSERT(wait && !request->next);
 
