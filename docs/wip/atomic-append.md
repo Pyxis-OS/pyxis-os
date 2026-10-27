@@ -163,6 +163,21 @@ The Go fork pin changes require rebuilding affected Go prefixes and programs.
 The LLVM pin changes require rebuilding hosted Clang/LLD/clangd payloads and the
 LLVM development prefix. The cross-compiler/container pin stays unchanged.
 
+## Pending buffered-error decision
+
+Source inspection found a retry through retained output: `flush_output` keeps
+unconfirmed queued bytes after a failed descriptor write, then `fclose`, exit or
+another flush can send those bytes again. An uncertain APPEND may already have
+changed EOF, so that retry conflicts with the no-replay contract.
+
+Proposed default (awaiting chronium): a native FILE WRITE, APPEND or positioned
+WRITE returning OUTCOME_UNKNOWN permanently latches EIO on that shared libc
+descriptor's write side. Descriptor aliases share the latch; `clearerr` clears
+stdio indicators but cannot reset uncertain mutation state. Reads and ownership
+release remain available, and a newly opened descriptor is a new intent. Pending
+buffer drains cannot resubmit; known non-uncertain errors keep their existing
+recovery. This requires no new kernel status or public libc error slot.
+
 ## Ordered tasks
 
 - [x] Capture before-code QEMU costs with existing tools, single runs unless a
