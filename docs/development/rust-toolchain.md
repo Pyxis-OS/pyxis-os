@@ -129,6 +129,11 @@ Native directory enumeration/mutation is added at
 checked recursive creation and the native-only mutation boundary.
 Copy and recursive removal use `1c82b7cac7de6e456741ec3084cfb42c30fa8e85`;
 see their [qualification](experiments/rust-copy-remove.md).
+`available_parallelism()` uses the grant-free startup CPU allowance through
+libpyxis at `35681ba73f8f36ac3e49ffd082294482042903d2`. Rebuild target std
+against the matching SDK; this does not require a compiler-container rebuild.
+The [runtime CPU check](experiments/startup-usable-cpus.md) covers restricted
+spaces and joined workers alongside C, C++ and Go.
 The target keeps `target_os="pyxis"`
 and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
 [first std main record](experiments/rust-std-main.md) separate their qualification
@@ -178,7 +183,7 @@ On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
 ```sh
 git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
 git -C /absolute/pyxis-rust fetch origin
-git -C /absolute/pyxis-rust checkout --detach 1c82b7cac7de6e456741ec3084cfb42c30fa8e85
+git -C /absolute/pyxis-rust checkout --detach 35681ba73f8f36ac3e49ffd082294482042903d2
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
