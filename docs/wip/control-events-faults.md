@@ -58,8 +58,9 @@ ignores the resource still works, and Continuum always knows whom it can ask.
   program to stop, so "stop, with a deadline" needs one meaning everywhere, and
   "reload" probably does too. Define only what the first haven needs; programs
   define their own messages beyond that.
-- **ISO C's `signal()` and `raise()`.** libc has neither today. `raise` is
-  synchronous and easy. A ported program's `signal(SIGTERM, handler)` could be
+- **ISO C's `signal()` and `raise()`.** libc currently exposes honest failing
+  shims for both; no handler is installed or delivered. `raise` would be
+  synchronous. A ported program's `signal(SIGTERM, handler)` could be
   mapped onto the `control` resource, running the handler at libc's blocking
   calls; decide that when a port needs it.
 - **Order.** The first consumer is graceful stop and reload of one haven, which
@@ -68,3 +69,19 @@ ignores the resource still works, and Continuum always knows whom it can ask.
 - **Ctrl+C** keeps today's foreground interruption. A program could later opt
   into a cooperative first stage through its `control` resource; nothing is
   imposed globally.
+
+## Parked libc compatibility proposal
+
+Cooperative libc signal compatibility is **proposed, not accepted or assigned**
+(chronium, 2026-10-27). Revisit it only for a real consumer after the
+[raw-termios follow-up](terminal-ui.md#libc-compatibility-follow-up). Possible
+source mappings are resize to SIGWINCH, opted-in foreground interruption to
+SIGINT, future control-channel stop/reload to SIGTERM/SIGHUP, owned child
+completion to SIGCHLD and clock expiry to SIGALRM. SIGPIPE remains an EPIPE
+error rather than handler delivery. These possibilities do not settle the
+source binding, thread/mask, safe-point, EINTR/restart or lifetime contracts.
+
+This is compatibility for ports, not a change to the native no-signals design.
+No asynchronous handler, compute-loop interruption, fault recovery or arbitrary
+process signalling is authorized. Continuum's previously accepted ownership of
+the named control resource remains separate from these unaccepted libc mappings.

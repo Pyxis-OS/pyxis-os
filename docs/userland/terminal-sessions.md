@@ -105,6 +105,42 @@ incomplete escape and advances only when required. Parser state survives DATA
 record boundaries. Both framebuffer and host presentations must honor
 these rules; no shared parser framework is introduced here.
 
+## Output drain and input flush
+
+CONSOLE_DRAIN (14) requires READ or WRITE on the supplied application endpoint.
+It captures the ordered output prefix already queued at entry. Completion means
+those complete records were copied successfully to an attachment with DRAIN
+rights. It does not acknowledge Remote transmission, display presentation or
+physical scanout. Later writes do not extend the fence; already queued controls
+and records from other writers retain their order. This observation grants no
+attachment DRAIN, RESIZE or HANGUP authority.
+
+The request supplies timeout_ms, zero for a poll or at most 30,000 for a bounded
+wait. A delivered prefix wins over expiry. Timeout leaves output intact. Hangup,
+absence or final closure of all DRAIN-authorized attachment grants, closure of
+the application endpoint's logical authority, or caller stopping/revocation ends
+the wait with an error; none is reported as delivery. There is no reattachment.
+Storage references do not retain logical drain or endpoint authority. Libc
+checks descriptor identity around the operation, serializes mode changes with
+final close, and refuses a stale restore into a replacement descriptor.
+
+Attachment TRY_DRAIN now retains the head record until successful copyout.
+Concurrent consumers can receive BUSY while one record is being copied; failed
+copyout leaves the record queued and cannot satisfy a fence. This is bounded
+record copying, not a pending attachment operation. Framebuffer CONSOLE_DRAIN
+completes immediately because writes already apply bytes to its TTY model.
+
+CONSOLE_FLUSH_INPUT (15), under READ, discards ordinary input queued at one
+locked instant without waiting for new input. It preserves EOF/hangup, interrupt
+and PASSTHROUGH state and clipboard framing; an active reader or paste receiver
+can return BUSY. Framebuffer flush also clears the old input-loss indication.
+Libc TCSAFLUSH uses drain before flush and clears its matching read-ahead.
+
+These are additive CONSOLE ABI operations with the existing request size;
+operation numbers/layouts remain unchanged. Rebuild Caelum and the exported
+SDK/libpyxis/libc, then affected target applications/ports. This requires no
+compiler/container rebuild or release-ABI renumbering.
+
 ## Resize
 
 `terminal_resize(attachment, columns, rows)` requires RESIZE, separately from

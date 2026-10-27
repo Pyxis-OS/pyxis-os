@@ -29,13 +29,14 @@ struct terminal_session {
   struct space *space;
   struct process *reader_process;
   struct terminal_end input, output, attachment, events;
-  size_t live_objects, input_authorities, controllers;
+  size_t live_objects, input_authorities, controllers, drain_authorities;
   /* Each output-producing object may retire while the other remains open. */
   size_t output_authorities, event_authorities;
   uint64_t columns, rows, geometry_generation, completed_commands;
   struct console_interrupt interrupt;
-  bool input_closed, output_closed, hung_up, reader_active;
-  struct task_wait_link *first_reader, *last_reader, *writers;
+  bool input_closed, output_closed, hung_up, reader_active, output_draining;
+  uint64_t output_enqueued, output_delivered;
+  struct task_wait_link *first_reader, *last_reader, *writers, *drainers;
   struct task_wait *input_wait;
   size_t input_head, input_count, output_head, output_count;
   uint8_t input_data[TERMINAL_INPUT_CAPACITY];
@@ -114,6 +115,7 @@ static void hangup(struct terminal_session *session)
     reader = next;
   }
   wake_all(&session->writers);
+  wake_all(&session->drainers);
 }
 
 static size_t *authority_counter(struct kernel_object *object, uint64_t rights)
@@ -149,14 +151,21 @@ bool terminal_authority_retain(struct kernel_object *object, uint64_t rights)
         rights);
   }
   size_t *counter = authority_counter(object, rights);
-  if (!counter) {
+  bool drain = object->type == OBJECT_TERMINAL_ATTACHMENT && (rights & TERMINAL_RIGHT_DRAIN);
+  if (!counter && !drain) {
     return true;
   }
   struct terminal_session *session = ((struct terminal_end *)object)->session;
   lock_session(session);
-  bool retained = *counter != SIZE_MAX;
+  bool retained = (!counter || *counter != SIZE_MAX) &&
+      (!drain || session->drain_authorities != SIZE_MAX);
   if (retained) {
-    ++*counter;
+    if (counter) {
+      ++*counter;
+    }
+    if (drain) {
+      ++session->drain_authorities;
+    }
   }
   unlock_session(session);
   return retained;
@@ -174,13 +183,26 @@ void terminal_authority_release(struct kernel_object *object, uint64_t rights)
     return;
   }
   size_t *counter = authority_counter(object, rights);
-  if (!counter) {
+  bool drain = object->type == OBJECT_TERMINAL_ATTACHMENT && (rights & TERMINAL_RIGHT_DRAIN);
+  if (!counter && !drain) {
     return;
   }
   struct terminal_session *session = ((struct terminal_end *)object)->session;
   lock_session(session);
-  KASSERT(*counter);
-  bool closed = --*counter == 0;
+  bool closed = false;
+  if (counter) {
+    KASSERT(*counter);
+    closed = --*counter == 0;
+  }
+  if (drain) {
+    KASSERT(session->drain_authorities);
+    if (!--session->drain_authorities) {
+      wake_all(&session->drainers);
+    }
+  }
+  if (closed) {
+    wake_all(&session->drainers);
+  }
   if (closed) {
     if (object->type == OBJECT_TERMINAL_INPUT) {
       clipboard_input_hangup(&session->input.object);
@@ -221,7 +243,8 @@ static void destroy_terminal_end(struct kernel_object *object)
   bool finished = --session->live_objects == 0;
   if (finished) {
     KASSERT(!session->reader_active && !session->first_reader &&
-        !session->writers && !session->input_wait);
+        !session->writers && !session->drainers && !session->input_wait);
+    KASSERT(!session->drain_authorities && !session->output_draining);
     KASSERT(!session->interrupt.armed && !session->interrupt.passthrough);
   }
   unlock_session(session);
@@ -614,6 +637,10 @@ static enum call_status enqueue_output(struct terminal_session *session,
       }
     }
     if (available >= required) {
+      if (required > UINT64_MAX - session->output_enqueued) {
+        unlock_session(session);
+        return CALL_LIMIT;
+      }
       size_t count = length;
       if (!task_operation_start()) {
         unlock_session(session);
@@ -636,6 +663,7 @@ static enum call_status enqueue_output(struct terminal_session *session,
         ring_copy_in(session->output_data, TERMINAL_OUTPUT_CAPACITY, tail, bytes, count);
       }
       session->output_count += sizeof(record) + count;
+      session->output_enqueued += sizeof(record) + count;
       *written = count;
       unlock_session(session);
       readiness_source_notify(&session->output.readiness);
@@ -698,6 +726,78 @@ static struct syscall_result application_write(struct terminal_session *session,
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
+static struct syscall_result application_drain(struct terminal_session *session,
+    struct kernel_object *object, const struct console_drain_request *request)
+{
+  if (request->timeout_ms > CONSOLE_DRAIN_TIMEOUT_MAX_MS) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  uint64_t deadline = task_deadline_after_ms(request->timeout_ms);
+  lock_session(session);
+  uint64_t target = session->output_enqueued;
+  unlock_session(session);
+  for (;;) {
+    struct task_wait_link *record = task_wait_link_prepare();
+    lock_session(session);
+    size_t authorities = object->type == OBJECT_TERMINAL_INPUT ?
+        session->input_authorities : session->output_authorities;
+    enum call_status status;
+    if (session->hung_up || !session->drain_authorities || !authorities ||
+        task_stop_requested() || task_operation_denied()) {
+      status = CALL_ENDPOINT_CLOSED;
+    } else if (session->output_delivered >= target) {
+      status = task_operation_start() ? CALL_OK : CALL_DENIED;
+    } else if (task_deadline_expired(deadline)) {
+      status = CALL_TIMED_OUT;
+    } else {
+      record->next = session->drainers;
+      session->drainers = record;
+      struct task_wait *wait = record->wait;
+      unlock_session(session);
+      bool resumed = task_wait_sleep_until_interruptible(wait, deadline);
+      lock_session(session);
+      if (record->wait) {
+        struct task_wait_link **link = &session->drainers;
+        while (*link && *link != record) {
+          link = &(*link)->next;
+        }
+        if (*link) {
+          *link = record->next;
+        }
+        record->next = NULL;
+        record->wait = NULL;
+      }
+      unlock_session(session);
+      if (!resumed) {
+        return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+      }
+      continue;
+    }
+    unlock_session(session);
+    return (struct syscall_result){status, 0};
+  }
+}
+
+static struct syscall_result application_flush_input(struct terminal_session *session)
+{
+  lock_session(session);
+  enum call_status status = CALL_OK;
+  if (session->hung_up || !session->input_authorities) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (session->reader_active || !clipboard_ordinary_allowed(&session->input.object)) {
+    status = CALL_BUSY;
+  } else if (!task_operation_start()) {
+    status = CALL_DENIED;
+  } else {
+    memzero_explicit(session->input_data, sizeof(session->input_data));
+    session->input_head = session->input_count = 0;
+  }
+  unlock_session(session);
+  readiness_source_notify(&session->input.readiness);
+  readiness_notify();
+  return (struct syscall_result){status, 0};
+}
+
 struct syscall_result terminal_application_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t request_address,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity)
@@ -708,12 +808,14 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   }
   uint64_t required;
   switch (operation) {
-  case CONSOLE_READ: required = CONSOLE_RIGHT_READ; break;
+  case CONSOLE_READ:
+  case CONSOLE_FLUSH_INPUT: required = CONSOLE_RIGHT_READ; break;
   case CONSOLE_WRITE:
   case CONSOLE_TRY_WRITE:
   case CONSOLE_FRESH_LINE:
   case CONSOLE_SET_TAB_WIDTH: required = CONSOLE_RIGHT_WRITE; break;
-  case CONSOLE_SIZE: required = CONSOLE_RIGHTS; break;
+  case CONSOLE_SIZE:
+  case CONSOLE_DRAIN: required = CONSOLE_RIGHTS; break;
   case CONSOLE_ARM_INTERRUPT: required = CONSOLE_RIGHT_INTERRUPT; break;
   case CONSOLE_PASSTHROUGH: required = CONSOLE_RIGHT_READ; break;
   case CONSOLE_ACK_INTERRUPT: required = CONSOLE_RIGHT_ARMED; break;
@@ -747,6 +849,12 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   }
   if (operation == CONSOLE_READ) {
     return application_read(session, &request.read, reply_address, reply_capacity);
+  }
+  if (operation == CONSOLE_DRAIN) {
+    return application_drain(session, object, &request.drain);
+  }
+  if (operation == CONSOLE_FLUSH_INPUT) {
+    return application_flush_input(session);
   }
   if (operation == CONSOLE_WRITE || operation == CONSOLE_TRY_WRITE) {
     return application_write(session, &request.write, reply_address, reply_capacity,
@@ -907,6 +1015,8 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
         wake_input(session);
       }
     }
+  } else if (session->output_draining) {
+    status = CALL_BUSY;
   } else if (session->output_count) {
     struct terminal_record record;
     ring_copy_out(session->output_data, TERMINAL_OUTPUT_CAPACITY,
@@ -920,9 +1030,7 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
       reply.length = record_size;
       ring_copy_out(session->output_data, TERMINAL_OUTPUT_CAPACITY,
           session->output_head, bytes, record_size);
-      session->output_head = (session->output_head + record_size) % TERMINAL_OUTPUT_CAPACITY;
-      session->output_count -= record_size;
-      wake_all(&session->writers);
+      session->output_draining = true;
     }
   } else if (!session->output_closed) {
     status = CALL_WOULD_BLOCK;
@@ -932,12 +1040,29 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
+  bool copied = copy_reply_to_user(reply_address, &reply, sizeof(reply), request.buffer,
+      bytes, inject ? 0 : reply.length);
+  if (!inject && reply.length) {
+    lock_session(session);
+    KASSERT(session->output_draining);
+    session->output_draining = false;
+    if (copied) {
+      if (!session->hung_up) {
+        session->output_head = (session->output_head + reply.length) % TERMINAL_OUTPUT_CAPACITY;
+        session->output_count -= reply.length;
+      }
+      session->output_delivered += reply.length;
+      KASSERT(session->output_delivered <= session->output_enqueued);
+      wake_all(&session->writers);
+      wake_all(&session->drainers);
+    }
+    unlock_session(session);
+  }
   if (reply.length) {
     readiness_source_notify(inject ? &session->input.readiness : &session->output.readiness);
     readiness_notify();
   }
-  if (!copy_reply_to_user(reply_address, &reply, sizeof(reply), request.buffer,
-      bytes, inject ? 0 : reply.length)) {
+  if (!copied) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   return (struct syscall_result){CALL_OK, sizeof(reply)};

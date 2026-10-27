@@ -34,6 +34,28 @@
 /* ARMED authority; header-only request, no reply. Consumes one pending
  * interrupt, returning WOULD_BLOCK if none. The input remains armed. */
 #define CONSOLE_ACK_INTERRUPT UINT64_C(13)
+#define CONSOLE_DRAIN UINT64_C(14)
+#define CONSOLE_FLUSH_INPUT UINT64_C(15)
+#define CONSOLE_DRAIN_TIMEOUT_MAX_MS UINT64_C(30000)
+
+/* READ or WRITE authority. Fence the terminal output prefix queued when the
+ * operation starts. Success means complete records were copied to a DRAIN
+ * attachment, not forwarded over a network or presented. Later writes do not
+ * extend the fence. Local framebuffer writes already apply to the TTY, so
+ * their drain completes immediately. No reply. Timeout leaves output intact;
+ * detach/no DRAIN attachment or endpoint closure returns ENDPOINT_CLOSED.
+ * timeout_ms is 0 for a poll or 1..CONSOLE_DRAIN_TIMEOUT_MAX_MS for a bounded
+ * wait. A ready fence wins over timeout; caller stop/revocation still unwinds.
+ */
+struct console_drain_request {
+  uint64_t timeout_ms;
+};
+
+/* FLUSH_INPUT needs READ. Discard queued ordinary input at one instant,
+ * including an acknowledged framebuffer input-loss condition, without waiting
+ * for new input. EOF/hangup, raw holds, interrupt and clipboard framing are
+ * unchanged. Another active reader or paste receiver can return BUSY.
+ * Takes the existing ignored fixed-size payload; no reply. */
 
 #define CONSOLE_PASTE_INPUT UINT64_C(1)
 #define CONSOLE_PASTE_BEGIN UINT64_C(2)
@@ -148,6 +170,7 @@ union console_payload {
   struct console_write_request write;
   struct console_read_request read;
   struct console_tab_width_request tab_width;
+  struct console_drain_request drain;
 };
 
 struct console_message {
