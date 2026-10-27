@@ -12,6 +12,7 @@
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_regs_hw.h"
 
+#define NS_PER_US UINT64_C(1000)
 #define NS_PER_MS UINT64_C(1000000)
 #define EFUSE_PHYSICAL_BYTES 0x1300u
 #define EFUSE_RF_BYTES 0x240u
