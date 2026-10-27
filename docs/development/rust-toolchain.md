@@ -134,6 +134,14 @@ libpyxis at `35681ba73f8f36ac3e49ffd082294482042903d2`. Rebuild target std
 against the matching SDK; this does not require a compiler-container rebuild.
 The [runtime CPU check](experiments/startup-usable-cpus.md) covers restricted
 spaces and joined workers alongside C, C++ and Go.
+Native append uses `8d1a1cd4fbdd3665d40dae4d8df6590c78bbfcd8`.
+`OpenOptions::append(true)` implies write access; adding `read(true)` selects
+read/write. Writes use libc's native APPEND, so seeking does not redirect the
+next append. Each native operation is atomic up to 4,080 bytes; `write_all` may
+split a larger buffer. `create_new` retains exclusive-create precedence;
+append with truncate is invalid unless `create_new` is selected. Unsupported
+backings refuse before creation/truncation, with no seek-to-end emulation.
+
 The target keeps `target_os="pyxis"`
 and has no Unix family. The [compiler record](experiments/rust-std-toolchain.md) and
 [first std main record](experiments/rust-std-main.md) separate their qualification
@@ -183,7 +191,7 @@ On horse, use HTTPS for Git clone/fetch, including the pinned libc overlay:
 ```sh
 git clone https://git.internal/PyxisOS/pyxis-rust.git /absolute/pyxis-rust
 git -C /absolute/pyxis-rust fetch origin
-git -C /absolute/pyxis-rust checkout --detach 35681ba73f8f36ac3e49ffd082294482042903d2
+git -C /absolute/pyxis-rust checkout --detach 8d1a1cd4fbdd3665d40dae4d8df6590c78bbfcd8
 ```
 
 The source checkout needs sufficient upstream Git history. Materialize
@@ -296,8 +304,8 @@ forced reschedule or fairness promise, and `available_parallelism` remains
 Unsupported. The native writable-file extension adds create/exclusive/truncate,
 read/write, resize and backend sync. `File::metadata` reports held rights;
 `fs::metadata(path)` reports authority obtainable through the captured path.
-Files use WRITE, directories use CREATE or REMOVE. Unknown provider facts,
-append and writable provider routes return Unsupported; no write request is
+Files use WRITE, directories use CREATE or REMOVE. Unknown provider facts
+and writable provider routes return Unsupported; no write request is
 prepared while querying permissions. `Permissions::set_readonly` changes only
 the local value; applying permissions remains Unsupported. Directory enumeration
 and mutation, child processes and network operations remain later work; hexyl
