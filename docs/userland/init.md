@@ -242,7 +242,7 @@ CPU 1; balancing later moves runnable tasks to idle CPUs.
 Every space also receives `bin://`, read-only. On installed boots it is the live
 command view of the installed packages ([packages](../interfaces/packages.md));
 without a packages volume it is the archive, and boot init says so. On live boots
-it is the archive itself. It also supplies the exported read-only `commands`
+it is the archive itself. It also supplies the exported read-only `path`
 list: `bin://`, then a distinct `boot://`; on a live boot bin and boot are one
 entry, followed by the live package-command view when a packages volume is
 mounted.

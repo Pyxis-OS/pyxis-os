@@ -233,11 +233,11 @@ launch. See [affinity setup](init.md#affinity-setup). Indices above 8191 are a
 usage error. Like the other builtins, `affinity` cannot run with `&`.
 
 A command without `/` or `:` is a bare name. It resolves through the exported
-`commands` capability list only. Trusted defaults are read-only bin, distinct
+`path` capability list only. Trusted defaults are read-only bin, distinct
 archive/rescue and the live package-command view. An absent/empty list means no
 bare search even if boot/bin roots are held. Home, cwd and the old development
-catalog are not searched implicitly. Append a held development/project command
-directory explicitly when needed; first matching entry wins. Selected errors
+catalog are not searched implicitly. Configure session.lua's ordered path or use
+`export path=(home://tools $path)` to add held locations; first matching entry wins. Selected errors
 refuse rather than falling through. `which NAME` shows that resolver's selected
 entry/target and package/version/set, without executing.
 
@@ -412,6 +412,36 @@ Scripts can expand their own arguments; see [script arguments](#script-arguments
 provider. It prints attested interface/masks, declared fields and unknown length
 honestly. Failed outcomes report failure; bounded error bodies are not dumped.
 `revoke ${name.control}` requires the explicitly held CUT controller.
+
+### Directory list values
+
+A parenthesized whole assignment value creates an immutable directory CAP list:
+
+```text
+saved=$path
+path=(home://tools $path)
+export path=(home://project/bin $saved)
+export path=()
+```
+
+The value is a CAP, not TEXT. Members use the ordinary scalar word/quoting rules:
+path strings open native directories through held cwd/roots; directory CAPs
+contribute their held read rights; list CAPs splice their entries in order.
+There is no implicit location or textual PATH translation. List construction
+preserves order and owns the selected directory grants before publication.
+Failure preserves the old environment entry. Native constructor capacity applies;
+there is no separate shell location quota. Empty lists deliberately disable
+bare-name lookup; explicit paths and builtins remain available.
+
+Lists occupy an entire named assignment/export value. They do not introduce
+command grouping or shell array variables, and member assignments/management
+captures are refused. Ordinary captured FILEs are not directories. Members are
+not wildcard-expanded. The lowercase `path` entry accepts only a valid list CAP;
+`path="home://tools"` refuses instead of replacing it with TEXT. Private assignment
+and exported inheritance retain their ordinary meanings. `which NAME` and Tab
+use the newly published list, while already-running children retain theirs.
+Persistent startup skips are printed by `which`; runtime replacement clears
+that diagnostic receipt, leaving the selected list as the lookup authority.
 
 ### Held output captures
 
@@ -1329,7 +1359,7 @@ table shape refuses the whole file.
 
 A name that currently holds a CAP, such as `tmp`, also refuses the whole file,
 and so does a name the shell supplies itself:
-- `home` and `commands`;
+- `home`, `path` and its `path.skipped` startup-diagnostic receipt;
 - `DNS_SERVER` and `network.` names;
 - the stdio `.append` names.
 

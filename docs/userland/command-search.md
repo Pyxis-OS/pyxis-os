@@ -2,7 +2,7 @@
 
 After the interactive shell's [one-time alias substitution](shell.md#startup-settings),
 bare command names use the ordered directory capabilities held in the exported
-`commands` environment entry. The shell, Lua run/jobs and libuv/Neovim use the
+`path` environment entry. The shell, Lua run/jobs and libuv/Neovim use the
 same owned resolver. Finding code supplies no launcher, network, writable root
 or package-management authority. See the [native interface](../interfaces/command-search.md)
 for construction, bounds, capture and lifetime rules.
@@ -29,6 +29,48 @@ directory refuse. Shell `which NAME` reports the selected entry, target and
 package identity without executing. A later independent launch can select a
 newer version.
 
+## Configuration and runtime edits
+
+The persistent `path` key in [session.lua](session-configuration.md) is one exact
+ordered list of held directory locations, for example:
+
+```lua
+path = { "home://tools", "bin://", "boot://" },
+```
+
+Absent uses the existing boot defaults; an explicit empty list searches nothing.
+The configured list does not append defaults or add a fixed personal directory.
+Locations resolve from the session's existing roots/cwd and become read-only
+native directory CAPs. User order wins, including shadowing ordinary command names. Missing or inaccessible
+configured locations print a visible `path: LOCATION ..., skipped` warning at
+session start; the remaining entries keep their written order. They never stop
+the session merely because a location is unavailable. `which NAME` repeats the
+startup skips before reporting the winner, and `config validate` warns about
+unavailable configured locations while still accepting a well-formed file.
+Malformed syntax/types are refused before publication.
+On live boots, explicitly selecting only bin and boot also omits the separate
+live package-command entry from the default list. Installed bin is itself the
+live package-command view. These are the existing root meanings.
+
+Runtime changes use ordinary shell values, not a builtin or textual PATH:
+
+```text
+path=(home://tools $path)
+export path=(home://project/bin $path)
+```
+
+Literal/expanded path strings resolve through held native directories. Directory
+CAP members are attenuated to held read rights; a held list such as `$path`
+splices its entries at that position in the same order. An empty `()` creates an
+empty list. The old publication remains unchanged if runtime list construction fails.
+Startup skip receipts are exported as diagnostic TEXT `path.skipped`; replacing
+path through ordinary assignment/export or the SDK publication helper clears
+that receipt. It is descriptive data and supplies no program-location authority.
+`path=...` is private and `export path=...` is inherited, like other environment
+values. Existing processes retain their captured list. Labels are bounded
+diagnostics, so `which` identifies entries by ordinal as well as label.
+The old environment name `commands` has no lookup or inheritance meaning.
+
 ## Packages and retained selections
 
 [Packages](../interfaces/packages.md) explicitly declare their command exports.
@@ -54,9 +96,9 @@ A PATH-aware spawn accepts absent `PATH` or its exact diagnostic label projectio
 other text refuses rather than creating directory authority. Native Lua command
 APIs do not interpret child PATH text as parent lookup policy. Explicit native
 job profiles remain explicit, and withholding launch authority still prevents
-execution. A native `uv_pyxis_spawn` resource named `commands` replaces the
+execution. A native `uv_pyxis_spawn` resource named `path` replaces the
 inherited entry, including malformed CAP/TEXT, and is itself validated. Explicit
-TEXT `commands` in the child environment still refuses. See the
+TEXT `path` in the child environment still refuses. See the
 [adapter notes](../../ports/libuv/README.md) and
 [replacement checks](../development/experiments/command-search-adapters/README.md#review-correction).
 

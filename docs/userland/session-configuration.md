@@ -147,3 +147,34 @@ The launcher lives in pyxis-userland and links against `liblua.a` and public
 headers exported by the Lua port. These build inputs travel in the ports bundle
 outside the boot payload; the SDK does not depend on Lua. See
 [build bundles](../development/build-bundles.md) for the dependency order.
+
+## Program path
+
+An optional top-level `path` beside `environment` is a dense ordered array of
+nonempty directory-location strings. The selected live configuration is
+`boot://config/session.lua`; installed boot uses `system://config/session.lua`.
+`config validate` checks the list shape; resolution uses the session's held
+roots/cwd when that session starts. Configuration grants no new directory rights.
+A missing/inaccessible location warns visibly and is skipped, preserving the
+remaining order; it does not refuse the session. `which` reports retained startup
+skips, and `config validate` checks availability against its current held roots,
+warning without making a well-formed configuration invalid. Syntax/types still
+refuse. Resource/admission failures are reported separately.
+
+```lua
+path = { "home://tools", "bin://", "boot://" },
+```
+
+Absent preserves today's boot-supplied path. Empty explicitly supplies no entries.
+User order is exact; defaults are not appended and no home directory is searched
+implicitly. The session constructs and exports the read-only native list once;
+ordinary panes and descendants inherit the selected path without reapplying the
+configuration over runtime edits. `environment.path` is not a TEXT override.
+The launcher retains its mux and remote-terminal images before applying user
+lookup policy, so an empty or fully skipped path still permits session startup.
+See [program lookup](command-search.md#configuration-and-runtime-edits) for runtime
+`export path=(...)`, root meanings and lifetime.
+
+Changes take effect at the next boot. Reloading/inheriting session settings through
+shell startup, including tab width and path, remains proposed in the
+[everyday gaps](../wip/everyday-gaps.md); it is not implemented here.

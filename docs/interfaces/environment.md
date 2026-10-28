@@ -36,7 +36,7 @@ caller buffer and has no endpoint payload limit of 4 KiB. Launch retains its own
 64 KiB capture and startup admission budgets.
 
 An immutable [command-directory list](command-search.md) is an ordinary CAP
-value, exported under `commands` for ordinary child inheritance. Its constructor
+value, exported under `path` for ordinary child inheritance. Its constructor
 uses WRITE on this caller-bound environment to create an owned value; it does not
 mutate the table or publish a name. SET performs that separate atomic publication.
 
