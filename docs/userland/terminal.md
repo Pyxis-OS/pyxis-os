@@ -209,8 +209,9 @@ handle; stock sessions provide one. Line helpers fall back to ordinary key
 reading when that resource is absent, preserving existing grants.
 
 Kilo uses the raw termios subset and upstream byte/escape parser. A small
-native wait hook observes input and resize together while signals remain
-unavailable, retaining a single Escape deadline across resize. Its status
+native wait hook observes input and resize together, retaining a single Escape
+deadline across resize. Its adapter is retained during the first
+[cooperative-signal consumer slice](cooperative-signals.md). Its status
 messages expire on a later keypress, as upstream does. It retains its minimum
 of two columns and three rows and the native viewport rules. Pinned upstream
 Home/End soft keys are not dispatched by its keypress handler; End can insert

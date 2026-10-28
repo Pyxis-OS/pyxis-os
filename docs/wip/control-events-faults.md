@@ -58,37 +58,32 @@ ignores the resource still works, and Continuum always knows whom it can ask.
   program to stop, so "stop, with a deadline" needs one meaning everywhere, and
   "reload" probably does too. Define only what the first haven needs; programs
   define their own messages beyond that.
-- **ISO C's `signal()` and `raise()`.** libc currently exposes honest failing
-  shims for both; no handler is installed or delivered. `raise` would be
-  synchronous. A ported program's `signal(SIGTERM, handler)` could be
-  mapped onto the `control` resource, running the handler at libc's blocking
-  calls; decide that when a port needs it.
-- **Order.** The first consumer is graceful stop and reload of one haven, which
-  needs Continuum. The control channel belongs to the Continuum milestone, not a
-  separate track.
-- **Ctrl+C** keeps today's foreground interruption. A program could later opt
-  into a cooperative first stage through its `control` resource; nothing is
-  imposed globally.
+- **Port compatibility.** The accepted [cooperative libc signal profile](../userland/cooperative-signals.md)
+  supplies selected standard names over native events at audited userland
+  boundaries. It does not introduce asynchronous native callbacks or fault
+  handlers. TERM/HUP mapping still requires the control resource's actual
+  vocabulary and lifecycle.
+- **Ctrl+C** keeps the current supervisor policy. A port opts into the existing
+  singleton process-interrupt receiver through its SIGINT disposition; native
+  raw PASSTHROUGH and supervisor escalation retain their existing precedence.
 
-## Parked libc compatibility proposal
+## Accepted first libc slice
 
-Cooperative libc signal compatibility is **proposed, not accepted or assigned**
-(chronium, 2026-10-27). Revisit it only for a real consumer after the
-[raw-termios follow-up](terminal-ui.md#libc-compatibility-follow-up). Possible
-source mappings are resize to SIGWINCH, opted-in foreground interruption to
-SIGINT, future control-channel stop/reload to SIGTERM/SIGHUP, owned child
-completion to SIGCHLD and clock expiry to SIGALRM. SIGPIPE remains an EPIPE
-error rather than handler delivery. These possibilities do not settle the
-source binding, thread/mask, safe-point, EINTR/restart or lifetime contracts.
+Accepted and assigned 2026-10-28: cooperative SIGWINCH and opted-in SIGINT,
+initial-thread ownership, real masks/dispositions/pending state, safe-point
+unwinding and limited restart. Handler installation selects terminal stdout,
+then stderr, then stdin unless an optional native override selects another
+endpoint. SA_RESTART, SA_RESETHAND, SA_NODEFER and minimal SA_SIGINFO are real;
+SA_ONSTACK and child/job-control flags refuse. See the
+[contract and limits](../userland/cooperative-signals.md).
 
-The descriptor-readiness contract (chronium, 2026-10-28) accepts both NULL and
-non-NULL `ppoll`/`pselect` signal-mask pointers as a documented no-op while no
-signals are delivered. Before this parked work enables delivery, those waits
-must gain the real atomic mask-change/sleep and restore-on-return semantics in
-the same milestone. Keeping the no-op after enabling handlers is not allowed.
-This coupling accepts no handler, source mapping or restart policy by itself.
+The same slice replaces ppoll/pselect's former no-op masks with atomic
+mask-change/pending-check/enrollment/restoration semantics. No build enabling
+handlers may retain the ignored-mask implementation. SIGPIPE remains EPIPE.
 
-This is compatibility for ports, not a change to the native no-signals design.
-No asynchronous handler, compute-loop interruption, fault recovery or arbitrary
-process signalling is authorized. Continuum's previously accepted ownership of
-the named control resource remains separate from these unaccepted libc mappings.
+Native programs keep this document's no-signals direction. No compute-loop
+interruption, fault recovery, arbitrary-process kill or automatic thread
+migration is introduced. TERM/HUP, owned-child CHLD and clock ALRM still need
+source-specific consumer/ownership decisions. Continuum's accepted control
+resource belongs to that milestone; the compatibility layer does not create a
+competing stop/reload channel.

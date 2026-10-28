@@ -42,8 +42,9 @@ calls the standard function rather than its own capability code.
 The test is whether the function maps onto objects and operations that already
 exist. At that decision, creating a directory did; threads, `fork` and signals
 needed a native design first. The native thread and parking operations now
-support the selected [C11/pthread profile](threads.md); `fork` and POSIX signals
-remain unsupported. No kernel mechanism is added only to satisfy a POSIX
+support the selected [C11/pthread profile](threads.md). The selected
+[cooperative signal profile](cooperative-signals.md) serves ports; `fork` and
+asynchronous POSIX signal delivery remain unsupported. No kernel mechanism is added only to satisfy a POSIX
 contract. Arguments with no native meaning are documented as such. For example,
 `mkdir`'s `mode` has no effect because npfs has no permissions. Missing authority
 or support returns a real error, never a successful stub.
