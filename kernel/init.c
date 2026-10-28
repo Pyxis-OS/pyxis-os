@@ -1,6 +1,6 @@
 #include <arch/cpu.h>
 #include <arch/amd/renoir_inventory.h>
-#include <arch/intel/display_inventory.h>
+#include <arch/intel/display.h>
 #include <arch/clock.h>
 #include <arch/smp.h>
 #include <arch/debug.h>
@@ -96,8 +96,8 @@
   const struct boot_options *options = boot_options_get();
   if (options->display_inventory) {
     renoir_inventory(boot);
-    intel_display_inventory(boot);
   }
+  intel_display_prepare(boot);
   display_init(boot, options->display_size, options->display_timing,
       options->display_timing_metrics);
   debug_prepare(boot, options);
