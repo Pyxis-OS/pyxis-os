@@ -51,9 +51,10 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
     const struct wifi_regdb_profile *rules, uint8_t channel,
     struct rtl8922ae_power_image *image);
 
-/* MAC0/PHY0 only, with the full first 0x40000 of BAR2 mapped and the MAC/BB
+/* Both MAC/PHY contexts, with the first 0x60000 of BAR2 mapped and the MAC/BB
  * clocks enabled by the caller. Does not tune or request RFK. Apply writes the
- * image. Caller retains scheduler/RF admission control across publication and
+ * image on both contexts, including the shared physical-path SAR limits.
+ * Caller retains scheduler/RF admission control across publication and
  * limit verification. */
 enum rtl8922ae_power_result rtl8922ae_power_apply(
     const struct rtl8922ae_power_image *image, uint64_t deadline,

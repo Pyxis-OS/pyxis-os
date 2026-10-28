@@ -2,9 +2,9 @@
 
 **Plan accepted (chronium, 2026-10-22). Target: 0.0.11, not 0.0.10
 (chronium, 2026-10-26).** Stage 1 and the stage-2 firmware-first/checked-stop
-cut and request-driven one-PHY initialization/RFK/checked stop are native
-qualified on vela. The implementation remains a draft; passive discovery,
-physical rfkill response and radiated-power behavior are not qualified. Native
+cut, request-driven PHY initialization/RFK/checked stop and one-channel DBCC
+passive discovery are native qualified on vela. Repetition, channel hopping,
+physical rfkill response and radiated-power behavior remain unqualified. Native
 runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages), after the delivered
 [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
@@ -693,62 +693,82 @@ See the [follow-up record](../development/experiments/rtl8922ae-scan-inputs.md#n
    facts, not measured radiated power. Source/QEMU checks cannot establish
    native programming, calibration outcome or a physical rfkill response.
    See the [source/QEMU qualification record](../development/experiments/rtl8922ae-phy-init.md).
-3. **Bounded unassociated passive discovery.** Use admitted channels only, no
+3. [ ] **Bounded unassociated passive discovery.** Use admitted channels only, no
    probe packets, no association/packet offloads; validate bounded records and
    preserve existing operation/FILE lifetime and cancellation semantics.
    **After this task chronium can:** request repeated explicit passive scans on
    the supported profile while wired management remains independent.
 
-### Next passive-results task — proposal (2026-10-27)
+The first explicit-channel firmware-offload slice is implemented and native
+qualified on vela (2026-10-28): a channel-1 request returned two real records in
+an immutable result FILE with observed RX and a retained healthy DBCC context.
+See the [passive-scan record](../development/experiments/rtl8922ae-passive-scan.md).
+- [x] One explicit legal channel: native immutable result FILE and observed RX.
+- [ ] Repeated same-channel requests and operation/FILE independence.
+- [ ] Channel hopping and complete admitted-channel-set delivery.
+- [ ] Cancellation, withdrawal, physical rfkill where controllable and recovery.
 
-No implementation is authorized by this proposal. Keep the accepted native
-SCAN operation, deadlines, cancellation and immutable result FILE. The current
-transport consumes only C2H and drops ordinary RX packets; passive results need
-BE RX decoding and management-frame collection, not a new application API.
+The full admitted-channel-set task above remains unchecked.
 
-Decisions for chronium, with proposed defaults:
+### Next passive-results task — accepted direction (chronium, 2026-10-27)
 
-1. **Host-directed channel walk first.** Reuse the qualified MAC/PHY tuning and
-   power machinery with bounded passive dwell, no probe templates or packet
-   offload. Linux has both software scanning and BE firmware scan offload; the
-   latter adds role/channel-list/start-stop and packet-template state before
-   native management RX is qualified. Default: host control for this first
-   delivery; firmware offload can be considered from measured need later.
-2. **Keep calibration inside the request's channel authority.** Default: select
-   the initial calibration anchor from requested channels where the effective
-   rules permit its TX-capable calibration. A first request containing only
-   NO_IR channels refuses before startup; do not silently calibrate elsewhere.
-   A normal world-domain request includes legal anchors and may subsequently
-   listen on channels 12–13 after same-band receive-only retuning is qualified.
-   Match the reference's channel/power update and band/PHY-dependent TSSI hooks,
-   not full RFK on every hop. No probes or calibration TX on NO_IR channels.
-   Alternative: separately authorize initialization on an effective-profile
-   channel outside the requested discovery mask.
-3. **Drain idle RX on the retained healthy context.** Repeated explicit scans
-   on that context are already accepted; this settles its idle behavior.
-   Default: retain driver-owned firmware/DMA, continuously drain/drop RX outside
-   an active operation, keep autonomous TX disabled and monitor rfkill. No
-   background channel walk, calibration, result cache or retained caller pointer.
-   Confirmed healthy completion/cancellation retires the operation before reuse;
-   uncertain command/transport/stop or rfkill closes admission and uses checked
-   terminal stop, with no restart this boot. Real retry/reset recovery remains
-   a separate requirement before everyday use. Alternative: power off after
-   every scan, which would require a new repeated-start/recovery contract.
+Follow the pinned Linux reference's actual path for firmware 0.35.80.3: modern
+BE firmware scan offload. Linux enables SCAN_OFFLOAD for RTL8922A firmware from
+0.34.35.0 and uses the older BE command only before 0.35.21.0
+([feature selection](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/fw.c#L854),
+[scan entry](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/mac80211.c#L1214)).
+Implement the necessary unassociated role/port/context, BE channel list and
+START/STOP/completion path. Use a zero-SSID passive request, no probe templates,
+no null/data TX and the reference's passive channel settings. Preserve native
+memory bounds, regulatory/SAR/rfkill authority and existing narrow TX/power
+hazard gates; add no hardware-value assumptions beyond the reference.
 
-Start with one explicitly selected legal channel: bounded RTL descriptor,
-CRC/ICV and management-frame decoding; reuse the native SSID/RSN accumulation
-semantics and publish an actual FILE after retiring collection. Then add the
-host channel walk and retained-context operation boundaries. Keep the existing
-128-record limit, BSSID/channel de-duplication, security-conflict handling and
-honest overflow/error outcomes. RTL signal/channel metadata must come from the
-Realtek descriptor/report, not Intel energy fields or the latest software
-channel variable. Drain/correlate frames across retunes before attribution.
+Keep the existing native SCAN operation, deadlines, cancellation and immutable
+result FILE; no new application API. The first slice accepts **one explicitly
+requested legal channel**, with subsequent requests limited to that same
+calibrated channel. Reject zero-channel and multichannel requests before effects
+until their full semantics are implemented; never scan one channel and report
+success for a broader request. This is a bounded first slice, not qualification
+of the complete admitted channel set.
 
-Qualification progresses from that one-channel result to a complete admitted
-channel set, repeated explicit requests, cancellation/timeout/final-close,
-rfkill where controllable, warm handoff and independent USB-wired controls.
-SSID/BSSID captures stay private/redacted. Successful initialization alone is
-not a passive-scan result, and an incomplete/failed scan publishes no success FILE.
+Initial TX-capable calibration stays within the requested mask and effective
+rules. A first NO_IR-only request refuses before startup; do not silently
+calibrate elsewhere. Listening on channels 12–13 and complete world-domain
+discovery remain later qualification work, preserving their receive-only
+permission without authorizing probes or calibration TX there. Match the
+reference's channel/power updates and band/PHY-dependent TSSI hooks when adding
+further channels.
+
+Retain driver-owned firmware/DMA on a healthy context and continuously drain/drop
+RX outside an active operation. Keep autonomous TX disabled and monitor rfkill.
+No background scan, calibration, result cache or retained caller pointer.
+Confirmed healthy completion/cancellation retires the operation before reuse;
+uncertain command/transport/stop or rfkill closes admission and uses checked
+terminal stop, with no restart this boot. The accepted one-start bring-up limit
+and separate real retry/reset recovery requirement before everyday use remain.
+
+Decode bounded Realtek descriptors and CRC/ICV-checked management frames. Reuse
+native counted-SSID/RSN accumulation, BSSID/channel de-duplication,
+security-conflict handling, the 128-record limit and honest overflow/error
+outcomes. Signal/channel metadata comes from Realtek descriptors/reports; use
+the existing unknown-signal value `-256` when no valid RSSI is available. Drain
+or correlate old observations before attribution; the latest software channel
+variable alone does not establish a frame's channel.
+
+Publish a real immutable FILE only after normal firmware END_SCAN or confirmed
+STOP and retirement of the fixed set of queued RX captured at that boundary.
+Command receipt or successful initialization alone is not scan completion. A
+completed zero-record scan is valid; an incomplete/failed scan publishes no
+success FILE. The reference's
+[BE command](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/fw.c#L5863)
+and [END_SCAN handling](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75c82ec4957c50034cb0ea449/drivers/net/wireless/realtek/rtw89/mac.c#L5042)
+define the firmware completion path; borrowed DMA storage never outlives its
+checked delivery.
+
+One normal channel-1 result is native qualified; same-channel repeated requests
+and full channel-list delivery remain unqualified. Progress next to repetition,
+cancellation/timeout/final-close, rfkill where controllable, warm handoff and
+independent USB-wired controls. Keep SSID/BSSID captures private/redacted.
 
 QEMU/source checks cover data bounds, narrowing and lifecycle, not RF. Separately
 scheduled VFIO/native checks must cover unknown/malformed inputs, channel/power
@@ -825,3 +845,45 @@ separate and go through the orchestrator.
    WPA2-PSK/CCMP scope. Reuse native RSN/grants, qualify Realtek key/PN behavior
    independently, and defer 5/6 GHz, HT/HE/EHT/MLO, WPA3/PMF, AP/monitor/roaming,
    suspend and Bluetooth coexistence. No Wi-Fi 7 capability is claimed by PCI ID.
+
+### DBCC initialization — implemented (chronium, 2026-10-28)
+
+The passive-results implementation uses the reference's coherent DBCC/EMLSR
+setup: CMAC1/BB1, matching quotas and firmware notification, PHY-indexed
+initialization and required calibration for both contexts. Both use the
+explicitly requested legal channel. Regulatory/SAR limits are applied and
+verified for both MAC banks with shared physical SAR before calibration and
+after each RFK helper; autonomous-response and packet-TX gates cover both MACs.
+No probes, association or data. Existing cancellation/rfkill, idle RX draining
+and checked whole-device stop/FLR cover both contexts.
+
+The checked BAR2 window is `0x60000` for the reference's PHY1 BBMCU control
+registers. RTL8922A still downloads one BBMCU firmware image. No new grant,
+application interface, public ABI or simultaneous multichannel capability.
+RFK completed bits mean completion on both PHYs, not either one. Native
+`f85199a6` passed one normal channel-1 request; it does not qualify repetition
+or hopping. Retained firmware/DMA is intentional after healthy completion.
+
+### Repeated same-channel qualification — accepted (chronium, 2026-10-28)
+
+Qualify two sequential explicit channel-1 requests on the same healthy DBCC
+activation, preserving the first immutable FILE across the second request.
+Each request has independent completion, bounded records and RX retirement;
+verify that the first FILE's bytes/rights remain unchanged, no extra startup or
+calibration occurs, and wired management survives. No automatic scan, retry or
+new application API. After this slice chronium can request channel 1 repeatedly
+without rebooting and keep independent result snapshots. The native packet is
+separate from the already passed single-request gate; this checklist remains
+unchecked until both requests and their retained-context boundary are observed.
+
+Do not combine this qualification with cancellation or hopping. Those require
+separate subsequent delivery: a confirmed STOP/END-and-drain reuse check, then
+bounded per-frame PPDU channel attribution before a continuous firmware channel
+list. Ordinary RTL8922A RX descriptors do not carry the channel; ENTER_CHANNEL
+and the two independent RX rings do not prove a frame's channel. Follow the
+reference's PPDU correlation instead of relabeling frames from the latest
+software channel or relying only on optional DS/HT IEs. The hopping task must
+also resolve and qualify power/firmware-calibration enforcement across hops;
+post-ENTER host writes alone provide no before-calibration ordering proof.
+NO_IR channels 12–13 remain deferred to receive-only qualification as accepted.
+These are identified future gates, not accepted fallback policies or APIs.

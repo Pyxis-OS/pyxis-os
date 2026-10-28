@@ -44,7 +44,7 @@
 #include "ax200_station.h"
 #include "ax200_station_wire.h"
 #include "ax200_security.h"
-#include "ax200_rsn.h"
+#include "wifi_rsn.h"
 
 #define AX_LINK_QUEUE 32u
 #define AX_LINK_STEP_MS 20u
@@ -390,7 +390,7 @@ struct station_elements {
 
 static bool rsn_supported(const uint8_t *ie, size_t bytes)
 {
-  uint32_t flags = ax200_rsn_security(ie, bytes);
+  uint32_t flags = wifi_rsn_security(ie, bytes);
   return (flags & WIFI_BSS_RSN_PSK_CCMP) == WIFI_BSS_RSN_PSK_CCMP &&
       !(flags & (WIFI_BSS_RSN_MFPR | WIFI_BSS_RSN_SPP_REQUIRED));
 }

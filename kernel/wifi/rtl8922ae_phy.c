@@ -11,13 +11,15 @@
 
 #define PHY_BASE 0x20000u
 #define BBMCU_BASE 0x30000u
-#define BAR_BYTES 0x40000u
+#define BAR_BYTES 0x60000u
+#define MAC1_OFFSET 0x4000u
 #define RF_MASK UINT32_C(0xfffff)
 #define RF_ADSEL PHY_BIT(16)
 #define PHY_TARGET_MASK UINT32_C(0x0fffffff)
 #define PHY_BYPASS_DATA UINT32_C(0xbabecafe)
 #define NS_PER_US UINT64_C(1000)
 #define RF_PAGE_WORDS 500u
+#define PHY_EDCCA_SCAN_MAX 249u
 #define RF_MAX_PAGES 3u
 #define RF_H2C_CATEGORY 2u
 #define RF_H2C_CLASS_A 8u
@@ -34,7 +36,8 @@ struct phy_gain {
   uint8_t rpl[2][15];
 };
 
-static bool channel_resume(uint64_t deadline, const char **detail);
+static bool channel_resume(unsigned phy, uint64_t deadline, const char **detail);
+static bool channel_reset_enter(unsigned phy, uint64_t deadline, const char **detail);
 
 /* The caller serializes all PHY operations with runtime firmware commands. */
 static uint8_t rf_page[RF_PAGE_WORDS * sizeof(uint32_t)];
@@ -85,13 +88,35 @@ static bool write_mask(uint32_t address, uint32_t mask, uint32_t value,
   return true;
 }
 
+/* Linux phy_be.c: only these BB pages have a second PHY register bank. */
+static uint32_t bb_address(unsigned phy, uint32_t address)
+{
+  unsigned page = address >> 8;
+  if (phy && ((page >= 0x04 && page <= 0x0f) ||
+      (page >= 0x20 && page <= 0x2b) ||
+      (page >= 0x40 && page <= 0x4f) ||
+      (page >= 0x60 && page <= 0x6f) ||
+      (page >= 0xe4 && page <= 0xe5) ||
+      (page >= 0xe8 && page <= 0xed))) {
+    address += 0x1000;
+  }
+  return PHY_BASE + address;
+}
+
+static bool bb_mask_idx(unsigned phy, uint32_t address, uint32_t mask,
+    uint32_t value, const char **detail)
+{
+  return phy < 2 && address < PHY_BASE &&
+      write_mask(bb_address(phy, address), mask, value, detail);
+}
+
 static bool bb_mask(uint32_t address, uint32_t mask, uint32_t value,
     const char **detail)
 {
   return address < PHY_BASE && write_mask(PHY_BASE + address, mask, value, detail);
 }
 
-static bool registers(const struct phy_register *registers, size_t count,
+static bool registers_idx(unsigned phy, const struct phy_register *registers, size_t count,
     bool bb, uint64_t deadline, const char **detail)
 {
   for (size_t i = 0; i < count; ++i) {
@@ -103,13 +128,21 @@ static bool registers(const struct phy_register *registers, size_t count,
       if (address >= PHY_BASE) {
         return fail(detail, "RTL8922AE PHY register offset invalid");
       }
-      address += PHY_BASE;
+      address = bb_address(phy, address);
+    } else {
+      address += phy * MAC1_OFFSET;
     }
     if (!write_mask(address, registers[i].mask, registers[i].value, detail)) {
       return false;
     }
   }
   return true;
+}
+
+static bool registers(const struct phy_register *values, size_t count,
+    bool bb, uint64_t deadline, const char **detail)
+{
+  return registers_idx(0, values, count, bb, deadline, detail);
 }
 
 static bool table_span(const void *asset, size_t bytes,
@@ -275,7 +308,7 @@ static bool apply_table(const void *asset, size_t bytes,
     }
     switch (operation) {
     case TABLE_BB:
-      if (value != PHY_BYPASS_DATA && !bb_mask(address, UINT32_MAX, value, detail)) {
+      if (value != PHY_BYPASS_DATA && !bb_mask_idx(path, address, UINT32_MAX, value, detail)) {
         return false;
       }
       break;
@@ -422,12 +455,12 @@ bool rtl8922ae_phy_afe(const void *asset, size_t bytes,
         return fail(detail, "RTL8922AE AFE delay interrupted");
       }
     } else if (action == 0) {
-      /* With DBCC disabled, the reference BB1 helper also targets PHY0. */
+      /* AFE BB/BB1 writes use the same bank mapping as indexed BB writes. */
       if (category <= 1) {
         if (address >= PHY_BASE) {
           return fail(detail, "RTL8922AE AFE BB offset invalid");
         }
-        address += PHY_BASE;
+        address = bb_address(category, address);
       }
       if (!write_mask(address, mask, value, detail)) {
         return false;
@@ -452,31 +485,37 @@ bool rtl8922ae_phy_afe(const void *asset, size_t bytes,
   return true;
 }
 
-bool rtl8922ae_phy_preinit(uint64_t deadline, const char **detail)
+static bool preinit(unsigned phy, uint64_t deadline, const char **detail)
 {
-  static const struct phy_register controls[] = {
-    {R_BE_DMAC_SYS_CR32B, B_BE_DMAC_BB_PHY0_MASK, 0x7ff9},
-    {R_BE_FEN_RST_ENABLE, B_BE_FEN_BB_IP_RSTN, 0},
-    {R_BE_FEN_RST_ENABLE, B_BE_FEN_BBPLAT_RSTB, 0},
-    {R_BE_FEN_RST_ENABLE, B_BE_FEN_BB_IP_RSTN, 1},
-    {R_BE_FEN_RST_ENABLE, B_BE_BOOT_RDY0, 0},
+  const struct phy_register controls[] = {
+    {R_BE_DMAC_SYS_CR32B, phy ? B_BE_DMAC_BB_PHY1_MASK : B_BE_DMAC_BB_PHY0_MASK, 0x7ff9},
+    {R_BE_FEN_RST_ENABLE, phy ? B_BE_FEN_BB1_IP_RSTN : B_BE_FEN_BB_IP_RSTN, 0},
+    {R_BE_FEN_RST_ENABLE, phy ? B_BE_FEN_BB1PLAT_RSTB : B_BE_FEN_BBPLAT_RSTB, 0},
+    {R_BE_FEN_RST_ENABLE, phy ? B_BE_FEN_BB1_IP_RSTN : B_BE_FEN_BB_IP_RSTN, 1},
+    {R_BE_FEN_RST_ENABLE, phy ? B_BE_BOOT_RDY1 : B_BE_BOOT_RDY0, phy},
     {R_BE_MEM_PWR_CTRL, B_BE_MEM_BBMCU0_DS_V1, 0},
   };
-  static const struct phy_register mcu[] = {
-    {BBMCU_BASE + 0x6990, UINT32_MAX, 0},
-    {BBMCU_BASE + 0x6994, UINT32_MAX, 0},
-    {BBMCU_BASE + 0x6998, UINT32_MAX, 0},
-    {BBMCU_BASE + 0x6820, UINT32_MAX, 0xfffffffe},
-    {BBMCU_BASE + 0x6800, UINT32_MAX, 0xc0000ffe},
-    {BBMCU_BASE + 0x6808, UINT32_MAX, 0x76543210},
-    {BBMCU_BASE + 0x6814, UINT32_MAX, 0xbfbfb000},
-    {BBMCU_BASE + 0x6818, UINT32_MAX, 0x0478c009},
-    {BBMCU_BASE + 0x6800, UINT32_MAX, 0xc0000fff},
-    {BBMCU_BASE + 0x6820, UINT32_MAX, 0xffffffff},
+  uint32_t mcu_base = BBMCU_BASE + phy * 0x20000;
+  const struct phy_register mcu[] = {
+    {mcu_base + 0x6990, UINT32_MAX, 0},
+    {mcu_base + 0x6994, UINT32_MAX, 0},
+    {mcu_base + 0x6998, UINT32_MAX, 0},
+    {mcu_base + 0x6820, UINT32_MAX, 0xfffffffe},
+    {mcu_base + 0x6800, UINT32_MAX, 0xc0000ffe},
+    {mcu_base + 0x6808, UINT32_MAX, 0x76543210},
+    {mcu_base + 0x6814, UINT32_MAX, 0xbfbfb000},
+    {mcu_base + 0x6818, UINT32_MAX, 0x0478c009},
+    {mcu_base + 0x6800, UINT32_MAX, 0xc0000fff},
+    {mcu_base + 0x6820, UINT32_MAX, 0xffffffff},
   };
   return registers(controls, sizeof(controls) / sizeof(*controls), false, deadline, detail) &&
       rtl8922ae_sleep(NS_PER_US, deadline) &&
       registers(mcu, sizeof(mcu) / sizeof(*mcu), false, deadline, detail);
+}
+
+bool rtl8922ae_phy_preinit(uint64_t deadline, const char **detail)
+{
+  return preinit(0, deadline, detail) && preinit(1, deadline, detail);
 }
 
 bool rtl8922ae_phy_enable(uint64_t deadline, const char **detail)
@@ -497,6 +536,8 @@ bool rtl8922ae_phy_bb(const void *asset, size_t bytes,
   struct phy_gain gain = {0};
   return apply_table(asset, bytes, tables, RTL8922AE_ELEMENT_BB,
       TABLE_BB, 0, NULL, deadline, detail) &&
+      apply_table(asset, bytes, tables, RTL8922AE_ELEMENT_BB,
+          TABLE_BB, 1, NULL, deadline, detail) &&
       apply_table(asset, bytes, tables, RTL8922AE_ELEMENT_BB_GAIN,
           TABLE_GAIN, 0, &gain, deadline, detail);
 }
@@ -505,12 +546,11 @@ bool rtl8922ae_phy_postinit(uint64_t deadline, const char **detail)
 {
   if (!checkpoint(deadline, detail) ||
       !write_mask(R_BE_FEN_RST_ENABLE, B_BE_BOOT_RDY0, 1, detail) ||
-      !write_mask(R_BE_FEN_RST_ENABLE, B_BE_FEN_BBPLAT_RSTB, 1, detail)) {
+      !write_mask(R_BE_FEN_RST_ENABLE, B_BE_FEN_BBPLAT_RSTB, 1, detail) ||
+      !write_mask(R_BE_FEN_RST_ENABLE, B_BE_FEN_BB1PLAT_RSTB, 1, detail)) {
     return false;
   }
   static const struct phy_register settings[] = {
-    {R_BBCLK, B_CLK_640M, 1},
-    {R_TXSCALE, B_TXFCTR_EN, 0},
     {R_TXFCTR, B_TXFCTR_THD, 0x200},
     {R_SLOPE, B_EHT_RATE_TH, 0xa},
     {R_BEDGE, B_HE_RATE_TH, 0xa},
@@ -533,7 +573,10 @@ bool rtl8922ae_phy_postinit(uint64_t deadline, const char **detail)
     {R_UDP_COEEF, B_UDP_COEEF, 0},
     {R_UDP_COEEF, B_UDP_COEEF, 1},
   };
-  if (!registers(settings, sizeof(settings) / sizeof(*settings), true, deadline, detail)) {
+  if (!bb_mask(R_BBCLK, B_CLK_640M, 1, detail) ||
+      !bb_mask(R_TXSCALE, B_TXFCTR_EN, 0, detail) ||
+      !registers_idx(0, settings, sizeof(settings) / sizeof(*settings), true, deadline, detail) ||
+      !registers_idx(1, settings, sizeof(settings) / sizeof(*settings), true, deadline, detail)) {
     return false;
   }
   return true;
@@ -559,12 +602,12 @@ bool rtl8922ae_phy_radio(const void *asset, size_t bytes,
   return true;
 }
 
-static bool configure_paths(const struct rtl8922ae_board *board,
+static bool configure_paths(unsigned phy, const struct rtl8922ae_board *board,
     uint64_t deadline, const char **detail)
 {
   if (board->tx_nss != 2 || board->rx_nss != 2 ||
       board->tx_antennas != 2 || board->rx_antennas != 2) {
-    return fail(detail, "RTL8922AE one-PHY two-path capability profile unsupported");
+    return fail(detail, "RTL8922AE DBCC physical two-path capability profile unsupported");
   }
   static const struct phy_register paths[] = {
     {R_MAC_SEL, B_MAC_SEL, 0},
@@ -590,14 +633,48 @@ static bool configure_paths(const struct rtl8922ae_board *board,
     {R_BRK_EHT, B_RXEHT_NSS_MAX, 1},
     {R_BRK_RXEHT, B_RXEHTTB_NSS_MAX, 1},
     {R_BRK_RXEHT, B_RXEHT_N_USER_MAX, 4},
-    {R_TXPWR_RSTA, B_TXPWR_RSTA, 0},
-    {R_TXPWR_RSTA, B_TXPWR_RSTA, 1},
-    {R_TXPWR_RSTB, B_TXPWR_RSTB, 0},
-    {R_TXPWR_RSTB, B_TXPWR_RSTB, 1},
   };
-  return registers(paths, sizeof(paths) / sizeof(*paths), true, deadline, detail) &&
-      registers(tmac, sizeof(tmac) / sizeof(*tmac), false, deadline, detail) &&
-      registers(receive, sizeof(receive) / sizeof(*receive), true, deadline, detail);
+  return registers_idx(phy, paths, sizeof(paths) / sizeof(*paths), true, deadline, detail) &&
+      registers_idx(phy, tmac, sizeof(tmac) / sizeof(*tmac), false, deadline, detail) &&
+      registers_idx(phy, receive, sizeof(receive) / sizeof(*receive), true, deadline, detail) &&
+      bb_mask(phy ? R_TXPWR_RSTB : R_TXPWR_RSTA,
+          phy ? B_TXPWR_RSTB : B_TXPWR_RSTA, 0, detail) &&
+      bb_mask(phy ? R_TXPWR_RSTB : R_TXPWR_RSTA,
+          phy ? B_TXPWR_RSTB : B_TXPWR_RSTA, 1, detail);
+}
+
+static bool status_init(unsigned phy, uint64_t deadline, const char **detail)
+{
+  enum {
+    STATUS_HE_MU = 6, STATUS_VHT_MU = 7, STATUS_RESERVED = 9,
+    STATUS_TRIGGER = 10, STATUS_CCK = 11, STATUS_HT = 13, STATUS_EHT = 16,
+    STATUS_IE_OFDM = 1, STATUS_IE_PATH_A = 4, STATUS_IE_PATH_D = 7,
+    STATUS_IE_DL_MU = 13, STATUS_IE_DEBUG_OFDM = 20,
+  };
+  for (unsigned page = 0; page <= STATUS_EHT; ++page) {
+    if (page == STATUS_RESERVED) {
+      continue;
+    }
+    uint32_t address = page == STATUS_EHT ? R_PHY_STS_BITMAP_EHT :
+        R_PHY_STS_BITMAP_ADDR_START + (page > STATUS_RESERVED ? page - 1 : page) * 4;
+    uint32_t value = rtl8922ae_read32(bb_address(phy, address));
+    if (page == STATUS_HE_MU || page == STATUS_VHT_MU) {
+      value |= PHY_BIT(STATUS_IE_DL_MU);
+    } else if (page == STATUS_TRIGGER) {
+      value |= PHY_BIT(STATUS_IE_DL_MU) | PHY_BIT(STATUS_IE_OFDM);
+    } else if (page >= STATUS_CCK) {
+      value &= ~PHY_MASK(STATUS_IE_PATH_D, STATUS_IE_PATH_A);
+      if (page == STATUS_CCK) {
+        value |= PHY_BIT(STATUS_IE_OFDM);
+      } else if (page >= STATUS_HT) {
+        value |= PHY_BIT(STATUS_IE_DEBUG_OFDM);
+      }
+    }
+    if (!bb_mask_idx(phy, address, UINT32_MAX, value, detail) || !checkpoint(deadline, detail)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 static bool static_receive_init(const struct rtl8922ae_board *board,
@@ -626,37 +703,12 @@ static bool static_receive_init(const struct rtl8922ae_board *board,
     {R_PLCP_HISTOGRAM, B_STS_DIS_TRIG_BY_FAIL, 1},
     {R_PLCP_HISTOGRAM, B_STS_DIS_TRIG_BY_BRK, 1},
   };
-  if (!registers(environment, sizeof(environment) / sizeof(*environment), true, deadline, detail)) {
+  if (!registers_idx(0, environment, sizeof(environment) / sizeof(*environment), true, deadline, detail) ||
+      !registers_idx(1, environment, sizeof(environment) / sizeof(*environment), true, deadline, detail)) {
     return false;
   }
-  enum {
-    STATUS_HE_MU = 6, STATUS_VHT_MU = 7, STATUS_RESERVED = 9,
-    STATUS_TRIGGER = 10, STATUS_CCK = 11, STATUS_HT = 13, STATUS_EHT = 16,
-    STATUS_IE_OFDM = 1, STATUS_IE_PATH_A = 4, STATUS_IE_PATH_D = 7,
-    STATUS_IE_DL_MU = 13, STATUS_IE_DEBUG_OFDM = 20,
-  };
-  for (unsigned page = 0; page <= STATUS_EHT; ++page) {
-    if (page == STATUS_RESERVED) {
-      continue;
-    }
-    uint32_t address = page == STATUS_EHT ? R_PHY_STS_BITMAP_EHT :
-        R_PHY_STS_BITMAP_ADDR_START + (page > STATUS_RESERVED ? page - 1 : page) * 4;
-    uint32_t value = rtl8922ae_read32(PHY_BASE + address);
-    if (page == STATUS_HE_MU || page == STATUS_VHT_MU) {
-      value |= PHY_BIT(STATUS_IE_DL_MU);
-    } else if (page == STATUS_TRIGGER) {
-      value |= PHY_BIT(STATUS_IE_DL_MU) | PHY_BIT(STATUS_IE_OFDM);
-    } else if (page >= STATUS_CCK) {
-      value &= ~PHY_MASK(STATUS_IE_PATH_D, STATUS_IE_PATH_A);
-      if (page == STATUS_CCK) {
-        value |= PHY_BIT(STATUS_IE_OFDM);
-      } else if (page >= STATUS_HT) {
-        value |= PHY_BIT(STATUS_IE_DEBUG_OFDM);
-      }
-    }
-    if (!bb_mask(address, UINT32_MAX, value, detail) || !checkpoint(deadline, detail)) {
-      return false;
-    }
+  if (!status_init(0, deadline, detail) || !status_init(1, deadline, detail)) {
+    return false;
   }
   /* RTL8922A has no host-controlled IGI. DIG still resets PD thresholds and
    * disables SDAGC following PAGC. Initial unlinked igi_rssi is zero; the
@@ -671,7 +723,8 @@ static bool static_receive_init(const struct rtl8922ae_board *board,
     {R_PATH1_P20_FOLLOW_BY_PAGCUGC_V3, B_PATH1_P20_FOLLOW_BY_PAGCUGC_EN_MSK, 0},
     {R_PATH1_S20_FOLLOW_BY_PAGCUGC_V3, B_PATH1_S20_FOLLOW_BY_PAGCUGC_EN_MSK, 0},
   };
-  if (!registers(dig, sizeof(dig) / sizeof(*dig), true, deadline, detail)) {
+  if (!registers_idx(0, dig, sizeof(dig) / sizeof(*dig), true, deadline, detail) ||
+      !registers_idx(1, dig, sizeof(dig) / sizeof(*dig), true, deadline, detail)) {
     return false;
   }
   uint8_t cap = board->xtal & B_AX_XTAL_SC_MASK;
@@ -681,18 +734,22 @@ static bool static_receive_init(const struct rtl8922ae_board *board,
   rtl8922ae_hw_xtal_write(XTAL_SI_XTAL_SC_XI, cap, 0xff, deadline);
   if (!checkpoint(deadline, detail)) return false;
   static const struct phy_register receive[] = {
-    {R_DCFO_OPT_V1, B_DCFO_OPT_EN_V1, 1},
-    {R_DCFO_WEIGHT_V1, B_DCFO_WEIGHT_MSK_V1, 8},
-    {R_TX_COLLISION_T2R_ST_BE, B_TX_COLLISION_T2R_ST_BE_M, 0x29},
     {R_CHINFO_SEG, B_CHINFO_SEG_LEN, 0},
     {R_CHINFO_SEG, B_CHINFO_SEG, 0xf},
     {R_CHINFO_DATA, B_CHINFO_DATA_BITMAP, 1},
+  };
+  static const struct phy_register indexed[] = {
+    {R_DCFO_OPT_V1, B_DCFO_OPT_EN_V1, 1},
+    {R_DCFO_WEIGHT_V1, B_DCFO_WEIGHT_MSK_V1, 8},
+    {R_TX_COLLISION_T2R_ST_BE, B_TX_COLLISION_T2R_ST_BE_M, 0x29},
     {R_CHINFO_ELM_SRC, B_CHINFO_ELM_BITMAP, 0x40303},
     {R_CHINFO_ELM_SRC, B_CHINFO_SRC, 0},
     {R_CHINFO_TYPE_SCAL, B_CHINFO_TYPE, 3},
     {R_CHINFO_TYPE_SCAL, B_CHINFO_SCAL, 0},
   };
-  return registers(receive, sizeof(receive) / sizeof(*receive), true, deadline, detail);
+  return registers(receive, sizeof(receive) / sizeof(*receive), true, deadline, detail) &&
+      registers_idx(0, indexed, sizeof(indexed) / sizeof(*indexed), true, deadline, detail) &&
+      registers_idx(1, indexed, sizeof(indexed) / sizeof(*indexed), true, deadline, detail);
 }
 
 /* Like rtw8922a_rfk_pll_init, a serial failure ends only this local sequence. */
@@ -709,6 +766,46 @@ static void pll_init(uint64_t deadline)
   }
 }
 
+static bool configure_topology(uint64_t deadline, const char **detail)
+{
+  static const struct phy_register topology[] = {
+    {R_DBCC, B_DBCC_EN, 1},
+    {R_DBCC_FA, B_DBCC_FA, 0},
+    {R_AFEDAC0, B_AFEDAC0, 0xe},
+    {R_AFEDAC1, B_AFEDAC1, 7},
+    {R_AFEDAC0 + 0x100, B_AFEDAC0, 0xe},
+    {R_AFEDAC1 + 0x100, B_AFEDAC1, 7},
+    {R_EMLSR, B_EMLSR_PARM, 0x6180},
+    {R_EMLSR, B_EMLSR_PARM, 0x7bab},
+    {R_EMLSR, B_EMLSR_PARM, 0x3bab},
+    {R_EMLSR, B_EMLSR_PARM, 0x3aab},
+  };
+  return registers(topology, sizeof(topology) / sizeof(*topology), true, deadline, detail);
+}
+
+static bool select_coefficients(const uint8_t slots[2], uint64_t deadline,
+    const char **detail)
+{
+  for (unsigned path = 0; path < 2; ++path) {
+    uint32_t coefficient = path ? R_COEF_SEL_C1 : R_COEF_SEL;
+    uint32_t lut = path ? R_CFIR_LUT_C1 : R_CFIR_LUT;
+    if (!bb_mask(coefficient, B_COEF_SEL_EN, 1, detail) ||
+        !bb_mask(coefficient, B_COEF_SEL_IQC_V1, slots[path], detail) ||
+        !bb_mask(coefficient, B_COEF_SEL_MDPD_V1, slots[path], detail)) {
+      return false;
+    }
+    rtl8922ae_phy_rf_write(path, RR_MODOPT, RR_TXG_SEL,
+        4 | slots[path], deadline, detail);
+    if (!checkpoint(deadline, detail)) return false;
+    uint32_t selection = rtl8922ae_read32(PHY_BASE + coefficient);
+    if (!bb_mask(lut, B_CFIR_LUT_G3, selection & 1, detail) ||
+        !bb_mask(lut, B_CFIR_LUT_G5, selection >> 1 & 1, detail)) {
+      return fail(detail, "RTL8922AE channel RFK coefficient selection unconfirmed");
+    }
+  }
+  return checkpoint(deadline, detail);
+}
+
 bool rtl8922ae_phy_hardware(const void *asset, size_t bytes,
     const struct rtl8922ae_firmware_tables *tables,
     const struct rtl8922ae_board *board, uint64_t deadline, const char **detail)
@@ -720,24 +817,20 @@ bool rtl8922ae_phy_hardware(const void *asset, size_t bytes,
   static const struct phy_register hardware[] = {
     {R_EN_SND_WO_NDP, B_EN_SND_WO_NDP, 0},
     {R_EN_SND_WO_NDP_C1, B_EN_SND_WO_NDP, 0},
-    {R_DBCC, B_DBCC_EN, 0},
-    {R_DBCC_FA, B_DBCC_FA, 1},
-    {R_AFEDAC0, B_AFEDAC0, 0xe},
-    {R_AFEDAC1, B_AFEDAC1, 7},
-    {R_AFEDAC0 + 0x100, B_AFEDAC0, 0xe},
-    {R_AFEDAC1 + 0x100, B_AFEDAC1, 7},
-    /* Reference single active PHY0 mode MLO_2_PLUS_0_1RF. */
-    {R_EMLSR, B_EMLSR_PARM, 0x6180},
-    {R_EMLSR, B_EMLSR_PARM, 0xbbab},
-    {R_EMLSR, B_EMLSR_PARM, 0xaba9},
-    {R_EMLSR, B_EMLSR_PARM, 0xeba9},
-    {R_EMLSR, B_EMLSR_PARM, 0xeaa9},
   };
   if (!registers(hardware, sizeof(hardware) / sizeof(*hardware), true, deadline, detail) ||
       !write_mask(R_BE_PWR_BOOST, B_BE_PWR_CTRL_SEL, 0, detail) ||
+      !write_mask(R_BE_PWR_BOOST + MAC1_OFFSET, B_BE_PWR_CTRL_SEL, 0, detail) ||
+      !configure_topology(deadline, detail) ||
       !static_receive_init(board, deadline, detail)) {
     return false;
   }
+  for (unsigned path = 0; path < 2; ++path) {
+    rtl8922ae_phy_rf_write(path, RR_POW, RR_POW_SYN_V1, 0xf, deadline, detail);
+    if (!checkpoint(deadline, detail)) return false;
+  }
+  const uint8_t slots[2] = {0};
+  if (!select_coefficients(slots, deadline, detail)) return false;
   pll_init(deadline);
   if (!checkpoint(deadline, detail)) return false;
   static const struct phy_register nctl[] = {
@@ -750,6 +843,8 @@ bool rtl8922ae_phy_hardware(const void *asset, size_t bytes,
     {R_IQK_DPK_PRST, B_IQK_DPK_PRST, 1},
     {R_IQK_DPK_PRST_C1, B_IQK_DPK_PRST, 1},
     {R_TXRFC, B_TXRFC_RST, 1},
+    {R_IQK_DPK_RST_C1, B_IQK_DPK_RST, 1},
+    {R_TXRFC_C1, B_TXRFC_RST, 1},
   };
   if (!registers(nctl, sizeof(nctl) / sizeof(*nctl), true, deadline, detail) ||
       !apply_table(asset, bytes, tables, RTL8922AE_ELEMENT_NCTL,
@@ -774,11 +869,16 @@ bool rtl8922ae_phy_hardware(const void *asset, size_t bytes,
       if (!checkpoint(deadline, detail)) return false;
     }
   }
-  return rtl8922ae_phy_channel_enter(deadline, detail) &&
-      configure_paths(board, deadline, detail) && channel_resume(deadline, detail);
+  /* Static AB/NSS2 defaults on both BBs match cfg_txrx_path; 1011's physical
+   * RF selection is applied separately by the indexed reset/tuning helpers. */
+  return channel_reset_enter(0, deadline, detail) &&
+      channel_reset_enter(1, deadline, detail) &&
+      configure_paths(0, board, deadline, detail) &&
+      configure_paths(1, board, deadline, detail) &&
+      channel_resume(0, deadline, detail) && channel_resume(1, deadline, detail);
 }
 
-static bool apply_gain(const struct phy_gain *gain, uint64_t deadline,
+static bool apply_gain(unsigned phy, const struct phy_gain *gain, uint64_t deadline,
     const char **detail)
 {
   static const uint32_t lna_address[] = {0x409c, 0x409c, 0x40a0, 0x40a0,
@@ -806,21 +906,21 @@ static bool apply_gain(const struct phy_gain *gain, uint64_t deadline,
     }
     uint32_t offset = path * 0x400;
     for (unsigned i = 0; i < 7; ++i) {
-      if (!bb_mask(lna_address[i] + offset, lna_mask[i], gain->lna[path][i], detail)) {
+      if (!bb_mask_idx(phy, lna_address[i] + offset, lna_mask[i], gain->lna[path][i], detail)) {
         return false;
       }
     }
-    if (!bb_mask(0x4054 + offset, 0x7fc0000, (uint32_t)(int8_t)gain->tia[path][0], detail) ||
-        !bb_mask(0x4058 + offset, 0x1ff, (uint32_t)(int8_t)gain->tia[path][1], detail)) {
+    if (!bb_mask_idx(phy, 0x4054 + offset, 0x7fc0000, (uint32_t)(int8_t)gain->tia[path][0], detail) ||
+        !bb_mask_idx(phy, 0x4058 + offset, 0x1ff, (uint32_t)(int8_t)gain->tia[path][1], detail)) {
       return false;
     }
     for (unsigned i = 0; i < 7; ++i) {
-      if (!bb_mask(lna_op_address[i] + offset, lna_op_mask[i], gain->lna_op[path][i], detail)) {
+      if (!bb_mask_idx(phy, lna_op_address[i] + offset, lna_op_mask[i], gain->lna_op[path][i], detail)) {
         return false;
       }
     }
     for (unsigned i = 0; i < 8; ++i) {
-      if (!bb_mask(tia_op_address[i] + offset, tia_op_mask[i], gain->tia_op[path][i], detail)) {
+      if (!bb_mask_idx(phy, tia_op_address[i] + offset, tia_op_mask[i], gain->tia_op[path][i], detail)) {
         return false;
       }
     }
@@ -828,7 +928,7 @@ static bool apply_gain(const struct phy_gain *gain, uint64_t deadline,
     static const uint8_t order[] = {7, 8, 9, 10, 11, 12, 13, 14, 3, 4, 5, 6, 1, 2, 0};
     for (unsigned i = 0; i < sizeof(order); ++i) {
       unsigned index = order[i];
-      if (!bb_mask(rpl_address[index] + offset, rpl_mask[index], gain->rpl[path][index], detail)) {
+      if (!bb_mask_idx(phy, rpl_address[index] + offset, rpl_mask[index], gain->rpl[path][index], detail)) {
         return false;
       }
     }
@@ -881,51 +981,86 @@ static bool apply_gain_offsets(const struct rtl8922ae_board *board,
   return true;
 }
 
-bool rtl8922ae_phy_channel_enter(uint64_t deadline, const char **detail)
+static bool channel_reset_enter(unsigned phy, uint64_t deadline, const char **detail)
 {
   static const struct phy_register settings[] = {
     {0x2800, PHY_BIT(1), 0},
     {0x2900, PHY_BIT(1), 0},
-    {R_TSSI_PWR_P0, B_TSSI_CONT_EN, 1},
-    {R_TSSI_PWR_P1, B_TSSI_CONT_EN, 1},
   };
-  if (!registers(settings, sizeof(settings) / sizeof(*settings), true, deadline, detail)) {
+  if (!registers_idx(phy, settings, sizeof(settings) / sizeof(*settings), true, deadline, detail)) {
+    return false;
+  }
+  if (!bb_mask(phy ? R_TSSI_PWR_P1 : R_TSSI_PWR_P0, B_TSSI_CONT_EN, 1, detail)) {
     return false;
   }
   uint32_t raw = rtl8922ae_read32(PHY_BASE + R_ADC_FIFO_V1);
-  if (!bb_mask(R_ADC_FIFO_V1, B_ADC_FIFO_EN_V1,
-      ((raw & B_ADC_FIFO_EN_V1) >> __builtin_ctz(B_ADC_FIFO_EN_V1)) | 3, detail) ||
+  if (!bb_mask_idx(phy, R_ADC_FIFO_V1, B_ADC_FIFO_EN_V1,
+      ((raw & B_ADC_FIFO_EN_V1) >> __builtin_ctz(B_ADC_FIFO_EN_V1)) | (1u << phy), detail) ||
       !rtl8922ae_sleep(40 * NS_PER_US, deadline) ||
-      !bb_mask(R_RXCCA_BE1, B_RXCCA_BE1_DIS, 1, detail) ||
-      !bb_mask(R_PD_CTRL, B_PD_HIT_DIS, 1, detail) ||
+      !bb_mask_idx(phy, R_RXCCA_BE1, B_RXCCA_BE1_DIS, 1, detail) ||
+      !bb_mask_idx(phy, R_PD_CTRL, B_PD_HIT_DIS, 1, detail) ||
       !rtl8922ae_sleep(NS_PER_US, deadline) ||
-      !bb_mask(R_RSTB_ASYNC, B_RSTB_ASYNC_ALL, 0, detail)) {
+      !bb_mask_idx(phy, R_RSTB_ASYNC, B_RSTB_ASYNC_ALL, 0, detail)) {
     return fail(detail, "RTL8922AE channel PHY reset entry failed");
   }
   return true;
 }
 
-bool rtl8922ae_phy_channel_tune(const void *asset, size_t bytes,
+bool rtl8922ae_phy_channel_enter(unsigned phy, uint64_t deadline, const char **detail)
+{
+  if (phy >= 2 || !checkpoint(deadline, detail)) {
+    return fail(detail, "RTL8922AE channel PHY index invalid or interrupted");
+  }
+  /* rtw8922a_pre_set_channel_bb temporarily joins both BB contexts. */
+  const struct phy_register settings0[] = {
+    {R_DBCC, B_DBCC_EN, 0},
+    {R_EMLSR, B_EMLSR_PARM, 0x6180},
+    {R_EMLSR, B_EMLSR_PARM, 0xbbab},
+    {R_EMLSR, B_EMLSR_PARM, 0xaba9},
+    {R_EMLSR, B_EMLSR_PARM, 0xeba9},
+    {R_EMLSR, B_EMLSR_PARM, 0xeaa9},
+  };
+  const struct phy_register settings1[] = {
+    {R_DBCC, B_DBCC_EN, 0},
+    {R_EMLSR, B_EMLSR_PARM, 0xbbab},
+    {R_EMLSR, B_EMLSR_PARM, 0xafff},
+    {R_EMLSR, B_EMLSR_PARM, 0xefff},
+    {R_EMLSR, B_EMLSR_PARM, 0xeeff},
+  };
+  if (!(phy ? registers(settings1, sizeof(settings1) / sizeof(*settings1), true,
+      deadline, detail) : registers(settings0, sizeof(settings0) / sizeof(*settings0),
+      true, deadline, detail))) {
+    return false;
+  }
+  for (unsigned path = 0; path < 2; ++path) {
+    rtl8922ae_phy_rf_write(path, RR_POW, RR_POW_SYN_V1, 0xf, deadline, detail);
+    if (!checkpoint(deadline, detail)) return false;
+  }
+  return rtl8922ae_sleep(1000 * NS_PER_US, deadline) &&
+      channel_reset_enter(phy, deadline, detail);
+}
+
+bool rtl8922ae_phy_channel_tune(unsigned phy, const void *asset, size_t bytes,
     const struct rtl8922ae_firmware_tables *tables,
     const struct rtl8922ae_board *board, uint8_t channel, uint64_t deadline,
     const char **detail)
 {
-  if (!board || !tables || channel < 1 || channel > 13 ||
+  if (phy >= 2 || !board || !tables || channel < 1 || channel > 13 ||
       !board->gain_offset_known || tables->live_cut != 2 || board->rfe != 1) {
     return fail(detail, "RTL8922AE channel or receive gain profile unsupported");
   }
   if (!checkpoint(deadline, detail)) return false;
-  uint8_t mode = rtl8922ae_read8(R_BE_WMAC_RFMOD);
-  uint8_t rate = rtl8922ae_read8(R_BE_TXRATE_CHK);
-  rtl8922ae_write8(R_BE_WMAC_RFMOD, mode & ~B_BE_WMAC_RFMOD_MASK);
+  uint8_t mode = rtl8922ae_read8(R_BE_WMAC_RFMOD + phy * MAC1_OFFSET);
+  uint8_t rate = rtl8922ae_read8(R_BE_TXRATE_CHK + phy * MAC1_OFFSET);
+  rtl8922ae_write8(R_BE_WMAC_RFMOD + phy * MAC1_OFFSET, mode & ~B_BE_WMAC_RFMOD_MASK);
   rate &= ~(B_BE_BAND_MODE | B_BE_CHECK_CCK_EN | B_BE_RTS_LIMIT_IN_OFDM6);
-  rtl8922ae_write8(R_BE_TXRATE_CHK, rate | B_BE_BAND_MODE);
+  rtl8922ae_write8(R_BE_TXRATE_CHK + phy * MAC1_OFFSET, rate | B_BE_BAND_MODE);
   static const struct phy_register mac[] = {
     {R_BE_TX_SUB_BAND_VALUE, UINT32_MAX, PHY_BIT(16)},
     {R_BE_PREBKF_CFG_1, B_BE_SIFS_MACTXEN_T1_MASK, 0x3f},
     {R_BE_MUEDCA_EN, B_BE_SIFS_MACTXEN_TB_T1_MASK, 0x3e},
   };
-  if (!registers(mac, sizeof(mac) / sizeof(*mac), false, deadline, detail)) {
+  if (!registers_idx(phy, mac, sizeof(mac) / sizeof(*mac), false, deadline, detail)) {
     return false;
   }
   static const uint32_t barker[] = {0x1fe4f, 0x1ff5e, 0x2006c, 0x2017b,
@@ -937,23 +1072,23 @@ bool rtl8922ae_phy_channel_tune(const void *asset, size_t bytes,
   static const uint32_t coefficients[] = {0x3a63ca, 0x2a833f, 0x1491f8,
       0x03c0b0, 0xfccff1, 0xfccfc3, 0xfebfdc, 0xffdff7};
   struct phy_gain gain = {0};
-  if (!bb_mask(R_BK_FC0INV, B_BK_FC0INV, barker[channel - 1], detail) ||
-      !bb_mask(R_CCK_FC0INV, B_CCK_FC0INV, cck[channel - 1], detail) ||
+  if (!bb_mask_idx(phy, R_BK_FC0INV, B_BK_FC0INV, barker[channel - 1], detail) ||
+      !bb_mask_idx(phy, R_CCK_FC0INV, B_CCK_FC0INV, cck[channel - 1], detail) ||
       !apply_table(asset, bytes, tables, RTL8922AE_ELEMENT_BB_GAIN,
           TABLE_GAIN, 0, &gain, deadline, detail) ||
-      !apply_gain(&gain, deadline, detail) ||
-      !bb_mask(0x4160, PHY_BIT(26), 1, detail) ||
-      !bb_mask(0x4560, PHY_BIT(26), 1, detail) ||
+      !apply_gain(phy, &gain, deadline, detail) ||
+      !bb_mask_idx(phy, 0x4160, PHY_BIT(26), 1, detail) ||
+      !bb_mask_idx(phy, 0x4560, PHY_BIT(26), 1, detail) ||
       !apply_gain_offsets(board, detail)) {
     return false;
   }
   unsigned frequency = 2407 + channel * 5;
-  if (!bb_mask(R_FC0, B_FC0, frequency, detail) ||
-      !bb_mask(R_FC0INV_SBW, B_FC0_INV, ((1u << 18) + frequency / 2) / frequency, detail)) {
+  if (!bb_mask_idx(phy, R_FC0, B_FC0, frequency, detail) ||
+      !bb_mask_idx(phy, R_FC0INV_SBW, B_FC0_INV, ((1u << 18) + frequency / 2) / frequency, detail)) {
     return false;
   }
   for (unsigned i = 0; i < 8; ++i) {
-    if (!bb_mask(R_PCOEFF01 + i * 4, B_PCOEFF01, coefficients[i], detail)) {
+    if (!bb_mask_idx(phy, R_PCOEFF01 + i * 4, B_PCOEFF01, coefficients[i], detail)) {
       return false;
     }
   }
@@ -974,13 +1109,13 @@ bool rtl8922ae_phy_channel_tune(const void *asset, size_t bytes,
     {0x45a0, PHY_BIT(12), 0},
     {0x45ac, PHY_BIT(12), 0},
     {R_RSTB_ASYNC, B_RSTB_ASYNC_ALL, 1},
-    {R_TXPWR_RSTA, B_TXPWR_RSTA, 0},
-    {R_TXPWR_RSTA, B_TXPWR_RSTA, 1},
-    {R_TXPWR_RSTB, B_TXPWR_RSTB, 0},
-    {R_TXPWR_RSTB, B_TXPWR_RSTB, 1},
   };
-  if (!bb_mask(R_MAC_PIN_SEL, B_CH_IDX_SEG0, channel, detail) ||
-      !registers(bandwidth, sizeof(bandwidth) / sizeof(*bandwidth), true, deadline, detail)) {
+  if (!bb_mask_idx(phy, R_MAC_PIN_SEL, B_CH_IDX_SEG0, channel, detail) ||
+      !registers_idx(phy, bandwidth, sizeof(bandwidth) / sizeof(*bandwidth), true, deadline, detail) ||
+      !bb_mask(phy ? R_TXPWR_RSTB : R_TXPWR_RSTA,
+          phy ? B_TXPWR_RSTB : B_TXPWR_RSTA, 0, detail) ||
+      !bb_mask(phy ? R_TXPWR_RSTB : R_TXPWR_RSTA,
+          phy ? B_TXPWR_RSTB : B_TXPWR_RSTA, 1, detail)) {
     return false;
   }
   const uint32_t rf_addresses[] = {RR_CFGCH, RR_CFGCH_V1};
@@ -992,72 +1127,89 @@ bool rtl8922ae_phy_channel_tune(const void *asset, size_t bytes,
       }
     }
   }
-  /* In MLO_2_PLUS_0_1RF the reference synthesizer selection is RF_PATH_A. */
+  /* MLO_1_PLUS_1_1RF maps PHY0 to RF A and PHY1 to RF B. */
   uint32_t synthesizer;
-  if (!rtl8922ae_phy_rf_read(0, RR_CFGCH, RF_MASK, &synthesizer, deadline, detail)) {
+  if (!rtl8922ae_phy_rf_read(phy, RR_CFGCH, RF_MASK, &synthesizer, deadline, detail)) {
     return false;
   }
-  for (unsigned path = 0; path < 2; ++path) {
-    for (unsigned i = 0; i < 2; ++i) {
-      uint32_t value = rf[path][i] &
-          ~(RR_CFGCH_BAND1 | RR_CFGCH_BW_V2 | RR_CFGCH_BAND0 | RR_CFGCH_CH);
-      value |= channel;
-      rtl8922ae_phy_rf_write(path, rf_addresses[i], RF_MASK, value, deadline, detail);
-      if (!rtl8922ae_sleep(100 * NS_PER_US, deadline)) {
-        return fail(detail, "RTL8922AE RF channel tuning interrupted");
-      }
+  for (unsigned i = 0; i < 2; ++i) {
+    uint32_t value = rf[phy][i] &
+        ~(RR_CFGCH_BAND1 | RR_CFGCH_BW_V2 | RR_CFGCH_BAND0 | RR_CFGCH_CH);
+    value |= channel;
+    rtl8922ae_phy_rf_write(phy, rf_addresses[i], RF_MASK, value, deadline, detail);
+    if (!rtl8922ae_sleep(100 * NS_PER_US, deadline)) {
+      return fail(detail, "RTL8922AE RF channel tuning interrupted");
     }
   }
   return checkpoint(deadline, detail);
 }
 
-static bool channel_resume(uint64_t deadline, const char **detail)
+static bool channel_resume(unsigned phy, uint64_t deadline, const char **detail)
 {
   uint32_t raw = rtl8922ae_read32(PHY_BASE + R_ADC_FIFO_V1);
-  if (!bb_mask(R_ADC_FIFO_V1, B_ADC_FIFO_EN_V1,
-      ((raw & B_ADC_FIFO_EN_V1) >> __builtin_ctz(B_ADC_FIFO_EN_V1)) & ~3u, detail)) {
+  if (!bb_mask_idx(phy, R_ADC_FIFO_V1, B_ADC_FIFO_EN_V1,
+      ((raw & B_ADC_FIFO_EN_V1) >> __builtin_ctz(B_ADC_FIFO_EN_V1)) & ~(1u << phy), detail)) {
     return fail(detail, "RTL8922AE channel ADC resume unconfirmed");
   }
   static const struct phy_register settings[] = {
     {0x2800, PHY_BIT(1), 1},
     {0x2900, PHY_BIT(1), 1},
-    {R_TSSI_PWR_P0, B_TSSI_CONT_EN, 0},
-    {R_TSSI_PWR_P1, B_TSSI_CONT_EN, 0},
-    {R_RSTB_ASYNC, B_RSTB_ASYNC_ALL, 1},
-    {R_RXCCA_BE1, B_RXCCA_BE1_DIS, 0},
-    {R_PD_CTRL, B_PD_HIT_DIS, 0},
   };
-  if (!registers(settings, sizeof(settings) / sizeof(*settings), true, deadline, detail)) {
-    return false;
-  }
-  return true;
+  return registers_idx(phy, settings, sizeof(settings) / sizeof(*settings), true, deadline, detail) &&
+      bb_mask(phy ? R_TSSI_PWR_P1 : R_TSSI_PWR_P0, B_TSSI_CONT_EN, 0, detail) &&
+      bb_mask_idx(phy, R_RSTB_ASYNC, B_RSTB_ASYNC_ALL, 1, detail) &&
+      bb_mask_idx(phy, R_RXCCA_BE1, B_RXCCA_BE1_DIS, 0, detail) &&
+      bb_mask_idx(phy, R_PD_CTRL, B_PD_HIT_DIS, 0, detail);
 }
 
-bool rtl8922ae_phy_channel_leave(const uint8_t slots[2], uint64_t deadline,
+bool rtl8922ae_phy_channel_leave(unsigned phy, const uint8_t slots[2], uint64_t deadline,
     const char **detail)
 {
-  if (!slots || slots[0] > 2 || slots[1] > 2 || !checkpoint(deadline, detail)) {
+  if (phy >= 2 || !slots || slots[0] > 2 || slots[1] > 2 || !checkpoint(deadline, detail)) {
     return fail(detail, "RTL8922AE channel RFK slot invalid or interrupted");
   }
-  if (!channel_resume(deadline, detail)) {
+  if (!channel_resume(phy, deadline, detail)) {
     return false;
   }
-  for (unsigned path = 0; path < 2; ++path) {
-    uint32_t coefficient = path ? R_COEF_SEL_C1 : R_COEF_SEL;
-    uint32_t lut = path ? R_CFIR_LUT_C1 : R_CFIR_LUT;
-    if (!bb_mask(coefficient, B_COEF_SEL_EN, 1, detail) ||
-        !bb_mask(coefficient, B_COEF_SEL_IQC_V1, slots[path], detail) ||
-        !bb_mask(coefficient, B_COEF_SEL_MDPD_V1, slots[path], detail)) {
-      return false;
-    }
-    rtl8922ae_phy_rf_write(path, RR_MODOPT, RR_TXG_SEL,
-        4 | slots[path], deadline, detail);
-    if (!checkpoint(deadline, detail)) return false;
-    uint32_t selection = rtl8922ae_read32(PHY_BASE + coefficient);
-    if (!bb_mask(lut, B_CFIR_LUT_G3, selection & 1, detail) ||
-        !bb_mask(lut, B_CFIR_LUT_G5, selection >> 1 & 1, detail)) {
-      return fail(detail, "RTL8922AE channel RFK coefficient selection unconfirmed");
-    }
+  /* 2.4 GHz disables the reference per-path digital power compensation. */
+  uint32_t compensation = phy ? R_BE_LTPC_T0_PATH1 : R_BE_LTPC_T0_PATH0;
+  for (unsigned i = 0; i < 22; ++i) {
+    if (!bb_mask(compensation + i * 4, UINT32_MAX, 0, detail)) return false;
   }
-  return checkpoint(deadline, detail);
+  if (!configure_topology(deadline, detail)) return false;
+  for (unsigned path = 0; path < 2; ++path) {
+    rtl8922ae_phy_rf_write(path, RR_POW, RR_POW_SYN_V1, 0xf, deadline, detail);
+    if (!checkpoint(deadline, detail)) return false;
+  }
+  return select_coefficients(slots, deadline, detail);
+}
+
+/* Linux rtw89_phy_dig_ctrl/config_edcca, unassociated PHY0. These are
+ * temporary receive thresholds, not RF power or regulatory substitutions. */
+static uint32_t scan_edcca, scan_ppdu;
+
+void rtl8922ae_phy_scan_dig(void)
+{
+  /* No associated DIG watchdog runs in this profile. Linux's saved lower
+   * bound is zero, both when suspending DIG and when resuming it. */
+  (void)bb_mask(R_SEG0R_PD_V2, B_SEG0R_PD_LOWER_BOUND_MSK, 0, NULL);
+  (void)bb_mask(R_SEG0R_PD_V2, B_SEG0R_PD_SPATIAL_REUSE_EN_MSK_V1, 0, NULL);
+}
+
+void rtl8922ae_phy_scan_edcca(bool scanning)
+{
+  uint32_t edcca = rtl8922ae_read32(PHY_BASE + R_SEG0R_EDCCA_LVL_BE);
+  uint32_t ppdu = rtl8922ae_read32(PHY_BASE + R_SEG0R_PPDU_LVL_BE);
+  if (scanning) {
+    scan_edcca = edcca & (B_EDCCA_LVL_MSK0 | B_EDCCA_LVL_MSK1);
+    scan_ppdu = ppdu & B_EDCCA_LVL_MSK1;
+    (void)bb_mask(R_SEG0R_EDCCA_LVL_BE, B_EDCCA_LVL_MSK0, PHY_EDCCA_SCAN_MAX, NULL);
+    (void)bb_mask(R_SEG0R_EDCCA_LVL_BE, B_EDCCA_LVL_MSK1, PHY_EDCCA_SCAN_MAX, NULL);
+    (void)bb_mask(R_SEG0R_PPDU_LVL_BE, B_EDCCA_LVL_MSK1, PHY_EDCCA_SCAN_MAX, NULL);
+  } else {
+    rtl8922ae_write32(PHY_BASE + R_SEG0R_EDCCA_LVL_BE,
+        (edcca & ~(B_EDCCA_LVL_MSK0 | B_EDCCA_LVL_MSK1)) | scan_edcca);
+    rtl8922ae_write32(PHY_BASE + R_SEG0R_PPDU_LVL_BE,
+        (ppdu & ~B_EDCCA_LVL_MSK1) | scan_ppdu);
+  }
 }

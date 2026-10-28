@@ -156,6 +156,17 @@
 #define RR_CFGCH_V1 0x10018
 #define RR_MODOPT 0x01
 #define RR_TXG_SEL PHY_MASK(19, 17)
+#define B_BE_DMAC_BB_PHY1_MASK PHY_MASK(31, 16)
+#define B_BE_FEN_BB1_IP_RSTN PHY_BIT(9)
+#define B_BE_FEN_BB1PLAT_RSTB PHY_BIT(8)
+#define B_BE_BOOT_RDY1 PHY_BIT(10)
+#define R_IQK_DPK_RST_C1 0x1c6c
+#define R_TXRFC_C1 0x1c7c
+#define RR_POW 0xa0
+#define RR_POW_SYN_V1 PHY_MASK(3, 0)
+#define R_BE_LTPC_T0_PATH0 0xba28
+#define R_BE_LTPC_T0_PATH1 0xbb28
+
 #define R_ADC_FIFO_V1 0x10FC
 #define R_AFEDAC0 0x2A5C
 #define R_AFEDAC1 0x2A60
@@ -258,5 +269,11 @@
 #define XTAL_SI_XTAL_PLL 0x16
 #define XTAL_SI_XTAL_SC_XI 0x04
 #define XTAL_SI_XTAL_SC_XO 0x05
+
+/* Reference one-PHY scan DIG and EDCCA controls. */
+#define R_SEG0R_EDCCA_LVL_BE 0x69EC
+#define R_SEG0R_PPDU_LVL_BE 0x69F0
+#define B_EDCCA_LVL_MSK0 HW_MASK(7, 0)
+#define B_EDCCA_LVL_MSK1 HW_MASK(15, 8)
 
 #endif

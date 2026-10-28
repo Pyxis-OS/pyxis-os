@@ -321,7 +321,7 @@ Reference: torvalds/linux v6.18, commit
 7d0a66e4bb9081d75c82ec4957c50034cb0ea449,
 drivers/net/wireless/realtek/rtw89/fw.c, fw.h, efuse.c, efuse_be.c,
 mac_be.c, pci.c, pci_be.c, pci.h, reg.h, rtw8922a.c, rtw8922a.h,
-phy.c, phy.h, sar.c, acpi.c and acpi.h.
+phy.c, phy.h, sar.c, acpi.c, acpi.h, core.c, core.h, txrx.h, cam.c and cam.h.
 SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause; BSD-3-Clause selected.
 Copyright(c) 2019-2020, 2021-2023 Realtek Corporation
 

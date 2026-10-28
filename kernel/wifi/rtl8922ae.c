@@ -10,6 +10,8 @@
 #include <kernel/wifi.h>
 #include "rtl8922ae.h"
 #include "rtl8922ae_firmware.h"
+#include "rtl8922ae_discovery.h"
+#include "rtl8922ae_scan.h"
 #include "rtl8922ae_hw.h"
 #include "rtl8922ae_sar.h"
 #include "rtl8922ae_io.h"
@@ -39,12 +41,15 @@ static struct {
   struct rtl8922ae_sar_envelope sar;
   struct wifi_regdb_profile rules;
   struct rtl8922ae_power_image power;
-  struct rtl8922ae_rfk_commands rfk;
+  struct rtl8922ae_rfk_commands rfk[2];
   struct wifi_scan_work *pending;
+  struct task_wait *worker_wait;
+  struct rtl8922ae_discovery discovery;
+  uint64_t notifications;
   enum call_status abort_status;
   uint64_t next_rfkill;
   uint8_t channel;
-  bool prepared, started, attempted, stopping, rfkill_live;
+  bool prepared, started, attempted, stopping, rfkill_live, live, worker_active;
   uint8_t cut;
 } preparation;
 
@@ -334,11 +339,14 @@ static bool initialize_phy(uint64_t deadline, const char **detail)
     *detail = "RTL8922AE effective power image unsupported or incomplete";
     return false;
   }
-  if (!rtl8922ae_rfk_prepare(preparation.asset.data, preparation.asset.size,
-      &preparation.tables, &preparation.board, preparation.cut, preparation.channel,
-      &preparation.rfk, detail)) return false;
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    if (!rtl8922ae_rfk_prepare(phy, preparation.asset.data, preparation.asset.size,
+        &preparation.tables, &preparation.board, preparation.cut, preparation.channel,
+        &preparation.rfk[phy], detail)) return false;
+  }
   uint64_t flags = cpu_save_interrupts();
-  preparation.status.phy.thermal_default_paths = preparation.rfk.thermal_default_paths;
+  preparation.status.phy.thermal_default_paths = preparation.rfk[0].thermal_default_paths |
+      preparation.rfk[1].thermal_default_paths;
   cpu_restore_interrupts(flags);
   phase(WIFI_PHY_MAC);
   if (!rtl8922ae_phy_enable(deadline, detail) || !rtl8922ae_mac_init(deadline, detail)) return false;
@@ -357,29 +365,35 @@ static bool initialize_phy(uint64_t deadline, const char **detail)
   preparation.status.phy.state |= WIFI_PHY_CONFIGURED;
   cpu_restore_interrupts(flags);
   phase(WIFI_PHY_CHANNEL);
-  if (!rtl8922ae_phy_channel_enter(deadline, detail) ||
-      !rtl8922ae_mac_channel(preparation.channel, deadline, detail) ||
-      !rtl8922ae_phy_channel_tune(preparation.asset.data, preparation.asset.size,
-          &preparation.tables, &preparation.board, preparation.channel, deadline, detail)) return false;
-  phase(WIFI_PHY_POWER);
-  if (rtl8922ae_power_apply(&preparation.power, deadline, detail) != RTL8922AE_POWER_OK ||
-      !verify_power(deadline, detail)) return false;
+  if (!rtl8922ae_mac_channel(preparation.channel, deadline, detail)) return false;
   const uint8_t slots[2] = {0, 0};
-  if (!rtl8922ae_phy_channel_leave(slots, deadline, detail)) return false;
-  /* Linux continues this sequence after RFK helper errors. Keep every result
-   * observable and retain the first failure without skipping later RFK. Native
-   * request, transport and RF-ceiling gates still stop unsafe work. */
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    if (!rtl8922ae_phy_channel_enter(phy, deadline, detail) ||
+        !rtl8922ae_phy_channel_tune(phy, preparation.asset.data, preparation.asset.size,
+            &preparation.tables, &preparation.board, preparation.channel, deadline,
+            detail)) return false;
+    phase(WIFI_PHY_POWER);
+    if (rtl8922ae_power_apply(&preparation.power, deadline, detail) != RTL8922AE_POWER_OK ||
+        !verify_power(deadline, detail) ||
+        !rtl8922ae_phy_channel_leave(phy, slots, deadline, detail)) return false;
+  }
+  /* Reference late initialization visits PHY0 then PHY1. Preserve warning-only
+   * helper handling while keeping request, transport and RF-ceiling gates. */
   const char *rfk_failure = NULL;
   phase(WIFI_PHY_RFK);
-  bool completed = rtl8922ae_rfk_pre_notify(&preparation.rfk, deadline, detail);
-  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
-  completed = rtl8922ae_rfk_dack(deadline, detail);
-  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
-  completed = rtl8922ae_rfk_rxdck(&preparation.rfk, deadline, detail);
-  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    bool completed = rtl8922ae_rfk_pre_notify(&preparation.rfk[phy], deadline, detail);
+    if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+    completed = rtl8922ae_rfk_dack(phy, deadline, detail);
+    if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+    completed = rtl8922ae_rfk_rxdck(&preparation.rfk[phy], deadline, detail);
+    if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  }
   phase(WIFI_PHY_TSSI);
-  completed = rtl8922ae_rfk_tssi(&preparation.rfk, deadline, detail);
-  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    bool completed = rtl8922ae_rfk_tssi(&preparation.rfk[phy], deadline, detail);
+    if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  }
   if (rfk_failure) {
     *detail = rfk_failure;
     return false;
@@ -387,71 +401,200 @@ static bool initialize_phy(uint64_t deadline, const char **detail)
   return rtl8922ae_operation_continue();
 }
 
+static void worker_notify(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  ++preparation.notifications;
+  struct task_wait *wait = preparation.worker_wait;
+  preparation.worker_wait = NULL;
+  if (wait) task_wait_wake(wait);
+  cpu_restore_interrupts(flags);
+}
+
+void rtl8922ae_runtime_frame(const uint8_t *descriptor, size_t descriptor_bytes,
+    const uint8_t *frame, size_t frame_bytes)
+{
+  rtl8922ae_discovery_receive(&preparation.discovery, descriptor, descriptor_bytes,
+      frame, frame_bytes);
+}
+
 static void finish_scan(struct wifi_scan_work *work, enum call_status result)
 {
   uint64_t flags = cpu_save_interrupts();
-  KASSERT(preparation.pending == work);
-  /* A request may be closed, cut or time out while checked stop is draining.
-   * Stop uncertainty remains stronger than a late cancellation. */
+  KASSERT(preparation.pending == work && !preparation.discovery.collecting);
   enum call_status reason = wifi_scan_stop_reason(work);
   if (result != CALL_OUTCOME_UNKNOWN && reason != CALL_OK) result = reason;
+  if (result == CALL_OK && preparation.discovery.overflow) result = CALL_FILE_TOO_LARGE;
   preparation.pending = NULL;
   preparation.status.phy.last_status = result;
   preparation.status.phy.phase = WIFI_PHY_COMPLETE;
-  wifi_scan_finished(work, result, work->channels, NULL, 0);
+  wifi_scan_finished(work, result, work->channels,
+      result == CALL_OK ? preparation.discovery.records : NULL,
+      result == CALL_OK ? preparation.discovery.count : 0);
   cpu_restore_interrupts(flags);
+}
+
+static bool terminal_stop(const char *detail)
+{
+  preparation.stopping = true;
+  preparation.rfkill_live = false;
+  preparation.live = false;
+  rtl8922ae_discovery_stop(&preparation.discovery);
+  uint64_t flags = cpu_save_interrupts();
+  preparation.status.base.flags &= ~WIFI_READY;
+  preparation.status.base.allowed_channels = 0;
+  preparation.status.phy.phase = WIFI_PHY_STOPPING;
+  cpu_restore_interrupts(flags);
+  uint64_t deadline = task_deadline_after_ms(RTL8922AE_STOP_MS);
+  const char *stop_detail = "RTL8922AE stop unconfirmed; ownership retained";
+  if (preparation.status.phy.state & WIFI_PHY_MAC_CONFIGURED) {
+    (void)rtl8922ae_mac_quiesce(deadline, &stop_detail);
+  }
+  bool stopped = rtl8922ae_transport_stop(deadline, &stop_detail);
+  flags = cpu_save_interrupts();
+  preparation.status.phy.state |= stopped ? WIFI_PHY_STOP_CONFIRMED : WIFI_PHY_STOP_UNCERTAIN;
+  if (preparation.abort_status == CALL_OK || preparation.abort_status == CALL_UNAVAILABLE) {
+    failed(detail);
+  } else {
+    set_detail(detail);
+  }
+  if (!stopped) {
+    preparation.status.base.flags |= WIFI_FAILED;
+    if (preparation.abort_status != CALL_OK) set_detail(stop_detail);
+  }
+  cpu_restore_interrupts(flags);
+  return stopped;
+}
+
+static bool idle_receive(const char **detail)
+{
+  uint64_t flags = cpu_save_interrupts();
+  uint64_t observed = preparation.notifications;
+  cpu_restore_interrupts(flags);
+  if (!rtl8922ae_transport_poll()) {
+    *detail = "RTL8922AE idle receive transport failed";
+    return false;
+  }
+  if (!rfkill_current(detail)) return false;
+  flags = cpu_save_interrupts();
+  if (!preparation.pending && observed == preparation.notifications) {
+    struct task_wait *wait = task_wait_prepare();
+    preparation.worker_wait = wait;
+    task_wait_sleep_until(wait, rtl8922ae_deadline(UINT64_MAX, RTL8922AE_RFKILL_NS));
+    if (preparation.worker_wait == wait) preparation.worker_wait = NULL;
+  }
+  cpu_restore_interrupts(flags);
+  return true;
 }
 
 static void rtl8922ae_worker(void *argument)
 {
   (void)argument;
   KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
-  struct wifi_scan_work *work = preparation.pending;
-  KASSERT(work);
+  const char *detail = "RTL8922AE passive discovery failed";
+  for (;;) {
+    struct wifi_scan_work *work = preparation.pending;
+    if (!work) {
+      if (idle_receive(&detail)) continue;
+      preparation.abort_status = CALL_UNAVAILABLE;
+      bool stopped = terminal_stop(detail);
+      if (preparation.pending) {
+        finish_scan(preparation.pending, stopped ? CALL_UNAVAILABLE : CALL_OUTCOME_UNKNOWN);
+      }
+      break;
+    }
+    uint64_t flags = cpu_save_interrupts();
+    bool begin = wifi_scan_begin(work);
+    enum call_status reason = wifi_scan_stop_reason(work);
+    cpu_restore_interrupts(flags);
+    if (!begin || reason != CALL_OK) {
+      if (!preparation.live) {
+        flags = cpu_save_interrupts();
+        preparation.worker_active = false;
+        finish_scan(work, reason != CALL_OK ? reason : CALL_DENIED);
+        cpu_restore_interrupts(flags);
+        return;
+      }
+      finish_scan(work, reason != CALL_OK ? reason : CALL_DENIED);
+      continue;
+    }
+    preparation.stopping = false;
+    bool ready = preparation.live;
+    if (!ready) {
+      preparation.attempted = true;
+      flags = cpu_save_interrupts();
+      preparation.status.base.boot.state |= WIFI_BOOT_ATTEMPTED;
+      preparation.status.phy.phase = WIFI_PHY_FIRMWARE;
+      cpu_restore_interrupts(flags);
+      rtl8922ae_rfk_reset();
+      rtl8922ae_scan_reset();
+      ready = initialize_phy(work->deadline_ns, &detail) &&
+          rtl8922ae_mac_scan_prepare(work->deadline_ns, &detail) &&
+          rtl8922ae_scan_setup(preparation.board.mac, work->deadline_ns, &detail);
+    }
+    bool scanning = false, completed = false;
+    if (ready && rtl8922ae_transport_retire_receive(work->deadline_ns, &detail)) {
+      rtl8922ae_mac_scan_rx_sync(false);
+      rtl8922ae_phy_scan_edcca(true);
+      scanning = true;
+      ready = rtl8922ae_scan_refresh_cam(work->deadline_ns, &detail);
+    }
+    if (ready && scanning) {
+      rtl8922ae_discovery_reset(&preparation.discovery);
+      /* This cut stays on the already calibrated channel. Drain preceding RX
+       * before opening collection; no descriptor supplies a channel number. */
+      rtl8922ae_discovery_channel_start(&preparation.discovery, preparation.channel);
+      rtl8922ae_mac_scan_filter(true);
+      rtl8922ae_phy_scan_dig();
+      completed = rtl8922ae_scan_run(preparation.channel, work->deadline_ns, &detail);
+    }
+    /* CLOSE/CUT/deadline cannot cancel the independent firmware/RX retirement.
+     * A confirmed STOP can preserve a healthy context after cancellation, but
+     * it never erases an unconfirmed earlier command or failed END. */
+    preparation.stopping = true;
+    uint64_t cleanup = task_deadline_after_ms(RTL8922AE_STOP_MS);
+    const char *cleanup_detail = "RTL8922AE scan retirement unconfirmed";
+    bool retired = ready && rtl8922ae_scan_stop(cleanup, &cleanup_detail);
+    if (retired && rtl8922ae_scan_reusable()) {
+      if (scanning) {
+        rtl8922ae_mac_scan_filter(false);
+        retired = rtl8922ae_scan_refresh_cam(cleanup, &cleanup_detail);
+        rtl8922ae_phy_scan_edcca(false);
+        rtl8922ae_mac_scan_rx_sync(true);
+        rtl8922ae_phy_scan_dig();
+      }
+      retired = retired && rtl8922ae_transport_retire_receive(cleanup, &cleanup_detail);
+    } else {
+      retired = false;
+    }
+    rtl8922ae_discovery_stop(&preparation.discovery);
+    preparation.stopping = false;
+    /* rfkill observed after completion also prevents retaining an RF context. */
+    if (retired && !rfkill_current(&cleanup_detail)) {
+      preparation.abort_status = CALL_UNAVAILABLE;
+      retired = false;
+    }
+    if (!retired) {
+      if (completed && preparation.abort_status == CALL_OK) detail = cleanup_detail;
+      bool stopped = terminal_stop(detail);
+      enum call_status result = !stopped ? CALL_OUTCOME_UNKNOWN :
+          preparation.abort_status != CALL_OK ? preparation.abort_status : CALL_IO;
+      finish_scan(work, result);
+      break;
+    }
+    preparation.live = true;
+    flags = cpu_save_interrupts();
+    preparation.status.base.flags |= WIFI_READY;
+    preparation.status.base.allowed_channels = UINT32_C(1) << (preparation.channel - 1);
+    set_detail("RTL8922AE one-channel passive discovery; healthy context retained");
+    cpu_restore_interrupts(flags);
+    enum call_status result = preparation.abort_status != CALL_OK ? preparation.abort_status :
+        completed ? CALL_OK : CALL_IO;
+    finish_scan(work, result);
+  }
   uint64_t flags = cpu_save_interrupts();
-  bool begin = wifi_scan_begin(work);
-  enum call_status reason = wifi_scan_stop_reason(work);
+  preparation.worker_active = false;
   cpu_restore_interrupts(flags);
-  if (!begin || reason != CALL_OK || task_deadline_expired(work->deadline_ns)) {
-    finish_scan(work, reason != CALL_OK ? reason : !begin ? CALL_DENIED : CALL_TIMED_OUT);
-    return;
-  }
-  preparation.attempted = true;
-  flags = cpu_save_interrupts();
-  preparation.status.base.boot.state |= WIFI_BOOT_ATTEMPTED;
-  preparation.status.phy.phase = WIFI_PHY_FIRMWARE;
-  cpu_restore_interrupts(flags);
-  rtl8922ae_rfk_reset();
-  const char *detail = "RTL8922AE one-PHY preparation failed";
-  bool ready = initialize_phy(work->deadline_ns, &detail);
-  /* Cancellation and rfkill cannot prevent independent bounded cleanup. No
-   * new request can reuse this attempt's firmware, DMA or completion state. */
-  preparation.stopping = true;
-  preparation.rfkill_live = false;
-  phase(WIFI_PHY_STOPPING);
-  uint64_t stop_deadline = task_deadline_after_ms(RTL8922AE_STOP_MS);
-  const char *stop_detail = "RTL8922AE stop unconfirmed; ownership retained";
-  if (preparation.status.phy.state & WIFI_PHY_MAC_CONFIGURED) {
-    (void)rtl8922ae_mac_quiesce(stop_deadline, &stop_detail);
-  }
-  bool stopped = rtl8922ae_transport_stop(stop_deadline, &stop_detail);
-  enum call_status result = stopped ? preparation.abort_status : CALL_OUTCOME_UNKNOWN;
-  if (result == CALL_OK) result = CALL_UNAVAILABLE;
-  flags = cpu_save_interrupts();
-  preparation.status.phy.state |= stopped ? WIFI_PHY_STOP_CONFIRMED : WIFI_PHY_STOP_UNCERTAIN;
-  if (!ready) {
-    if (preparation.abort_status == CALL_OK) failed(detail);
-  }
-  if (!stopped) {
-    preparation.status.base.flags |= WIFI_FAILED;
-    /* Keep a primary startup refusal; stop uncertainty has its own state and
-     * OUTCOME_UNKNOWN result, even when cancellation initiated cleanup. */
-    if (ready || preparation.abort_status != CALL_OK) set_detail(stop_detail);
-  } else if (ready) {
-    set_detail("RTL8922AE PHY/calibration verified; checked stop; scan results not implemented");
-  }
-  cpu_restore_interrupts(flags);
-  finish_scan(work, result);
 }
 
 void rtl8922ae_prepare(const struct boot_info *boot)
@@ -501,7 +644,7 @@ void rtl8922ae_prepare(const struct boot_info *boot)
   }
   preparation.prepared = true;
   preparation.status.base.flags |= WIFI_PREPARED;
-  set_detail("RTL8922AE prepared; explicit SCAN required for one-PHY initialization");
+  set_detail("RTL8922AE prepared; explicit SCAN required for DBCC initialization");
 }
 
 void rtl8922ae_start(void)
@@ -514,12 +657,14 @@ void rtl8922ae_start(void)
 void rtl8922ae_interrupt(void)
 {
   rtl8922ae_transport_interrupt();
+  worker_notify();
 }
 
 void rtl8922ae_status(struct wifi_status_full_reply *status)
 {
   *status = preparation.status;
   rtl8922ae_transport_status(&status->base);
+  if (preparation.attempted) rtl8922ae_scan_status(&status->base);
   struct rtl8922ae_rfk_observations rfk;
   rtl8922ae_rfk_observe(&rfk);
   status->phy.rfk_completed = rfk.completed;
@@ -571,7 +716,8 @@ enum call_status rtl8922ae_scan(struct wifi_scan_work *work)
 {
   KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled());
   if (preparation.pending) return CALL_BUSY;
-  if (!preparation.started || !preparation.prepared || preparation.attempted ||
+  if (!preparation.started || !preparation.prepared ||
+      (preparation.attempted && !preparation.live) ||
       (preparation.status.base.flags & WIFI_FAILED)) return CALL_UNAVAILABLE;
   enum acpi_wifi_state captured = acpi_rtl_wifi_snapshot(&preparation.platform);
   preparation.sar = rtl8922ae_sar_envelope(&preparation.platform, captured);
@@ -583,32 +729,49 @@ enum call_status rtl8922ae_scan(struct wifi_scan_work *work)
   uint32_t admitted = preparation.rules.channels & preparation.status.base.policy_channels;
   if (!admitted) return CALL_UNAVAILABLE;
   if (work->channels & ~admitted) return CALL_BAD_REQUEST;
-  if (!work->channels) work->channels = admitted;
-  preparation.channel = 0;
+  /* One explicit channel is the qualified delivery boundary. Do not silently
+   * replace a caller's complete/default mask with a one-channel result. */
+  if (!work->channels || (work->channels & (work->channels - 1))) {
+    set_detail("RTL8922AE first scan slice requires one explicit channel");
+    return CALL_UNAVAILABLE;
+  }
+  uint8_t channel = 0;
   for (unsigned i = 0; i < WIFI_CHANNEL_24_COUNT; ++i) {
     /* No environment/PtP qualification exists in this cut. AUTO_BW/NO_HT40
      * do not restrict this fixed 20 MHz profile; every other restriction does. */
     uint32_t restrictive = preparation.rules.channel[i].flags &
         ~(WIFI_RULE_AUTO_BW | WIFI_RULE_NO_HT40);
     if ((work->channels & (UINT32_C(1) << i)) && !restrictive) {
-      preparation.channel = i + 1;
+      channel = i + 1;
       break;
     }
   }
-  if (!preparation.channel) {
+  if (!channel) {
     set_detail("RTL8922AE request has no qualified calibration channel");
     return CALL_UNAVAILABLE;
   }
+  if (preparation.live && channel != preparation.channel) {
+    set_detail("RTL8922AE retained scan context supports its calibrated channel only");
+    return CALL_UNAVAILABLE;
+  }
+  preparation.channel = channel;
   uint64_t maximum = task_deadline_after_ms(RTL8922AE_SCAN_MS);
   if (!work->deadline_ns || work->deadline_ns > maximum) work->deadline_ns = maximum;
   if (task_deadline_expired(work->deadline_ns)) return CALL_TIMED_OUT;
   preparation.abort_status = CALL_OK;
-  preparation.status.phy = (struct wifi_phy_facts){.channel = preparation.channel};
-  preparation.pending = work;
-  if (kernel_task_create(rtl8922ae_worker, NULL) != MM_OK) {
-    preparation.pending = NULL;
-    return CALL_NO_MEMORY;
+  if (!preparation.live) {
+    preparation.status.phy = (struct wifi_phy_facts){.channel = preparation.channel};
   }
+  preparation.status.phy.last_status = CALL_OK;
+  preparation.pending = work;
+  if (!preparation.worker_active) {
+    if (kernel_task_create(rtl8922ae_worker, NULL) != MM_OK) {
+      preparation.pending = NULL;
+      return CALL_NO_MEMORY;
+    }
+    preparation.worker_active = true;
+  }
+  worker_notify();
   return CALL_OK;
 }
 
