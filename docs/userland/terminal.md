@@ -83,7 +83,8 @@ With both positive, the first byte has no deadline, then an inter-byte timer
 resets after received input. TIME is in deciseconds. EOF/errors can return
 partial progress; deferred native errors remain visible to the next read.
 Existing descriptor try-read calls bypass MIN/TIME and return EAGAIN when empty;
-this adds no `fcntl` or O_NONBLOCK interface.
+`O_NONBLOCK` likewise bypasses MIN/TIME without changing saved timing; see
+[descriptor readiness](libc-readiness.md).
 
 TCSANOW applies immediately. TCSADRAIN and `tcdrain` fence the current output
 prefix through [native drain](terminal-sessions.md#output-drain-and-input-flush),

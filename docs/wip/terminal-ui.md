@@ -17,6 +17,12 @@ output-prefix drain and pending-input flush; Kilo retains its upstream calls.
 See the [implemented contract](../userland/terminal.md#raw-termios-subset). This assignment does not change the accepted
 native raw/cbreak or foreground-interruption contracts below.
 
+- [ ] Descriptor readiness (chronium, 2026-10-28): `poll`/`ppoll`,
+  `select`/`pselect`, shared `O_NONBLOCK`, directional native status-only
+  observation and the eligible port-adapter reductions. See the
+  [descriptor contract](../userland/libc-readiness.md). Signal-mask pointers
+  are accepted as no-ops only while no signals are delivered.
+
 **Proposed and parked, not accepted:** cooperative libc `signal`/`sigaction`
 compatibility at audited blocking-call safe points, including resize/SIGWINCH
 and optional foreground SIGINT. Consider it only when a real port needs it;
