@@ -100,12 +100,13 @@ bring-up one-attempt policy. An inherited powered MAC after a warm handoff is
 therefore the supported diagnosis; the capture does not identify what left it
 active. This attempt did not exercise the hopping implementation.
 
-**Proposal, not accepted:** when the initial MAC is active, use the reference
+**Accepted (chronium, 2026-10-28):** when the initial MAC is active, use the reference
 power-off sequence and one fresh power-on within the original request deadline;
-stop on failure, with no automatic firmware-download or scan retry. This changes
-the explicit startup limit and awaits chronium's decision before code or a new
-native packet. Raw results remain in the packet's `results/` directory. Native
-hopping qualification remains pending.
+stop on failure, with no automatic firmware-download or scan retry. The active
+state is checked again by the second power-on attempt, as in the reference;
+there is no loop. This replaces the explicit startup-wrapper deferral. Raw
+results remain in the old packet's `results/` directory. Native hopping and the
+new inherited-active startup handling remain pending qualification.
 
 ## Limits and next evidence
 

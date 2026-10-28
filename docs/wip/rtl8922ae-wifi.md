@@ -380,7 +380,13 @@ nonzero state. Power-off uses the reference handshakes without a final
 `0x03f0 == 0` requirement. DMA pre-deinit posts the reference sequence; terminal
 PCI reset supplies the DMA-halt proof. Request cancellation, rfkill, outer
 budgets and backing retention remain native lifetime constraints. The
-power-off/retry wrapper is still deferred under the one-attempt policy.
+startup active-MAC handling follows the reference caller (accepted, chronium,
+2026-10-28): if the initial WLMAC state is active, run the reference power-off
+sequence and try power-on once more, including its existing active-state check.
+Both steps use the original request deadline. An unconfirmed power-off or failed
+second power-on takes the existing terminal-stop path. This is a bounded startup
+handoff, not a firmware-download or SCAN retry; no further startup is admitted
+after failure in that boot.
 
 The exceptions protect specific admitted hardware effects: PCI/MSI/DMA
 ownership and bounds, suppression of autonomous packet TX, factory-board input

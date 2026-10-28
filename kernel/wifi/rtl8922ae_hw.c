@@ -166,11 +166,15 @@ uint8_t rtl8922ae_hw_cut(void)
 
 bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
 {
-  /* mac.c:rtw89_mac_power_switch rejects the active state only. This cut
-   * still makes one attempt, without the wrapper's power-off/retry. */
+  /* rtw89_mac_pwr_on powers off after the inner active-state refusal, then
+   * tries power-on once more. Keep both steps within the request deadline. */
   uint32_t power = rtl8922ae_read32(R_BE_IC_PWR_STATE);
   if (extract(B_BE_WLMAC_PWR_STE_MASK, power) == MAC_POWER_ACTIVE) {
-    return fail(detail, "RTL8922AE MAC already powered on");
+    if (!rtl8922ae_hw_power_off(deadline, detail)) return false;
+    power = rtl8922ae_read32(R_BE_IC_PWR_STATE);
+    if (extract(B_BE_WLMAC_PWR_STE_MASK, power) == MAC_POWER_ACTIVE) {
+      return fail(detail, "RTL8922AE MAC still powered on after startup power-off");
+    }
   }
 
   clear32(R_BE_SYS_PW_CTRL, B_BE_AFSM_WLSUS_EN |
