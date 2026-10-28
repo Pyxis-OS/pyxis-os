@@ -147,3 +147,12 @@ and deadlines are unchanged. Chronium authorized this candidate on2026-10-28;
 its native result is pending. The omission is proven, but code03's cause remains
 unproved until the isolated candidate is tested. Raw packet/offset comparisons
 and the corrected diagnostic interpretation are linked from PR#1528.
+
+The isolated OFLD_CFG candidate `6bb4793adf6a` was run natively on vela:
+START still received `raw=03 code=03 seq=15`, PHY`df`,14interrupts/28packets,
+confirmed stop/status19, preserved wired management and byte-exact PXE restore.
+The shifted sequence proves the added H2C was submitted, not that its ACK
+succeeded. Its DONE_ACK was discarded when it did not match the scan waiter.
+The next candidate retains that reply's raw return/sequence as a bounded status
+diagnostic; it adds no wait or admission condition and preserves the primary
+failure text when no suffix fits. No new ABI fields or log producer.

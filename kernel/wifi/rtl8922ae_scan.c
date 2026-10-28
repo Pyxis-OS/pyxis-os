@@ -6,6 +6,7 @@
  */
 #include <kernel/format.h>
 #include <kernel/memory.h>
+#include <kernel/string.h>
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_scan.h"
 #include "rtl8922ae_transport.h"
@@ -20,6 +21,7 @@
 #define H2C_CAM_UPDATE 0u
 #define H2C_JOIN_INFO 0u
 #define H2C_ROLE_MAINTAIN 4u
+#define H2C_OFLD_CFG 0x14u
 #define H2C_ADD_SCAN_CHANNEL 0x16u
 #define H2C_SCAN_BE 0x2cu
 #define H2C_MACID_PAUSE_SLEEP 0x28u
@@ -102,7 +104,9 @@
 static struct {
   bool ready, running, ended, end_ok, fault, uncertain;
   bool waiting, acked, ack_ok;
+  bool offload_acked;
   uint8_t wait_function, channel, ack_return, ack_sequence;
+  uint8_t offload_return, offload_sequence;
   uint8_t cam[CAM_COMMAND_BYTES];
 } scan;
 static char ack_detail[WIFI_DETAIL_BYTES];
@@ -127,6 +131,23 @@ static bool fail(const char **detail, const char *message)
 void rtl8922ae_scan_reset(void)
 {
   memset(&scan, 0, sizeof(scan));
+}
+
+void rtl8922ae_scan_status(struct wifi_status_reply *status)
+{
+  char suffix[40];
+  int bytes;
+  if (scan.offload_acked) {
+    bytes = sprintf(suffix, "; OFLD_ACK raw=%02x seq=%u",
+        (unsigned)scan.offload_return, (unsigned)scan.offload_sequence);
+  } else {
+    bytes = sprintf(suffix, "; OFLD_ACK unobserved");
+  }
+  size_t used = strnlen(status->detail, sizeof(status->detail));
+  /* Preserve the primary cause if its text leaves no room for the observation. */
+  if (used + (size_t)bytes < sizeof(status->detail)) {
+    memcpy(status->detail + used, suffix, (size_t)bytes + 1);
+  }
 }
 
 uint8_t rtl8922ae_scan_channel(void)
@@ -160,6 +181,12 @@ bool rtl8922ae_scan_receive(const void *data, size_t bytes)
     uint32_t ack = get32(packet + C2H_HEADER_BYTES);
     unsigned ack_category = ack & 3u, ack_class = ack >> 2 & 63u;
     unsigned ack_function = ack >> 8 & 255u;
+    if (ack_category == H2C_CATEGORY_MAC && ack_class == H2C_CLASS_OFFLOAD &&
+        ack_function == H2C_OFLD_CFG) {
+      scan.offload_return = ack >> 16;
+      scan.offload_sequence = ack >> 24;
+      scan.offload_acked = true;
+    }
     if (ack_category != H2C_CATEGORY_MAC || ack_class != H2C_CLASS_OFFLOAD ||
         !scan.waiting || ack_function != scan.wait_function) return true;
     scan.ack_return = ack >> 16;

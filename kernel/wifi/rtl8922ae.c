@@ -655,6 +655,7 @@ void rtl8922ae_status(struct wifi_status_full_reply *status)
 {
   *status = preparation.status;
   rtl8922ae_transport_status(&status->base);
+  if (preparation.attempted) rtl8922ae_scan_status(&status->base);
   struct rtl8922ae_rfk_observations rfk;
   rtl8922ae_rfk_observe(&rfk);
   status->phy.rfk_completed = rfk.completed;
