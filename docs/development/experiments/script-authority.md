@@ -63,5 +63,5 @@ its omission-on-unavailable contract.
 Small raw results, commands and executable hashes are retained under
 `/shared/present/script-authority/qualification/`; working roots, SDKs and images
 stay on the VM local disk. The [shell reference](../../userland/shell.md#script-runtime-grants)
-defines the implemented behaviour; [Lua inheritance](../../wip/script-authority.md#follow-up)
-remains a separate follow-up.
+defines the implemented behaviour; [Lua inheritance](../../userland/script-authority.md)
+is recorded separately with its qualification.

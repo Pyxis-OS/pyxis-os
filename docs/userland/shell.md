@@ -1001,20 +1001,16 @@ shell, never a basename, suffix, manifest ID or rebound `boot` name. Other
 interpreters keep their ordinary launch rules. A rootless shell cannot recover
 an omitted trusted root, source or ownership role by re-entering its held image.
 
-A script that holds `child_launcher` first creates its own subgroup of it and
-keeps the only CONTROL grant. It launches its foreground commands, and gives
-them as their `launcher` and `child_launcher`, through that subgroup's bound
-launcher, so everything they start is a member of the subgroup. When the script
-ends (success, failure, `exit` or a `session` handoff), the shell terminates the
-subgroup and waits for its completion before it exits. If the script is
-terminated instead, for instance by Ctrl+C at the interactive prompt, closing its
-CONTROL requests the same subtree stop. A nested script creates its own subgroup
-inside the caller's, so the whole tree stops with the outermost script. A
-`session` successor and background commands and services are launched outside
-the subgroup and outlive the script; a successor keeps the shell's original
-`child_launcher`. A `$(...)` capture in a script runs in a further subgroup of the
-script's. Failure to create the subgroup, such as reaching the group depth or
-count bound, fails the script before its first command.
+A handed script with `child_launcher` owns a foreground subgroup and keeps its
+CONTROL. Its foreground commands use the bound launcher; completion, failure or
+`exit` stops and waits for that subgroup. Background/services and successors use
+the original permitted launcher outside it. Explicit `shell FILE`/`shell -c`
+confines those launches under the positional script owner too. Interactive mode
+has no script-wide group. An outer owner may still retire either kind of child;
+there is no unconditional detached survival. See the shared
+[script lifetime table](script-authority.md#lifetime), also used by Lua including
+`os.exit`. Native group admission and final-CONTROL cleanup keep their existing
+bounds. Remote waiting successors propagate their result before caller exit.
 
 ### Script arguments
 
@@ -1071,8 +1067,9 @@ A script is not a sandbox; use a restricted space when a sandbox is needed.
 For example, a builtin such as `reboot`
 works when its shell holds the required authority. An explicitly reduced native
 grant list or bundle launch stays reduced; neither a script nor its descendants
-can recover omitted sources. Ordinary native children and Lua interpreters keep
-their current declaration/profile rules. The shell bundle declares optional JIT,
+can recover omitted sources. Ordinary native children keep their declaration/profile rules. The standalone
+Lua interpreters use the same held-source inventory and scope routing; embeddings
+and captured leaf jobs remain separate. The shell bundle declares optional JIT,
 threads and random, so a declared JIT child works from a script whenever the same
 child works from that script's launching shell.
 

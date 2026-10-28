@@ -14,7 +14,10 @@ handoffs preserve that source. Exact held-shell script re-entry also retains it
 in foreground, pipeline, background and capture positions, so a declaring child
 can receive the same JIT authority as when launched directly from that shell.
 The shell bundle declares JIT optionally and remains bounded by its manifest.
-Ordinary native children, Lua and libuv keep their explicit declaration rules;
+Standalone Lua 5.5/5.1 requests JIT optionally and retains its source through
+exact held interpreter continuation. Child bundles still declare `jit/manage`;
+embeddings and captured leaf jobs gain no inventory. Ordinary native children
+and libuv outside that CLI context keep their explicit declaration rules;
 an environment alias does not make JIT an ordinary inherited grant. See
 [script runtime grants](../userland/shell.md#script-runtime-grants).
 

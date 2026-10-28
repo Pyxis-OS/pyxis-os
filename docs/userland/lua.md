@@ -25,37 +25,29 @@ arguments. `loadfile` and `dofile` require explicit filenames and use those same
 path rules. Script/chunk return values are discarded. File, syntax and runtime
 errors return a nonzero process status; runtime errors include tracebacks.
 
-With no arguments, Lua opens the libterm REPL. Expressions print their results,
-globals survive across chunks, and locals belong to the current chunk. Lua's
-parser determines when a statement needs another line, shown by the `>> `
-prompt. Language errors return to the primary prompt. Ctrl+C discards the whole
-pending chunk; Ctrl+D on an empty primary or continuation line exits. The parent shell handles Ctrl+C during an executing chunk by terminating
-Lua; Lua has no cooperative signal hook.
+With no script or expression, terminal stdin selects upstream's plain stdio
+REPL; redirected stdin executes as a script. `-` explicitly selects stdin.
+The upstream continuation parser and prompts remain; no libterm editor, history,
+custom line limit or cooperative signal cancellation is provided.
 
-The line editor supports insertion, deletion and cursor movement. Each input
-line is limited to 1023 bytes and the visible terminal capacity. Input loss or
-line-limit rejection discards the pending chunk. Multiline source grows on
-Lua's heap; allocation and terminal failures exit nonzero. Prompts are fixed,
-and history is not implemented.
+Direct native shebang launches consume the handed READ FILE. The diagnostic
+filename is not reopened. `loadfile` and `dofile`, including their stdin forms,
+keep ordinary upstream loading semantics.
 
 ## Libraries and runtime
 
-The interpreter opens base, coroutine, table, string, UTF-8, `io`, `os` and
-pure-Lua `package`, plus the native `pyxis` table. It keeps Lua's 64-bit integers
+The interpreter opens the upstream standard libraries, including debug and math,
+plus the native `pyxis` table. It keeps Lua's 64-bit integers
 and double-precision numbers. Library initialization, loading and execution are
 protected against Lua errors. Decimal point, calendar names and string collation
 use the fixed C locale.
 
-`require` checks preloaded modules, then Lua files. `LUA_PATH`, when present,
-is the exact semicolon-separated path, including an empty value; versioned
-variables and `;;` default expansion are not used. Otherwise the search is
-`?.lua` and `?/init.lua` in the script's directory, followed by
-`boot://share/lua/?.lua` and `boot://share/lua/?/init.lua`. Dots in module names
-become `/`. For `-e` and the REPL, the first directory is the inherited cwd.
-A relative script directory is resolved against that same cwd, without changing
-it. Scripts may replace `package.path` or register their own preloaded modules.
-`package.loaded`, `package.preload`, `package.searchers` and `package.searchpath`
-retain normal Lua behavior; there are only preload and Lua-file searchers.
+`require` uses upstream preload and file searchers. `LUA_PATH_5_5` takes
+precedence over `LUA_PATH`; `;;` inserts
+`?.lua;?/init.lua;boot://share/lua/?.lua;boot://share/lua/?/init.lua`.
+Relative templates use inherited cwd rather than the script directory.
+`LUA_INIT_5_5`/`LUA_INIT` run startup file or text chunks; `-E` suppresses them.
+C-module loading reports unsupported; no dynamic modules are loaded.
 
 `io` operates on real libc file, pipe and console streams. Text and binary modes
 are identical. Reads, writes, seeking, flush, close, iterators and one-byte
@@ -84,11 +76,8 @@ filesystem and caller's authority permit it. Replacement requires matching
 kinds and an empty directory victim; directory moves require RAM or writable
 npfs. See [rename paths](paths.md#rename-paths).
 
-The following remain absent: `file:setvbuf`, `io.popen`, `os.execute`, `os.clock`,
-`os.setlocale`, `package.loadlib`, C-module searchers, debug and the full math
-library. Stdin scripts and direct shebang handoffs are unsupported: the latter
-must consume the launcher's existing script capability rather than reopen its
-diagnostic name. No environment startup chunks or dynamic modules are loaded.
+`io.popen`, `os.execute` and `os.clock` remain unsupported. Locale selection
+uses libc's real fixed-C locale. Standard file buffering uses libc.
 
 ## Native helpers
 
@@ -108,8 +97,9 @@ caller's process environment: exported TEXT, exported directory/provider CAPs
 and the allowed ordinary-command capabilities, with the existing attenuation.
 Plain children omit the parent's `app` directory entry. Bundle children receive
 their declared capabilities and read-only app/resource directories. Private
-controllers, configured bundle-source inventory and `job_work` are not inherited
-implicitly. Captures retain authority only through preparation/admission and are
+controllers and `job_work` are not inherited implicitly. Exact held interpreter
+continuation preserves the standalone CLI source inventory, including configured
+sources and optional JIT/threads, under [script authority](script-authority.md). Captures retain authority only through preparation/admission and are
 released before the child wait. The required `launcher` is
 LAUNCH only, supplied to foreground commands only in an opted-in
 [space](init.md#boot-configuration). Missing authority raises a Lua error.
@@ -120,9 +110,11 @@ append state, pushback and buffered pipe bytes remain private to Lua; child file
 streams start at offset zero. Named terminal input is separate from a piped
 stdin and never carries interrupt rights. Launch, wait, fault and termination
 raise errors; normal exit returns the actual signed integer status, including
-nonzero values. There is no descendant supervision: shell Ctrl+C stops Lua,
-and a process Lua launched may outlive it. Remote execution-group lifetime
-still applies to group members.
+nonzero values. Child routing and exit cleanup follow the [same lifetime table as shell
+scripts](script-authority.md#lifetime), including `os.exit`. Handed scripts own
+a foreground subgroup; explicit filename/`-e`/stdin scripts own their children
+under one script scope. An enclosing owner can still stop background children.
+Embeddings gain no runtime inventory or scope just by linking Lua or luv.
 
 The capture API below keeps the ordinary `pyxis.run` contract above.
 
@@ -253,10 +245,16 @@ an error; no Lua state or borrowed Lua strings escape. These are trusted boot
 files with no new execution-time or heap quota. There is no schema builder,
 native resource binding, live reload or module search framework.
 
-[Later Lua work](../wip/later-os-directions.md#lua-follow-ups) records the
-remaining library, stdin and shebang work.
+See [script authority](script-authority.md) for launcher lifetime and source
+selection, and the [port notes](../../ports/lua/README.md) for the upstream CLI profile.
 
 ## Validation
+
+Current standalone source/lifetime checks are in the
+[Lua launcher qualification](../development/experiments/lua-script-authority.md).
+The following records the earlier runtime profile, before the upstream 5.5 CLI
+and full library closure; its historical omissions do not describe today's API.
+
 
 Manual QEMU checks used nested KVM, four CPUs, 512 MiB, OVMF, virtio-net/rng and
 TCP remote terminals. A private Lua script required a sibling module and a boot
