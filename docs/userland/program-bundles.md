@@ -97,8 +97,9 @@ Explicit leaf job profiles may withhold it.
 The launcher preserves explicit streams and cwd, selected exported environment entries
 and declared directory grants. `pipe/create` is an ordinary manifest request available to
 foreground bundles when their supplying shell holds the pipe service; plain
-foreground programs still receive no pipe-creation grant, except a script run by
-`boot://init-shell.pxe`, which needs it for [pipelines](shell.md#script-mode). `clipboard_local` and
+foreground programs still receive no pipe-creation grant. Exact held-shell scripts
+retain their launching shell's source inventory, including available PIPE CREATE,
+under the [script rules](shell.md#script-runtime-grants). `clipboard_local` and
 `clipboard_shared` (owner decision, 2026-10-13) follow the plain-program rule: the
 shell supplies them only on foreground and session launches, and only the stores it
 holds, so a game declaring them optionally still runs without them and its
@@ -163,9 +164,11 @@ Programs using libc allocation request `memory/manage` under its documented
 
 Generated-code consumers separately declare `jit/manage`. Trusted launchers have
 a private source only when their space opts into `jit = true`; no shipped space
-does. Raw children do not inherit that source, including aliases captured from
-the environment. Explicit native grants/transfers remain possible and apply to
-the receiving process. See [JIT memory](../interfaces/jit.md) for ownership,
+does. Exact held-shell scripts retain an already-held JIT source and offer it to
+declaring children in every command position. A shell bundle still receives only
+its declared grants, including optional JIT. Ordinary native children do not
+inherit JIT through environment aliases. Explicit native grants/transfers remain
+possible and apply to the receiving process. See [JIT memory](../interfaces/jit.md) for ownership,
 permission transitions, quotas and caller code-lifetime obligations.
 
 Unknown classes/rights, system-only setup, space-factory and raw-device requests
@@ -235,12 +238,16 @@ use an owned, waited group; arbitrary declaring bundles without an owned scope
 retain the tree until pane/session cleanup or reboot.
 Revisit consent and narrowing when grants stop being grant-all.
 
-Client `job_work` leaves remain available to session launches; only fresh
-`job_provisioner` delegation is foreground-only. Preparation uses the separately
-held ancestor and never copies an existing context from ordinary inventory. If both roles are declared, client work and
-provisioning use distinct trees. Neither role creates absent authority or
-becomes an exported root. The foreground exact held-shell shebang path uses the
-same fresh subtree rule, without reopening mutable interpreter names.
+Client `job_work` leaves remain available to session launches. Ordinary bundle
+`job_provisioner` delegation remains foreground-only; exact held-shell scripts
+retain their available provisioning source in foreground, pipeline, background
+and capture positions, using a fresh confined subtree under the existing
+enclosing owner. Interpreter selection uses the retained native FILE, without
+reopening mutable interpreter names. Preparation uses the separately held ancestor
+and never copies an existing client context from ordinary inventory. If both
+roles are declared, client work and provisioning use distinct trees. Neither role
+creates absent authority or becomes an exported root. A client leaf cannot
+become a provisioner, and a retention account cannot become a factory.
 
 Ownership is prepared before directory creation and client admission. A retained
 WAIT observer allows the creator to clean a leaf only after confirmed retirement;

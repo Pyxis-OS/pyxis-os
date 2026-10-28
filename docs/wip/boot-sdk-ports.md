@@ -111,6 +111,10 @@ blocked on hardware semantics, not on evidence;
 subset are delivered with recorded QEMU qualification. Full std profile, Rust
 workers and native hardware qualification remain open; hosted Rust remains later.
 
+[Script launch authority](script-authority.md): exact held-shell source inheritance
+is implemented (chronium, 2026-10-28), with QEMU qualification and linked delivery
+PRs. Equivalent Pyxis Lua inheritance remains an unassigned follow-up.
+
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
 epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue
 kept, and the always-drain fix (#1008) is merged; the matched TX A/B waits for
