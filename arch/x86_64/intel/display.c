@@ -127,8 +127,12 @@ static bool map_page(uint32_t offset, bool writable, uintptr_t *window)
     /* Keep a possible mapping for the ordinary unmap path. No MMIO is read. */
     struct page_translation page;
     if (vm_query(vm_kernel_space(), *window, &page) != MM_OK) {
-      vm_release(vm_kernel_space(), *window, PAGE_SIZE);
-      *window = 0;
+      if (vm_release(vm_kernel_space(), *window, PAGE_SIZE) == MM_OK) {
+        *window = 0;
+      } else {
+        fenced = true;
+        kerror("intel-display: temporary reservation retained until reboot\n");
+      }
     }
     return false;
   }
@@ -728,9 +732,9 @@ void intel_display_prepare(const struct boot_info *boot)
   bool stable = false;
   if (!fenced && snapshot(&first_state)) {
     inspect_gtt();
-    if (holds_stable()) {
+    if (!fenced && holds_stable()) {
       observe_timing();
-    } else {
+    } else if (!fenced) {
       fence_access("inherited state changed before timing");
     }
     if (!fenced && snapshot(&second_state)) {
