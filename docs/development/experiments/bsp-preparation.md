@@ -268,6 +268,50 @@ discounts only the executing user preparation actor and awaits matched
 qualification. Fixed RAM owners and confirmed capture retirement
 do not inherently require placing ordinary IPC peers on different CPUs.
 
+### Accepted placement correction — QEMU, native pending
+
+At clean signed `4c4b6625e398874309402f49471f34d130600c39`, initial
+process/thread placement discounts only the executing user preparation caller's
+one running contribution. Both candidate load and sibling-idleness use that
+view. Actual scheduler accounting, queued batch children, affinity and idle
+stealing are unchanged. Boot, fixed-worker and normal scheduler rebalancing
+receive no discount. No foreign CPU's current-task pointer is read, and no IPC
+guard is removed. Chronium accepted this scoring rule on 2026-10-28.
+
+Ordinary kernel build and exact CI4799 pass. B ELF SHA:
+`91d700ea6703a73228bcb2e438ec3f754779cdfb6cb30c3d2d1471673263c0e8`.
+A remains main `79ccea04f`, with the same ELF/archive/config/builder as above.
+Normal `{1,3}` allowance, four-vCPU nested KVM; one discarded warmup per variant,
+then three interleaved fresh A/B pairs, reversing order in pair 2. Existing
+commands/counts/FINAL drainage pass. No debugger during timing. Summed 100-pass
+guest intervals, milliseconds, median (range):
+
+| IPC interval | A | Corrected B |
+| --- | --- | --- |
+| CALL64 completion | 286.930 (176.334–849.457) | 144.261 (143.010–160.912) |
+| CALL4096 completion | 338.826 (189.170–500.547) | 219.540 (170.749–221.849) |
+| SEND64 completion | 100.080 (77.989–108.352) | 79.460 (68.231–92.587) |
+| SEND4096 completion | 116.562 (95.863–128.003) | 84.933 (77.624–111.454) |
+| SEND64 admission | 10.913 (8.715–11.709) | 8.871 (7.504–10.617) |
+| SEND4096 admission | 19.884 (17.002–23.217) | 16.019 (13.380–20.991) |
+
+The old repeated threefold CALL penalty is absent; these medians are not a
+claimed large speedup. A has substantial variation and a CALL64 outlier; the
+first pair's CALL4096 and SEND completion intervals are higher in B. Host
+one-minute load was 1.13–2.57. Single additional full-cohort observations give
+1,024 target launches A1522.999/B1142.873 ms and pages A18.633/B18.275 ms;
+they do not replace a repeated native comparison. Both full existing cohorts,
+including thread/TLS/Go and Neovim, and both actual sealed-packet CLI collectors
+pass with confirmed final drainage. Separate GDB placement observation is untimed.
+
+Small reports and raw evidence:
+`/shared/present/bsp-removal/task4/ipc-after-discount/`. The new sealed pair
+`/shared/present/bsp-removal/task4/native-placement-fix/` preserves A and workload
+bytes, fixes B at the exact hash above, and keeps the six-boot A1/B1/A2/B2/A3/B3
+shape and identical `resolution: 2880x1800x32`. It performs no staging itself.
+Native IPC at main's level with the launch gain retained is still the merge
+requirement. No corrected native result is claimed here.
+
 ## Storage and remaining limits
 
 Artifact type inspection: task 840 bytes, process 432 bytes (baseline 392),

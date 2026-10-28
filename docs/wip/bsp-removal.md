@@ -272,10 +272,10 @@ may still serialize the small kernel-range preparation/retirement portions.
   New deliberate fault/uncertain-ACK scenarios still need separate scope; ordinary
   successful ACK checks do not qualify the timeout/quarantine path.
 
-The least-loaded placement code is unchanged, but its inputs changed: caller
+In the original candidate the placement code was unchanged, but its inputs changed: caller
 preparation counts as running load on its AP, unlike an old caller parked for
 BSP preparation. It consequently selects a different child CPU, so task 4 has
-not preserved decision 11's placement behavior. Native launch improves 11.8%
+not preserved decision 11's placement behavior. That candidate's native launch improves 11.8%
 and pages are flat, but CALL64/4096 completion rises 32.6%/45.4%; SEND completion
 rises too. That trade-off is not accepted.
 
@@ -297,8 +297,13 @@ to its caller CPU. This is a narrowly scoped scoring rule;
 it adds no per-message check, placement reservation or retained load snapshot.
 It favors the existing parent-CPU tie-break when other allowed CPUs are equally
 idle; it does not reproduce every historical destination under arbitrary CPU0
-or SMT load. An independently runnable child can still be stolen by an idle CPU;
-QEMU and native remeasurement must establish whether the regression is fixed.
+or SMT load. An independently runnable child can still be stolen by an idle CPU.
+The implementation and both full QEMU packet collectors pass at `4c4b6625e`;
+three normal-affinity A/B pairs no longer reproduce the old threefold CALL
+penalty, with substantial A-side variation. The new sealed native six-boot
+pair is `/shared/present/bsp-removal/task4/native-placement-fix/`.
+Native IPC must reach main's level and retain the launch gain before merge;
+QEMU improvement and green CI do not satisfy that gate.
 
 Keep the VM, endpoint and task-lifetime guards protecting live operations.
 
