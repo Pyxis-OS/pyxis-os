@@ -149,3 +149,161 @@ Additional pinned references:
   `intel_de_read` takes/releases the DMC wakelock.
 - [Power-well transitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display_power_well.c):
   `gen9_set_dc_state` explains why disabling DC requires an MMIO write.
+
+## Powered-state access — proposed, awaiting chronium
+
+The native identity narrows the reference to display 30.0, raw step 4 (B0). It does not prove
+which DMC firmware is running, whether its wakelock protocol is initialized,
+or which display domains are held. The next slice needs a limited exception
+to the original no-power-writes boundary. **None of the writes below are
+implemented or authorized yet.**
+
+### Reference-backed primitives and their limits
+
+The pinned Xe driver calls the shared i915 display probe. In
+`intel_display_driver_probe_noirq`, power-domain hardware initialization occurs
+before `intel_dmc_init`. For this generation, `icl_display_core_init` starts
+with `gen9_set_dc_state(DC_STATE_DISABLE)`. Its documented hardware guarantee
+is that the disabling MMIO write completes after the affected resources and
+register state have been restored. `gen9_write_dc_state` contains the bounded
+rewrite/readback workaround. DC3CO has an additional exit sequence and 200 µs
+settling interval. This provides an early admission primitive; it does not
+justify transplanting Linux's complete clock/PHY/DBUF initialization.
+The reference's combo-PHY recovery path is inactive for Panther Lake; its
+display-30.0 DC5/DC6 PSR workaround covers A0 up to, but excluding, B0.
+Keep the initial powered-access profile scoped to the observed B0 device;
+other steppings need their own prerequisite/erratum check.
+
+A DMC wakelock is not a replacement for pipe-domain ownership. Linux enables
+its wakelock protocol before requesting it, waits at most 5 ms for ACK, and
+still holds the relevant domain and parents. Its source explicitly leaves
+request-before-enable safety unresolved. Raw wakelock control access is an
+intentional bootstrap path, so the broad DMC register range alone is not a
+proof that the control cannot be accessed. However, neither GMD identity nor
+an idle request bit proves inherited protocol initialization. Blindly asserting
+REQ and hoping for ACK is not the recommended next step.
+
+Linux's `hsw_power_well_sync_hw` copies an existing BIOS request into the DRIVER
+request register before removing the BIOS request. A well stays on while any
+requester holds it. The proposal borrows the additive hold but **omits BIOS
+request removal**. It does not run the full enable/disable sequence for an
+otherwise gated well, whose additional IRQ/VGA work is outside this slice.
+The Xe3 hierarchy is PG1 → PGA/PGB/PG2, PG2 → PGC/PGD; PG0 has no software
+request knob and PW1 is HW/DMC-managed. Domain and fuse checks must follow
+that map, not an invented BIOS-request requirement for every ancestor.
+
+### Decision 1 — a temporary DC0 admission window
+
+**Recommended default:** opt-in, boot-only inventory on the qualified
+`8086:b0a0` / display-30.0 B0 device may save the inherited DC target and use the
+reference's early DC-disable primitive at `DC_STATE_EN` (`0x45504`). Keep DC0
+through the entire snapshot, then restore only the inherited target fields.
+Preserve unrelated register bits through masked operations. Follow the
+reference's rewrite/readback bounds and DC3CO exit handling. Admit the known
+targets disabled, DC5, DC6 or DC3CO; refuse DC9, mixed/reserved targets or an
+unqualified profile before the first write. The target-field mask is
+`0x4000000b`. DC3CO exit separately clears status bit 29 and waits 200–210 µs;
+that status bit is never saved/restored as a target. Successful restoration
+restores sleep eligibility, not historical residency, counters or an identical
+instantaneous power state.
+
+This temporarily changes sleep eligibility; it does not set a pixel clock,
+power up a new output, retrain a link or change the mode. Do not load/replace
+DMC firmware, set `DMC_WAKELOCK_CFG`, use an unqualified wakelock request, or
+perform GT forcewake. No DMC handshake is required for this early DC0 path.
+The alternative is to keep identity-only inventory until a larger Intel
+power/DMC ownership implementation is authorized.
+
+### Decision 2 — retain only already-enabled display resources
+
+**Recommended default:** under that window, serialize a single kernel inventory
+owner before AP startup, display initialization and any other Intel register
+writer. Require the existing PCI D0/decode/BAR identity and reject an endpoint
+already owned by another driver. Temporarily add only missing DRIVER requests
+for the already-enabled BIOS-held wells needed by a candidate pipe and its
+parents, following the additive part of Linux's handoff. Preserve BIOS, KVMR,
+DEBUG and pre-existing DRIVER requests. Treat HW/DMC-managed ancestors by their
+reference rules and verify the relevant state/fuse acknowledgements. Keep an
+explicit journal of request bits actually added by this operation.
+
+The permitted additional write location is `HSW_PWR_WELL_CTL2` (`0x45404`),
+limited to the qualified PG1/PG2/PGA/PGB/PGC/PGD request fields and only where
+the reference's parent/admission conditions hold. An off, unqualified or
+unretainable domain is skipped; never enable an inactive pipe just to read it.
+A sampled status bit without a retained lifetime is insufficient.
+
+Read pipe/transcoder/plane/cursor/scaler state only under those lifetimes.
+Keep all other MMIO mappings read-only. GGTT reads use Xe's separate raw-PTE
+read path, under stable PCI/MMIO lifetime, bounded to the GOP and admitted
+surface extents; they do not authorize PTE allocation, writes or invalidation.
+Report raw unsupported tiling/DPT/format instead of guessing translation.
+Repeated snapshots detect changing configuration and invalidate the affected
+interpretation; zero PTEs never establish unused ownership.
+
+Do not disable PSR/panel replay to manufacture moving timing. Use one bounded
+40 ms observation window, following Xe's early frame-timestamp wait. Static
+fields may reflect self-refresh: report timing unproven without treating that
+as a dead display. Every report includes the actual GOP/mode and stable field
+values; neither the 1080p PXE capture nor Linux's 120 Hz establishes NVMe-boot
+timing. Mode/plane/GGTT programming remains a later decision.
+
+### Decision 3 — bounded cleanup, explicit uncertain state
+
+**Recommended default:** use the reference's bounded DC rewrite/readback and
+1 ms power-state/fuse waits. Acquisition failure authorizes no dependent
+register reads. On success, release only our added request bits in reverse
+dependency order while the original inherited holds are still established;
+then restore the saved DC target with the reference's bounded confirmation.
+Do not restore whole stale registers or clear somebody else's request.
+
+On an uncertain transition, lost inherited hold or unconfirmed cleanup, stop
+further probe mutations, retain any still-owned holds and the small access
+record/mappings until reboot, and report `access cleanup unconfirmed`.
+Report only holds/transitions positively confirmed; a failed DC write is
+`state unknown`, not a claim that DC0 is retained. Do not guess restoration,
+retry the inventory, take a late acknowledgement as
+permission to release, or panic routinely. Existing firmware-framebuffer
+presentation continues; a retained hold/DC0 state can cost power until reboot.
+No scanout backing is allocated by this slice. This failure policy is proposed
+Pyxis ownership policy, not a claim that Linux uses it. The software wait
+bounds do not make a CPU MMIO transaction itself interruptible.
+
+### Qualification after acceptance
+
+- Audit the exact allowed writes and matched acquire/release journal; QEMU
+  checks option-off/nonmatching paths but cannot qualify Intel power handling.
+- One hands-free vela capture through Remote/UDP with before/after DC target,
+  request masks, acknowledgements, skipped-domain reasons, raw layout, bounded
+  PTE summaries and timing observations. Every failure remains a visible
+  unavailable/uncertain result, not an inferred successful inventory.
+- Request 2880×1800×32 with the verified Limine per-entry option; record the
+  actual returned GOP. Keep the prior 1080p capture separately labelled.
+  No new kernel build is needed merely to request that bootloader mode.
+
+**What chronium can do after this slice:** inspect a source-scoped, power-held
+snapshot and decide the exact GGTT/plane write and retirement contract. It
+still does not remove tearing or take full modesetting ownership.
+
+Additional pinned Linux references:
+
+- [Shared display probe ordering](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display_driver.c):
+  `intel_display_driver_probe_noirq`, power admission before DMC initialization.
+- [Power initialization and domain lifetimes](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display_power.c):
+  `icl_display_core_init`, `intel_power_domains_init_hw`,
+  `intel_display_power_get_if_enabled`.
+- [Xe3 power-domain hierarchy](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display_power_map.c):
+  `xe3lpd_power_wells`, HW/DMC-managed PW1.
+- [DC admission, bounded waits and additive request handoff](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display_power_well.c):
+  `gen9_set_dc_state`, `gen9_write_dc_state`, `tgl_disable_dc3co`,
+  `hsw_power_well_sync_hw`, `hsw_wait_for_power_well_enable`.
+- [Wakelock initialization and its ordering limit](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_dmc_wl.c):
+  `intel_dmc_wl_enable`, `__intel_dmc_wl_take`.
+- [Xe early timing observation](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/display/xe_plane_initial.c):
+  `intel_plane_initial_vblank_wait`.
+- [Limine v12.9.3 configuration](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/CONFIG.md):
+  protocol-specific `resolution`; unsupported modes can fall back.
+
+The profile-specific prerequisite references are
+[`intel_phy_is_combo`](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display.c)
+and
+[`intel_psr_notify_dc5_dc6`](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_psr.c).
