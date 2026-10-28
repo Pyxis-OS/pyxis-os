@@ -74,4 +74,5 @@ PPM. It has no display grant and declares optional JIT. See the original
 [off-screen qualification](experiments/mesa-softpipe.md) and
 [SDL/swap qualification](experiments/sdl2-osmesa.md). These original records cover softpipe. Current llvmpipe QEMU triangle checks
 cover default/zero/four workers, absent/forced JIT and AVX-off selection; native
-game comparison remains pending.
+game comparison is recorded in the
+[llvmpipe qualification](experiments/llvmpipe.md#native-vela-complete-stack-comparison-2026-10-28).
