@@ -80,8 +80,9 @@ backends remain unsupported. Standard module registration does not qualify every
 module: the local ACME server/PKI, Tailscale integration, external key stores,
 subprocesses, watch/reload and background service management are outside this
 profile. Dependency platform adapters return honest unsupported errors where
-native equivalents are absent. Readline's raw/password/suspension operations and
-Smallstep's certificate-transparency X.509 system-root lookup are unsupported;
+native equivalents are absent. Readline raw-state operations use Go's native
+terminal snapshots. Password input, suspension and resize callbacks remain
+unsupported, as does Smallstep's certificate-transparency X.509 system-root lookup;
 Go's ordinary `crypto/x509` still uses the pinned archive CA bundle. HTTP/3
 dependencies still compile; there is no
 upstream HTTP/3 compile-out tag and QUIC service is not qualified here. The
