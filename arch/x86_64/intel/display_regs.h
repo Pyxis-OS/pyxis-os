@@ -34,6 +34,7 @@
 #define PSR2_STATUS(p) (TRANS_BASE(p) + 0x940u)
 #define PLANE_BASE(p, n) (0x70180u + PIPE_STEP * (p) + 0x100u * (n))
 #define PLANE_ENABLE (1u << 31)
+#define PLANE_DECRYPT (1u << 2)
 #define PLANE_SURFACE_MASK 0xfffff000u
 #define PLANE_FORMAT_MASK 0x0f800000u
 #define PLANE_FORMAT_8888 0x04000000u

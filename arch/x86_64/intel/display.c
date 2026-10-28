@@ -322,7 +322,6 @@ static bool snapshot(struct display_state *s)
         for (unsigned n = 0; n < 6; ++n) {
           pipe->timing[n] = read_register(TRANS_BASE(p) + 4 * n);
         }
-        pipe->source = read_register(PIPE_SOURCE(p));
         pipe->ddi = read_register(TRANS_DDI(p));
         pipe->dp2 = read_register(TRANS_DP2(p));
         pipe->psr = read_register(PSR_CONTROL(p));
@@ -335,6 +334,7 @@ static bool snapshot(struct display_state *s)
       continue;
     }
     pipe->valid = 1;
+    pipe->source = read_register(PIPE_SOURCE(p));
     pipe->misc = read_register(PIPE_MISC(p));
     pipe->joiner[0] = read_register(JOINER_BASE(p));
     pipe->joiner[1] = read_register(JOINER_BASE(p) + 4);
@@ -363,7 +363,7 @@ static bool snapshot(struct display_state *s)
     for (unsigned n = 0; n < scaler_count; ++n) {
       uint32_t base = SCALER_BASE(p, n);
       pipe->scaler[n][0] = read_register(base + 128);
-      if ((pipe->scaler[n][0] & (SCALER_ENABLE | SCALER_BINDING_MASK)) == SCALER_ENABLE) {
+      if (pipe->scaler[n][0] & SCALER_ENABLE) {
         pipe->scaler[n][1] = read_register(base + 112);
         pipe->scaler[n][2] = read_register(base + 116);
       }
@@ -442,8 +442,8 @@ static void report_state(const struct display_state *s, bool stable)
   for (unsigned p = 0; p < PIPE_COUNT; ++p) {
     const struct pipe_state *pipe = &s->pipes[p];
     if (pipe->transcoder_valid) {
-      kdebug("intel-display: TC%c conf=%x source=%x DDI=%x DP2=%x PSR=%x PSR2=%x\n",
-          'A' + p, pipe->conf, pipe->source, pipe->ddi, pipe->dp2, pipe->psr, pipe->psr2);
+      kdebug("intel-display: TC%c conf=%x DDI=%x DP2=%x PSR=%x PSR2=%x\n",
+          'A' + p, pipe->conf, pipe->ddi, pipe->dp2, pipe->psr, pipe->psr2);
       if (pipe->conf & PLANE_ENABLE) {
         kinfo("intel-display: TC%c active=%ux%u total=%ux%u; pixel clock/link unchanged\n", 'A' + p,
             (pipe->timing[0] & 0xffff) + 1, (pipe->timing[3] & 0xffff) + 1,
@@ -456,8 +456,8 @@ static void report_state(const struct display_state *s, bool stable)
     if (!pipe->valid) {
       continue;
     }
-    kdebug("intel-display: PIPE%c misc=%x DSS=%x/%x cursor=%x/%x/%x/%x\n", 'A' + p,
-        pipe->misc, pipe->joiner[0], pipe->joiner[1], pipe->cursor[0], pipe->cursor[1],
+    kdebug("intel-display: PIPE%c source=%x misc=%x DSS=%x/%x cursor=%x/%x/%x/%x\n", 'A' + p,
+        pipe->source, pipe->misc, pipe->joiner[0], pipe->joiner[1], pipe->cursor[0], pipe->cursor[1],
         pipe->cursor[2], pipe->cursor[3]);
     for (unsigned n = 0; n < scaler_count; ++n) {
       kdebug("intel-display: PIPE%c scaler%u control=%x position=%x size=%x\n", 'A' + p, n,
@@ -473,21 +473,23 @@ static void report_state(const struct display_state *s, bool stable)
       }
       unsigned width = (plane->size & 0xffff) + 1, height = (plane->size >> 16) + 1;
       unsigned pitch = (plane->stride & 0xfff) * 64;
-      bool linear = !(plane->control & (PLANE_TILING_MASK | PLANE_COMPRESSION_MASK |
+      bool linear = !(plane->surface & PLANE_DECRYPT) &&
+          !(plane->control & (PLANE_TILING_MASK | PLANE_COMPRESSION_MASK |
           PLANE_ROTATION_MASK | PLANE_FLIP_HORIZONTAL)) &&
           (plane->control & PLANE_FORMAT_MASK) == PLANE_FORMAT_8888 &&
           !(pipe->joiner[0] & JOINER_MASK);
       bool channels = fb->green_shift == 8 &&
           (plane->control & PLANE_RGBX ? fb->red_shift == 0 && fb->blue_shift == 16 :
            fb->red_shift == 16 && fb->blue_shift == 0);
-      bool candidate = stable && linear && channels && !plane->position && !plane->offset &&
+      bool candidate = stable && pipe->transcoder_valid && (pipe->conf & PLANE_ENABLE) &&
+          (pipe->ddi & PLANE_ENABLE) && linear && channels && !plane->position && !plane->offset &&
           width == fb->width && height == fb->height && pitch == fb->pitch &&
           fb->physical >= aperture_bar &&
           fb->physical - aperture_bar == (plane->surface & PLANE_SURFACE_MASK) &&
           (plane->live & PLANE_SURFACE_MASK) == (plane->surface & PLANE_SURFACE_MASK);
       kinfo("intel-display: PIPE%c plane%u %ux%u pitch=%u linear8888=%u GOP-source-candidate=%u\n",
           'A' + p, n + 1, width, height, pitch, linear, candidate);
-      if (linear && pitch && height) {
+      if (linear && pitch && height && !plane->offset) {
         uint64_t start = plane->surface & PLANE_SURFACE_MASK;
         uint64_t bytes = (uint64_t)pitch * height;
         uint64_t first, last;
@@ -565,6 +567,12 @@ static bool release_holds(void)
     }
     owned_requests &= ~request;
     wells[i].state = WELL_SKIPPED;
+    if (!inherited_hold(i) ||
+        !(read_register(POWER_DRIVER) & (1u << (2 * wells[i].index))) ||
+        !(read_register(FUSE_STATUS) & (1u << wells[i].fuse))) {
+      fence_access("inherited hold changed after request release");
+      return false;
+    }
   }
   if (!holds_stable()) {
     fence_access("identity changed before DC restoration");
@@ -607,7 +615,7 @@ static void unmap_windows(void)
 
 void intel_display_prepare(const struct boot_info *boot)
 {
-  if (pci_select_device(INTEL_VENDOR, PANTHER_LAKE_DEVICE, &display_device) != PCI_SELECTION_UNIQUE) {
+  if (boot_info || pci_select_device(INTEL_VENDOR, PANTHER_LAKE_DEVICE, &display_device) != PCI_SELECTION_UNIQUE) {
     return;
   }
   boot_info = boot;
