@@ -20,6 +20,9 @@
 #define PLANE_COUNT 5
 #define SCALER_COUNT 2
 #define PIPE_STEP 0x1000u
+#define TRANS_ENABLE (1u << 31)
+#define WELL_REQUEST(index) (2u << (2 * (index)))
+#define WELL_STATE(index) (1u << (2 * (index)))
 #define PIPE_SCANLINE(p) (0x70000u + PIPE_STEP * (p))
 #define TRANS_CONF(p) (0x70008u + PIPE_STEP * (p))
 #define PIPE_MISC(p) (0x70030u + PIPE_STEP * (p))
@@ -33,7 +36,13 @@
 #define PSR2_CONTROL(p) (TRANS_BASE(p) + 0x900u)
 #define PSR2_STATUS(p) (TRANS_BASE(p) + 0x940u)
 #define PLANE_BASE(p, n) (0x70180u + PIPE_STEP * (p) + 0x100u * (n))
+enum plane_register {
+  PLANE_CONTROL = 0, PLANE_STRIDE = 8, PLANE_POSITION = 12, PLANE_SIZE = 16,
+  PLANE_SURFACE = 28, PLANE_OFFSET = 36, PLANE_LIVE = 44, PLANE_COLOR = 76,
+};
 #define PLANE_ENABLE (1u << 31)
+#define PLANE_STRIDE_MASK 0xfffu
+#define LINEAR_STRIDE_BYTES 64u
 #define PLANE_DECRYPT (1u << 2)
 #define PLANE_SURFACE_MASK 0xfffff000u
 #define PLANE_FORMAT_MASK 0x0f800000u
@@ -45,6 +54,8 @@
 #define PLANE_FLIP_HORIZONTAL (1u << 8)
 #define CURSOR_BASE(p) (0x70080u + PIPE_STEP * (p))
 #define SCALER_BASE(p, s) (0x68100u + 0x800u * (p) + 0x100u * (s))
+enum scaler_register { SCALER_POSITION = 112, SCALER_SIZE = 116, SCALER_CONTROL = 128 };
+#define CURSOR_MODE_MASK 0x27u
 #define SCALER_ENABLE (1u << 31)
 #define SCALER_BINDING_MASK (7u << 25)
 #define JOINER_BASE(p) (0x78000u + 0x200u * (p))

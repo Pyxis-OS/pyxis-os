@@ -221,7 +221,7 @@ static const unsigned pipe_wells[] = {2, 3, 4, 5};
 
 static bool inherited_hold(unsigned well)
 {
-  uint32_t request = 2u << (2 * wells[well].index);
+  uint32_t request = WELL_REQUEST(wells[well].index);
   return ((read_register(POWER_BIOS) & inherited_bios) |
       (read_register(POWER_DRIVER) & inherited_driver)) & request;
 }
@@ -244,8 +244,8 @@ static bool holds_stable(void)
   uint32_t driver = read_register(POWER_DRIVER), fuse = read_register(FUSE_STATUS);
   for (unsigned i = 0; i < sizeof(wells) / sizeof(wells[0]); ++i) {
     if (wells[i].state == WELL_HELD && (!inherited_hold(i) ||
-        !(driver & (1u << (2 * wells[i].index))) ||
-        !(driver & (2u << (2 * wells[i].index))) || !(fuse & PG0_FUSE) ||
+        !(driver & (WELL_STATE(wells[i].index))) ||
+        !(driver & (WELL_REQUEST(wells[i].index))) || !(fuse & PG0_FUSE) ||
         !(fuse & (1u << wells[i].fuse)))) {
       return false;
     }
@@ -263,8 +263,8 @@ static bool retain_well(unsigned well)
   if (w->parent >= 0 && !retain_well((unsigned)w->parent)) {
     return false;
   }
-  uint32_t request = 2u << (2 * w->index);
-  uint32_t state = 1u << (2 * w->index);
+  uint32_t request = WELL_REQUEST(w->index);
+  uint32_t state = WELL_STATE(w->index);
   uint32_t driver = read_register(POWER_DRIVER);
   if (!inherited_hold(well) || !(driver & state) ||
       !(read_register(FUSE_STATUS) & (1u << w->fuse))) {
@@ -323,7 +323,7 @@ static bool snapshot(struct display_state *s)
     if (wells[trans_well].state == WELL_HELD) {
       pipe->transcoder_valid = 1;
       pipe->conf = read_register(TRANS_CONF(p));
-      if (pipe->conf & PLANE_ENABLE) {
+      if (pipe->conf & TRANS_ENABLE) {
         for (unsigned n = 0; n < 6; ++n) {
           pipe->timing[n] = read_register(TRANS_BASE(p) + 4 * n);
         }
@@ -346,31 +346,31 @@ static bool snapshot(struct display_state *s)
     for (unsigned n = 0; n < PLANE_COUNT; ++n) {
       struct plane_state *plane = &pipe->planes[n];
       uint32_t base = PLANE_BASE(p, n);
-      plane->control = read_register(base);
+      plane->control = read_register(base + PLANE_CONTROL);
       if (!(plane->control & PLANE_ENABLE)) {
         continue;
       }
-      plane->stride = read_register(base + 8);
-      plane->position = read_register(base + 12);
-      plane->size = read_register(base + 16);
-      plane->surface = read_register(base + 28);
-      plane->offset = read_register(base + 36);
-      plane->live = read_register(base + 44);
-      plane->color = read_register(base + 76);
+      plane->stride = read_register(base + PLANE_STRIDE);
+      plane->position = read_register(base + PLANE_POSITION);
+      plane->size = read_register(base + PLANE_SIZE);
+      plane->surface = read_register(base + PLANE_SURFACE);
+      plane->offset = read_register(base + PLANE_OFFSET);
+      plane->live = read_register(base + PLANE_LIVE);
+      plane->color = read_register(base + PLANE_COLOR);
     }
     uint32_t cursor = CURSOR_BASE(p);
     pipe->cursor[0] = read_register(cursor);
-    if (pipe->cursor[0] & 0x27) {
+    if (pipe->cursor[0] & CURSOR_MODE_MASK) {
       pipe->cursor[1] = read_register(cursor + 4);
       pipe->cursor[2] = read_register(cursor + 8);
       pipe->cursor[3] = read_register(cursor + 44);
     }
     for (unsigned n = 0; n < scaler_count; ++n) {
       uint32_t base = SCALER_BASE(p, n);
-      pipe->scaler[n][0] = read_register(base + 128);
+      pipe->scaler[n][0] = read_register(base + SCALER_CONTROL);
       if (pipe->scaler[n][0] & SCALER_ENABLE) {
-        pipe->scaler[n][1] = read_register(base + 112);
-        pipe->scaler[n][2] = read_register(base + 116);
+        pipe->scaler[n][1] = read_register(base + SCALER_POSITION);
+        pipe->scaler[n][2] = read_register(base + SCALER_SIZE);
       }
     }
   }
@@ -449,7 +449,7 @@ static void report_state(const struct display_state *s, bool stable)
     if (pipe->transcoder_valid) {
       kdebug("intel-display: TC%c conf=%x DDI=%x DP2=%x PSR=%x PSR2=%x\n",
           'A' + p, pipe->conf, pipe->ddi, pipe->dp2, pipe->psr, pipe->psr2);
-      if (pipe->conf & PLANE_ENABLE) {
+      if (pipe->conf & TRANS_ENABLE) {
         kinfo("intel-display: TC%c active=%ux%u total=%ux%u; pixel clock/link unchanged\n", 'A' + p,
             (pipe->timing[0] & 0xffff) + 1, (pipe->timing[3] & 0xffff) + 1,
             (pipe->timing[0] >> 16) + 1, (pipe->timing[3] >> 16) + 1);
@@ -477,7 +477,7 @@ static void report_state(const struct display_state *s, bool stable)
         continue;
       }
       unsigned width = (plane->size & 0xffff) + 1, height = (plane->size >> 16) + 1;
-      unsigned pitch = (plane->stride & 0xfff) * 64;
+      unsigned pitch = (plane->stride & PLANE_STRIDE_MASK) * LINEAR_STRIDE_BYTES;
       bool linear = !(plane->surface & PLANE_DECRYPT) &&
           !(plane->control & (PLANE_TILING_MASK | PLANE_COMPRESSION_MASK |
           PLANE_ROTATION_MASK | PLANE_FLIP_HORIZONTAL)) &&
@@ -486,7 +486,7 @@ static void report_state(const struct display_state *s, bool stable)
       bool channels = fb->green_shift == 8 &&
           (plane->control & PLANE_RGBX ? fb->red_shift == 0 && fb->blue_shift == 16 :
            fb->red_shift == 16 && fb->blue_shift == 0);
-      bool candidate = stable && pipe->transcoder_valid && (pipe->conf & PLANE_ENABLE) &&
+      bool candidate = stable && pipe->transcoder_valid && (pipe->conf & TRANS_ENABLE) &&
           (pipe->ddi & PLANE_ENABLE) && linear && channels && !plane->position && !plane->offset &&
           width == fb->width && height == fb->height && pitch == fb->pitch &&
           fb->physical >= aperture_bar &&
@@ -515,7 +515,7 @@ static void observe_timing(void)
   bool enabled[PIPE_COUNT] = {0};
   for (unsigned p = 0; p < PIPE_COUNT; ++p) {
     enabled[p] = first_state.pipes[p].valid && first_state.pipes[p].transcoder_valid &&
-        (first_state.pipes[p].conf & PLANE_ENABLE);
+        (first_state.pipes[p].conf & TRANS_ENABLE);
     if (enabled[p]) {
       initial_line[p] = last_line[p] = read_register(PIPE_SCANLINE(p));
       initial_stamp[p] = last_stamp[p] = read_register(FRAME_TIMESTAMP(p));
@@ -565,7 +565,7 @@ static bool release_holds(void)
     return false;
   }
   for (unsigned i = sizeof(wells) / sizeof(wells[0]); i-- > 0;) {
-    uint32_t request = 2u << (2 * wells[i].index);
+    uint32_t request = WELL_REQUEST(wells[i].index);
     if (!(owned_requests & request)) {
       continue;
     }
@@ -581,7 +581,7 @@ static bool release_holds(void)
     owned_requests &= ~request;
     wells[i].state = WELL_SKIPPED;
     if (!inherited_hold(i) ||
-        !(read_register(POWER_DRIVER) & (1u << (2 * wells[i].index))) ||
+        !(read_register(POWER_DRIVER) & (WELL_STATE(wells[i].index))) ||
         !(read_register(FUSE_STATUS) & (1u << wells[i].fuse))) {
       fence_access("inherited hold changed after request release");
       return false;
