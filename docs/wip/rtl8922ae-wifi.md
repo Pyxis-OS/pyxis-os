@@ -839,3 +839,9 @@ separate and go through the orchestrator.
    WPA2-PSK/CCMP scope. Reuse native RSN/grants, qualify Realtek key/PN behavior
    independently, and defer 5/6 GHz, HT/HE/EHT/MLO, WPA3/PMF, AP/monitor/roaming,
    suspend and Bluetooth coexistence. No Wi-Fi 7 capability is claimed by PCI ID.
+
+The one-channel OFLD_CFG-only candidate is authorized (chronium, 2026-10-28):
+queue the reference MAC-init configuration before BB/RF setup, with its existing
+DONE_ACK request and no new firmware-ACK wait. Preserve the current one-PHY
+mode, scan payloads and RX filter. Native discovery remains unqualified until
+this isolated candidate's result; the Linux capture does not close that gate.

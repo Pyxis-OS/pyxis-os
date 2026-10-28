@@ -125,3 +125,25 @@ data or multi-channel discovery claim is made. The earlier disposable staging
 check preserved menu/other entries/root/EFI; fresh image checks and qualification
 are reported on the PR. Raw evidence remains under the shared task directory.
 Only the orchestrator schedules/runs the fresh native packet.
+
+## OFLD_CFG-only candidate, 2026-10-28
+
+The subsequent vela run verified `a31f3798f50c` and received START DONE_ACK
+`raw=03 code=03 seq=14`. A Linux reference capture on the same card and
+firmware0.35.80.3 completed one passive channel1 scan. It records the same
+channel-list, ROLE/JOIN and default CMAC/DMAC payloads, then successful list and
+START ACKs and END_SCAN. The diagnostic gate's36-byte-only report whitelist
+rejected the complete40-byte END report; offline decoding of its known status
+prefix confirms reason5/status1. Capture counters reconcile with no loss.
+This is Linux reference evidence, not a native Pyxis discovery pass.
+
+Linux also sends OFLD_CFG (`090000005e000000`, category1/class9/function0x14)
+during MAC initialization and receives a successful ACK. Native omitted this
+call. The isolated candidate adds it at the reference MAC-init point before
+BB/RF setup (`mac.c:4111–4112`, `fw.c:4471–4488` in the pinned source), requesting
+DONE_ACK without adding a firmware-ACK wait. Existing transport-consumption
+failure handling applies. PHY/RFK mode0x1002, scan payloads, RX filters, grants
+and deadlines are unchanged. Chronium authorized this candidate on2026-10-28;
+its native result is pending. The omission is proven, but code03's cause remains
+unproved until the isolated candidate is tested. Raw packet/offset comparisons
+and the corrected diagnostic interpretation are linked from PR#1528.

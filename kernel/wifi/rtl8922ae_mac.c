@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /* Copyright(c) 2019-2020, 2023 Realtek Corporation
- * Native one-PHY subset of Linux rtw89 mac.c/mac_be.c/rtw8922a.c at
+ * Native one-PHY subset of Linux rtw89 mac.c/mac_be.c/fw.c/rtw8922a.c at
  * 7d0a66e4bb9081d75c82ec4957c50034cb0ea449, BSD alternative.
  * See kernel/wifi/NOTICE for the complete notice.
  */
@@ -13,6 +13,7 @@
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_mac.h"
 #include "rtl8922ae_regs_mac.h"
+#include "rtl8922ae_transport.h"
 
 #define MAC_US UINT64_C(1000)
 #define MAC_MS UINT64_C(1000000)
@@ -33,6 +34,9 @@
 #define MAC_RPR_TIMEOUT 255u
 #define MAC_RX_LENGTH_UNITS 23u
 #define MAC_CHANNEL_COUNT 14u
+#define H2C_CATEGORY_MAC 1u
+#define H2C_CLASS_OFFLOAD 9u
+#define H2C_OFLD_CFG 0x14u
 
 static uint32_t field(uint32_t mask, uint32_t value)
 {
@@ -468,7 +472,13 @@ bool rtl8922ae_mac_init(uint64_t deadline, const char **detail)
   *detail = "RTL8922AE MAC error/report initialization failed";
   interrupt_init();
   host_report_init();
-  return rtl8922ae_mac_quiesce(deadline, detail);
+  if (!rtl8922ae_mac_quiesce(deadline, detail)) return false;
+  /* Reference MAC init sends OFLD_CFG before BB/RF setup, requesting DONE_ACK
+   * without waiting for that firmware reply. */
+  static const uint8_t offload_config[] = {0x09, 0, 0, 0, 0x5e, 0, 0, 0};
+  return rtl8922ae_transport_h2c(H2C_CATEGORY_MAC, H2C_CLASS_OFFLOAD,
+      H2C_OFLD_CFG, false, true, offload_config, sizeof(offload_config), NULL,
+      deadline, detail);
 }
 
 bool rtl8922ae_mac_channel(uint8_t channel, uint64_t deadline, const char **detail)
