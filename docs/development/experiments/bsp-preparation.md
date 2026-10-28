@@ -140,7 +140,7 @@ but existing idle stealing moved six receivers before first dispatch. Twelve B
 receivers first dispatched on the other AP. Debugger stops perturb stealing;
 these counts do not establish an ordinary placement frequency or quantify the
 whole timing increase. The extra cross-CPU traffic explains the direction, and
-native IPC measurements remain required. No scheduler scoring, affinity,
+the native measurement below checks the same IPC workloads. No scheduler scoring, affinity,
 migration or priority policy was changed to hide the cost.
 
 Raw after samples/comparison and placement evidence live under
@@ -169,8 +169,56 @@ B ELF SHA: `8b46292f81bec986fcefc4a1b25f1c49e5f5d9e12dd6b6eace94a356133c0d5d`.
 Common archive SHA: `93b4b48660b55d0822545dc2e60b78062fece6f8e8bbac8e86d9e21937fe9704`.
 Full config/builder/program identities and qualification evidence are sealed with
 SHA256SUMS. Subsequent experiment/WIP documentation commits change no runtime
-code from B. No native speedup or native IPC cost is claimed before the
-orchestrator runs it. No native/PXE action has occurred here.
+code from B.
+
+### Native results — vela, 2026-10-28
+
+The orchestrator completed six fresh boots in order A1/B1/A2/B2/A3/B3; every
+cohort, outcome/count check and FINAL/drain check passed. Both images used the
+PXE default entry with the identical `resolution: 2880x1800x32` line, the same
+command line/archive/config/compiler flags and RAM backing. All six recorded AC
+online, 16 CPUs with HWP applied on all 16, eager XSAVE/XCR0=7 (832 bytes), and
+3686.4 MHz TSC from CPUID 0x15 using RDTSCP+LFENCE. Remote/children retained the
+same {1,3} CPU allowance; actual sender/receiver placement was not traced natively.
+The orchestrator restored the plain PXE default after the run.
+
+Launch and page values are target-program intervals, not host Remote wall time.
+IPC values below are milliseconds per 256-message timed pass: each tool command
+runs one warmup and 100 verified timed passes. The table reports the median
+(range) across the three per-boot medians. Nested tables above instead sum all
+100 completion intervals, so their absolute values must not be compared with
+these native per-pass medians.
+
+| Target interval, ms | A | B | Median change |
+| --- | --- | --- | --- |
+| 1,024 launches | 1050.917 (1048.565–1087.575) | 927.027 (925.158–931.245) | −11.8% |
+| Private pages | 25.515 (25.500–25.998) | 25.854 (25.062–25.856) | +1.3%, overlapping ranges |
+| CALL64 completion | 1.2350 (1.2015–1.2585) | 1.6370 (1.6355–1.6395) | +32.6% |
+| CALL4096 completion | 1.4230 (1.4060–1.4230) | 2.0690 (2.0590–2.0885) | +45.4% |
+| SEND64 completion | 0.6365 (0.6205–0.6490) | 0.7485 (0.7460–0.7575) | +17.6% |
+| SEND4096 completion | 0.6780 (0.6775–0.6880) | 1.1980 (1.1925–1.2015) | +76.7% |
+| SEND64 admission | 0.0740 (0.0710–0.0750) | 0.0920 (0.0910–0.0930) | +24.3% |
+| SEND4096 admission | 0.0975 (0.0960–0.0985) | 0.2320 (0.2310–0.2335) | +137.9% |
+
+The native packet includes exactly the nested CALL/SEND 64/4096 commands shown
+above, with `--messages 256 --rounds 100`; no additional native IPC run is needed
+to establish the performance cost. CALL64 adds about 1.57 microseconds per round
+trip and CALL4096 about 2.52 microseconds, from these pass medians. Launch is
+faster and page allocation effectively flat, but the IPC increase is real and
+must accompany the merge assessment. The QEMU placement investigation explains
+a mechanism; it does not quantitatively attribute the whole native difference.
+No scheduler scoring/affinity change was introduced or implied by the results.
+
+The client-wall controls also passed: thread lifecycle 35.312 → 34.316 ms,
+TLS lifecycle 66.409 → 66.520 ms, Go lifecycle 15.654 → 14.824 ms, and larger
+Neovim launch/exit 33.434 → 28.424 ms. These include transport and cleanup;
+they are not target-only phase timings.
+
+Native evidence: `native/orchestrator-runs.txt`, `native/comparison.json` and
+`native/results/` under `/shared/present/bsp-removal/task4/`. The run log identifies
+all six staged boots and the restored default; comparison preserves individual
+samples and the common environment checks. No boot-time/multi-client scaling,
+physical-device cleanup stress or native uncertain-ACK fault claim is added.
 
 ## Storage and remaining limits
 
