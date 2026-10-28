@@ -52,6 +52,7 @@
 #define SCAN_MACC_ROLE_WORDS 1u
 #define SCAN_OP_CHANNEL_WORDS 5u
 #define SCAN_MLO_2_PLUS_0_1RF UINT32_C(0x1002)
+#define SCAN_ALL_6GHZ_DISABLED UINT64_C(0x07ffffffffffffff)
 #define FIRMWARE_WAIT_NS UINT64_C(100000000)
 #define SCAN_POLL_NS UINT64_C(50000)
 #define WIFI_ROLE_STATION 1u
@@ -375,9 +376,10 @@ static void scan_configuration(uint8_t payload[SCAN_CONFIG_BYTES], unsigned oper
   put32(payload + 12, SCAN_PACKET_NONE << 24);
   put32(payload + 16, SCAN_PACKET_NONE | SCAN_PACKET_NONE << 8);
   put32(payload + 20, SCAN_MLO_2_PLUS_0_1RF);
-  /* Reference scan_get_6g_disabled_chan: this profile exposes no 6 GHz band. */
-  put32(payload + 24, ALL_WORD_BITS);
-  put32(payload + 28, ALL_WORD_BITS);
+  /* Match the observed device's 59-channel bitmap, prohibiting every valid
+   * 6 GHz channel without setting its five unused upper bits. */
+  put32(payload + 24, (uint32_t)SCAN_ALL_6GHZ_DISABLED);
+  put32(payload + 28, (uint32_t)(SCAN_ALL_6GHZ_DISABLED >> 32));
   put32(payload + 36, SCAN_CONFIG_BYTES / 4 | SCAN_MACC_ROLE_WORDS << 8 |
       SCAN_OP_CHANNEL_WORDS << 16);
 }

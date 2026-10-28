@@ -156,3 +156,12 @@ succeeded. Its DONE_ACK was discarded when it did not match the scan waiter.
 The next candidate retains that reply's raw return/sequence as a bounded status
 diagnostic; it adds no wait or admission condition and preserves the primary
 failure text when no suffix fits. No new ABI fields or log producer.
+
+The next single-variable protocol candidate matches the captured RTL8922AE
+6GHz prohibition bitmap: `0x07ffffffffffffff` instead of `U64_MAX`. Every one
+of the59 valid channel bits remains prohibited; only the unused upper five
+bits clear. This changes only START/STOP payload byte31, `ff` to `07`. It
+preserves the current one-PHY topology0x1002, calibration, all2.4GHz scan settings,
+OFLD_CFG, filters, grants and timeouts. It is a discriminating encoding test,
+not a finding that the reference's absent-band `U64_MAX` branch is universally
+wrong. No6GHz band or permission is exposed. Native result pending.
