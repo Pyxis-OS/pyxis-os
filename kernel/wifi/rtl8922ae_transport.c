@@ -112,6 +112,7 @@
 #define RTL_SECURE_MALLOC 0x20248000u
 #define RTL_PACKET_H2C 13u
 #define RTL_PACKET_WIFI 0u
+#define RTL_PACKET_PPDU 1u
 #define RTL_PACKET_C2H 10u
 #define RTL_PACKET_DOWNLOAD 14u
 #define RTL_H2C_HEADER_BYTES 8u
@@ -312,6 +313,8 @@ static void drain_receive_to(const unsigned producers[RTL_RX_QUEUES])
         }
       } else if (((descriptor >> RTL_RX_PACKET_TYPE_SHIFT) & RTL_RX_PACKET_TYPE_MASK) == RTL_PACKET_WIFI) {
         rtl8922ae_runtime_frame(buffer + 4, offset - 4, buffer + offset, payload);
+      } else if (((descriptor >> RTL_RX_PACKET_TYPE_SHIFT) & RTL_RX_PACKET_TYPE_MASK) == RTL_PACKET_PPDU) {
+        rtl8922ae_runtime_ppdu(buffer + 4, offset - 4, buffer + offset, payload);
       } else {
         ++transport.dropped;
       }

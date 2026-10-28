@@ -140,6 +140,7 @@ struct wifi_credential_reply { handle_t file; };
 #define WIFI_SCAN_COMPLETE (UINT32_C(1) << 0)
 #define WIFI_SCAN_TAKEN (UINT32_C(1) << 1)
 #define WIFI_SCAN_CANCEL_REQUESTED (UINT32_C(1) << 2)
+#define WIFI_SCAN_TRUNCATED (UINT32_C(1) << 3)
 #define WIFI_CHANNEL_24_COUNT 14u
 #define WIFI_SCAN_CHANNELS ((UINT32_C(1) << WIFI_CHANNEL_24_COUNT) - 1)
 #define WIFI_SCAN_FALLBACK_CHANNELS UINT32_C(0x7ff)
@@ -390,10 +391,15 @@ struct wifi_scan_status_reply {
 };
 struct wifi_scan_take_reply { handle_t file; };
 
+#define WIFI_SCAN_FILE_TRUNCATED (UINT32_C(1) << 0)
+
 /* Immutable FILE bytes: one header followed by count records. SSIDs are counted
  * bytes, not NUL-terminated text. Reserved fields zero. No hidden global cache. */
 struct wifi_scan_file_header {
   uint32_t count, record_bytes, channels, reserved;
+  /* Capacity-dropped candidate observations, not unique BSS identities.
+   * UINT32_MAX is a saturated lower bound; reserved remains zero. */
+  uint32_t flags, dropped_records;
 };
 /* Passive, unauthenticated evidence only. VALID requires a complete RSN v1
  * parse, one RSN per frame, and consistent security observations for this BSS.
@@ -463,5 +469,5 @@ _Static_assert(sizeof(struct wifi_link_status_reply) == 32, "Wi-Fi link status")
 _Static_assert(sizeof(struct wifi_scan_request) == 32, "Wi-Fi scan request");
 _Static_assert(sizeof(struct wifi_policy_request) == 24, "Wi-Fi policy request");
 _Static_assert(sizeof(struct wifi_bss_record) == 52, "Wi-Fi BSS record");
-_Static_assert(sizeof(struct wifi_scan_file_header) == 16, "Wi-Fi result header");
+_Static_assert(sizeof(struct wifi_scan_file_header) == 24, "Wi-Fi result header");
 #endif

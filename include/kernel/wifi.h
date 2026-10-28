@@ -47,7 +47,8 @@ enum call_status wifi_scan_stop_reason(struct wifi_scan_work *work);
 /* BSP/IF=0, after confirmed completion/drain or controller quarantine. Copies
  * records into the operation-owned result backing; no DMA pointer survives. */
 void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
-    uint32_t channels, const struct wifi_bss_record *records, size_t count);
+    uint32_t channels, const struct wifi_bss_record *records, size_t count,
+    uint32_t dropped_records);
 
 /* BSP/IF=0. Admission only; no firmware waits. Success requires one setup
  * callback and one later retirement callback (or failure+retirement). */

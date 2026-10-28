@@ -738,7 +738,7 @@ static void finish_scan(struct wifi_scan_work *work, enum call_status status)
   driver.pending = NULL;
   firmware.active = false;
   wifi_scan_finished(work, status, firmware.channels,
-      status == CALL_OK ? firmware.records : NULL, status == CALL_OK ? firmware.count : 0);
+      status == CALL_OK ? firmware.records : NULL, status == CALL_OK ? firmware.count : 0, 0);
   cpu_restore_interrupts(flags);
   memzero_explicit(firmware.records, sizeof(firmware.records));
   firmware.count = 0;
