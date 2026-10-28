@@ -81,6 +81,13 @@ completion to SIGCHLD and clock expiry to SIGALRM. SIGPIPE remains an EPIPE
 error rather than handler delivery. These possibilities do not settle the
 source binding, thread/mask, safe-point, EINTR/restart or lifetime contracts.
 
+The descriptor-readiness contract (chronium, 2026-10-28) accepts both NULL and
+non-NULL `ppoll`/`pselect` signal-mask pointers as a documented no-op while no
+signals are delivered. Before this parked work enables delivery, those waits
+must gain the real atomic mask-change/sleep and restore-on-return semantics in
+the same milestone. Keeping the no-op after enabling handlers is not allowed.
+This coupling accepts no handler, source mapping or restart policy by itself.
+
 This is compatibility for ports, not a change to the native no-signals design.
 No asynchronous handler, compute-loop interruption, fault recovery or arbitrary
 process signalling is authorized. Continuum's previously accepted ownership of

@@ -94,6 +94,10 @@ aliases. `clearerr` does not reset this latch. Reads and ownership release remai
 available; close still releases the descriptor after a failed flush. A fresh open
 is a new intent. Known non-uncertain errors retain their ordinary recovery.
 
+Descriptor readiness and shared nonblocking status use
+[`poll`/`select` and `fcntl`](libc-readiness.md). They preserve descriptor
+read-ahead ownership and the existing native FILE-value latency boundary.
+
 ## Typed resources and transactions
 
 `fopen` dispatches on the attested result of [typed OPEN](../interfaces/file-providers.md).

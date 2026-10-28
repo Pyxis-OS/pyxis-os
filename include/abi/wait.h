@@ -19,6 +19,8 @@
 #define WAIT_COMPLETE (UINT64_C(1) << 7)
 #define WAIT_INTERRUPT (UINT64_C(1) << 8)
 #define WAIT_RESIZED (UINT64_C(1) << 9)
+#define WAIT_READ_STATUS (UINT64_C(1) << 10)
+#define WAIT_WRITE_STATUS (UINT64_C(1) << 11)
 
 struct wait_interest {
   handle_t handle;
@@ -43,9 +45,9 @@ struct wait_interest {
  * EOF. FIN alone never closes writes. A listener accepts ACCEPTABLE/CLOSED,
  * both requiring ACCEPT; ACCEPTABLE automatically reports CLOSED. Relevant
  * terminal errors report ERROR without an additional INSPECT right.
- * Pipe readers accept READABLE/PEER_FIN with READ; writers accept
- * WRITABLE/WRITE_CLOSED with WRITE. Ordinary interests automatically include
- * their closure flag. Final-writer closure preserves buffered readable bytes;
+ * Pipe readers accept READABLE/PEER_FIN/READ_STATUS with READ; writers accept
+ * WRITABLE/WRITE_CLOSED/WRITE_STATUS with WRITE. Ordinary interests automatically
+ * include their closure flag. Final-writer closure preserves buffered readable bytes;
  * drain them before interpreting a zero-length read as EOF. Final-reader closure
  * reports WRITE_CLOSED, never WRITABLE. Ordinary pipe closure does not report ERROR.
  * Owned endpoint receivers accept READABLE/CLOSED with RECEIVE transport;
@@ -72,6 +74,13 @@ struct wait_interest {
  * WRITABLE means an initialized output TTY, ERROR means unavailable output.
  * Framebuffer rendering still serializes through its shared output lock;
  * readiness promises neither lock-free rendering nor reserved capacity.
+ * READ_STATUS/WRITE_STATUS are accepted only by pipes and console/terminal
+ * application input/output under the corresponding READ/WRITE right. They
+ * observe that direction's existing closure/error conditions, returning only
+ * PEER_FIN/WRITE_CLOSED/ERROR, never data/capacity readiness or the status
+ * interest bits themselves. Framebuffer input READ_STATUS observes loss and
+ * keyboard unavailability without reporting queued input; WRITE_STATUS observes
+ * output unavailability. Status observation consumes and acknowledges nothing.
  * INTERRUPT requires ARMED and observes the Ctrl+C latch without consuming it.
  * Console RESIZED requires READ or WRITE;
  * terminal input/output RESIZED requires READ/WRITE respectively. Explicit

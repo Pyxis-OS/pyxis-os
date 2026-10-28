@@ -42,6 +42,17 @@ conditions with OK status. They leave the registration/source attached, are
 suppressed while disarmed, and wake a consumer to retry I/O; a read may report
 INPUT_LOST once before subsequent input resumes.
 
+Pipes and console/terminal application input/output also accept directional
+`WAIT_READ_STATUS`/`WAIT_WRITE_STATUS` under their existing READ/WRITE rights.
+These interests report only existing `WAIT_PEER_FIN`, `WAIT_WRITE_CLOSED` and
+`WAIT_ERROR` conditions, without ordinary readable/writable readiness or the
+status interest bits themselves. Framebuffer read status observes input loss
+and keyboard unavailability; write status observes unavailable output. They
+consume no input, acknowledge no loss and reserve no I/O. An active status-only
+interest can therefore wait for closure/error while ordinary data/capacity is
+ignored. Setting the active mask to zero retains the existing disarmed behavior.
+Other source families do not accept these interests.
+
 The caller specifies nonzero allowed events, an active subset (possibly zero),
 an observed geometry generation where applicable, and an opaque tag. REGISTER
 returns a non-reused set-local identity and generation. UPDATE cannot expand

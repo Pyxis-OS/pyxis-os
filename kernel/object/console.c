@@ -320,12 +320,13 @@ uint64_t console_ready(struct console_object *console, uint64_t events,
 {
   uint64_t flags = cpu_save_interrupts();
   uint64_t ready = (events & WAIT_READABLE) ? clipboard_input_ready(&console->object, caller) : 0;
-  if (events & WAIT_READABLE) {
+  if (events & (WAIT_READABLE | WAIT_READ_STATUS)) {
     lock_input(console);
     if (console->input_lost || !keyboard_available()) {
       ready |= WAIT_ERROR;
     }
-    if (!console->reader_active && console->input_count && clipboard_ordinary_allowed(&console->object)) {
+    if ((events & WAIT_READABLE) && !console->reader_active && console->input_count &&
+        clipboard_ordinary_allowed(&console->object)) {
       ready |= WAIT_READABLE;
     }
     unlock_input(console);
@@ -333,12 +334,12 @@ uint64_t console_ready(struct console_object *console, uint64_t events,
   if (events & WAIT_INTERRUPT) {
     ready |= console_interrupt_ready(&console->interrupt);
   }
-  if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_RESIZED)) {
+  if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_WRITE_STATUS | WAIT_RESIZED)) {
     bool locked = tty_lock(console->tty);
     if (!locked) {
       ready |= WAIT_ERROR;
     } else {
-      if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) {
+      if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_WRITE_STATUS)) {
         if (!console->tty->initialized) {
           ready |= WAIT_ERROR;
         } else {
