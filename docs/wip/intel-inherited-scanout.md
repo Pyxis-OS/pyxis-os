@@ -1,8 +1,8 @@
 # Intel inherited scanout: vela tearing
 
-Assigned to Codex alpha (chronium, 2026-10-28). The current slice admits and
-observes inherited display state. Plane/GGTT programming and retirement remain
-unapproved; this does not yet remove tearing.
+Assigned to Codex alpha (chronium, 2026-10-28). The startup slice admits and observes inherited display state. Synchronized
+flips are authorized under the accepted contract below; implementation and
+native qualification are pending, so this does not yet remove tearing.
 
 ## Accepted scope (chronium, 2026-10-28)
 
@@ -57,7 +57,7 @@ usable. It saves a known inherited DC target (disabled, DC5, DC6 or DC3CO),
 then uses the reference's early DC-disable primitive. DC9, mixed/reserved
 targets and unknown profiles refuse before the first write.
 
-Only two control locations may be written:
+The startup inventory permits writes to only two control locations:
 
 | Register | Permitted changes |
 | --- | --- |
@@ -205,14 +205,18 @@ memory, nor a flip latch/retirement rule.
   QEMU does not qualify Intel MMIO.
 - [x] Native complete-plane alias check at `4c3164d82`: all 5063 PTEs matched
   in both snapshots, layout stable and cleanup confirmed.
-- [ ] Decide GGTT/plane programming, backing authority and retirement after the
-  actual powered-state evidence. No writes implied by completing the inventory.
+- [x] Decide flip backing, synchronous operation/power lifetime and retirement
+  (chronium, 2026-10-28).
+- [ ] Matched 2880×1800 OpenArena presentation baseline before implementation.
+- [ ] Implement source-qualified GGTT ownership, owned UMA buffers and synchronous
+  correlated flips; no reuse after uncertain completion.
+- [ ] Hands-free vela qualification packet and matched presentation comparison.
 
 **What chronium can do after this slice:** inspect the inherited route and
 translation evidence and decide a bounded flip contract. It does not yet make
 presentation tear-free. Access limitations are tracked in [#1549](https://git.internal/PyxisOS/pyxis-os/issues/1549).
 
-## Next slice: synchronized flips — proposed, not authorized
+## Synchronized flips — accepted (chronium, 2026-10-28)
 
 The complete-PTE native observation establishes that GOP and plane 1 share
 stolen backing through different address spaces in the captured boot. Retest
@@ -221,7 +225,7 @@ because the untranslated addresses differ.
 
 ### Decision 1: starting surface and owned back buffers
 
-**Recommended default:** after every active PTE and the layout match, retain
+**Accepted (chronium, 2026-10-28):** after every active PTE and the layout match, retain
 the inherited GOP mapping/backing as the initial front, preserving its entire
 GGTT span. Allocate two new, pinned, kernel-owned UMA back buffers at the same
 pitch/format; map their device-visible addresses into explicitly owned GGTT
@@ -236,13 +240,11 @@ not allocation authority. The inherited span crosses Linux's GuC-specific
 UMA mappings require a proven DMA/IOMMU address contract, CPU WC/cache-alias
 handling and the inherited PAT interpretation. No guessed identity DMA or
 Linux-initialized PAT indices. If those prerequisites cannot be established,
-report the missing contract before broadening this slice. A stolen allocator
-is the alternative, with additional GSM/DSM capacity and firmware/WOPCM
-exclusions; it is not the default.
+report the missing contract before broadening this slice. No stolen-memory allocator is authorized.
 
 ### Decision 2: synchronous inherited-mode operation and power lifetime
 
-**Recommended default:** one pending, synchronous update on the qualified
+**Accepted (chronium, 2026-10-28):** one pending, synchronous update on the qualified
 pipe A/plane 1, leaving mode, clock, link, colour and scaler setup unchanged.
 Preserve PSR/replay controls and their retained timing fields: their enable
 bits (PSR/PSR2 bit 31, replay bit 30) are clear in the measured boot. Nonzero
@@ -255,14 +257,15 @@ in isolation. Display 30's async selector is SURF bit 0; keep it clear.
 For an active flip backend, hold the qualified power domains and DC0 continuously
 through all outstanding transactions, rather than releasing startup's holds
 between frames. Preserve every inherited request and release only owned ones.
-This can increase idle power; runtime power optimization is later work. The
+The idle-power cost is accepted for now; runtime power optimization is later work. The
 exclusive display owner serializes submissions and validates the inherited
 layout/access before writes. Derive the reference scanline keepout from qualified
 clock/timing and VRR state before the final SURF arm; defer/coalesce a late
 frame. A changing frame is composed/copied into an inactive buffer, with
 frame skipping and frozen software capture semantics preserved.
 
-This is a development-packet write path first. Ordinary startup remains the
+Implementation is assigned to Codex alpha (chronium, 2026-10-29). Capture the
+matched presentation baseline first. This is a development-packet write path first. Ordinary startup remains the
 qualified inventory plus existing copy path until native flip qualification
 and the activation decision. Exact GGTT update/invalidation and plane-register
 write masks must be source-qualified before the first write; the current two
@@ -272,7 +275,7 @@ copying PTEs and writing SURF alone is not an implementation plan.
 
 ### Decision 3: completion, retirement and uncertainty
 
-**Recommended default:** establish a transaction-correlated hardware completion
+**Accepted (chronium, 2026-10-28):** establish a transaction-correlated hardware completion
 rule before the first plane write. Linux arms its vblank event inside the update
 critical section and waits for flip completion; two equal SURFLIVE reads do
 not establish the same guarantee. Qualify the applicable flip-done indication,
