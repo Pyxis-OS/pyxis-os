@@ -96,6 +96,11 @@ no host Lua, dynamic module loader or target build tool. Source pins, licences
 and covered adapter sources accompany the program; the port recipe is their
 authority. Stdout contains LSP frames only. There is no fake PID or CPU clock.
 
+Bee's upstream filesystem binding uses the SDK's native C++ filesystem library.
+Unsupported operations report its errors; real-file copying remains unavailable.
+Metadata generation writes its in-memory templates through ordinary FILEs.
+Owned instance cleanup retains native directory identities.
+
 Admission is sized from real public-workspace measurements: 8 MiB conservative
 serialized messages, 32/64 MiB channel/global byte admission, 512/1024 queued
 items and 4 MiB LSP bodies. Graph depth/value/table limits apply independently.
