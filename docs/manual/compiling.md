@@ -76,45 +76,63 @@ Hello, C++!
 ## Use files from C++
 
 `<filesystem>`, `<fstream>` and `<iostream>` work with Pyxis paths, which start
-with a root such as `tmp://`. Create `files.cpp`:
+with a root such as `tmp://`. For now you build a program that uses them on your
+development machine with the [SDK's `clang++`](../development/sdk.md#c), then
+copy it into Pyxis.
 
-```cpp
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <string>
+1. On the development machine, create `files.cpp`:
 
-namespace fs = std::filesystem;
+   ```cpp
+   #include <filesystem>
+   #include <fstream>
+   #include <iostream>
+   #include <string>
 
-int main()
-{
-    fs::path dir = "tmp://demo";
-    fs::create_directories(dir);
+   namespace fs = std::filesystem;
 
-    std::ofstream(dir / "hello.txt") << "Hello from C++\n";
-    std::cout << fs::file_size(dir / "hello.txt") << " bytes\n";
+   int main()
+   {
+       fs::path dir = "tmp://demo";
+       fs::create_directories(dir);
 
-    std::ifstream in(dir / "hello.txt");
-    std::string line;
-    std::getline(in, line);
-    std::cout << line << "\n";
+       std::ofstream(dir / "hello.txt") << "Hello from C++\n";
+       std::cout << fs::file_size(dir / "hello.txt") << " bytes\n";
 
-    for (const auto& entry : fs::directory_iterator(dir))
-        std::cout << entry.path().filename().string() << "\n";
+       std::ifstream in(dir / "hello.txt");
+       std::string line;
+       std::getline(in, line);
+       std::cout << line << "\n";
 
-    fs::remove_all(dir);
-}
-```
+       for (const auto& entry : fs::directory_iterator(dir))
+           std::cout << entry.path().filename().string() << "\n";
 
-Build and run it the same way:
+       fs::remove_all(dir);
+   }
+   ```
 
-```text
-clang++ files.cpp -o files.pxe
-./files.pxe
-15 bytes
-Hello from C++
-hello.txt
-```
+2. Build it with the target [toolchain](../../toolchain/README.md) on your
+   `PATH` and an SDK from `make sdk`:
+
+   ```text
+   x86_64-unknown-pyxis-clang++ --sysroot=build/sdk/sysroot files.cpp -o files.pxe
+   ```
+
+3. Connect to a running Pyxis with `pyxis-remote`, and upload the file into the
+   current directory. The host asks for confirmation; answer `y`. See
+   [file transfer](../userland/remote-terminal.md#explicit-file-transfer):
+
+   ```text
+   home://> xfer receive /home/you/files.pxe files.pxe
+   ```
+
+4. Run it:
+
+   ```text
+   home://> ./files.pxe
+   15 bytes
+   Hello from C++
+   hello.txt
+   ```
 
 Calls with no Pyxis meaning, such as symbolic links, permissions, timestamp
 changes and free space, report an error.
