@@ -399,37 +399,54 @@ static bool read_gtt(uint64_t gpu, uint64_t *value)
   return true;
 }
 
-static void inspect_gtt(void)
+static bool inspect_plane_gtt(unsigned pipe, unsigned plane, uint64_t gpu, uint64_t bytes)
 {
   const struct boot_framebuffer *fb = &boot_info->framebuffer;
-  if (!fb->size || fb->physical < aperture_bar) {
-    kinfo("intel-display: GOP GGTT unavailable: no aperture-relative extent\n");
-    return;
-  }
-  uint64_t gpu = fb->physical - aperture_bar;
-  if (gpu >= GGTT_ADDRESS_BYTES || fb->size > GGTT_ADDRESS_BYTES - gpu) {
-    kinfo("intel-display: GOP GGTT unavailable: extent outside source table\n");
-    return;
+  if (!bytes || gpu >= GGTT_ADDRESS_BYTES || bytes > GGTT_ADDRESS_BYTES - gpu) {
+    return false;
   }
   uint64_t base = gpu & ~(PAGE_SIZE - 1);
-  size_t count = ((gpu - base) + fb->size + PAGE_SIZE - 1) / PAGE_SIZE;
+  size_t count = ((gpu - base) + bytes + PAGE_SIZE - 1) / PAGE_SIZE;
   uint64_t *ptes = kmalloc(count * sizeof(*ptes));
   if (!ptes) {
-    kinfo("intel-display: GOP GGTT unavailable: snapshot allocation failed\n");
-    return;
+    kinfo("intel-display: PIPE%c plane%u GGTT unavailable: snapshot allocation failed\n",
+        'A' + pipe, plane + 1);
+    return false;
   }
+  /* PTL's DM PTE addresses are GSMBASE offsets, CPU-visible through BAR2. */
+  uint64_t device_offset = fb->physical >= aperture_bar ? fb->physical - aperture_bar : UINT64_MAX;
+  bool comparable = device_offset < GGTT_PTE_ADDRESS_LIMIT &&
+      bytes <= GGTT_PTE_ADDRESS_LIMIT - device_offset &&
+      (device_offset & (PAGE_SIZE - 1)) == gpu - base && bytes <= fb->size;
+  uint64_t device_base = device_offset & ~(PAGE_SIZE - 1);
   bool complete = true, stable = true;
-  size_t present = 0, device_memory = 0;
+  size_t present = 0, device_memory = 0, matches = 0, first_mismatch = count;
   for (size_t i = 0; i < count; ++i) {
+    if (!(i % (PAGE_SIZE / sizeof(*ptes))) && !holds_stable()) {
+      fence_access("power lifetime changed during plane PTE snapshot");
+      complete = false;
+      break;
+    }
     if (!read_gtt(base + i * PAGE_SIZE, &ptes[i])) {
       complete = false;
       break;
     }
     present += !!(ptes[i] & GGTT_PTE_PRESENT);
     device_memory += !!(ptes[i] & GGTT_PTE_DM);
+    uint64_t expected = (device_base + i * PAGE_SIZE) | GGTT_PTE_PRESENT | GGTT_PTE_DM;
+    if (comparable && (ptes[i] & ~GGTT_PTE_PAT_MASK) == expected) {
+      ++matches;
+    } else if (first_mismatch == count) {
+      first_mismatch = i;
+    }
   }
   if (complete) {
     for (size_t i = 0; i < count; ++i) {
+      if (!(i % (PAGE_SIZE / sizeof(*ptes))) && !holds_stable()) {
+        fence_access("power lifetime changed during plane PTE recheck");
+        complete = false;
+        break;
+      }
       uint64_t value;
       if (!read_gtt(base + i * PAGE_SIZE, &value)) {
         complete = false;
@@ -438,13 +455,15 @@ static void inspect_gtt(void)
       stable &= value == ptes[i];
     }
   }
-  kinfo("intel-display: GOP GGTT gpu=%lx pages=%zu complete=%u stable=%u present=%zu DM=%zu\n",
-      gpu, count, complete, stable, present, device_memory);
+  bool alias = complete && stable && comparable && matches == count;
+  kinfo("intel-display: PIPE%c plane%u GGTT gpu=%lx pages=%zu complete=%u stable=%u present=%zu DM=%zu GOP-DM-alias=%u matches=%zu\n",
+      'A' + pipe, plane + 1, gpu, count, complete, stable, present, device_memory, alias, matches);
   if (complete) {
-    kdebug("intel-display: GOP PTE first=%lx last=%lx; DMA addresses, not CPU-physical ownership\n",
-        ptes[0], ptes[count - 1]);
+    kdebug("intel-display: PIPE%c plane%u PTE first=%lx last=%lx GOP-BAR2=%lx first-mismatch=%zu; no backing ownership inferred\n",
+        'A' + pipe, plane + 1, ptes[0], ptes[count - 1], device_offset, first_mismatch);
   }
   kfree(ptes);
+  return alias;
 }
 
 static void report_state(const struct display_state *s, bool stable)
@@ -492,22 +511,16 @@ static void report_state(const struct display_state *s, bool stable)
       bool channels = fb->green_shift == 8 &&
           (plane->control & PLANE_RGBX ? fb->red_shift == 0 && fb->blue_shift == 16 :
            fb->red_shift == 16 && fb->blue_shift == 0);
-      bool candidate = stable && pipe->transcoder_valid && (pipe->conf & TRANS_ENABLE) &&
+      bool alias = linear && pitch && !plane->offset &&
+          inspect_plane_gtt(p, n, plane->surface & PLANE_SURFACE_MASK, (uint64_t)pitch * height);
+      bool candidate = stable && alias && pipe->transcoder_valid && (pipe->conf & TRANS_ENABLE) &&
           (pipe->ddi & PLANE_ENABLE) && linear && channels && !plane->position && !plane->offset &&
           width == fb->width && height == fb->height && pitch == fb->pitch &&
-          fb->physical >= aperture_bar &&
-          fb->physical - aperture_bar == (plane->surface & PLANE_SURFACE_MASK) &&
           (plane->live & PLANE_SURFACE_MASK) == (plane->surface & PLANE_SURFACE_MASK);
       kinfo("intel-display: PIPE%c plane%u %ux%u pitch=%u linear8888=%u GOP-source-candidate=%u\n",
           'A' + p, n + 1, width, height, pitch, linear, candidate);
-      if (linear && pitch && height && !plane->offset) {
-        uint64_t start = plane->surface & PLANE_SURFACE_MASK;
-        uint64_t bytes = (uint64_t)pitch * height;
-        uint64_t first, last;
-        if (bytes <= GGTT_ADDRESS_BYTES - start && read_gtt(start, &first) &&
-            read_gtt(start + bytes - 1, &last)) {
-          kdebug("intel-display: PIPE%c plane%u GGTT edge PTE=%lx/%lx\n", 'A' + p, n + 1, first, last);
-        }
+      if (fenced) {
+        return;
       }
     }
   }
@@ -735,7 +748,6 @@ void intel_display_prepare(const struct boot_info *boot)
   }
   bool stable = false;
   if (!fenced && snapshot(&first_state)) {
-    inspect_gtt();
     if (!fenced && holds_stable()) {
       observe_timing();
     } else if (!fenced) {
@@ -744,6 +756,10 @@ void intel_display_prepare(const struct boot_info *boot)
     if (!fenced && snapshot(&second_state)) {
       stable = !memcmp(&first_state, &second_state, sizeof(first_state));
       report_state(&second_state, stable);
+      if (!fenced) {
+        stable &= snapshot(&first_state) &&
+            !memcmp(&first_state, &second_state, sizeof(first_state));
+      }
     }
   }
   if (!fenced && release_holds()) {
