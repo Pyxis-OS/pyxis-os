@@ -1,15 +1,16 @@
 # Vela RTL8922AE Wi-Fi
 
-**Plan accepted (chronium, 2026-10-22). Target: 0.0.11, not 0.0.10
-(chronium, 2026-10-26).** Stage 1 and the stage-2 firmware-first/checked-stop
-cut, request-driven PHY initialization/RFK/checked stop and one-channel DBCC
-passive discovery are native qualified on vela. Repetition, channel hopping,
-physical rfkill response and radiated-power behavior remain unqualified. Native
+**Plan accepted (chronium, 2026-10-22).** The 0.0.11-only placement decided on
+2026-10-26 is superseded: eligible for 0.0.10 if ready before its release,
+otherwise 0.0.11 (chronium, 2026-10-28). Stage 1 and the stage-2
+firmware-first/checked-stop cut, request-driven PHY initialization/RFK/checked stop and one-channel DBCC
+passive discovery, including two sequential same-channel requests with independent
+FILEs, are native qualified on vela. Channel hopping, physical rfkill response and radiated-power behavior remain unqualified. Native
 runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages), after the delivered
 [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
 The accepted decisions below define the initial scope; this track must preserve
-the released status prefix and does not land as part of 0.0.10.
+the released status prefix; release eligibility does not authorize another task.
 
 **Fresh read-only inventory completed, 2026-10-22**, through Tailscale SSH after
 chronium approved its check. No known_hosts change or host-check bypass was
@@ -704,7 +705,7 @@ qualified on vela (2026-10-28): a channel-1 request returned two real records in
 an immutable result FILE with observed RX and a retained healthy DBCC context.
 See the [passive-scan record](../development/experiments/rtl8922ae-passive-scan.md).
 - [x] One explicit legal channel: native immutable result FILE and observed RX.
-- [ ] Repeated same-channel requests and operation/FILE independence.
+- [x] Repeated same-channel requests and operation/FILE independence.
 - [ ] Channel hopping and complete admitted-channel-set delivery.
 - [ ] Cancellation, withdrawal, physical rfkill where controllable and recovery.
 
@@ -765,10 +766,10 @@ and [END_SCAN handling](https://github.com/torvalds/linux/blob/7d0a66e4bb9081d75
 define the firmware completion path; borrowed DMA storage never outlives its
 checked delivery.
 
-One normal channel-1 result is native qualified; same-channel repeated requests
-and full channel-list delivery remain unqualified. Progress next to repetition,
-cancellation/timeout/final-close, rfkill where controllable, warm handoff and
-independent USB-wired controls. Keep SSID/BSSID captures private/redacted.
+One normal channel-1 result and two sequential same-channel requests with
+independent FILEs are native qualified. Hopping, cancellation/timeout/final-close,
+physical rfkill response and recovery remain separate gates. Keep independent
+USB-wired controls and SSID/BSSID captures private/redacted.
 
 QEMU/source checks cover data bounds, narrowing and lifecycle, not RF. Separately
 scheduled VFIO/native checks must cover unknown/malformed inputs, channel/power
@@ -861,29 +862,121 @@ The checked BAR2 window is `0x60000` for the reference's PHY1 BBMCU control
 registers. RTL8922A still downloads one BBMCU firmware image. No new grant,
 application interface, public ABI or simultaneous multichannel capability.
 RFK completed bits mean completion on both PHYs, not either one. Native
-`f85199a6` passed one normal channel-1 request; it does not qualify repetition
-or hopping. Retained firmware/DMA is intentional after healthy completion.
+`f85199a6` passed one normal channel-1 request; `4b6c74cc` subsequently passed
+two sequential channel-1 requests. Neither qualifies hopping. Retained
+firmware/DMA is intentional after healthy completion.
 
-### Repeated same-channel qualification — accepted (chronium, 2026-10-28)
+### Repeated same-channel qualification — delivered (2026-10-28)
 
-Qualify two sequential explicit channel-1 requests on the same healthy DBCC
-activation, preserving the first immutable FILE across the second request.
-Each request has independent completion, bounded records and RX retirement;
-verify that the first FILE's bytes/rights remain unchanged, no extra startup or
-calibration occurs, and wired management survives. No automatic scan, retry or
-new application API. After this slice chronium can request channel 1 repeatedly
-without rebooting and keep independent result snapshots. The native packet is
-separate from the already passed single-request gate; this checklist remains
-unchecked until both requests and their retained-context boundary are observed.
+The two-request contract accepted by chronium on 2026-10-28 passed natively on
+vela at `4b6c74cc` with userland `1b546c9f`. Two explicit channel-1 requests on
+one healthy DBCC activation returned status 0 and counts 2/1. The first immutable
+FILE stayed held and unchanged through the second request; identities and close
+lifetimes were independent. Power verification boundaries stayed 10/10, boot
+state 3/3 and RFK `0xf`/`0xf`: no extra host startup/RFK. Wired management and
+byte-exact PXE restoration passed. See the
+[qualification record](../development/experiments/rtl8922ae-passive-scan.md#retained-context-repetition-2026-10-28).
+After this slice chronium can request channel 1 twice without rebooting and
+keep independent result snapshots. No automatic scan, retry or new API.
 
-Do not combine this qualification with cancellation or hopping. Those require
-separate subsequent delivery: a confirmed STOP/END-and-drain reuse check, then
-bounded per-frame PPDU channel attribution before a continuous firmware channel
-list. Ordinary RTL8922A RX descriptors do not carry the channel; ENTER_CHANNEL
-and the two independent RX rings do not prove a frame's channel. Follow the
-reference's PPDU correlation instead of relabeling frames from the latest
-software channel or relying only on optional DS/HT IEs. The hopping task must
-also resolve and qualify power/firmware-calibration enforcement across hops;
-post-ENTER host writes alone provide no before-calibration ordering proof.
-NO_IR channels 12–13 remain deferred to receive-only qualification as accepted.
-These are identified future gates, not accepted fallback policies or APIs.
+### Channel hopping — accepted (chronium, 2026-10-28)
+
+Keep BE firmware scan offload. The first hopping slice is an explicit
+channel-1-plus-6 request in one firmware list, with the existing START/END,
+DBCC context and immutable FILE. It does not add a host-directed channel walk,
+automatic scanning, association, probes or data TX. First qualify channel
+attribution on the already supported fixed channel; then qualify the two-channel
+request. Full admitted-mask delivery and NO_IR channels 12–13 remain later
+slices; the latter require receive-only retuning qualification. Cancellation and
+recovery remain separate gates.
+
+#### Reference findings
+
+Reference is Linux v6.18 `7d0a66e4bb9081d75c82ec4957c50034cb0ea449`,
+`drivers/net/wireless/realtek/rtw89/`:
+
+- `mac_be.c:2008–2025` enables PPDU reports; `core.c:1682–1734,1982–2031`
+  bounds/parses them. RTL8922A uses IE01 channel metadata
+  (`rtw8922a.c:2674–2708`). Ordinary RX descriptors lack a channel.
+- `core.c:2118–2152,3084–3136,3490–3517` correlates one current PPDU group
+  per BB using its counter and normalized rate/GI/bandwidth. A counter change
+  or report drains the group. Invalid/missing/unmatched reports retain Linux's
+  saved software-channel fallback; they do not fail its scan. ENTER_CHANNEL
+  alone is not per-frame channel evidence. RXQ is ordinary RX; RPQ handles TX
+  releases (`pci.c:436–453,713–733`), not a second channel-ordering guarantee.
+- Host channel changes call `set_txpwr` (`core.c:453–480`), including shape,
+  normal/RU limits and SAR (`rtw8922a.c:2257–2274`). Firmware scan channel-list
+  elements have no host power-image field (`fw.c:5660–5749`). ENTER handling
+  updates software channel state without a host power/RFK barrier
+  (`mac.c:5042–5085`); the RTL8922A scan RFK hook is empty
+  (`rtw8922a.c:2137–2142`). Post-ENTER writes cannot establish pre-hop ordering.
+
+Current Pyxis drops PPDU packet type 1 and uses fixed-channel metadata, which
+must not become an inferred hopping channel. Its existing PHY status bitmaps
+already include the reference's IE01. No new hardware readback-equality checks
+or stricter PPDU counter/timestamp matching are proposed.
+
+#### Accepted contract (chronium, 2026-10-28)
+
+1. **Channel evidence: PPDU-attributed records for hopping.** Follow
+   Linux's per-BB current-group matcher and report parsing, but omit hopping
+   candidates without a valid matched requested-channel report. Keep the current
+   fixed-channel fallback for single-channel requests. Missing, malformed,
+   late or unmatched reports are counted omissions, not terminal radio failures;
+   a completed empty FILE is valid. This deliberately yields fewer observations
+   than Linux's software-channel fallback, rather than presenting that fallback
+   as proven attribution. No report cache, timestamp-equality gate or extra
+   modulo-counter generation is introduced.
+2. **Bounded pending records; retain a visibly truncated result on overflow.**
+   Use 512 copied candidates shared by two BB queues, at most 64 bytes each
+   (32 KiB). Copy parsed BSS/correlation metadata, never whole frames or borrowed
+   DMA. This is an authored capacity, not an RX-ring lifetime guarantee. Keep
+   the existing 128 final BSS-record bound. At either capacity, keep what fits,
+   count dropped candidate records where known and mark the immutable result
+   visibly TRUNCATED; overflow alone does not fail the scan. Missing/unmatched
+   PPDU metadata remains a separately counted omission, not proof of capacity
+   truncation. Drain captured RX at END/confirmed STOP before resolving pending
+   groups and publishing; clear all groups between operations.
+3. **Power across hops: one conservative request-wide image before
+   RFK/START for the first explicit 1+6 slice.** Prepare both channels from the
+   validated tables, regulatory rules and fixed SAR; take the lower signed
+   ceiling for each corresponding normal/RU limit and physical-path SAR.
+   Other power/shape/by-rate controls must be compatible, not bytewise-minimized.
+   Apply that image to both contexts before calibration on requested channel 1,
+   retain it throughout firmware hopping, and follow Linux's scan RFK behavior
+   without an invented per-ENTER calibration sequence. This may reduce available
+   power; it never grants TX beyond initialization/calibration. Repeated exact
+   masks reuse the healthy context; a different retained-context mask remains
+   unsupported in this first slice. If compatible controls or enforcement
+   continuity cannot be established from the reference and programming evidence,
+   stop before enabling hopping and bring that concrete difference back.
+
+These decisions authorize implementation, not a claim that hopping is qualified.
+No new grant is needed. The immutable result carries truncation metadata so it
+outlives operation close; in-tree readers are updated together under the
+development ABI policy. The common power image is an explicit Pyxis policy,
+not a Linux firmware-upload format.
+Historical limit readbacks are not radiated-power measurements or proof of
+closed-firmware internals.
+
+#### Assigned delivery and qualification
+
+1. Enable reference PPDU reporting/decoding and bounded per-BB correlation on
+   channel 1; qualify known-channel records, omitted/unusable reports and FILE
+   retirement while keeping normal repeated single-channel results intact.
+   **After this task chronium can:** obtain channel-attributed fixed-channel
+   observations using the metadata required for hopping.
+2. Prepare/qualify the common 1+6 power image, then submit one firmware list with
+   both channels. Require reference START/END and RX retirement, channel values
+   derived from reports, decoded power ceilings covering both channels, rfkill
+   observations and independent wired management. Repeat the same request while
+   holding the first FILE; normal completion retains healthy context.
+   **After this task chronium can:** request a passive two-channel snapshot and
+   keep it independently of another completed request.
+
+Source/QEMU checks cover bounds, decoding and lifetime; only orchestrator-run
+native packets qualify PPDU delivery and firmware hopping on vela. No nearby AP
+or nonempty result is guaranteed. Channel attribution and programmed limits are
+separate evidence; neither proves radiated power. No native run is authorized
+by this document alone. The implementation and each native packet are qualified
+separately; the one-channel implementation and reviewed power correction are merged.

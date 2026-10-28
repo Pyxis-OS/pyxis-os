@@ -1,9 +1,9 @@
 # RTL8922AE: one-channel firmware passive discovery
 
 Native one-channel discovery passed on vela on 2026-10-28. This is the first
-slice of the [0.0.11 milestone](../../wip/rtl8922ae-wifi.md), following the
-[PHY/RFK qualification](rtl8922ae-phy-init.md). It does not qualify hopping,
-repeated/cancelled scans, association or data transmission.
+slice of the [RTL8922AE milestone](../../wip/rtl8922ae-wifi.md), following the
+[PHY/RFK qualification](rtl8922ae-phy-init.md). Two normal same-channel requests also passed as recorded below. Hopping,
+cancelled scans, association and data transmission remain unqualified.
 
 ## Revisions and configuration
 
@@ -54,6 +54,31 @@ RFK and after every helper. RFK status reports the intersection of both PHYs'
 completion masks. The bounded checked BAR2 mapping is `0x60000` for PHY1 control
 registers; RTL8922A still downloads one BBMCU firmware image, as Linux does.
 
+## Retained-context repetition (2026-10-28)
+
+Native kernel `4b6c74ccfa607fbca0ea8635a092ee3a9b0dca1d`, userland
+`1b546c9f7611a2a52cb2eeef181a2f0d353ec73a`; packet
+`/shared/present/rtl8922ae-passive-scan/native-repeat-20261028/`, authoritative
+result `results/run/summary.json`. The helper verified the running kernel.
+This is native evidence for this integration head, separate from the earlier
+single-request head and its matched controls below.
+
+| Observation | Native result |
+| --- | --- |
+| Sequential channel-1 requests | Both status 0 / complete; counts 2 and 1 |
+| First FILE held through second request | Unchanged bytes, size and read-only rights |
+| Snapshot identity and close lifetime | Independent FILE identities; operation closes passed, then FILE2 survived FILE1 close |
+| Power verification boundaries | 10 after each request |
+| Host startup/RFK | No additional startup/RFK; boot state 3/3, RFK `0xf`/`0xf` |
+| Radio / PHY state | READY, healthy context retained / `0xcf` |
+| Wired management / PXE restoration | Preserved / orchestrator verified byte-exact restoration |
+
+The first snapshot remained readable after the second operation closed, and
+the second remained readable after the first FILE closed. Different counts
+are ordinary independent observations, not a requirement that snapshots differ.
+No stop was attempted on healthy completion. These observations do not expose
+firmware-internal calibration or measure radiated power.
+
 ## Local checks and matched controls
 
 The frozen DBCC kernel built using `pyxis-llvm23.1.3-8a4d001`; its archive reused
@@ -91,9 +116,10 @@ recorded process identity; no native/PXE action occurred.
 
 ## Limits
 
-The native pass is one normal request on one channel and a retained healthy
-context, not a hardware-stop claim. It proves result publication and ordinary
-management-frame RX for that request. No repeated request, hopping, cancellation,
+Native qualification covers one normal channel-1 request and two sequential
+channel-1 requests on a retained healthy context, with independent immutable
+snapshots. It proves result publication and ordinary management-frame RX for
+those requests, not hardware stop. No hopping, cancellation,
 physical rfkill, radiated-power, recovery or connection claim. No probe/null/data
 TX; initialization/RFK is TX-capable under the accepted regulatory/SAR profile.
 Historical stop qualification remains in the preceding PHY/RFK record.
