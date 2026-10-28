@@ -264,7 +264,9 @@ may still serialize the small kernel-range preparation/retirement portions.
   records a placement mechanism without claiming full phase attribution.
 - [ ] Hands-free vela native A/B: same frozen workload archive/config/flags,
   actual AC/HWP/XSAVE/TSC checks, three interleaved fresh boots each, outcome and
-  final-drain checks. The orchestrator schedules/stages it; no attended steps.
+  final-drain checks. The [sealed packet](../development/experiments/bsp-preparation.md#native-handoff)
+  passes both final-pair QEMU collectors; the orchestrator schedules/stages it,
+  with no attended steps.
   New deliberate fault/uncertain-ACK scenarios still need separate scope; ordinary
   successful ACK checks do not qualify the timeout/quarantine path.
 

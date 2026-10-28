@@ -148,16 +148,29 @@ Raw after samples/comparison and placement evidence live under
 
 ## Native handoff
 
-The hands-free vela pair uses clean main `750cd0b99` as A and rebased task-4
-code `e647e2543` as B, so unrelated RTL Wi-Fi changes are present on both sides.
+The hands-free vela pair uses clean main `79ccea04f` as A and rebased task-4
+code `a83e821b9` as B, so unrelated RTL Wi-Fi and readiness changes are present
+on both sides.
 Both use identical deliberately frozen workload archive bytes from the original
 `af35537d6` / userland `b714efef765` baseline, plus the existing identity qualifier.
 Their consumed launch/memory/IPC/system-info ABI is unchanged; this is not claimed
 to be a freshly rebuilt newer userland. Compiler/config/flags match. The packet
 records AC/HWP/XSAVE/TSC state and requires three interleaved fresh boots each.
 Reverse Remote admits one client, so native cohorts are sequential; QEMU supplies
-the independent-preparation evidence. No native speedup or native IPC cost is
-claimed before the orchestrator runs it. No native/PXE action has occurred here.
+the independent-preparation evidence. The sealed pair is at `/shared/present/bsp-removal/task4/native/`; its numbered
+README gives the existing Remote commands and interleaved order. Both exact
+four-CPU nested-QEMU collectors pass, including runtime compatibility of the old
+identity qualifier and every workload's FINAL/drain checks. This qualifies the
+rebased runtime code, not native performance. MACs are masked from saved output;
+output-event payloads are omitted from event logs. Both guests/helpers stopped.
+
+A ELF SHA: `33cf1718dd056b6002f13d32ffbe2f23727d089a723049349d58d79530d90ae7`.
+B ELF SHA: `8b46292f81bec986fcefc4a1b25f1c49e5f5d9e12dd6b6eace94a356133c0d5d`.
+Common archive SHA: `93b4b48660b55d0822545dc2e60b78062fece6f8e8bbac8e86d9e21937fe9704`.
+Full config/builder/program identities and qualification evidence are sealed with
+SHA256SUMS. Subsequent experiment/WIP documentation commits change no runtime
+code from B. No native speedup or native IPC cost is claimed before the
+orchestrator runs it. No native/PXE action has occurred here.
 
 ## Storage and remaining limits
 
