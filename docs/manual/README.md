@@ -19,7 +19,7 @@ pages that 0.0.8 ships with.
 
 | Page | What it covers | Release |
 | --- | --- | --- |
-| [Shell basics](shell-basics.md) | Run commands, use `*` globbing, recall history, and clear or reset the terminal. | 0.0.8 core |
+| [Shell basics](shell-basics.md) | Run commands, use `*` globbing, add to a file with `>>`, complete names with Tab, recall history, set aliases, and clear or reset the terminal. | 0.0.8 core |
 | [Files and URIs](files-and-uris.md) | Name files with `boot://`, `home://`, `system://config`, `pkg://`, `sdk://`, `bin://` and `tmp://`, and copy, move and list them. | 0.0.8 core |
 | Editing with Neovim and vi | Open, change, save and quit in `nvim` and `vi`. | 0.0.8 core |
 | Keyboard and the multiplexer | Switch spaces with Super+Left and Super+Right, split and move between panes with Ctrl+B, open the power screen with Ctrl+Alt+Delete, release a captured pointer with Super+Esc, and copy and paste with Ctrl+Shift+C and V. | 0.0.8 core |

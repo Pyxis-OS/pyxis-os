@@ -73,6 +73,70 @@ clang++ hello.cpp -o hello-cpp.pxe
 Hello, C++!
 ```
 
+## Use files from C++
+
+`<filesystem>`, `<fstream>` and `<iostream>` work with Pyxis paths, which start
+with a root such as `tmp://`. For now you build a program that uses them on your
+development machine with the [SDK's `clang++`](../development/sdk.md#c), then
+copy it into Pyxis.
+
+1. On the development machine, create `files.cpp`:
+
+   ```cpp
+   #include <filesystem>
+   #include <fstream>
+   #include <iostream>
+   #include <string>
+
+   namespace fs = std::filesystem;
+
+   int main()
+   {
+       fs::path dir = "tmp://demo";
+       fs::create_directories(dir);
+
+       std::ofstream(dir / "hello.txt") << "Hello from C++\n";
+       std::cout << fs::file_size(dir / "hello.txt") << " bytes\n";
+
+       std::ifstream in(dir / "hello.txt");
+       std::string line;
+       std::getline(in, line);
+       std::cout << line << "\n";
+
+       for (const auto& entry : fs::directory_iterator(dir))
+           std::cout << entry.path().filename().string() << "\n";
+
+       fs::remove_all(dir);
+   }
+   ```
+
+2. Build it with the target [toolchain](../../toolchain/README.md) on your
+   `PATH` and an SDK from `make sdk`:
+
+   ```text
+   x86_64-unknown-pyxis-clang++ --sysroot=build/sdk/sysroot files.cpp -o files.pxe
+   ```
+
+3. Connect to a running Pyxis with `pyxis-remote`, and upload the file into the
+   current directory. The host asks for confirmation; answer `y`. See
+   [file transfer](../userland/remote-terminal.md#explicit-file-transfer):
+
+   ```text
+   home://> xfer receive /home/you/files.pxe files.pxe
+   ```
+
+4. Run it:
+
+   ```text
+   home://> ./files.pxe
+   15 bytes
+   Hello from C++
+   hello.txt
+   ```
+
+Calls with no Pyxis meaning, such as symbolic links, permissions, timestamp
+changes and free space, report an error.
+
 ## Use a library
 
 1. Install its development package:
