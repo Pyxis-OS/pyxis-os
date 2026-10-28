@@ -44,6 +44,7 @@ return function(inputs)
     for _, entry in ipairs({
       { file = "build/kernel-random-NOTICE", at = "share/licenses/kernel-random/NOTICE" },
       { file = "build/kernel-amd-NOTICE", at = "share/licenses/kernel-amd/NOTICE" },
+      { file = "build/kernel-intel-NOTICE", at = "share/licenses/kernel-intel/NOTICE" },
       { file = "assets/ui/volume/README.md", at = "share/licenses/volume-icons/NOTICE" },
       { file = "LICENSE", at = "share/licenses/volume-icons/LICENSE" },
       { file = "boot/rescue.list", at = "share/installer/rescue.list" },

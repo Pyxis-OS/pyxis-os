@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright © 2023-2025 Intel Corporation. Adapted register subset; see NOTICE. */
 #ifndef INTEL_DISPLAY_REGS_H
 #define INTEL_DISPLAY_REGS_H
 

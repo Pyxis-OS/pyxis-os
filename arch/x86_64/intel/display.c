@@ -1,3 +1,4 @@
+/* Portions adapted from Linux: Copyright © 2022 Intel Corporation. See NOTICE. */
 #include <arch/intel/display.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
