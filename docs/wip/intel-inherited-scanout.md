@@ -31,6 +31,26 @@ Raw captures and a compact decoded summary remain under
 headless query timed out; the DRM snapshot is sufficient for this reference.
 No further Fedora capture is required for the next step.
 
+## Native identity — 2026-10-28
+
+The orchestrator-run PXE capture of #1548 at `60376e62d` passed the partial
+identity check: PCI `00:02.0`, `8086:b0a0`, revision 0, D0; BAR0
+`0x10012000000`, BAR2 `0x10000000000`; stable display GMD `0x07800004`
+(**30.0, step 4**). GOP was `0x10000800000`, 1920×1080, pitch 7680,
+8,294,400 bytes, RGB shifts 16/8/0. BAR2-relative placement is 8 MiB;
+translation and active-plane ownership remain unproven. No hardware writes
+were made. Raw filtered results remain with the sealed native packet under
+`/shared/present/vela-tearing/inventory-native-20261028/results-vela/`.
+
+This is a **PXE-path mode**, not a panel limit. Chronium reports the normal
+NVMe firmware/Limine boot supplies 2880×1800. The installed menu generators
+set no resolution; the deployed NVMe menu has not been inspected here.
+Pinned Limine v12.9.3 (`e3aa138d383ca4fe061f05931b5a54497cd502f2`)
+supports the per-entry line `resolution: 2880x1800x32`; it may select another
+mode if the firmware does not offer that one. The next capture must report
+its actual GOP and hardware timing instead of assuming either resolution,
+Linux's 120 Hz mode, or an unchanged firmware route.
+
 ## Initial strategy — accepted (chronium, 2026-10-28)
 
 Pursue an inherited-state backend, beginning with a
