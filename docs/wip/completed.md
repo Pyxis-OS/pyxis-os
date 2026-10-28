@@ -8,6 +8,12 @@ when a milestone completes, as the [milestone index](boot-sdk-ports.md) says.
 [ACPI](../kernel/acpi.md), 2026-10-07: power-off, restart, the power button and
 battery.
 
+- [x] [Atomic append](../interfaces/atomic-append.md), 2026-10-28: bounded native
+  EOF placement, libc/shell and Go/Rust/LLVM integration; QEMU and native vela RAM
+  qualification. [Newer-shell](https://git.internal/PyxisOS/pyxis-os/issues/1537)
+  and [persistent-media](https://git.internal/PyxisOS/pyxis-os/issues/1538) native
+  checks remain open.
+
 [Automatic wired binding and route preference](../devices/net0-selection.md),
 2026-10-19: boot-discovered wired interfaces, exclusions, stable initial roles,
 observed link rates and scoped automatic routing/numeric DNS; management and

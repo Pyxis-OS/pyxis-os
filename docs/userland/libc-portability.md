@@ -745,7 +745,7 @@ builds use the ports recipe above, not the probe's replacement headers.
 The [libc compatibility gaps](https://git.internal/PyxisOS/pyxis-os/issues/1368) record
 absent interfaces and their revisit points. [Console EOF](https://git.internal/PyxisOS/pyxis-os/issues/1362),
 [creation mode](https://git.internal/PyxisOS/pyxis-os/issues/1369),
-[non-atomic append](https://git.internal/PyxisOS/pyxis-os/issues/1370),
+[large formatted-output staging](https://git.internal/PyxisOS/pyxis-os/issues/1370),
 [uncertain native release](https://git.internal/PyxisOS/pyxis-os/issues/1375),
 [narrow file metadata](https://git.internal/PyxisOS/pyxis-os/issues/1376) and
 [file alias side effects](https://git.internal/PyxisOS/pyxis-os/issues/1441)

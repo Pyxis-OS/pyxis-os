@@ -130,8 +130,8 @@ returns WRONG_TYPE without poisoning the captured value.
 
 The SDK clips a larger helper request to this bound, validates the returned
 extent/count and detects offset overflow. Successful append does not imply SYNC
-or directory persistence. Libc/shell/language adoption is tracked separately in
-the [milestone](../wip/atomic-append.md).
+or directory persistence. Libc/shell/language behaviour and qualification limits
+are described in [atomic append](atomic-append.md).
 
 The explicit `file_read_bulk` helper uses `FILE_READ_BULK`: offset, capacity and
 one absolute deadline, with at most 1 MiB returned as raw syscall bytes. Native

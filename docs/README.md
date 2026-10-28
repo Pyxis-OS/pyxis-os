@@ -26,6 +26,8 @@ notes, remain authoritative in their separately versioned repositories.
 
 [File metadata](interfaces/file-metadata.md) defines live identity, sampled
 modification time and independent validity across native and provider backing.
+[Native atomic append](interfaces/atomic-append.md) defines bounded EOF placement,
+libc/shell/language use and qualification limits.
 [Native hard links](interfaces/native-hard-links.md) defines npfs alias authority,
 counted lifetime, feature activation and explicit durability.
 
