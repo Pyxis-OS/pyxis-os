@@ -987,9 +987,9 @@ separate evidence; neither proves radiated power. No native run is authorized
 by this document alone. The implementation and each native packet are qualified
 separately; the one-channel implementation and reviewed power correction are merged.
 
-### Hopping implementation checkpoint (native pending)
+### Hopping implementation and bounded native qualification
 
-The accepted slice is implemented in a separate PR: reference PPDU reporting,
+The accepted slice is merged: reference PPDU reporting,
 bounded per-BB current-group matching, copied candidates, the BE two-element
 1+6 firmware list and the common power image. Overflow retains fitting records
 and carries TRUNCATED/drop metadata in the immutable 24-byte FILE header;
@@ -1014,6 +1014,13 @@ Power readbacks advanced 11 to 12 without another startup/RFK; wired management
 and byte-exact PXE restoration passed. Execution of the startup active-MAC
 power-cycle branch was not observable in the saved logs. This qualifies the
 bounded slice, not the complete channel set, physical rfkill or general recovery.
+
+Open qualification items (chronium, 2026-10-28):
+
+- [ ] Demonstrate channel-6 PPDU attribution. The native sweep visited both
+  channels, but all returned records were attributed to channel 1.
+- [ ] Prove execution of the startup active-MAC power-off/power-on branch.
+  The successful boot's saved logs do not identify whether that branch ran.
 
 [Qualification record](../development/experiments/rtl8922ae-hopping.md).
 These checkboxes do not complete full admitted-mask discovery or cancellation.
