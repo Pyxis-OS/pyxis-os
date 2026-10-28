@@ -113,7 +113,8 @@ workers and native hardware qualification remain open; hosted Rust remains later
 
 [Script launch authority](script-authority.md): exact held-shell source inheritance
 is implemented (chronium, 2026-10-28), with QEMU qualification and linked delivery
-PRs. Equivalent Pyxis Lua inheritance remains an unassigned follow-up.
+PRs. The Lua interpreter follow-up is assigned to Codex beta; its entry-point,
+API and descendant-lifetime choices await decisions.
 
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
 epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue
