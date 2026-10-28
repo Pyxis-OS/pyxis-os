@@ -17,7 +17,7 @@ output-prefix drain and pending-input flush; Kilo retains its upstream calls.
 See the [implemented contract](../userland/terminal.md#raw-termios-subset). This assignment does not change the accepted
 native raw/cbreak or foreground-interruption contracts below.
 
-- [ ] Descriptor readiness (chronium, 2026-10-28): `poll`/`ppoll`,
+- [x] Descriptor readiness (chronium, 2026-10-28): `poll`/`ppoll`,
   `select`/`pselect`, shared `O_NONBLOCK`, directional native status-only
   observation and the eligible port-adapter reductions. See the
   [descriptor contract](../userland/libc-readiness.md). Signal-mask pointers

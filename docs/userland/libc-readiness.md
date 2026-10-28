@@ -61,20 +61,22 @@ I/O through aliases while a wait runs. Storage pins and slot generations reject
 observed replacement; close is not a cancellation/wakeup interface. A stronger
 concurrent-reader/close contract needs libc buffer-state and lifetime wakeups.
 Do not copy native pipe grants merely to pin a wait and postpone peer EOF.
+The consequence and revisit point are tracked in
+[debt #1552](https://git.internal/PyxisOS/pyxis-os/issues/1552).
 
 Each call uses a temporary native readiness set. Registration captures all
-simultaneous sources before sleep. Results arrive in batches of at most64 and
-are collected without repeating returned rows; this is not a64-fd limit.
-Poll has checked INT_MAX/allocation limits plus the existing process-wide16MiB
+simultaneous sources before sleep. Results arrive in batches of at most 64 and
+are collected without repeating returned rows; this is not a 64-fd limit.
+Poll has checked INT_MAX/allocation limits plus the existing process-wide 16 MiB
 native readiness metadata account, without another libc fd quota. Resource
-admission can fail. Select uses FD_SETSIZE1024 as its bitset representation;
+admission can fail. Select uses FD_SETSIZE 1024 as its bitset representation;
 nfds is highest fd+1, not the count of set bits. Invalid selected fds return EBADF
 and failed calls preserve output sets.
 
 Poll timeout uses milliseconds; ppoll/pselect nanoseconds and select timeval
 microseconds. Zero polls, negative poll/NULL timeout waits indefinitely; waits
 that can park need the startup clock READ|PRECISE for deadlines. One monotonic
-deadline survives native30-second slices; expiry returns0. Timeout objects are
+deadline survives native 30-second slices; expiry returns 0. Timeout objects are
 not modified. Empty fd sets wait on a real empty native set. There is no
 periodic scan/sleep emulation or guarantee against lock/scheduler latency.
 
@@ -87,8 +89,8 @@ same milestone that enables delivery.
 
 ## Native ABI and rebuilding
 
-The native [wait ABI](../../include/abi/wait.h) adds WAIT_READ_STATUS(bit10) and
-WAIT_WRITE_STATUS(bit11) for PIPE and console/terminal application endpoints.
+The native [wait ABI](../../include/abi/wait.h) adds WAIT_READ_STATUS (bit 10) and
+WAIT_WRITE_STATUS (bit 11) for PIPE and console/terminal application endpoints.
 Each requires its existing matching data right and reports only closure/error,
 without ordinary data/capacity. Existing readiness/disarm behavior is unchanged;
 these observations consume no input or loss notification and add no I/O rights.
