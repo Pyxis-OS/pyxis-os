@@ -190,6 +190,7 @@ static bool set_dc_target(uint32_t target)
       expected = write_control(DC_STATE_EN, DC_TARGET_MASK, target);
       matches = 0;
     } else if (++matches == 7) {
+      kdebug("intel-display: DC target=%x confirmed=%x rewrites=%u\n", target, current, rewrites);
       return true;
     }
   }
@@ -596,6 +597,8 @@ static bool release_holds(void)
     fence_access("identity changed before DC restoration");
     return false;
   }
+  kdebug("intel-display: release BIOS=%x DRIVER=%x remaining=%x\n",
+      read_register(POWER_BIOS), read_register(POWER_DRIVER), owned_requests);
   if (!set_dc_target(saved_target)) {
     dc_confirmed = false;
     fence_access("DC target restoration not confirmed");
