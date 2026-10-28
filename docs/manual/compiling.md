@@ -73,6 +73,52 @@ clang++ hello.cpp -o hello-cpp.pxe
 Hello, C++!
 ```
 
+## Use files from C++
+
+`<filesystem>`, `<fstream>` and `<iostream>` work with Pyxis paths, which start
+with a root such as `tmp://`. Create `files.cpp`:
+
+```cpp
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string>
+
+namespace fs = std::filesystem;
+
+int main()
+{
+    fs::path dir = "tmp://demo";
+    fs::create_directories(dir);
+
+    std::ofstream(dir / "hello.txt") << "Hello from C++\n";
+    std::cout << fs::file_size(dir / "hello.txt") << " bytes\n";
+
+    std::ifstream in(dir / "hello.txt");
+    std::string line;
+    std::getline(in, line);
+    std::cout << line << "\n";
+
+    for (const auto& entry : fs::directory_iterator(dir))
+        std::cout << entry.path().filename().string() << "\n";
+
+    fs::remove_all(dir);
+}
+```
+
+Build and run it the same way:
+
+```text
+clang++ files.cpp -o files.pxe
+./files.pxe
+15 bytes
+Hello from C++
+hello.txt
+```
+
+Calls with no Pyxis meaning, such as symbolic links, permissions, timestamp
+changes and free space, report an error.
+
 ## Use a library
 
 1. Install its development package:
