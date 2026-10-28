@@ -150,13 +150,22 @@ Additional pinned references:
 - [Power-well transitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display_power_well.c):
   `gen9_set_dc_state` explains why disabling DC requires an MMIO write.
 
-## Powered-state access — proposed, awaiting chronium
+## Powered-state access — accepted (chronium, 2026-10-28)
 
-The native identity narrows the reference to display 30.0, raw step 4 (B0). It does not prove
-which DMC firmware is running, whether its wakelock protocol is initialized,
-or which display domains are held. The next slice needs a limited exception
-to the original no-power-writes boundary. **None of the writes below are
-implemented or authorized yet.**
+Linux-style early DC0 admission and inherited-state reads are ordinary display
+startup on the matched Intel device. There is no Intel inventory opt-in and no
+`display.inventory.power` option. During development the packet image is the
+gate. The existing `display.inventory` option remains for its independent
+Renoir read-only inventory; Intel startup does not consult it.
+
+Keep qualified inherited wells and parents held without clearing BIOS requests;
+skip gated/unproven domains, with no plane/GGTT programming or forced PSR exit.
+Release only our holds; uncertain outcomes fence further probing and retain
+confirmed resources/records until reboot, with a report and no routine panic.
+
+The PXE default entry now requests `resolution: 2880x1800x32`; the orchestrator
+confirmed vela's early console reports 2880×1800. Future captures still record
+actual GOP and timing, without reinterpreting the earlier 1080p identity run.
 
 ### Reference-backed primitives and their limits
 
@@ -192,13 +201,10 @@ The Xe3 hierarchy is PG1 → PGA/PGB/PG2, PG2 → PGC/PGD; PG0 has no software
 request knob and PW1 is HW/DMC-managed. Domain and fuse checks must follow
 that map, not an invented BIOS-request requirement for every ancestor.
 
-### Decision 1 — explicit power opt-in and a temporary DC0 window
+### Ordinary matched-device admission
 
-**Recommended default:** require `display.inventory.power=1` in addition to
-`display.inventory=1`; the existing option alone stays strictly read-only.
-The new option defaults off, with no default probe work or output. Under that
-explicit boot-only opt-in, the qualified `8086:b0a0` / display-30.0 B0 device
-may save the inherited DC target and use the
+The qualified `8086:b0a0` / display-30.0 B0 device saves the inherited DC target
+and uses the
 reference's early DC-disable primitive at `DC_STATE_EN` (`0x45504`). Keep DC0
 through the entire snapshot, then restore only the inherited target fields.
 Preserve unrelated register bits through masked operations. Follow the
@@ -214,12 +220,12 @@ This temporarily changes sleep eligibility; it does not set a pixel clock,
 power up a new output, retrain a link or change the mode. Do not load/replace
 DMC firmware, set `DMC_WAKELOCK_CFG`, use an unqualified wakelock request, or
 perform GT forcewake. No DMC handshake is required for this early DC0 path.
-The alternative is to keep identity-only inventory until a larger Intel
-power/DMC ownership implementation is authorized.
+Other devices/profiles remain on the existing firmware-framebuffer path; this
+startup does not initialize an otherwise gated output.
 
-### Decision 2 — retain only already-enabled display resources
+### Retain only qualified inherited resources
 
-**Recommended default:** under that window, serialize a single kernel inventory
+Under that window, serialize a single kernel inventory
 owner before AP startup, display initialization and any other Intel register
 writer. Require the existing PCI D0/decode/BAR identity and reject an endpoint
 already owned by another driver. Temporarily add only missing DRIVER requests
@@ -250,9 +256,9 @@ as a dead display. Every report includes the actual GOP/mode and stable field
 values; neither the 1080p PXE capture nor Linux's 120 Hz establishes NVMe-boot
 timing. Mode/plane/GGTT programming remains a later decision.
 
-### Decision 3 — bounded cleanup, explicit uncertain state
+### Bounded cleanup and explicit uncertain state
 
-**Recommended default:** use the reference's bounded DC rewrite/readback and
+Use the reference's bounded DC rewrite/readback and
 1 ms power-state/fuse waits. Acquisition failure authorizes no dependent
 register reads. On success, release only our added request bits in reverse
 dependency order while the original inherited holds are still established;
@@ -267,14 +273,14 @@ Report only holds/transitions positively confirmed; a failed DC write is
 retry the inventory, take a late acknowledgement as
 permission to release, or panic routinely. Existing firmware-framebuffer
 presentation continues; a retained hold/DC0 state can cost power until reboot.
-No scanout backing is allocated by this slice. This failure policy is proposed
-Pyxis ownership policy, not a claim that Linux uses it. The software wait
+No scanout backing is allocated by this slice. This is the accepted Pyxis failure/ownership policy, not a claim that Linux
+uses it. The software wait
 bounds do not make a CPU MMIO transaction itself interruptible.
 
-### Qualification after acceptance
+### Qualification
 
 - Audit the exact allowed writes and matched acquire/release journal; QEMU
-  checks option-off/nonmatching paths but cannot qualify Intel power handling.
+  checks nonmatching paths but cannot qualify Intel power handling.
 - One hands-free vela capture through Remote/UDP with before/after DC target,
   request masks, acknowledgements, skipped-domain reasons, raw layout, bounded
   PTE summaries and timing observations. Every failure remains a visible
