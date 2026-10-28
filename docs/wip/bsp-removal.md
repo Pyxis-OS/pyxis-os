@@ -173,7 +173,7 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 | 1. Private MEMORY on its caller CPU | Per-space owner proof, stable queries, counters/identities and pin synchronization; kernel-root continuations; all existing ordinary/guarded/sparse MEMORY operations. Preserve the BSP clients' use of the same gate. Check real AP execution, unrelated processes mutating concurrently, same-process competition, parked I/O and stop/unwind. | Run memory-heavy processes on APs without CPU0 servicing their MEMORY bodies; sibling quiescence still applies. |
 | 2. Frame allocation on each CPU | First measure PMM lock/search/zero/map costs with the routing bottleneck gone and bring chronium the decision whether to move frame allocation out. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
 | 3. Invalidation and shared kernel VM (merged, #1500) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
-| [x] 4. Preparation and reclamation (qualified, #1554) | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
+| [ ] 4. Preparation and reclamation (#1554; IPC regression blocks merge) | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
 | 5. Remaining VM consumers | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Complete the remaining VM-client audit and migration; the earlier JIT task already uses the common caller-CPU transaction. |
 
 ## Task 4 scope and decisions — accepted (chronium, 2026-10-28)
@@ -183,7 +183,8 @@ confirmed shared capture retirement. See [SMP ownership](../kernel/smp.md),
 [memory](../kernel/memory.md) and the
 [baseline/qualification record](../development/experiments/bsp-preparation.md).
 Device hooks and actual object destructors retain their fixed owners. Six native
-vela A/B boots pass; the record includes faster launch and higher IPC cost.
+vela A/B boots pass functionally, but their IPC regression blocks merge. No
+material IPC regression against main is a requirement (chronium, 2026-10-28).
 
 ### Decision 10 — fixed RAM cleanup owners
 
@@ -271,14 +272,44 @@ may still serialize the small kernel-range preparation/retirement portions.
   New deliberate fault/uncertain-ACK scenarios still need separate scope; ordinary
   successful ACK checks do not qualify the timeout/quarantine path.
 
-The least-loaded placement and migration rules are unchanged. Caller preparation
-is now running load on its AP, unlike an old caller parked for BSP preparation;
-that can change the selected child CPU within the same affinity. The nested IPC
-cost reproduces; the [experiment](../development/experiments/bsp-preparation.md)
-records the observed publication/first-dispatch distinction. No new scheduler
-scoring exception was introduced. Native launch improves 11.8%, pages are flat,
-and CALL64/4096 completion rises 32.6%/45.4%; SEND completion rises too. These
-costs are recorded alongside the benefit rather than treated as a QEMU-only effect.
+The least-loaded placement code is unchanged, but its inputs changed: caller
+preparation counts as running load on its AP, unlike an old caller parked for
+BSP preparation. It consequently selects a different child CPU, so task 4 has
+not preserved decision 11's placement behavior. Native launch improves 11.8%
+and pages are flat, but CALL64/4096 completion rises 32.6%/45.4%; SEND completion
+rises too. That trade-off is not accepted.
+
+- [ ] Resolve the placement regression and repeat matched QEMU and native IPC
+  controls before qualifying task 4. The configuration-only isolation in the
+  [experiment](../development/experiments/bsp-preparation.md#ipc-regression-attribution)
+  removes the large IPC penalty with all kernel checks unchanged; it is not a
+  delivered configuration workaround.
+
+### Initial placement after caller preparation — proposed, not implemented
+
+**Proposed default:** for initial child placement only, exclude the actual
+executing preparation actor from the load and sibling-idleness scoring view.
+Keep the real scheduler running state truthful; keep affinity, preferred CPU,
+idle stealing and wakeup rules. Boot/fixed-worker publication gets no exclusion.
+Count every queued batch member normally. Apply
+the same rule to native-thread creation, which also moved from a parked creator
+to its caller CPU. This changes scoring semantics and needs chronium's decision;
+it adds no per-message check, placement reservation or retained load snapshot.
+It favors the existing parent-CPU tie-break when other allowed CPUs are equally
+idle; it does not reproduce every historical destination under arbitrary CPU0
+or SMT load. An independently runnable child can still be stolen by an idle CPU;
+QEMU and native remeasurement must establish whether the regression is fixed.
+
+Alternative: suspend the creator and publish from its CPU's permanent scheduler
+stack, with a complete retained publication record and explicit preparation-owner
+handoff. This avoids a scoring exception and CPU0, but adds a publication phase
+and context switches whose cost and ownership proof need qualification.
+
+Alternative: retain a short BSP publication handoff after caller-CPU heavy
+preparation. That restores the old parked-caller placement context, but keeps
+CPU0 in every launch and requires an explicitly owned preparation handoff; its
+extra request/wakeup cost has not been measured. Neither alternative removes
+the VM, endpoint or task-lifetime guards protecting live operations.
 
 **You should know:** fixed cleanup actors add boot storage. Shared stack/capture
 admission can return BUSY after the existing bounded wait; cleanup contention can

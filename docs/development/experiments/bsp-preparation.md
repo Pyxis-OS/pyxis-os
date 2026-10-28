@@ -2,7 +2,7 @@
 
 Task 4 of [BSP removal](../../wip/bsp-removal.md), accepted placement/lifetime
 rules in #1550. This record separates source inspection, nested QEMU results
-and pending native qualification. No new guest benchmark or profiling code is
+and native qualification. No new guest benchmark or profiling code is
 part of the implementation.
 
 ## Pre-code baseline
@@ -219,6 +219,52 @@ Native evidence: `native/orchestrator-runs.txt`, `native/comparison.json` and
 all six staged boots and the restored default; comparison preserves individual
 samples and the common environment checks. No boot-time/multi-client scaling,
 physical-device cleanup stress or native uncertain-ACK fault claim is added.
+
+## IPC regression attribution
+
+The native regression blocks merge; chronium requires no material IPC regression
+against main (2026-10-28). A launch gain does not offset this cost.
+
+A configuration-only nested-KVM isolation reused the exact final A/B kernels and
+archive above, changing only Remote's allowed CPUs from `{1,3}` to `{1}`. All four
+vCPUs remain online; Development/network remains on CPU0. Each configuration has
+one discarded warmup boot per variant and three retained interleaved A/B pairs.
+No debugger runs during timing. Host one-minute load was 0.46–1.10. Existing IPC
+commands/counts/outcomes and final drainage all pass. Values are median (range)
+of summed 100-pass guest intervals, milliseconds:
+
+| CALL completion | Default `{1,3}`, A → B | CPU1-only, A → B |
+| --- | --- | --- |
+| 64 bytes | 138.928 (133.817–145.792) → 448.546 (446.988–455.123) | 121.346 (119.861–123.981) → 119.027 (118.351–119.348) |
+| 4096 bytes | 144.873 (143.483–165.856) → 473.370 (471.741–477.173) | 138.952 (137.292–142.520) → 132.989 (132.715–136.272) |
+
+SEND completion penalties likewise change from +56.2%/+69.0% with `{1,3}` to
+−4.2%/−4.2% with CPU1-only. Separate untimed GDB observations find both peers on
+CPU1 in all 12 samples per variant under that restriction. With `{1,3}`, all 12
+B samples run the receiver on the other AP; A has five same-CPU and seven
+cross-CPU first dispatches. Debugger stops can affect idle stealing; these are
+not natural placement frequencies. The unchanged-check control identifies
+placement as a material cause, not a per-check cycle cost or a native fix.
+
+Source and exact-artifact disassembly audit finds no new unconditional per-user-
+message guard. The two RAM-worker wait checks are bypassed by the existing user-
+task branch. VM dispatch/syscall/borrow, endpoint and wakeup guards protect root
+drainage, user-copy lifetime, delivery/cancellation and queue ownership as before.
+No new capture ACK, pin/unpin or process-retirement fence enters this timed loop:
+the benchmark launches its receiver from initrd, prepares it before the clock
+bracket, and stops/joins it afterward. The root-depart pending-service check
+actually loses its THREAD case. Existing wakeups can now require a remote IPI
+instead of a local queue operation; endpoint/queue cache ownership can cross CPUs.
+Those mechanisms explain the source-level connection to placement, but their
+individual costs have not been separated by the available tools. In particular,
+equal instruction counts and improved CPU1-only totals do not prove zero guard
+cost. No check was removed or redundant-check speedup claimed.
+
+Reports, exact source references, disassembly counts, hashes and small raw
+captures: `/shared/present/bsp-removal/task4/ipc-isolation/`. The default remains
+unfixed; the [placement proposal](../../wip/bsp-removal.md#initial-placement-after-caller-preparation--proposed-not-implemented)
+awaits a scheduling decision. Fixed RAM owners and confirmed capture retirement
+do not inherently require placing ordinary IPC peers on different CPUs.
 
 ## Storage and remaining limits
 
