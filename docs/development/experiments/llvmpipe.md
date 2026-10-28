@@ -62,8 +62,7 @@ Ordinary image builds consumed the container prefix without building LLVM.
 
 Parent `1adcae9272c68d546143c485000f608e692bc7e6` included main's script
 launch-source fix, userland `2a63b32de4109f6ba0952b240544e718130e569c`
-and ports `bf08f5da3c955098d8eddf6b76dff7f20275c31e`. Clean compiler/SDK/Mesa,
-SDL, ImGui and ioquake3 builds passed; both core and full live archives assembled.
+and ports `bf08f5da3c955098d8eddf6b76dff7f20275c31e`. Fresh SDK/Mesa, SDL, ImGui and ioquake3 builds passed; both core and full live archives assembled.
 The final ports follow-up only replaces ImGui's stale hardcoded softpipe label
 with renderer-neutral wording; its stderr already reports the actual renderer.
 
