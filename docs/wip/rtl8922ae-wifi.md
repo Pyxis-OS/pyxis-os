@@ -980,3 +980,25 @@ or nonempty result is guaranteed. Channel attribution and programmed limits are
 separate evidence; neither proves radiated power. No native run is authorized
 by this document alone. The implementation and each native packet are qualified
 separately; the one-channel implementation and reviewed power correction are merged.
+
+### Hopping implementation checkpoint (native pending)
+
+The accepted slice is implemented in a separate PR: reference PPDU reporting,
+bounded per-BB current-group matching, copied candidates, the BE two-element
+1+6 firmware list and the common power image. Overflow retains fitting records
+and carries TRUNCATED/drop metadata in the immutable 24-byte FILE header;
+SCAN STATUS adds a flag without growing its reply. In-tree readers change
+together; no retained release ABI is listed by the current development tree.
+
+The candidate applies/verifies the common image before RFK on both contexts and
+checks it after END/captured RX retirement, with collection already closed before
+any power helper can poll. Endpoint checks are not an on-air power measurement.
+Known single-channel requests keep fallback; different retained masks still
+refuse. No new grant, background scan, association or data path.
+
+- [x] CPU-only power compatibility and reference wire-format/lifetime qualification.
+- [ ] Current integration QEMU, matched controls and sealed hands-free packet.
+- [ ] Native PPDU delivery, 1+6 completion, retained repetition and FILE independence.
+
+[Qualification record](../development/experiments/rtl8922ae-hopping.md).
+These checkboxes do not complete full admitted-mask discovery or cancellation.
