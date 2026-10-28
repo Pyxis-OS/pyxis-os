@@ -183,8 +183,9 @@ Each delivery task needs a separate go-ahead.
 ncursesw with `TERM=pyxis`, then hexcurse (0.0.9; assigned, delta).
 [SQLite](application-ports.md#libraries-and-terminal-tools) through a native VFS.
 
-Physical GPU drivers, after the [display milestone](../kernel/display.md): the owner
-prepares the hardware.
+[Intel inherited scanout](intel-inherited-scanout.md): vela tearing investigation
+assigned to Codex alpha (chronium, 2026-10-28); read-only-first strategy accepted.
+Broader physical GPU drivers remain separately assigned.
 
 [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).
 
