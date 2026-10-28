@@ -12,24 +12,31 @@ Interpreter lookup authority is separate from the roots delegated to the
 child, which can be absent for provider publication launches. It appends a READ
 resource named `script` for the original file. Existing grant indices and child
 resources, roots, working directory and environment retain their meaning; no
-launcher authority is added. A caller may offer extra named grants for one exact
-parsed interpreter URI (`program_launch_extras`). ROOT selection opens that
-interpreter beneath a held directory; IMAGE selection takes a READ-only copy
-of a held native FILE. A selected missing/unusable image refuses launch without
-a mutable-name fallback. Both preserve source lineage, reject conflicting entry
-names and add nothing to native executables or other interpreters. The image
-selects code; it grants no trust or new authority.
+launcher authority is added. Interpreter preparation retains the parsed prefix
+and selected native FILE for `program_launch_prepared` or the corresponding
+batch entry point. The caller can bind a retained native interpreter with
+`program_image_select_interpreter`; shell startup selects it beneath its held
+root or from its own bundle. A missing/unusable selection refuses launch without
+a mutable-name fallback. Selection preserves source lineage; script-resource
+name collisions refuse before launch. The image selects
+code; it grants no trust or new authority. There is no interpreter-extras API.
 
 The shell's trusted chain uses its private `interpreter_root`. A rootless
 bundled shell instead retains its own `app/bin/shell.pxe` at startup and privately
-forwards that image to nested exact-shell scripts, together with only its held
-pipe CREATE, subgroup launcher LAUNCH and optional threads MANAGE. An explicitly
-supplied private provisioner and READ clock let a foreground exact selected shell receive
-a fresh private provisioning subtree. Native images and other interpreters
-receive none, and a client work leaf lacks the rights to provision. Creation is
-part of interpreter preparation; definite failure cleans it, while successful
-or unknown admission retains it for enclosing-owner cleanup or reboot. A script
-process observer alone never authorizes deleting that subtree.
+forwards that image to nested exact-shell scripts. The shell's common preparation
+retains its owned launch-source inventory for exact held-shell execution in
+foreground, pipeline, background and capture positions. Ordinary native profiles,
+explicit grant lists and bundle declarations still select authority for other
+launches. A non-shell caller cannot recover the session shell's sources by
+starting an interpreter. Lua interpreter source inheritance remains a separate
+follow-up; its existing explicit launch rules apply.
+
+Available private provisioning authority gives an exact held-shell launch a
+fresh confined subtree under the existing enclosing owner. A client work leaf
+lacks the rights to provision. Definite failure cleans unused preparation, while
+successful or unknown admission retains its tree for confirmed enclosing-owner
+cleanup or reboot. A script process observer alone never authorizes deleting
+that subtree. See [shell runtime grants](shell.md#script-runtime-grants).
 **Only trusted roots extend the trusted interpreter chain.** A caller-supplied
 `script` resource conflicts with shebang launch and is rejected.
 

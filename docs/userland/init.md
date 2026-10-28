@@ -148,10 +148,13 @@ return {
   archive root from which trusted shells open their script interpreter.
   Trusted init and session handoff preserve both;
   the shell delegates it as `launcher` to ordinary foreground commands, including
-  every foreground pipeline stage, and shell scripts they run
-  [delegate it in turn](shell.md#script-mode). Background commands and
-  services do not receive it. LAUNCH includes scoped subgroup creation; it does not delegate group
-  supervision or add terminal input rights.
+  every foreground pipeline stage. Exact held-shell scripts
+  [retain their shell's launch sources](shell.md#script-runtime-grants) in
+  foreground, pipeline, background and capture positions, with each launcher
+  bound to the permitted execution scope. Ordinary plain background commands and
+  services do not receive a launcher through this profile; bundles still use
+  their explicit declarations. LAUNCH includes scoped subgroup creation; it does
+  not delegate group supervision or add terminal input rights.
 - **Declared native jobs.** `jobs` is an optional boolean, defaulting to false.
   It makes a private RAM provisioning tree available to trusted startup and
   explicit successor handoff. A bundle must request `job_work`, plus usable
@@ -163,9 +166,13 @@ return {
   [declared contexts](program-bundles.md#private-job-contexts).
 - **Generated code.** `jit` is an optional boolean, defaulting to false. True
   provisions a private JIT source through trusted startup/session/mux/Remote
-  handoffs. Only explicitly declaring bundles receive it automatically; ordinary
-  children do not. No shipped space enables it. This source gate does not revoke
-  capabilities explicitly transferred by a native caller. See
+  handoffs. Exact held-shell scripts retain an available source and offer it to
+  explicitly declaring bundles just as their launching shell does. Shell bundles
+  remain subject to their declarations, including optional JIT; ordinary native
+  children and Lua interpreters keep their existing launch rules. No shipped
+  space enables it. A script cannot enable this switch or mint a missing source.
+  This source gate does not revoke capabilities explicitly transferred by a
+  native caller. See
   [JIT memory](../interfaces/jit.md).
 - **Multiplexer.** `multiplexer` is an optional boolean, defaulting to false.
   It supplies a distinct trusted `mux_terminal` grant. After configuration and
@@ -774,7 +781,13 @@ commands receive LAUNCH only when the shell holds `child_launcher`; `session`
 preserves that separate resource as well as the shell's own launcher. The
 kernel enforces capability rights, while
 the trusted programs choose what to delegate. Neither URI names nor selecting
-a different script creates authority beyond the supplied grants.
+a different script creates authority beyond the supplied grants. A directly
+invoked exact-shell script keeps the shell's available sources, including
+authority for privileged builtins; it is not an attenuation boundary. To run a
+reduced shell, use an explicit native grant list or declaring bundle with the
+desired sources. Nested scripts keep that reduced context and cannot recover
+omitted grants. A rootless shell's held image selects interpreter code and
+confers no trusted root or new ownership role.
 
 Failure to load boot init stops the boot. A space init that cannot be opened
 or launched leaves its space unstarted, with the reason on its tab. Boot init

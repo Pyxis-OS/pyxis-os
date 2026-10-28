@@ -894,11 +894,18 @@ background during default boot.
 
 ## Script mode
 
-`shell home://post.pxs` runs the supplied path through the declared `shell.pxb`
-grants. The script gets an owned subgroup; commands and staging workers remain
-inside its subtree, and Ctrl+C stops the subtree and waits for retirement. No
-root launcher or retention factory is delegated. Missing declared authority
-refuses before child launch. Bundle-interpreter shebangs remain later work.
+A directly invoked script using the exact held Pyxis shell runs with its
+launching shell's sources, so its commands have the same authority as commands
+typed there. This applies to foreground, pipeline, background and `$(...)`
+execution. A script cannot create missing sources or enable a space switch.
+An explicit `shell.pxb` launch, including `shell home://post.pxs`, remains bounded
+by its manifest and the caller's supplied grants; nested scripts retain that
+resulting shell context. Bundle-interpreter shebangs remain later work.
+
+The script gets an owned subgroup; foreground commands and staging workers remain
+inside its subtree, and Ctrl+C stops the subtree and waits for retirement. Each
+child receives the launcher bound to its permitted scope. Ancestor supervision
+and retention factories are not delegated.
 
 A named READ resource `script` selects script mode. `argv[1]` supplies the name
 used in diagnostics; the shell reads the granted handle from offset zero rather
@@ -933,30 +940,24 @@ Neither falls back to an interactive prompt.
 Script mode needs the same startup resources as interactive mode, including an
 explicit launcher grant, except the console: only an interactive shell requires
 console `input` and `output`. A script or `-c` line started with other standard
-streams, such as Neovim's pipes, writes to those, and its commands inherit them. In a space with `launch = true`, an ordinary foreground
-shell script receives LAUNCH as `launcher` and, because it is run by the shell
-interpreter, again as `child_launcher`; its other required startup resources
-must still be present. Holding `child_launcher` is what makes the script
-delegate: its ordinary foreground commands, including every pipeline stage and
-nested scripts, receive LAUNCH the way an interactive foreground command does,
-so `lua5.1` with luv can start children inside a script. Plain background
-programs and services still receive no launcher; a background bundle receives the
-launcher it declares, as at the prompt. Nothing beyond the LAUNCH right is added
-for launch.
+streams, such as Neovim's pipes, writes to those, and its commands inherit them.
+The script retains the shell's available launch sources, including its separately
+held `child_launcher`; all required startup resources must still be present.
+Its ordinary children use the same native profiles and bundle declarations as
+at the prompt. Plain background programs and services gain no launcher through
+the ordinary-child profile; a declaring bundle can receive a scoped launcher.
+A background script gains no console stdin or keyboard ownership. Existing
+background-redirection restrictions still apply.
 
-The shell offers its `net_registry` (READ alone) only to a bundle that declares
-it, such as [`net`](net.md); plain programs receive it through trusted session
+For ordinary child launch, the shell offers its `net_registry` (READ alone) only
+to a bundle that declares it, such as [`net`](net.md); plain native programs
+receive it through trusted session
 handoff only. Ordinary TCP, UDP and echo copies retain their held interface
 scopes. Resolver-capable children receive a separately scoped `dns_udp` grant
 with their selected `DNS_SERVER` snapshot, subject to their declared grants.
-Private policy, interface configuration and DHCP broadcast authority travel only
-through the trusted network-owner handoff, never ordinary command launch.
-
-For the exact parsed `#!boot://init-shell.pxe`, the shared launch helper can
-forward the caller's pipe CREATE, subgroup-bound `child_launcher` LAUNCH and
-optional threads MANAGE. Native executables and other interpreters get none of
-these script extras. Masks are narrowed to the caller's held rights; absent
-authority is never acquired.
+Private policy, interface configuration and DHCP broadcast authority stay with
+the trusted network-owner handoff, never ordinary native child launch. Recognizing
+a shell script creates no network-owner role.
 
 **Only trusted roots extend the trusted interpreter chain.** Trusted session,
 boot and pane shells open the interpreter beneath their retained private
@@ -965,12 +966,10 @@ bundled shell (`shell -c` or `shell FILE.pxs`, including one started by Neovim)
 retains a READ-only image from its own startup `app/bin/shell.pxe`; nested script
 shells receive a private copy. This image selects code, not trust. Missing or
 unusable image refuses script re-entry without falling back to a mutable name.
-Runtime re-entry adds no trusted root, ancestor launcher, retention factory,
-job provisioner, session or device authority. The runtime-only extras do not add
-a retention account; capture still requires one in the receiving profile.
-Startup-held runtime selection
-cannot be replaced by rebinding a name. Backgrounds and services keep their
-existing profiles.
+The held native FILE identity and retained interpreter selection identify the
+shell, never a basename, suffix, manifest ID or rebound `boot` name. Other
+interpreters keep their ordinary launch rules. A rootless shell cannot recover
+an omitted trusted root, source or ownership role by re-entering its held image.
 
 A script that holds `child_launcher` first creates its own subgroup of it and
 keeps the only CONTROL grant. It launches its foreground commands, and gives
@@ -1021,19 +1020,38 @@ echo "$#" arguments, first "$1", tenth "${10}"
 
 ### Script runtime grants
 
-A foreground bundle started from a script receives the runtime authority its
-manifest declares from what the script holds. A plain program receives no
-`threads`; exact-shell interpreter extras pass it to the script's shell, which
-can offer it to a Clang bundle. `random`, `clock` and `memory` keep their existing
-plain-program profile. `shell.pxb` declares optional threads and random.
+The shell owns one launch-source inventory. Re-entering its exact held shell
+retains that inventory; ordinary child preparation selects its native profile
+or manifest declarations from it. There is no interpreter-specific extras list.
+Held JIT, threads, PIPE CREATE, capture, clock, random, memory, display/audio and
+other available sources keep their actual rights and transport masks. Held roots,
+the command list and cwd keep their selected authority. These are existing
+sources, not grants inferred from resource names or arbitrary handles.
+
+Private job provisioning and retention authority remain private runtime state.
+Process observers, ancestor group CONTROL, pending transactions, terminal
+interrupt ownership and provider publication controllers are not launch sources
+copied by shell re-entry. The script owns its script FILE and its own execution
+and cleanup state. Standard streams use this invocation's redirects, pipeline
+connections, append policy and observation companions. Exported TEXT/CAP entries
+are an owned snapshot; private variables and interactive aliases are not exported.
+Child assignments, exports and cwd changes do not mutate the parent shell.
+
+A script is not a sandbox; use a restricted space when a sandbox is needed.
+For example, a builtin such as `reboot`
+works when its shell holds the required authority. An explicitly reduced native
+grant list or bundle launch stays reduced; neither a script nor its descendants
+can recover omitted sources. Ordinary native children and Lua interpreters keep
+their current declaration/profile rules. The shell bundle declares optional JIT,
+threads and random, so a declared JIT child works from a script whenever the same
+child works from that script's launching shell.
 
 The shell bundle declares optional private `job_provisioner` authority. When
-its caller can provision jobs, foreground `shell FILE` and `shell -c` receive a
-fresh private child subtree, not the caller's ancestor or another client's `job_work` leaf.
-A foreground exact supported shebang receives the same confined delegation after
-selecting its held interpreter. This works recursively, including a rootless
-bundled shell's held image. Nothing is granted to other interpreters or implicitly
-to ordinary children. A manifest cannot create absent authority: with jobs off,
+available, exact held-shell execution receives a fresh private provisioning
+subtree, including in pipeline, background and capture positions, under the
+existing enclosing owner. It receives neither the caller's ancestor nor another
+client's `job_work` leaf. This works recursively, including a rootless bundled
+shell's held image. A manifest cannot create absent authority: with jobs off,
 optional contexts stay absent and required `job_work` requests refuse before
 launch. A client leaf cannot be converted into a provisioner. Runtime capabilities
 `job_provisioner`, `interpreter_root` and `interpreter_image` cannot be used as
@@ -1055,7 +1073,8 @@ no waiting-session marker. Native image matching uses
 held FILE domain/object identity, not a name or manifest ID; the startup-selected
 shell bundle is pinned for this containment comparison alone. Shebang selection
 is parsed once and retained through admission. Each nested launch adds one group
-level (the existing depth/member limits are 16/256). Arbitrary bundles declaring
+level; the existing limits are depth 16 and 256 allocated group objects per
+space, not a member quota. Arbitrary bundles declaring
 provisioning outside an owned scope still retain their tree until pane/session
 cleanup or reboot. A captured private-work directory does not extend storage
 lifetime: group retirement clears/unlinks its contents. The script subgroup and
@@ -1079,7 +1098,7 @@ containing CR or LF is refused, as is one beyond the script line limit.
 Neovim's `'shell'` uses it for `:!`, `system()` and `:make`
 ([Neovim external jobs](neovim.md#external-jobs-and-shell-commands)).
 
-Under `shell.pxb`, console `input` and `output`, `threads`, `random` and the
+Under `shell.pxb`, console `input` and `output`, `jit`, `threads`, `random` and the
 `retention_account` are optional grants, so the command line runs with only
 what its caller holds. Without a retention account, `$(...)` captures are
 refused.
@@ -1200,11 +1219,12 @@ ENUMERATE and READ_FILES, and home additionally supplies CREATE, WRITE_FILES and
 REMOVE. Directory grants can be restricted by the launcher; the shell queries
 and preserves their actual rights.
 An optional `power` resource supplies the `poweroff` and `reboot` builtins. The
-shell forwards it only to a `session` successor, never to the programs it runs;
+shell retains it through exact-shell scripts and forwards it to a `session`
+successor, not to ordinary native programs it runs;
 session passes it on to local successors but not when it starts remote services.
-The separate `remote_power` resource also passes only to session successors;
+The separate `remote_power` resource follows shell re-entry and session successors;
 the remote supervisor converts it to `power` for its root shell. Ordinary
-commands and service providers receive neither.
+native commands and service providers receive neither through ordinary launch.
 An optional `display` resource supplies DRAW authority for the space. An optional
 `clock` resource supplies READ and SLEEP authority for monotonic time. An optional
 `keyboard` resource supplies INPUT authority for physical-key sessions.
@@ -1215,9 +1235,10 @@ preserves at most 16 startup roots and fails explicitly if that limit is exceede
 An optional `child_launcher` resource controls delegation to ordinary foreground
 commands, including every pipeline stage. The packaged Development and installed
 `pyxis` profiles provide it; Read-only and Remote do not. When present, the shell
-passes this grant as `launcher` with LAUNCH alone and, to a script run by the
-shell interpreter, again as `child_launcher`, so the script delegates the same
-way. It never substitutes its own launcher. Plain programs launched in the background
+passes this grant as `launcher` with LAUNCH alone. Exact held-shell scripts
+retain the available launch-source inventory and use launchers bound to their
+own execution scopes. No inherited inventory carries an ancestor launcher.
+Plain programs launched in the background
 or as services gain no launcher through this policy. A bundle that declares
 `launcher` is offered the grant in every launch mode, background included, as it
 is at the prompt and in scripts alike. Trusted `session` handoff preserves

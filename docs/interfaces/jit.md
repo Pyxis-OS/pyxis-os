@@ -10,8 +10,13 @@ The ABI is [jit.h](../../include/abi/jit.h); libpyxis exposes the corresponding
 No shipped space enables JIT. A space explicitly sets `jit = true` to provision
 a private JIT source for its trusted launchers. Bundle launch supplies it only
 for an explicit `jit` grant with `manage` rights. Trusted session, mux and Remote
-handoffs preserve that source; ordinary child inheritance does not forward it,
-including under an alias. Lua and libuv follow the same declaration rule.
+handoffs preserve that source. Exact held-shell script re-entry also retains it
+in foreground, pipeline, background and capture positions, so a declaring child
+can receive the same JIT authority as when launched directly from that shell.
+The shell bundle declares JIT optionally and remains bounded by its manifest.
+Ordinary native children, Lua and libuv keep their explicit declaration rules;
+an environment alias does not make JIT an ordinary inherited grant. See
+[script runtime grants](../userland/shell.md#script-runtime-grants).
 
 This is a source-provisioning gate, not an additional runtime space ceiling:
 explicit native grant lists and capability transfer can convey already-held
