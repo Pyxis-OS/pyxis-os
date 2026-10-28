@@ -20,15 +20,17 @@ native raw/cbreak or foreground-interruption contracts below.
 - [x] Descriptor readiness (chronium, 2026-10-28): `poll`/`ppoll`,
   `select`/`pselect`, shared `O_NONBLOCK`, directional native status-only
   observation and the eligible port-adapter reductions. See the
-  [descriptor contract](../userland/libc-readiness.md). Signal-mask pointers
-  are accepted as no-ops only while no signals are delivered.
+  [descriptor contract](../userland/libc-readiness.md). Temporary signal masks
+  have real meaning in the cooperative follow-up below.
 
 - [ ] Cooperative libc signals (chronium, 2026-10-28): initial-thread WINCH
   and opted-in INT; automatic rendering-terminal selection; real
   sigaction/masks/pending/suspend and ppoll/pselect masks; audited delivery and
   read restart; SA_RESTART/RESETHAND/NODEFER/SIGINFO. First consumers are
   Fastfetch's generator and BusyBox less. See the
-  [accepted contract](../userland/cooperative-signals.md).
+  [accepted contract](../userland/cooperative-signals.md). The implementation
+  has [initial QEMU evidence](../development/experiments/cooperative-signals.md);
+  qualification remains open for INT and the upstream less prompt-resize defect.
 
 Later control-channel TERM/HUP, owned-child CHLD and clock ALRM require their
 own source/consumer gates. The initial slice adds no asynchronous compute-loop

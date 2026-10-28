@@ -1,6 +1,7 @@
 # Cooperative libc signals
 
-Accepted 2026-10-28; first-slice implementation and qualification in progress.
+Accepted 2026-10-28; the first slice is implemented, with
+[initial QEMU qualification and outstanding checks](../development/experiments/cooperative-signals.md).
 This is an opt-in compatibility layer for ports. Native programs retain
 [control, events and faults](../wip/control-events-faults.md), with no
 asynchronous kernel callbacks or fault-signal recovery.
