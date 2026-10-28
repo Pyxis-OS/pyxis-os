@@ -19,9 +19,9 @@ Tearing was visible on vela. No display-driver change is included here.
 
 OpenArena used the public 0.8.8 assets in an explicit qualification bundle;
 SoH used the previously staged private assets and a same-compiler relink.
-Neither is a package-install check. Games were launched directly as bundles:
-the convenience `.pxs` launchers did not receive JIT authority. That launcher
-design remains separate; this check adds no authority workaround.
+Neither is a package-install check. The later merged script-authority change
+(#1542, userland #416) preserves the shell's held launch sources, including JIT,
+for `.pxs` scripts. The llvmpipe stack includes that change.
 
 The matched trimmed OpenArena timedemo, once on Pyxis and once on Fedora on
 vela with upstream default workers, remains pending. The refreshed container
