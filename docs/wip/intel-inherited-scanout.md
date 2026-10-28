@@ -192,6 +192,98 @@ an alias, not permission to allocate or overwrite nearby stolen memory.
 translation evidence and decide a bounded flip contract. It does not yet make
 presentation tear-free. Access limitations are tracked in [#1549](https://git.internal/PyxisOS/pyxis-os/issues/1549).
 
+## Next slice: synchronized flips — proposed, not authorized
+
+The starting-buffer choice depends on the complete-PTE observation above.
+The two edge matches strongly suggest that GOP and plane 1 already share the
+same stolen backing through different address spaces. Do not allocate a new
+"initial front" merely because their untranslated addresses differ.
+
+### Decision 1: starting surface and owned back buffers
+
+**Recommended default:** after every active PTE and the layout match, retain
+the inherited GOP mapping/backing as the initial front, preserving its entire
+GGTT span. Allocate two new, pinned, kernel-owned UMA back buffers at the same
+pitch/format; map their device-visible addresses into explicitly owned GGTT
+slots with DM clear. The inherited stolen range remains reserved, including
+after the first flip; do not overwrite its PTEs or allocate adjacent stolen
+storage. A failed alias check leaves the existing copy backend running.
+
+The GGTT address allocator must import inherited mappings and reference-defined
+firmware reservations under exclusive device ownership; zero PTEs alone are
+not allocation authority. The inherited span crosses Linux's GuC-specific
+`0xfee00000` allocator ceiling, which is not permission to truncate it. New
+UMA mappings require a proven DMA/IOMMU address contract, CPU WC/cache-alias
+handling and the inherited PAT interpretation. No guessed identity DMA or
+Linux-initialized PAT indices. If those prerequisites cannot be established,
+report the missing contract before broadening this slice. A stolen allocator
+is the alternative, with additional GSM/DSM capacity and firmware/WOPCM
+exclusions; it is not the default.
+
+### Decision 2: synchronous inherited-mode operation and power lifetime
+
+**Recommended default:** one pending, synchronous update on the qualified
+pipe A/plane 1, leaving mode, clock, link, colour and scaler setup unchanged.
+Preserve PSR/replay controls: they are disabled in the measured boot. If a
+future inherited setup has them enabled, keep software presentation until a
+separate source/sink exit contract is accepted; do not write PSR enable bits
+in isolation. Display 30's async selector is SURF bit 0; keep it clear.
+
+For an active flip backend, hold the qualified power domains and DC0 continuously
+through all outstanding transactions, rather than releasing startup's holds
+between frames. Preserve every inherited request and release only owned ones.
+This can increase idle power; runtime power optimization is later work. The
+exclusive display owner serializes submissions and validates the inherited
+layout/access before writes. Derive the reference scanline keepout from qualified
+clock/timing and VRR state before the final SURF arm; defer/coalesce a late
+frame. A changing frame is composed/copied into an inactive buffer, with
+frame skipping and frozen software capture semantics preserved.
+
+This is a development-packet write path first. Ordinary startup remains the
+qualified inventory plus existing copy path until native flip qualification
+and the activation decision. Exact GGTT update/invalidation and plane-register
+write masks must be source-qualified before the first write; the current two
+power-control write allowance does not silently authorize them. In particular,
+Xe GGTT writes include platform workarounds and translation-ordering machinery;
+copying PTEs and writing SURF alone is not an implementation plan.
+
+### Decision 3: completion, retirement and uncertainty
+
+**Recommended default:** establish a transaction-correlated hardware completion
+rule before the first plane write. Linux arms its vblank event inside the update
+critical section and waits for flip completion; two equal SURFLIVE reads do
+not establish the same guarantee. Qualify the applicable flip-done indication,
+vblank progress and expected live surface together, including exactly when old
+backing is no longer fetched. Keep the inherited front and both owned buffers
+pinned through that proof; admit no second pending flip.
+
+On timeout or ambiguous completion, fence further plane/GGTT writes and retain
+every possibly referenced mapping/backing until reboot. Do not reclaim on a
+late observation, guess which buffer is free, disable the pipe, or resume
+copying into an uncertain front. Continue device/input service and report the
+fenced display. Software fallback is available before the first write, or after
+a separately confirmed return to the inherited surface; it is not an uncertain
+mid-flip recovery. Integrate panic output with the same retained-buffer state
+before enabling this backend, so the fallback never targets released storage.
+
+### First task and qualification
+
+First finish the all-page alias capture and source-level mapping/cache/update
+contract, then prepare owned buffers and a single correlated flip/return under
+the accepted write list. If the applicable hardware completion or GGTT-access
+contract is absent, stop there for the next decision; no speculative native
+write is justified by the current inventory.
+
+QEMU checks only non-Intel behavior and software buffer/state ownership. A
+hands-free vela packet then checks the one-flip/return proof before repetitive
+presentation, followed by desktop/mux/game frame changes, idle frame skipping
+and capture/panic behavior. Record native timing and power state independently
+of Fedora's modeset. A native tear-free claim waits for this evidence.
+
+**What chronium can do after the first task:** inspect a measured whole-buffer
+GOP alias and the exact owned-buffer/write/retirement contract, or one reported
+prerequisite that prevents a safe first flip.
+
 ## Pinned references
 
 Linux v6.19 `05f7e89ab9731565d8a62e3b5d1ec206485eeb0b` is the source reference,
@@ -203,6 +295,10 @@ not a claim of identical initialization to observed Fedora 7.2.10-200.fc44.
 - [Xe3 power map](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display_power_map.c): domain dependencies and HW/DMC-managed ancestors.
 - [DMC wakelocks](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_dmc_wl.c): powered/DMC-touched ranges and ordering caveat.
 - [Plane readout](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/skl_universal_plane.c) and [Xe initial plane](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/display/xe_plane_initial.c): power-guarded layout and bounded early timestamp wait.
+- [Stolen device-memory layout](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c): `detect_bar2_integrated()` GSM-relative DM PTEs and BAR2 CPU access.
+- [PSR register definitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_psr_regs.h): enable, idle and link-state fields.
+- [Plane register definitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/skl_universal_plane_regs.h): 8888/channel order, alpha and display-30 SURF async selection.
+- [CRTC update](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_crtc.c) and [vblank timing](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_vblank.c): safe update window and completion arming.
 - [Xe GGTT](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_ggtt.c): table extent/location and raw inherited-PTE reader.
 - [PHY selection](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display.c) and [PSR workarounds](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_psr.c): Panther Lake has no combo-PHY recovery and this B0 is outside the A0–before-B0 DC5/DC6 workaround.
 - [Pinned Limine configuration](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/CONFIG.md): per-entry resolution request and fallback.
