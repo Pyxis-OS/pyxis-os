@@ -48,7 +48,9 @@
 #define SCAN_LEARN_CHANNEL (UINT32_C(1) << 7)
 #define SCAN_CONFIG_BYTES 40u
 #define SCAN_CHANNEL_BYTES 32u
-#define SCAN_LIST_BYTES (4u + SCAN_CHANNEL_BYTES)
+#define SCAN_LIST_MAX_CHANNELS 2u
+#define SCAN_LIST_HEADER_BYTES 4u
+#define SCAN_LIST_BYTES (SCAN_LIST_HEADER_BYTES + SCAN_LIST_MAX_CHANNELS * SCAN_CHANNEL_BYTES)
 #define SCAN_MACC_ROLE_WORDS 1u
 #define SCAN_OP_CHANNEL_WORDS 5u
 #define SCAN_MLO_1_PLUS_1_1RF UINT32_C(0x1011)
@@ -108,6 +110,7 @@ static struct {
   bool offload_acked;
   uint8_t wait_function, channel, ack_return, ack_sequence;
   uint8_t offload_return, offload_sequence;
+  uint32_t entered_channels;
   uint8_t cam[CAM_COMMAND_BYTES];
 } scan;
 static char ack_detail[WIFI_DETAIL_BYTES];
@@ -151,9 +154,9 @@ void rtl8922ae_scan_status(struct wifi_status_reply *status)
   }
 }
 
-uint8_t rtl8922ae_scan_channel(void)
+uint32_t rtl8922ae_scan_channels(void)
 {
-  return scan.channel;
+  return scan.entered_channels;
 }
 
 bool rtl8922ae_scan_reusable(void)
@@ -203,7 +206,12 @@ bool rtl8922ae_scan_receive(const void *data, size_t bytes)
     }
     uint32_t report = get32(packet + C2H_HEADER_BYTES);
     unsigned reason = report >> 16 & 15u, status = report >> 20 & 15u;
-    if (scan.running && reason == SCAN_ENTER_CHANNEL_NOTIFY) scan.channel = report & 255u;
+    if (scan.running && reason == SCAN_ENTER_CHANNEL_NOTIFY) {
+      scan.channel = report & 255u;
+      if (scan.channel && scan.channel <= WIFI_CHANNEL_24_COUNT) {
+        scan.entered_channels |= UINT32_C(1) << (scan.channel - 1);
+      }
+    }
     if (scan.running && reason == SCAN_END_NOTIFY) {
       scan.end_ok = status == SCAN_STATUS_SUCCESS;
       if (!scan.end_ok) scan.uncertain = true;
@@ -400,7 +408,7 @@ static bool wait_end(uint64_t deadline, const char **detail)
   return fail(detail, "RTL8922AE scan END failed/timed out");
 }
 
-bool rtl8922ae_scan_run(uint8_t channel, uint64_t deadline, const char **detail)
+bool rtl8922ae_scan_run(uint32_t channels, uint64_t deadline, const char **detail)
 {
   if (!rtl8922ae_scan_reusable()) {
     return fail(detail, "RTL8922AE scan context unavailable");
@@ -410,17 +418,26 @@ bool rtl8922ae_scan_run(uint8_t channel, uint64_t deadline, const char **detail)
     return fail(detail, "RTL8922AE scan context transport unavailable");
   }
   uint8_t list[SCAN_LIST_BYTES] = {0};
-  /* Linux CHAN_ACTIVE with zero SSIDs: 20 MHz, no probe, null or random SN.
-   * Current BE channel format carries the period in w7 rather than w0. */
-  list[0] = 1;
+  /* Reference BE channel list, CHAN_ACTIVE with zero SSIDs: no probe, null
+   * or random sequence. Period is w7, and each element owns its packet IDs. */
+  unsigned count = 0;
+  for (unsigned channel = 1; channel <= WIFI_CHANNEL_24_COUNT; ++channel) {
+    if (!(channels & (UINT32_C(1) << (channel - 1)))) continue;
+    if (count == SCAN_LIST_MAX_CHANNELS) return fail(detail, "RTL scan channel list exceeds this slice");
+    uint8_t *entry = list + SCAN_LIST_HEADER_BYTES + count * SCAN_CHANNEL_BYTES;
+    put32(entry, (uint32_t)channel << 16 | (uint32_t)channel << 24);
+    put32(entry + 4, SCAN_PAUSE_DATA | SCAN_NOTIFY_MASK << SCAN_NOTIFY_SHIFT);
+    put32(entry + 12, ALL_WORD_BITS);
+    put32(entry + 16, ALL_WORD_BITS);
+    put32(entry + 28, SCAN_CHANNEL_TIME_MS);
+    ++count;
+  }
+  if (!count) return fail(detail, "RTL scan requires explicit channels");
+  list[0] = count;
   list[1] = SCAN_CHANNEL_BYTES / 4;
-  put32(list + 4, (uint32_t)channel << 16 | (uint32_t)channel << 24);
-  put32(list + 8, SCAN_PAUSE_DATA | SCAN_NOTIFY_MASK << SCAN_NOTIFY_SHIFT);
-  put32(list + 16, ALL_WORD_BITS);
-  put32(list + 20, ALL_WORD_BITS);
-  put32(list + 32, SCAN_CHANNEL_TIME_MS);
-  if (!acknowledged_command(H2C_ADD_SCAN_CHANNEL, list, sizeof(list),
-      deadline, detail)) return false;
+  if (!acknowledged_command(H2C_ADD_SCAN_CHANNEL, list,
+      SCAN_LIST_HEADER_BYTES + count * SCAN_CHANNEL_BYTES, deadline, detail)) return false;
+  scan.entered_channels = 0;
 
   uint8_t payload[SCAN_CONFIG_BYTES];
   scan_configuration(payload, SCAN_START);

@@ -34,7 +34,7 @@ struct wifi_scan {
   struct wifi_object *radio;
   size_t grants;
   uint32_t record_count;
-  bool terminal, taken, closed;
+  bool terminal, taken, closed, truncated;
   enum call_status status;
   struct wifi_scan_work work;
   struct forwarder_operation lineage;
@@ -224,7 +224,8 @@ bool wifi_scan_begin(struct wifi_scan_work *work)
 }
 
 void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
-    uint32_t channels, const struct wifi_bss_record *records, size_t count)
+    uint32_t channels, const struct wifi_bss_record *records, size_t count,
+    uint32_t dropped_records)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct wifi_scan *scan = scan_from_work(work);
@@ -262,6 +263,8 @@ void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
   if (status == CALL_OK) {
     scan->bytes.header = (struct wifi_scan_file_header){
       .count = count, .record_bytes = sizeof(struct wifi_bss_record), .channels = channels,
+      .flags = dropped_records ? WIFI_SCAN_FILE_TRUNCATED : 0,
+      .dropped_records = dropped_records,
     };
     size_t length = sizeof(scan->bytes.header) + count * sizeof(scan->bytes.records[0]);
     file_fill_snapshot_size(scan->file, &scan->bytes, length);
@@ -274,6 +277,7 @@ void wifi_scan_finished(struct wifi_scan_work *work, enum call_status status,
   scan->terminal = true;
   if (status == CALL_OK) {
     scan->record_count = count;
+    scan->truncated = dropped_records != 0;
   }
   spin_unlock(&scan->lock);
   readiness_notify();
@@ -660,6 +664,7 @@ struct syscall_result wifi_scan_call(struct kernel_object *object, uint64_t righ
     struct wifi_scan_status_reply reply = {
       .flags = (scan->terminal ? WIFI_SCAN_COMPLETE : 0) |
           (scan->taken ? WIFI_SCAN_TAKEN : 0) |
+          (scan->truncated ? WIFI_SCAN_TRUNCATED : 0) |
           (atomic_load_explicit(&scan->work.cancel, memory_order_acquire) ?
               WIFI_SCAN_CANCEL_REQUESTED : 0),
       .status = scan->status, .record_count = scan->record_count,

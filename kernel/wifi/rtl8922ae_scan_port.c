@@ -16,6 +16,16 @@
 #define PORT_BEACON_EARLY 160u
 #define PORT_BEACON_EARLY_US 20u
 #define PHY_REPORT_EIGHT_BYTES 1u
+#define MAC_BAND1_OFFSET 0x4000u
+#define R_BE_HW_PPDU_STATUS 0x9c30u
+#define B_BE_FWD_PPDU_STAT_MASK 0xffu
+#define R_BE_PPDU_STAT 0x11440u
+#define B_BE_PPDU_STAT_RPT_DMA (UINT32_C(1) << 6)
+#define B_BE_PPDU_STAT_RPT_CRC32 (UINT32_C(1) << 5)
+#define B_BE_APP_PLCP_HDR_RPT (UINT32_C(1) << 3)
+#define B_BE_APP_RX_CNT_RPT (UINT32_C(1) << 2)
+#define B_BE_PPDU_MAC_INFO (UINT32_C(1) << 1)
+#define B_BE_PPDU_STAT_RPT_EN UINT32_C(1)
 #define NS_PER_MS UINT64_C(1000000)
 #define NS_PER_US UINT64_C(1000)
 
@@ -36,6 +46,21 @@ static void change16(unsigned reg, uint16_t clear, uint16_t set)
 {
   uint16_t value = rtl8922ae_read16(reg);
   rtl8922ae_write16(reg, (value & ~clear) | set);
+}
+
+void rtl8922ae_mac_ppdu(bool enable)
+{
+  if (enable) change32(R_BE_HW_PPDU_STATUS, B_BE_FWD_PPDU_STAT_MASK, 3);
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    unsigned reg = R_BE_PPDU_STAT + phy * MAC_BAND1_OFFSET;
+    if (enable) {
+      rtl8922ae_write32(reg, B_BE_PPDU_STAT_RPT_EN | B_BE_PPDU_MAC_INFO |
+          B_BE_APP_RX_CNT_RPT | B_BE_APP_PLCP_HDR_RPT |
+          B_BE_PPDU_STAT_RPT_CRC32 | B_BE_PPDU_STAT_RPT_DMA);
+    } else {
+      change32(reg, B_BE_PPDU_STAT_RPT_EN, 0);
+    }
+  }
 }
 
 bool rtl8922ae_mac_scan_prepare(uint64_t deadline, const char **detail)

@@ -18,6 +18,8 @@ bool rtl8922ae_mac_quiesce(uint64_t deadline, const char **detail);
 /* Reference port-zero NOLINK setup and scan RX filter lifetime. The caller
  * has initialized CMAC0 and retains its role through healthy idle. */
 bool rtl8922ae_mac_scan_prepare(uint64_t deadline, const char **detail);
+/* Both initialized DBCC CMACs; separate from the inline RSSI report. */
+void rtl8922ae_mac_ppdu(bool enable);
 void rtl8922ae_mac_scan_rx_sync(bool enable);
 void rtl8922ae_mac_scan_filter(bool scanning);
 

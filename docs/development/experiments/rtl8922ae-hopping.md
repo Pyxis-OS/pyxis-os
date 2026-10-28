@@ -1,0 +1,166 @@
+# RTL8922AE bounded hopping qualification
+
+The bounded 1+6 slice is natively qualified on vela (2026-10-28). The accepted contract
+is in the [milestone](../../wip/rtl8922ae-wifi.md#channel-hopping--accepted-chronium-2026-10-28).
+The orchestrator performed the native run; source/host checks are separate.
+
+## Inputs and baseline
+
+Baseline kernel main `750cd0b99e685c07eb55f9ffe0fd7db1cf83da1d`, built before
+implementation with published `pyxis-llvm23.1.3-8bdf136`. Four-CPU q35/KVM,
+host CPU, 4 GiB, OVMF, virtio/slirp, no radio or disk. The unchanged clean
+qualification archive pins userland `1b546c9f`; only the new baseline kernel is
+substituted. Actual running kernel and archive marker were checked via Remote;
+GDB observed idle/absent radio, and owned processes retired through QMP.
+Three existing iobench invocations each ran a warmup and three verified 1 MiB
+RAM-archive reads, buffer 4096. Raw baseline and later matched control records
+stay local under `rtl8922ae-hopping-20261028/`; the final PR/packet identifies
+exact candidate and userland heads. Integration subsequently incorporates the
+merged poll stack; these controls do not isolate a radio-performance effect.
+
+## CPU-only checks
+
+Reference Linux v6.18 `7d0a66e4bb9081d75c82ec4957c50034cb0ea449` defines
+BE descriptors, PPDU MAC/PHY prefixes, IE01 and normalized current-group matching.
+Transient manual wire fixtures passed 24 cases / 2,795 checks under plain GCC
+and ASan/UBSan, with no sanitizer finding. Inputs were overwritten/freed after
+each callback. Cases cover channels 1/6, per-BB isolation, variable prefixes,
+missing/invalid/late/unrequested reports, no report cache, fixed-channel fallback,
+reset/stop, and pending/final capacity while retaining fitting records.
+
+The 513-candidate case keeps 128 records, counts one pending-capacity drop and
+384 final-capacity drops: 385 total. Existing final records still merge when
+full. No firmware, MMIO, DMA or RF is simulated. FILE serialization is separately
+source-inspected; native publication remains a later qualification gate.
+
+The pinned firmware and accepted world/SAR-16 tables prepare compatible 1/6
+nonlimit controls. Their signed common normal/RU/path image equals the prior
+channel-1 image, including SAR 64/64 quarter-dBm. Existing regulatory regression
+still admits 296 / refuses 16 cases with zero numeric ceiling violations; invalid
+common-mask/input preparation clears its output. This proves CPU construction,
+not physical RF enforcement.
+
+## Integrated QEMU and matched controls
+
+Candidate kernel `4c09ccb240cdef4e4e5c29068cc9528e8c85d79a`, pinned userland
+`8cefca4017769e5e79d455cfff127947554a6fc3`, built with the same published
+builder. Matching SDK/CLI/private helper rebuilt; unchanged ordinary control
+executables and archive fixture reused intentionally. Four-CPU q35/KVM/OVMF
+checks passed actual kernel/archive identity, wired/log/status, new CSV syntax,
+invalid channels and absent-radio refusal before either helper scan. GDB showed
+64-byte pending entries, zero queued candidates and collection disabled. Every
+owned guest/client/monitor was retired. This does not emulate Realtek RF.
+
+The existing iobench command was run three times per boot, three verified samples
+per invocation after its warmup, interleaved A1/B1/A2/B2/A3/B3 (27 samples each):
+
+```sh
+boot://iobench.pxe read boot://share/iobench.bin --rounds 3 --buffer 4096
+```
+
+| Nested RAM control | A: main750cd0b99 | B: candidate4c09ccb24 |
+| --- | --- | --- |
+| Payload median (range), ms | 0.247 (0.230–0.573) | 0.249 (0.233–0.314) |
+| Complete median (range), ms | 0.257 (0.237–0.593) | 0.256 (0.240–0.324) |
+| Per-boot payload medians, ms | 0.258 / 0.247 / 0.239 | 0.251 / 0.250 / 0.238 |
+
+Ranges overlap, and pair direction changes. No isolated radio-performance gain
+or regression follows. Both have no radio; B also contains the merged poll
+integration. Interval VM observations were mostly idle with no steal; initial
+since-boot vmstat rows are not cohort observations. Native wired/RF cost remains
+unmeasured by these nested controls.
+
+Packet parser checks passed 16 synthetic host cases, including valid empty and
+truncated results and refusal of inconsistent metadata/extra host RFK. Full-image
+stage/restore passed on a disposable local PXE fixture under umask077, including
+byte-identical menu, other entry/root/EFI preservation and readable TFTP payloads.
+No real PXE path or target was touched. The finished once-only native packet is
+`/shared/present/rtl8922ae-passive-scan/native-hopping-20261028/`; its manifest
+records exact production heads and hashes.
+
+## First native attempt: startup refusal (2026-10-28)
+
+The orchestrator ran that packet once on vela with the frozen kernel and
+userland above. Kernel identity, wired management and byte-exact PXE restoration
+passed. The first request failed with `CALL_IO` (19); the second was not run.
+Mask `0x21` is channels 1 and 6. The helper's `stage=completion` identifies its
+wait for the asynchronous operation result, not completed firmware scanning.
+
+Status reported `RTL8922AE MAC already powered on`, no firmware security/image
+facts, zero interrupts/packets and PHY state `0x10`: only terminal stop was
+confirmed. No Pyxis firmware download, PHY/RFK initialization, channel list or
+START command was reached. The zero counters do not establish RF silence of the
+inherited hardware state. Power-off and PCI stop completed (`boot.state=0x1d`).
+
+The refusal is the active WLMAC state at `0x03f0`, checked before the power-on
+sequence in `rtl8922ae_hw_power_on`. Pinned Linux `mac.c:1484-1487` has the same
+inner refusal, but `rtw89_mac_pwr_on` at lines 1517-1527 powers off and tries
+power-on once after failure. Pyxis explicitly omits that wrapper under the
+bring-up one-attempt policy. An inherited powered MAC after a warm handoff is
+therefore the supported diagnosis; the capture does not identify what left it
+active. This attempt did not exercise the hopping implementation.
+
+**Accepted (chronium, 2026-10-28):** when the initial MAC is active, use the reference
+power-off sequence and one fresh power-on within the original request deadline;
+stop on failure, with no automatic firmware-download or scan retry. The active
+state is checked again by the second power-on attempt, as in the reference;
+there is no loop. This replaces the explicit startup-wrapper deferral. Raw
+results remain in the old packet's `results/` directory. The subsequent hopping
+qualification below does not separately observe the inherited-active branch.
+
+The corrected kernel `aebf0ca52e865eee7d6be41db808ccb0afcf6ae9`, with the
+same userland pin, builds in the published builder and passes the same four-CPU
+no-radio QEMU configuration: exact kernel/archive identity, ordinary wired and
+log/status reads, malformed-channel and absent-radio refusals. GDB confirms the
+new power-off branch in the running kernel; no MMIO or hardware state was
+injected. Guest, debugger, Remote clients and monitor were retired. This checks
+the image and unaffected paths, not execution of the active-MAC branch.
+
+The fresh once-only packet is
+`/shared/present/rtl8922ae-passive-scan/native-hopping-startup-20261028/`.
+It retains the same two explicit 1+6 sweeps, helper, grants, firmware and power
+image, with a new kernel and archive marker. Its offline checker, parser and
+disposable stage/restore checks pass; the failed packet and results are kept
+unchanged.
+
+## Native 1+6 repetition qualification (2026-10-28)
+
+The orchestrator ran that corrected packet once on vela. It verified running
+kernel `aebf0ca52e865eee7d6be41db808ccb0afcf6ae9`, userland
+`8cefca4017769e5e79d455cfff127947554a6fc3` and the archive marker. Both requests
+completed successfully on the same retained DBCC context:
+
+| Request | Requested channels | BSS records | Attributed record channels | Truncated / dropped | Power readbacks |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1, 6 | 4 | 1 | 0 / 0 | 11 |
+| 2 | 1, 6 | 5 | 1 | 0 / 0 | 12 |
+
+Firmware ENTER observations cover both requested channels (`hop=0x21`). Matched
+PPDU delivery was observed, without claiming a channel-6 BSS. The first FILE
+stayed held and unchanged through the second request and operation close; native
+object identities were independent, and the second FILE remained readable after
+the first closed. Rights, immutable-header, EOF, close and second-TAKE checks
+passed. The RFK bitmap remained `0xf`, boot state `3`, and the additional power
+check per sweep did not repeat startup/calibration. Fixed path limits remained
+64/64 quarter-dBm. Healthy context and wired management survived; the PXE menu
+was restored byte-for-byte. The helper exited successfully with no errors.
+
+The saved logs/status do not identify whether this boot entered the startup
+power-off/power-on branch: successful startup has no branch marker or retained
+flag. Do not infer branch execution from this pass or the previous active-MAC
+failure. No native capacity overflow, physical-rfkill, cancellation, general
+recovery, association or data path is qualified here. Raw evidence is retained
+under the corrected packet's `results/run/` directory.
+
+## Limits and next evidence
+
+The immutable result grows from 16 to 24 header bytes in the development ABI;
+flags/drop count persist after operation close. There is no legacy-format shim.
+SCAN STATUS stays its existing size. Kernel, SDK, CLI and private helper must
+match; no retained release ABI is listed by this development tree.
+
+The native run establishes 1+6 completion, matched PPDU observations, endpoint
+power checks, retained repetition, independent immutable FILE lifetimes, rfkill
+observations and wired management. No nearby AP or per-channel nonempty result
+is guaranteed. Overflow remains CPU-qualified only; no radiated-power,
+physical-rfkill, association, general retry/recovery or full-mask claim.

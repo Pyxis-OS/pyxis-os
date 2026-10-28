@@ -22,21 +22,30 @@ Firmware, resources and ownership are in the [AX200 controller](../devices/ax200
 The opt-in RTL8922AE backend (`wifi.rtl8922ae=1`, image option
 `WIFI_RTL8922AE=1`) reserves the function, validates the pinned format-4 asset
 and prepares retained DMA backing at boot. READ does not start firmware or RF.
-An explicit SCAN request elects the one preparation attempt after effective
-regulatory and required platform/SAR inputs are available. It loads WCPU plus
-BBMCU0, initializes one PHY/MAC and both RF paths, programs and reads back the
-board/regulatory/fixed-SAR limits, then requests PRE_NOTIFY, DACK, RXDCK and
-TSSI calibration. Normal packet scheduling and automatic responses stay gated;
-no probes, association, data or packet offloads are requested. Calibration is
-TX-capable and confined to a channel whose effective rules permit it; NO_IR
-permission for passive discovery never authorizes calibration there.
+An explicit SCAN request elects the one startup attempt after effective regdb
+and required platform/SAR inputs are available. WCPU plus BBMCU0 initialize
+both MAC/PHY contexts and both RF paths. Fixed firmware/SAR/numeric-regdb limits
+are applied before TX-capable PRE_NOTIFY/DACK/RXDCK/TSSI calibration. No probes,
+association, null/data packets or ordinary automatic responses are enabled.
+Calibration stays on requested channel 1 for a 1+6 sweep; NO_IR-only startup
+and unqualified restrictive channels refuse before calibration.
 
-This preparation cut publishes no scan results or RTL network interface.
-Even verified preparation followed by confirmed stop completes SCAN with
-UNAVAILABLE and no result FILE; WIFI_READY stays clear. Cancellation, authority
-withdrawal and deadlines retain their operation results after cleanup, except
-an unconfirmed stop reports OUTCOME_UNKNOWN. Hardware programming and RFK remain
-subject to the separately scheduled native qualification in the
+The first profile accepts one explicit legal channel or the explicit 1+6 mask.
+BE firmware offload completes the requested list; results publish only after
+END/confirmed STOP and captured RX retirement. PPDU reports supply hopping
+frame channels with separate correlation groups per BB. Unmatched metadata is
+omitted, never relabeled from the last software ENTER notification. One-channel
+requests retain their fixed-channel fallback. Results are passive, unauthenticated
+observations; an empty completed FILE is valid.
+
+Healthy firmware/DMA stays retained and idle RX is drained/dropped. Another
+exact-mask request needs no startup/RFK; a changed mask is unsupported in this
+slice. Uncertainty/rfkill takes the existing checked terminal-stop path, retaining
+backing if stop cannot be confirmed. No RTL network interface or CONNECT path.
+The common 1+6 power image intersects both channels' signed ceilings before
+RFK/START and is checked again after result collection closes. These historical
+endpoint checks do not measure radiated power or prove continuous enforcement
+inside closed firmware. Native qualification and remaining gates are in the
 [RTL8922AE milestone](../wip/rtl8922ae-wifi.md#delivery-and-qualification).
 
 After MAC power-on, the driver configures and checks active-low GPIO9 before
@@ -166,7 +175,7 @@ or quarantine, reserving nothing. TAKE is nonblocking: WOULD_BLOCK before
 completion, otherwise the actual terminal status; local handle admission failure
 is retryable. Success transfers one READ-only immutable native FILE once.
 
-The FILE contains `wifi_scan_file_header` then exactly `count` 52-byte
+The FILE contains the 24-byte `wifi_scan_file_header` then exactly `count` 52-byte
 `wifi_bss_record`s (ABI in `abi/wifi.h`). SSIDs are counted bytes; records are
 bounded to 128, keyed by BSSID/channel. Duplicate observations retain strongest
 signal and the first nonhidden name. Bounded RSN security flags report a valid
@@ -175,8 +184,14 @@ are passive, unauthenticated beacon evidence, not proof of AP identity. Missing,
 malformed, duplicate or conflicting RSN observations cannot satisfy the WPA2
 precheck. The connection revalidates the selected target independently. Explicit
 `wifi scan` prints these flags as `security=<decimal>` after the counted SSID.
-Overflow is FILE_TOO_LARGE, without a
-published prefix. A complete FILE can be deliberately delegated normally.
+RTL8922AE keeps what fits when its 512 pending candidates or 128 final records
+fill. Its successful immutable header carries `WIFI_SCAN_FILE_TRUNCATED` and
+`dropped_records`; SCAN STATUS also reports `WIFI_SCAN_TRUNCATED`. The count is
+capacity-dropped candidate observations, not unique BSS identities. UINT32_MAX
+is a saturated lower bound; malformed/unmatched metadata is a separate omission.
+Existing records can still merge after the final array fills. This bounded
+truncation is not a firmware/transport failure. Other backend error handling is
+unchanged. A result FILE can be deliberately delegated normally.
 
 Cancellation/deadline/CUT do not release DMA. Firmware must emit a matching
 terminal completion and drain; an iteration notification alone is insufficient.

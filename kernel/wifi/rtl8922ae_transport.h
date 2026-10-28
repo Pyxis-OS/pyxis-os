@@ -39,6 +39,9 @@ bool rtl8922ae_runtime_receive(const void *data, size_t bytes);
  * only for this call. */
 void rtl8922ae_runtime_frame(const uint8_t *descriptor, size_t descriptor_bytes,
     const uint8_t *frame, size_t frame_bytes);
+/* PPDU reports are borrowed for one CPU-only metadata/correlation callback. */
+void rtl8922ae_runtime_ppdu(const uint8_t *descriptor, size_t descriptor_bytes,
+    const uint8_t *payload, size_t payload_bytes);
 bool rtl8922ae_transport_stop(uint64_t deadline, const char **detail);
 void rtl8922ae_transport_interrupt(void);
 void rtl8922ae_transport_status(struct wifi_status_reply *status);

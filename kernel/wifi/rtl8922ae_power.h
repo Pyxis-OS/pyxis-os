@@ -51,6 +51,18 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
     const struct wifi_regdb_profile *rules, uint8_t channel,
     struct rtl8922ae_power_image *image);
 
+/* CPU-only common image for the explicit channel-1-plus-6 mask. Prepare each
+ * channel with the same firmware/SAR/regdb caps, require compatible nonlimit
+ * controls, and retain the lower signed active limits and physical-path SAR.
+ * Channel remains 1, the initialization anchor; publication grants no per-hop
+ * calibration or TX authority. Same storage and failure contract as prepare. */
+enum rtl8922ae_power_result rtl8922ae_power_prepare_common(const void *asset,
+    size_t bytes, const struct rtl8922ae_firmware_tables *tables,
+    const struct rtl8922ae_sar_envelope *sar,
+    enum acpi_wifi_state antenna_state, const char country[2],
+    const struct wifi_regdb_profile *rules, uint32_t channels,
+    struct rtl8922ae_power_image *image);
+
 /* Both MAC/PHY contexts, with the first 0x60000 of BAR2 mapped and the MAC/BB
  * clocks enabled by the caller. Does not tune or request RFK. Apply writes the
  * image on both contexts, including the shared physical-path SAR limits.

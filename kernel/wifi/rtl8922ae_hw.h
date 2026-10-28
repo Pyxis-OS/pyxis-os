@@ -34,7 +34,8 @@ void rtl8922ae_hw_rfkill_prepare(void);
 /* After GPIO setup, while the register domain is live.
  * Observe GPIO9 directly, as in the reference rfkill_get path. */
 bool rtl8922ae_hw_rfkill(void);
-/* After transport pre-deinit, while BAR/decode and DMA backing remain owned.
+/* Before startup DMA publication when an inherited MAC is active, or after
+ * transport pre-deinit, while BAR/decode and DMA backing remain owned.
  * Attempt once even after partial power-on. No firmware power-save mode may
  * have been entered. Shutdown polls must remain usable after a transport fault.
  * True means the reference shutdown handshakes completed;
