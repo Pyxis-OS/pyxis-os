@@ -233,10 +233,10 @@ defaults and application policy; a generic schema framework is not needed.
 
 Build scripting for [in-Pyxis development](in-pyxis-development.md#tooling)
 and the implemented behavior are in the [runtime reference](../userland/lua.md).
-Remaining interpreter work, each a separate slice: stdin scripts and consuming the
-existing script capability for shebang launches; `file:setvbuf`; `os.clock`
-(process CPU time); debug and the full math library. Dynamic modules, live
-configuration reload and per-user/space settings policy also remain deferred.
+Remaining interpreter directions include `os.clock` (process CPU time), dynamic
+modules, live configuration reload and per-user/space settings policy. Native
+stdin/shebang loading and the upstream library profile are implemented; see
+[Lua](../userland/lua.md) and [script authority](../userland/script-authority.md).
 None depends on virtio-fs.
 
 Owner direction, 2026-10-13: allow bundle interpreters in shebangs (for example
