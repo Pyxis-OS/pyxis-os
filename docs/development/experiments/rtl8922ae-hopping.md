@@ -76,7 +76,36 @@ stage/restore passed on a disposable local PXE fixture under umask077, including
 byte-identical menu, other entry/root/EFI preservation and readable TFTP payloads.
 No real PXE path or target was touched. The finished once-only native packet is
 `/shared/present/rtl8922ae-passive-scan/native-hopping-20261028/`; its manifest
-records exact production heads and hashes. Native qualification is pending.
+records exact production heads and hashes.
+
+## First native attempt: startup refusal (2026-10-28)
+
+The orchestrator ran that packet once on vela with the frozen kernel and
+userland above. Kernel identity, wired management and byte-exact PXE restoration
+passed. The first request failed with `CALL_IO` (19); the second was not run.
+Mask `0x21` is channels 1 and 6. The helper's `stage=completion` identifies its
+wait for the asynchronous operation result, not completed firmware scanning.
+
+Status reported `RTL8922AE MAC already powered on`, no firmware security/image
+facts, zero interrupts/packets and PHY state `0x10`: only terminal stop was
+confirmed. No Pyxis firmware download, PHY/RFK initialization, channel list or
+START command was reached. The zero counters do not establish RF silence of the
+inherited hardware state. Power-off and PCI stop completed (`boot.state=0x1d`).
+
+The refusal is the active WLMAC state at `0x03f0`, checked before the power-on
+sequence in `rtl8922ae_hw_power_on`. Pinned Linux `mac.c:1484-1487` has the same
+inner refusal, but `rtw89_mac_pwr_on` at lines 1517-1527 powers off and tries
+power-on once after failure. Pyxis explicitly omits that wrapper under the
+bring-up one-attempt policy. An inherited powered MAC after a warm handoff is
+therefore the supported diagnosis; the capture does not identify what left it
+active. This attempt did not exercise the hopping implementation.
+
+**Proposal, not accepted:** when the initial MAC is active, use the reference
+power-off sequence and one fresh power-on within the original request deadline;
+stop on failure, with no automatic firmware-download or scan retry. This changes
+the explicit startup limit and awaits chronium's decision before code or a new
+native packet. Raw results remain in the packet's `results/` directory. Native
+hopping qualification remains pending.
 
 ## Limits and next evidence
 
