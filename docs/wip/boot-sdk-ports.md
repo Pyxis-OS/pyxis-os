@@ -184,7 +184,7 @@ ncursesw with `TERM=pyxis`, then hexcurse (0.0.9; assigned, delta).
 [SQLite](application-ports.md#libraries-and-terminal-tools) through a native VFS.
 
 [Intel inherited scanout](intel-inherited-scanout.md): vela tearing investigation
-assigned to Codex alpha (chronium, 2026-10-28); read-only-first strategy proposed.
+assigned to Codex alpha (chronium, 2026-10-28); read-only-first strategy accepted.
 Broader physical GPU drivers remain separately assigned.
 
 [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).

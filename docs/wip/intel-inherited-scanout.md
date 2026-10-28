@@ -1,8 +1,8 @@
 # Intel inherited scanout: vela tearing
 
-Status: investigation assigned to Codex alpha by chronium through the
-orchestrator, 2026-10-28. The implementation boundary below is proposed; no Intel
-display-register or GGTT-write implementation has started.
+Status: inherited-state investigation accepted (chronium, 2026-10-28),
+assigned to Codex alpha. The first implementation is an opt-in, read-only
+inventory; GGTT/plane writes remain unapproved.
 
 ## Problem and evidence
 
@@ -31,26 +31,26 @@ Raw captures and a compact decoded summary remain under
 headless query timed out; the DRM snapshot is sufficient for this reference.
 No further Fedora capture is required for the next step.
 
-## Decision 1 — initial strategy (proposed)
+## Initial strategy — accepted (chronium, 2026-10-28)
 
-**Recommended default:** pursue an inherited-state backend, beginning with a
+Pursue an inherited-state backend, beginning with a
 read-only native inventory. Preserve firmware mode, clocks, links, power state,
 scalers and colour configuration. No general Intel modesetting or rendering
 engine is part of this task. First establish the active pipe/plane, framebuffer
 translation and timing; propose the exact write/ownership contract afterward.
 
-The alternative is to take ownership of Intel mode/link/power initialization
-before attempting tear-free presentation. That is a different driver scope;
-it is not silently included in the tearing fix.
+Full Intel modesetting ownership is later work, likely with the Intel GPU
+driver. It is outside the inherited-state inventory and any later bounded
+scanout implementation.
 
-The default does **not** authorize unused-GGTT claims, page-table writes,
+This decision does **not** authorize unused-GGTT claims, page-table writes,
 stolen-memory reuse or a plane-address update. If a spare surface needs any of
 those, its authority, backing ownership, invalidation and retirement rules must
 be settled when the native evidence establishes that need. Zero entries alone
 are not proof that a GGTT range is available. No framebuffer-copy timing or
 application FPS cap will be advertised as a tear-free guarantee.
 
-## First task after acceptance
+## Task 1 — read-only inherited inventory
 
 - Scope the initial native probe to PCI `8086:b0a0`, deriving BARs and display
   layout from the device and the reference's GMD decoding, not from the Fedora
