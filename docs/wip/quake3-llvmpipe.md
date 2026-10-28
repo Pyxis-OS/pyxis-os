@@ -4,11 +4,12 @@ Status: tasks 1–4 are implemented and QEMU-qualified, including installed
 OpenArena and local corresponding-source publication. The
 [qualification record](../development/experiments/ioquake3-softpipe.md) also
 records an attended Vela timedemo and listening observation; broader native/audio
-qualification and public recipient access remain separate. llvmpipe and the JIT
-grant remain future work.
+qualification and public recipient access remain separate. The JIT grant is
+implemented; the LLVM adapter is merged and QEMU-qualified in pyxis-llvm #20
+and Pyxis #1523. llvmpipe implementation is assigned, with the startup CPU-count prerequisite described below.
 Remaining direction and decisions follow. The
 softpipe delivery is in the [0.0.9 release notes](../releases.md#009-2026-10-25);
-llvmpipe follows the JIT grant, in the next kernel push after it. Its sources are
+llvmpipe follows the JIT grant and its LLVM library adapter. Its sources are
 cached and verified (see [source cache](#source-cache)). Nothing here authorizes code: a
 task starts when it is assigned. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
 software rasterizer, and give Pyxis JIT support through an explicit grant. The
@@ -51,8 +52,120 @@ design below is a proposal except where marked decided.
    records the accepted operation/budget/lifetime decisions (2026-10-27). This does not
    declare BSP removal complete or enable llvmpipe by default.
 
-Smaller choices that I would apply unless chronium objects are listed under
-[Routine choices](#routine-choices).
+The next assigned work is task 6, followed by task 7 and SoH qualification
+(chronium, 2026-10-27); BSP-removal tasks 4–5 wait. The runtime profile below is
+accepted. Earlier routine suggestions do not override its authority or runtime
+policy.
+
+## Task 6 runtime profile — accepted (chronium, 2026-10-27)
+
+Mesa patches remain build changes and Pyxis platform integration only. Keep
+upstream Gallium selection, shader compilation, rasterization and failure
+handling. Use the existing native C/C++ libraries for missing standard APIs;
+stop for any new behavioural or lifetime contract discovered while compiling.
+Sources stay at the cached Mesa 26.2.5/OSMesa 25.0.7 pins. Use MCJIT for the
+first Mesa profile (`llvm-orcjit=false`), with explicit mappings for required runtime helpers and no process scan. The independent LLVM
+[development prefix](../development/llvm-development.md)
+supplies the libraries; no compiler-container rebuild is part of this task.
+
+1. **Renderer and declared authority. Accepted:** build softpipe and
+   llvmpipe together. Add optional `jit/manage` declarations to ioquake3's engine
+   bundle (shared by OpenArena/Quake 3), the manual triangle and the SoH consumer
+   manifests, including its LUS demonstration if used for qualification. Keep
+   spaces' `jit = true` opt-in unchanged; do not enable it globally. Implement
+   the Pyxis case of Mesa's existing `os_jit_allowed()` by looking up the actual
+   named JIT capability, verifying native protocol/kind/manage/no transport,
+   and closing the resulting owned lookup handle. No executable-allocation probe.
+   Upstream default selection then uses llvmpipe when JIT is available and
+   softpipe when it is absent. An explicit `GALLIUM_DRIVER=llvmpipe` without
+   authority fails context creation; `GALLIUM_DRIVER=softpipe` remains usable.
+   This fallback happens before LLVM emission, not after a genuine JIT failure.
+2. **Workers. Accepted with change:** use Mesa's upstream default, one worker
+   per reported CPU subject to its existing cap. Do not replace that default
+   with zero or a fixed count. Keep `LP_NUM_THREADS` as upstream's override.
+   Measure default, 0 and 4 once each in QEMU; use the default for both native
+   comparisons on vela (Pyxis and Fedora). `LP_NUM_THREADS=N` can create both
+   raster and compute pools, not N total process threads; upstream caps each
+   pool at 32, and Pyxis's existing per-process task bound still applies. Supply
+   a real CPU count through the Pyxis platform integration, not a fabricated
+   count chosen to force a worker policy. The required authority choice follows.
+3. **Instruction set. Accepted:** let Mesa's existing CPUID/OSXSAVE/XCR0
+   checks select AVX2 and pass its feature enables/disables to LLVM. Keep the
+   archive/native C/C++ baseline portable; do not force `-mavx2` or enable new
+   XCR0 components. The merged kernel's `0x7` profile permits XMM/YMM, while
+   its FXSAVE fallback clears OSXSAVE; AVX-512 remains unavailable. Qualify an
+   AVX2-capable QEMU CPU and a CPU with AVX/AVX2 disabled before native use,
+   recording the actual renderer/feature path.
+
+Source basis at Mesa 26.2.5: `src/util/os_misc.c:553` (`os_jit_allowed`),
+`src/gallium/drivers/llvmpipe/lp_screen.c:1023–1032` (pre-allocation refusal),
+`src/gallium/auxiliary/target-helpers/inline_sw_helper.h:69–94` (default fallback
+and explicit-driver refusal), `lp_screen.c:987–994,1072–1076` (two pools and
+worker selection), `lp_limits.h:69` (pool bound),
+`src/util/u_cpu_detect.c:775–856,894–915` (CPU fallback and AVX2 checks),
+`src/gallium/auxiliary/gallivm/lp_bld_misc.cpp:340–379` (LLVM feature flags).
+The existing Pyxis profile's unavailable physical-memory queries and disabled
+disk shader cache remain unavailable; do not advertise invented memory facts.
+
+### Decision 4 — usable CPU count at startup (accepted, chronium, 2026-10-27)
+
+Every process receives its usable logical CPU count in kernel-prepared,
+read-only startup metadata, like its arguments and environment. The count is
+from the process/space CPU allowance, not global hardware inventory or CPUID
+topology. It requires no grant. No `system_info` declaration or ambient
+inventory query is added to Mesa consumers.
+
+Append a `uint64_t usable_cpu_count` to `startup_info` (offset 72, total size
+80 bytes). Existing field offsets stay unchanged. This is a startup ABI addition;
+`STARTUP_VERSION` remains 1 under the development ABI's in-place-change policy,
+without a compatibility reader or a new ABI identity. Kernel startup construction
+and matching SDK/runtime consumers are rebuilt together. The count describes the
+allowance at process startup; children receive their own kernel-prepared value.
+
+Expose the count through libpyxis startup access and libc
+`sysconf(_SC_NPROCESSORS_ONLN)` / `_SC_NPROCESSORS_CONF` for Pyxis's boot-fixed
+usable CPU population. These do not reveal a global configured CPU count.
+Rust `available_parallelism`, C++ `std::thread::hardware_concurrency` and Go's
+startup CPU count consume the same fact. Go retains its explicit `GOMAXPROCS`
+override, but ordinary experiments no longer need to set it by hand.
+
+C++ already has an upstream `sysconf(_SC_NPROCESSORS_ONLN)` branch: rebuild its
+runtime archive against the updated SDK header rather than patch LLVM or move
+the compiler pin. Rebuild libc/libpyxis/startup clients, Rust's target standard
+library, and Go's target runtime/programs (including its raw startup layout).
+Update the runtime source pins and dependent consumers as needed for qualification;
+no compiler-container rebuild is required for this startup/libc change.
+
+Mesa's Pyxis platform CPU-count input uses the standard libc result. Its worker
+selection and upstream cap stay unchanged. Qualify distinct CPU allowances so a
+one-CPU process in a four-CPU guest reports one, not four.
+
+### Delivery and qualification
+
+- Capture the existing softpipe control first. Then build the static
+  softpipe+llvmpipe OSMesa prefix and its notice/provenance closure. QEMU triangle
+  checks cover no grant/default softpipe, held grant/llvmpipe, explicit llvmpipe
+  refusal without grant and the two CPU feature profiles. Measure the default,
+  0 and 4 worker settings once each. Recheck
+  SDL front/back buffering and canvas presentation; no new benchmark framework.
+- Prepare the existing OpenArena demo as a roughly 30-second input by retaining
+  whole demo messages and writing its end marker. Verify that exact trimmed
+  file once in QEMU with `+set timedemo 1 +set nextdemo quit +demo bench`.
+  Keep its digest, canvas, engine/data versions, renderer, worker count and CPU
+  power state with the result. Do not trim by cutting inside a message.
+- Through the orchestrator, one hands-free Remote-driven Pyxis run and one
+  Fedora run on vela use that same input/settings and Mesa's default workers.
+  Keep host, nested-QEMU and native numbers separate; report full-power CPU
+  state and shader-startup cost rather than assuming them. No native staging or
+  run is performed by this proposal.
+- Then prepare SoH on vela for chronium's functional play check with the
+  DualSense Edge. Keep private game data outside repositories and logs. Check
+  renderer selection and the controller path; this does not claim a game port
+  beyond the existing native platform work.
+
+**What chronium can do after this task:** supply JIT to a qualified Mesa bundle
+and use llvmpipe, or continue using softpipe without it, with an honest renderer
+name. The native OpenArena comparison and SoH play check remain required evidence.
 
 ## The JIT contract
 
@@ -121,12 +234,12 @@ fine; the build as it stands is not:
   libraries must be built with threads on.
 - The target list is already X86 only, which is what llvmpipe needs.
 
-So the work is a fourth LLVM output: static libraries and headers for the module
-list above, threads on, RTTI and EH off, X86 only, installed beside the SDK as a
-development prefix, with a host-runnable `llvm-config` (or an equivalent file
-Meson accepts) describing it. It reuses the pinned source and flags and, like
-the hosted rebuild, is built by luna and pushed by chronium; the compiler
-container is not affected.
+The separate LLVM development output now supplies static libraries and headers
+for that closure, with threads on, RTTI/EH off, X86 only and a host-runnable
+`llvm-config`. Its [reference](../development/llvm-development.md) and
+[JIT qualification](https://git.internal/PyxisOS/pyxis-os/pulls/1523) distinguish it from
+hosted Clang. Luna builds published prefixes and chronium publishes them; this
+does not require a compiler-container rebuild.
 
 ### Threads, CPU count and CPU features
 
@@ -353,7 +466,7 @@ Small tasks, each with a first check. Repositories in parentheses.
    QVM, the public package. *Check:* OpenArena reaches its menu and plays a map
    at a small canvas, with the missing-authority errors from the manifest
    checks, in QEMU. Mouse look, sound and quit are part of the check.
-5. **The `jit` grant** (pyxis-os kernel and docs, pyxis-userland, pyxis-llvm).
+5. [x] **The `jit` grant** (pyxis-os kernel and docs, pyxis-userland, pyxis-llvm).
    Starts after BSP-removal task 3, before tasks 4–5 (revised decision 3). *Check:* a manual
    program obtains the grant through a
    `jit = true` space, writes a function, transitions it, calls it, and shows
