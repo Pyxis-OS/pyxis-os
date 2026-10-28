@@ -4,12 +4,12 @@ Status: tasks 1–4 are implemented and QEMU-qualified, including installed
 OpenArena and local corresponding-source publication. The
 [qualification record](../development/experiments/ioquake3-softpipe.md) also
 records an attended Vela timedemo and listening observation; broader native/audio
-qualification and public recipient access remain separate. The JIT grant is
-implemented; the LLVM adapter is merged and QEMU-qualified in pyxis-llvm #20
-and Pyxis #1523. llvmpipe implementation is assigned, with the startup CPU-count prerequisite described below.
+qualification and public recipient access remain separate. The JIT grant is merged. llvmpipe is implemented and QEMU-qualified; the
+[attended vela check](../development/experiments/llvmpipe.md) passed OpenArena
+and SoH, with tearing remaining. Matched Pyxis/Fedora timedemos remain pending.
 Remaining direction and decisions follow. The
 softpipe delivery is in the [0.0.9 release notes](../releases.md#009-2026-10-25);
-llvmpipe follows the JIT grant and its LLVM library adapter. Its sources are
+llvmpipe follows the JIT grant, in the next kernel push after it. Its sources are
 cached and verified (see [source cache](#source-cache)). Nothing here authorizes code: a
 task starts when it is assigned. Direction: run ioquake3 with OpenGL through Mesa's llvmpipe
 software rasterizer, and give Pyxis JIT support through an explicit grant. The
@@ -52,8 +52,11 @@ design below is a proposal except where marked decided.
    records the accepted operation/budget/lifetime decisions (2026-10-27). This does not
    declare BSP removal complete or enable llvmpipe by default.
 
-The next assigned work is task 6, followed by task 7 and SoH qualification
-(chronium, 2026-10-27); BSP-removal tasks 4–5 wait. The runtime profile below is
+Smaller choices that I would apply unless chronium objects are listed under
+[Routine choices](#routine-choices).
+
+Tasks 5–6 are implemented; task 7's paired native timedemo remains pending.
+BSP-removal tasks 4–5 wait for this assigned delivery. The runtime profile below is
 accepted. Earlier routine suggestions do not override its authority or runtime
 policy.
 
@@ -66,7 +69,9 @@ stop for any new behavioural or lifetime contract discovered while compiling.
 Sources stay at the cached Mesa 26.2.5/OSMesa 25.0.7 pins. Use MCJIT for the
 first Mesa profile (`llvm-orcjit=false`), with explicit mappings for required runtime helpers and no process scan. The independent LLVM
 [development prefix](../development/llvm-development.md)
-supplies the libraries; no compiler-container rebuild is part of this task.
+supplies the libraries. The later accepted delivery decision (chronium,
+2026-10-27) builds it in the compiler container from the same fork pin as the
+compiler; ordinary image builds consume it without building LLVM.
 
 1. **Renderer and declared authority. Accepted:** build softpipe and
    llvmpipe together. Add optional `jit/manage` declarations to ioquake3's engine
@@ -234,12 +239,12 @@ fine; the build as it stands is not:
   libraries must be built with threads on.
 - The target list is already X86 only, which is what llvmpipe needs.
 
-The separate LLVM development output now supplies static libraries and headers
-for that closure, with threads on, RTTI/EH off, X86 only and a host-runnable
-`llvm-config`. Its [reference](../development/llvm-development.md) and
-[JIT qualification](https://git.internal/PyxisOS/pyxis-os/pulls/1523) distinguish it from
-hosted Clang. Luna builds published prefixes and chronium publishes them; this
-does not require a compiler-container rebuild.
+So the work is a fourth LLVM output: static libraries and headers for the module
+list above, threads on, RTTI and EH off, X86 only, installed beside the SDK as a
+development prefix, with a host-runnable `llvm-config` (or an equivalent file
+Meson accepts) describing it. It reuses the pinned source and flags and, like
+the hosted rebuild, is built by luna and pushed by chronium; the compiler
+container supplies the target libraries from the same pin as the compiler.
 
 ### Threads, CPU count and CPU features
 
@@ -251,16 +256,12 @@ does not require a compiler-container rebuild.
   ([threads](../interfaces/threads.md#placement-and-limits)). Siblings inherit
   the space's CPU set and are placed by least load, so llvmpipe's workers do run
   on other CPUs; there is no per-thread affinity.
-- **How many threads.** `lp_screen.c:1072-1076` uses the detected CPU count (zero
-  threads, meaning single threaded, if it is one) and `LP_NUM_THREADS`
-  overrides it. Mesa counts CPUs with `sched_getaffinity` or
-  `sysconf(_SC_NPROCESSORS_ONLN)` only when `DETECT_OS_POSIX` is set
-  (`src/util/u_cpu_detect.c:782-815`, `src/util/detect_os.h`). Libc has no
-  `sysconf` (`userspace/libc`), and Mesa's `detect_os.h` does not know Pyxis.
-  Mapping `sysconf(_SC_NPROCESSORS_ONLN)` onto the
-  [system information](../interfaces/system-information.md) CPU count is a
-  natural libc extension on a native object; until then, set `LP_NUM_THREADS`
-  explicitly from the program.
+- **How many threads.** Mesa uses the process's usable CPU count from
+  `sysconf(_SC_NPROCESSORS_ONLN)` and keeps its upstream default and cap.
+  The kernel supplies that allowance at startup without a grant; it is not
+  the global CPU inventory. `LP_NUM_THREADS` remains upstream's explicit
+  override. The [llvmpipe record](../development/experiments/llvmpipe.md)
+  compares default, zero and four workers once each in QEMU.
 - **AVX depends on the qualified kernel profile.** The separate
   [XSAVE/AVX reference](../kernel/xsave-avx.md) enables x87/SSE/AVX on compatible CPUs and
   otherwise retains legacy FXSAVE. Mesa still requires CPUID, OSXSAVE and
@@ -447,8 +448,8 @@ not the JIT path.
 
 Small tasks, each with a first check. Repositories in parentheses.
 
-1. [x] **LLVM development prefix for Mesa** (pyxis-os `toolchain/`; container
-   unaffected). Build the library set above with threads on and a usable
+1. [x] **LLVM development prefix for Mesa** (pyxis-os `toolchain/`; compiler
+   container supplies the libraries). Build the library set above with threads on and a usable
    `llvm-config`, on the existing pin. *Check:* a host-built Meson probe finds
    it, and a small C++ program linked on Pyxis builds an LLVM module and emits an
    object for x86-64 without executing generated code.
@@ -473,7 +474,7 @@ Small tasks, each with a first check. Repositories in parentheses.
    refusal without the grant, a writable-plus-executable request, a stale
    identity, and use after release; QEMU with several CPUs and a debugger look
    at the sibling-thread case.
-6. **Mesa with llvmpipe** (pyxis-ports `ports/mesa`, pyxis-llvm). Switch LLVM on.
+6. [x] **Mesa with llvmpipe** (pyxis-ports `ports/mesa`, pyxis-llvm). Switch LLVM on.
    *Check:* the task 2 program reports llvmpipe and renders the same image, with
    `LP_NUM_THREADS=0` first, then with workers.
 7. **ioquake3 on llvmpipe** (pyxis-ports). Same game, the real rasterizer.
@@ -484,7 +485,7 @@ Small tasks, each with a first check. Repositories in parentheses.
    machine; the public repository and images contain no game data.
 9. **Optional follow-ups, each separately decided:** ioquake3's compiled QVM on
    the grant, opengl2, AVX/XSAVE in the kernel, a dual-view region, a networked
-   game, `sysconf` in libc if not done earlier.
+   game. CPU-count startup information, libc sysconf and XSAVE/AVX are delivered.
 
 ### Task 4 source delivery
 
@@ -513,9 +514,11 @@ remain unqualified, and no guard is weakened.
 
 Implemented [producer/interfaces/limits](../development/llvm-development.md)
 and [qualification](../development/experiments/llvm-development.md). The
-development-only source pin is separate from hosted Clang and the installed
-compiler; no container rebuild is needed. Luna builds published output,
-chronium publishes it.
+native-library producer can run independently. For llvmpipe delivery, accepted
+(chronium, 2026-10-27): the compiler container builds these target libraries from
+the same pin as the compiler, using a disposable SDK from a fixed published
+snapshot. Normal image/CI builds consume that prefix and never build LLVM.
+Luna builds the container; chronium publishes it. Hosted Clang remains separate.
 
 Accepted (chronium, 2026-10-23): narrow LLVM-fork portability changes on that
 separate pin, explicitly refusing unsupported FD-based ORC remote execution
@@ -569,7 +572,7 @@ Applied unless chronium objects; none changes an architectural contract.
 - Interpreted QVM first; compiled QVM only after the grant, as a separate task.
 - `USE_OPENAL=OFF`, SDL audio; networking, VoIP, HTTP and Mumble off.
 - libpyxis `jit_*` wrappers, not libc `mmap`/`mprotect`.
-- `LP_NUM_THREADS` set by the program until libc has `sysconf`.
+- Mesa upstream worker defaults; `LP_NUM_THREADS` remains its explicit override.
 - A logical render canvas with aspect-fit scaling, as for raylib.
 - The OpenArena engine fork only if ioquake3 cannot run the 0.8.8 data.
 
@@ -588,9 +591,9 @@ mirror has the pinned commit.
 | ioquake3 (git) | `https://github.com/ioquake/ioq3.git` | `https://git.internal/mirrors/ioq3` | commit `87a99d18206e878a20289f05ac3c16005dcae5c3` |
 
 The ioquake3 entry is a git mirror like `mirrors/SDL`, pinned by commit. Mesa and
-OpenArena are archives checked by SHA-256, as for zlib. No new compiler container
-is required for the ports; the LLVM development prefix needs the hosted rebuild
-that luna builds and chronium pushes.
+OpenArena are archives checked by SHA-256, as for zlib. llvmpipe consumes the
+LLVM development prefix in the compiler container; luna builds the matching
+compiler and target libraries, and chronium publishes the image.
 
 ### Verifying them
 
@@ -639,7 +642,9 @@ the pin, and a git mirror preserves it.
   [Vela comparison](../development/experiments/ioquake3-softpipe.md#vela-native-hwp-comparison-2026-10-25)
   records a native timedemo and listening observation, without a repeated sample
   range or closure of broader audio qualification. Public upload/recipient access,
-  llvmpipe and JIT remain unqualified.
+  broader qualification remains open. The JIT grant is merged and the
+  [attended llvmpipe check](../development/experiments/llvmpipe.md) passed; the
+  matched native timedemo remains pending.
 - The [kernel JIT design](jit-grant.md) follows merged BSP-removal task 3.
   Its operation/budget/lifetime choices are accepted (chronium, 2026-10-27);
   tasks 4–5 resume afterward.

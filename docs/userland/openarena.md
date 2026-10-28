@@ -1,10 +1,13 @@
 # OpenArena on Pyxis
 
 The ioquake3 port runs OpenArena 0.8.8 offline through SDL2 and
-[Mesa softpipe](../development/mesa.md). It statically links the opengl1 renderer,
+[Mesa software OpenGL](../development/mesa.md). It statically links the opengl1 renderer,
 uses interpreted QVMs from the unchanged base-game PK3s, and presents through
-SDL's real double-buffered GL path. It has no JIT, external networking, native
-shared game modules, OpenAL, HTTP downloads or voice chat.
+SDL's real double-buffered GL path. Mesa uses llvmpipe when the bundle's optional
+JIT grant is available and softpipe otherwise; the space must explicitly opt in.
+An explicitly requested llvmpipe without that authority refuses. The QVMs remain
+interpreted: this grants no QVM compiler. External networking, native shared game
+modules, OpenAL, HTTP downloads and voice chat are unavailable.
 
 The package install, default runtime path and separate source publication are
 qualified locally. See the [remaining milestone](../wip/quake3-llvmpipe.md)

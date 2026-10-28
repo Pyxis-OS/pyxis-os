@@ -14,6 +14,8 @@ From the Pyxis checkout:
 
 ```sh
 JOBS=8 toolchain/build.sh "$HOME/opt/pyxis-llvm" /tmp/pyxis-llvm-build
+JOBS=8 toolchain/build-container-libraries.sh "$HOME/opt/pyxis-llvm" \
+  /tmp/pyxis-native-llvm-build /tmp/pyxis-llvm-build/llvm-project
 export PATH="$HOME/opt/pyxis-llvm/bin:$PATH"
 make clean
 make -j16 image
@@ -29,20 +31,30 @@ tools only; it does not install host packages or run tests.
 A build directory belongs to one compiler. `build/toolchain` records it, and a
 different compiler needs `make clean`.
 
-`ci/Containerfile` runs the same build script. The owner builds and publishes
-`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8a4d001` before merging
+`ci/Containerfile` runs the compiler build and native-library producer below.
+The owner builds and publishes
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8bdf136` before merging
 consumers of that image; the tag names the release and the fork commit, and the
 image checks that commit. Normal workflows consume the image without rebuilding
 LLVM. The public image is pulled anonymously by CI; the Forgejo instance must
 allow anonymous registry access. Publishing still requires login with an
 account allowed to write packages in `PyxisOS`. Container paths use the
-lowercase namespace `pyxisos`. Ordinary SDK changes do not require a container
-rebuild; changing the installed cross-compiler pin does:
+lowercase namespace `pyxisos`. The compiler and target LLVM libraries share
+`toolchain/llvm-development/revision`. A disposable complete SDK from the published
+Pyxis snapshot in `toolchain/llvm-development/sdk-revision` supplies the native
+library build. Only the resulting LLVM headers/archives, host configuration tool
+and notices/provenance enter the final image, under `/opt/cross/llvm-development`;
+bootstrap sources, SDK and build trees do not.
+
+Changing the compiler pin requires a container rebuild. SDK changes that alter
+interfaces used by these target LLVM libraries also require a refreshed snapshot
+and container; unrelated SDK changes do not. Ordinary OS/image/CI builds consume
+the prebuilt prefix through `x86_64-unknown-pyxis-llvm-config` and never build LLVM:
 
 ```sh
 podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8a4d001 .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8a4d001
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8bdf136 .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8bdf136
 ```
 
 ## Rust core and alloc
@@ -66,7 +78,7 @@ JOBS=16 toolchain/build-hosted.sh /absolute/sdk /absolute/payloads /absolute/wor
 ```
 
 The script pins the hosted source independently, currently
-`819c2b770271807f4436dcf76e435c0727c4a1ad`, and fetches only that commit from
+`8bdf1360b8c47640c92eeeb515ee4a08814987e6`, and fetches only that commit from
 the internal mirror. `LLVM_SOURCE` may select a clean checkout of that same
 commit. Installed compiler provenance and builtins must still match the SDK.
 `CROSS_COMPILE` selects the installed compiler prefix;
@@ -119,7 +131,7 @@ outside this mount):
 podman run --rm --userns=keep-id --user 0 -e HOME=/tmp -e JOBS=16 \
   -e BUILD_UID="$(id -u)" -e BUILD_GID="$(id -g)" \
   -v "$PWD":/src:Z -v /absolute/hosted-build:/hosted:Z -w /src \
-  git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8a4d001 \
+  git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8bdf136 \
   sh -ec 'apt-get update -qq
     apt-get install -y --no-install-recommends build-essential ninja-build
     exec setpriv --reuid="$BUILD_UID" --regid="$BUILD_GID" --clear-groups \
@@ -179,8 +191,9 @@ verification and an immutable published revision.
 
 `build-llvm-development.sh SDK OUTPUT WORKDIR` builds a separate threaded static
 X86 library/header prefix for Mesa, with a Linux-host `llvm-config` reporting
-the target libraries. The development pin is separate; the compiler container and
-hosted tool bundles are unchanged. See [the prefix, object-emission and explicit
+the target libraries. The compiler container runs it against a pinned bootstrap
+SDK, from the same LLVM source revision as the compiler. Hosted tool bundles
+retain their own pin. See [the prefix, object-emission and explicit
 JIT checks](../docs/development/llvm-development.md).
 
 ## Installation
@@ -248,7 +261,9 @@ helpers. `-nostdlib` suppresses the runtime and default SDK script for
 kernel/custom links; `-T` overrides the default script. Existing SDK Make
 settings name runtime inputs explicitly for dependency tracking. Changing the
 compiler target defaults or compiler-rt requires rebuilding this compiler;
-changing SDK headers/libraries/startup/linker script does not.
+unrelated SDK headers/libraries/startup/linker-script changes do not. If an SDK
+interface consumed by the target LLVM libraries changes, refresh the container
+bootstrap snapshot and rebuild its target libraries too.
 
 ## Sources and licenses
 

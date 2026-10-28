@@ -1,10 +1,22 @@
 # LLVM development prefix
 
-`toolchain/build-llvm-development.sh` is an opt-in build of native static LLVM
-libraries and headers for Mesa. `toolchain/llvm-development/revision` selects
-its source independently of hosted Clang, using the existing compiler container.
-It does not
-replace the compiler, alter the SDK, install a package or enable JIT execution.
+The compiler container includes native static LLVM libraries and headers for
+Mesa, with a host `x86_64-unknown-pyxis-llvm-config` that reports their adjacent
+target prefix. **Accepted (chronium, 2026-10-27):** build these libraries once
+inside the compiler container from the same fork pin as the compiler, selected by
+`toolchain/llvm-development/revision`. Ordinary image/CI builds consume them.
+
+`toolchain/build-container-libraries.sh` prepares a disposable complete SDK from
+the published Pyxis snapshot in `toolchain/llvm-development/sdk-revision` (and
+its pinned userland/filesystem), then invokes the existing producer. The bootstrap
+SDK does not depend on Mesa or target LLVM, so there is no build cycle. Its
+sources, SDK and work trees stay out of the final image. The installed libraries
+retain their SDK inventories and full licences/provenance. The snapshot revision
+is recorded beside compiler provenance. Refresh it and the container when an SDK
+interface used by LLVM changes.
+
+The manual producer remains available for development; it does not alter the
+SDK, install a runtime package or grant executable-memory authority:
 
 ```sh
 JOBS=8 toolchain/build-llvm-development.sh /absolute/sdk /absolute/output /absolute/work
@@ -53,8 +65,8 @@ then `LLVM_OBJECT COMPLETE target=x86_64 bytes=... execution=NONE`. Inspect the
 result with an object reader: ELF64 little-endian x86-64 relocatable, exporting
 `pyxis_answer`. The program emits into owned memory and writes an ordinary FILE;
 it never maps or executes generated instructions. Neither linking MCJIT nor
-this check qualifies executable-memory support. Luna builds published prefixes;
-chronium publishes them. No compiler-container rebuild is needed.
+this check qualifies executable-memory support. Luna builds the compiler container; chronium publishes it. Manual development
+prefixes remain available for independent qualification.
 
 ## Explicit JIT sections
 
@@ -99,8 +111,8 @@ The development-only fork refuses ORC's FD-based remote-executor factory with
 resolver reports the same error, and its validator accepts no shared library.
 Its POSIX mode/symlink caches are absent on Pyxis. Ordinary Support native FILE
 lookup/private memory remain available. The execution-engine C header includes
-its own standard `size_t` definition. Hosted Clang and installed compiler pins
-are unchanged.
+its own standard `size_t` definition. Hosted Clang keeps its separate pin; the installed compiler and native
+libraries now share the JIT-capable pin.
 
 [Task-1 qualification](experiments/llvm-development.md) records host and target
 builds, relocated Meson discovery, an independently linked consumer of the

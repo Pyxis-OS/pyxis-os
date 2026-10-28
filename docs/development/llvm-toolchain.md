@@ -37,12 +37,12 @@ how applications use it.
     signature help that parse the whole file without a preamble. Clang and LLD
     stay threads off.
 - **The pin:** `toolchain/build.sh` fetches one commit shallowly, currently
-  `8a4d001d5480`. The SDK builds its [C++ runtime](sdk.md#c) from the same
+  `2b3a3a41df74`. The SDK builds its [C++ runtime](sdk.md#c) from the same
   commit. Moving to a new LLVM release is a rebase onto its tag in a new
   `pyxis-VERSION` branch. Hosted tool sources have their own pin in
   `toolchain/build-hosted.sh`; hosted-only changes do not move the compiler pin.
-  The separate [LLVM development prefix](llvm-development.md) is being qualified
-  for Mesa; it does not change the installed compiler.
+  The [LLVM development prefix](llvm-development.md) for Mesa is built into the
+  compiler container from that same pin; normal image builds consume it.
 
 ## Changing the pin
 
