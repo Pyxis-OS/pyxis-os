@@ -162,7 +162,7 @@ static void unlock_requests(void)
 
 struct bsp_request *bsp_request_storage_create(void)
 {
-  KASSERT(arch_cpu_index() == 0 && initialized);
+  KASSERT(initialized);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct bsp_request *storage = kmalloc(storage_size);
   if (storage) {
@@ -174,7 +174,6 @@ struct bsp_request *bsp_request_storage_create(void)
 
 void bsp_request_storage_destroy(struct bsp_request *storage)
 {
-  KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (storage) {
     KASSERT(storage->state == BSP_REQUEST_FREE && !storage->next && !storage->wait);
@@ -286,7 +285,8 @@ void bsp_request_submit_and_wait(struct bsp_request *request)
 {
   KASSERT(initialized && request && request->state == BSP_REQUEST_PREPARED);
   KASSERT(request == task_bsp_request_current());
-  KASSERT(request->service != BSP_SERVICE_MEMORY && request->service != BSP_SERVICE_JIT);
+  KASSERT(request->service != BSP_SERVICE_MEMORY && request->service != BSP_SERVICE_JIT &&
+      request->service != BSP_SERVICE_THREAD);
   /* Both typed local services execute on their retained caller CPU. */
   struct task_wait *wait = request->wait;
   KASSERT(wait && !request->next);
@@ -491,8 +491,8 @@ static void service_request(struct bsp_request *request)
     display_request_execute((struct display_request *)request);
     break;
   case BSP_SERVICE_THREAD:
-    object_cleanup_leave(previous);
-    process_vm_mutation_forward(request);
+    /* Typed caller-owned storage only; never submitted to the BSP queue. */
+    KASSERT(false);
     return;
   default:
     KASSERT(false);

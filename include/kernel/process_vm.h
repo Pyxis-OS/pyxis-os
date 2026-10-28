@@ -69,7 +69,7 @@ void process_vm_borrow_release(struct process *process);
 /* Executor transfers a request without waiting for drainage. The preallocated
  * record owns process/task lifetime through its uninterruptible caller. */
 void process_vm_mutation_forward(struct bsp_request *request);
-/* Admitted private MEMORY/JIT caller, IF=0; retained record, no BSP publication.
+/* Admitted private MEMORY/JIT/thread caller, IF=0; retained record, no BSP publication.
  * Leaves its root, drains under the common gate, executes and rejoins for reply. */
 void process_vm_private_call(struct bsp_request *request);
 void process_vm_reply_finish(struct process *process);

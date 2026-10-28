@@ -22,7 +22,14 @@ enum call_status image_capture_allocate(uint64_t size, struct image_capture *cap
   uintptr_t address;
   struct vm_kernel_owner owner = {0};
   if (!vm_kernel_owner_try(&owner)) {
-    return CALL_BUSY;
+    /* Fixed I/O actors retain the source operation without a short lock while
+     * shared range preparation admits. Refusal still precedes any capture. */
+    cpu_enable_interrupts();
+    bool admitted = vm_kernel_owner_acquire(&owner);
+    cpu_disable_interrupts();
+    if (!admitted) {
+      return CALL_BUSY;
+    }
   }
   enum mm_result result = vm_alloc(vm_kernel_space(), backing_bytes, PAGE_SIZE,
       PAGE_WRITE, &address);

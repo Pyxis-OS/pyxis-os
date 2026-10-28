@@ -65,7 +65,8 @@ enum call_status private_memory_update(struct process *process,
  * and holds no short VM activity lease. */
 enum call_status private_context_pin(struct process *process, uint64_t identity,
     struct private_context *context);
-/* BSP, IF=0, for unpublished unwind or after root/stack/continuation retirement,
+/* Owning caller or fixed RAM actor, IF=0, after unpublished unwind or
+ * root/stack/continuation retirement,
  * before completion. No VM access or mutation. Zero/unacquired context is safe;
  * clears storage. */
 void private_context_unpin(struct private_context *context);
@@ -78,7 +79,8 @@ enum call_status private_jit_protect(struct process *process, uint64_t identity,
     size_t offset, size_t size, enum jit_state state);
 enum call_status private_jit_release(struct process *process, uint64_t identity, size_t *bytes);
 
-/* BSP, IF=0, after vm_space_destroy reclaimed all backing. Frees only records. */
+/* Exclusive retired/preparing process owner, IF=0, after all private backing
+ * is reclaimed. Frees records in bounded steps, yielding without a VM loan. */
 void private_memory_discard_records(struct process *process);
 
 #endif

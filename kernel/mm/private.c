@@ -327,7 +327,7 @@ enum call_status private_context_pin(struct process *process, uint64_t identity,
 
 void private_context_unpin(struct private_context *context)
 {
-  KASSERT(arch_cpu_index() == 0 && context);
+  KASSERT(context);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (context->allocation) {
     KASSERT(atomic_load_explicit(&context->allocation->pinned, memory_order_relaxed));
@@ -475,11 +475,15 @@ enum call_status private_jit_release(struct process *process, uint64_t identity,
 
 void private_memory_discard_records(struct process *process)
 {
-  KASSERT(arch_cpu_index() == 0 && process);
+  KASSERT(!cpu_interrupts_enabled() && process);
+  size_t released = 0;
   while (process->allocations) {
     struct private_allocation *allocation = process->allocations;
     KASSERT(!atomic_load_explicit(&allocation->pinned, memory_order_acquire));
     process->allocations = allocation->next;
     kfree(allocation);
+    if (!(++released % 256) && task_current_actor()) {
+      task_yield_masked();
+    }
   }
 }

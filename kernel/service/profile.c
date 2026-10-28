@@ -6,7 +6,6 @@
 
 struct task_profile *profile_storage_create(void)
 {
-  KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct task_profile *profile = kmalloc(sizeof(*profile));
   if (profile) {
@@ -17,7 +16,6 @@ struct task_profile *profile_storage_create(void)
 
 void profile_storage_destroy(struct task_profile *profile)
 {
-  KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   kfree(profile);
 }

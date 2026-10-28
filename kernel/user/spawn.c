@@ -379,8 +379,8 @@ static enum call_status prepare_child(struct launch_preparation *group,
       kept |= handle == startup.working_directories[j];
     }
     for (size_t j = 0; j < startup.entry_count; ++j) {
-      const struct process_environment_entry *entry = &startup.entries[j];
-      named |= entry->kind == ENVIRONMENT_CAP && entry->value == handle;
+      const struct process_environment_entry *named_entry = &startup.entries[j];
+      named |= named_entry->kind == ENVIRONMENT_CAP && named_entry->value == handle;
     }
     if (!kept && !named) {
       KASSERT(capability_close(&child->capabilities, handle) == CAP_OK);

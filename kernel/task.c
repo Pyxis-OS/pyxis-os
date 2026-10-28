@@ -60,6 +60,7 @@ struct task {
   struct arch_user_state cpu;
   size_t cpu_index;
   bool exited, in_syscall;
+  bool ram_reaper; /* Fixed boot-created RAM owner, with audited wait/yield paths. */
   atomic_bool vm_continuation;
   bool vm_kernel; /* Current syscall owns a kernel-root continuation, never movable. */
   bool thread_exit_pending;
@@ -103,6 +104,7 @@ struct scheduler {
 
 static struct scheduler *schedulers;
 static struct task *completed_head;
+static struct task **ram_retired; /* queues_locked; indexed by departure CPU. */
 static atomic_bool started;
 static struct spinlock queues_locked;
 
@@ -555,7 +557,7 @@ struct task_wait *task_wait_prepare(void)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct task *task = local_scheduler()->current_task;
   KASSERT(task && !task->exited);
-  KASSERT(task->kind == TASK_USER || arch_cpu_index() == 0);
+  KASSERT(task->kind == TASK_USER || task->ram_reaper || arch_cpu_index() == 0);
   KASSERT(!task->wait && !task->parked);
   task->wait_record = (struct task_wait){.task = task};
   return &task->wait_record;
@@ -625,7 +627,7 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline,
   struct task *task = scheduler->current_task;
   KASSERT(task && wait == &task->wait_record && wait->task == task && !task->exited);
   KASSERT(!task->vm_borrowers);
-  KASSERT(task->kind == TASK_USER || arch_cpu_index() == 0);
+  KASSERT(task->kind == TASK_USER || task->ram_reaper || arch_cpu_index() == 0);
 
   lock_queues();
   wait->interruptible = interruptible;
@@ -1062,7 +1064,7 @@ static enum mm_result allocate_task(struct task **result)
 
 static void free_task(struct task *task)
 {
-  KASSERT(arch_cpu_index() == 0 && vm_kernel_owner_held());
+  KASSERT(vm_kernel_owner_held());
   KASSERT(!task->bsp_request && !task->deferred_request);
   KASSERT(!task->wait && !task->wait_record.timed && !task->resource_wait.next);
   KASSERT(!task->address_wait && !task->address_wait_expired &&
@@ -1074,7 +1076,8 @@ static void free_task(struct task *task)
   kfree(task);
 }
 
-static enum mm_result create_kernel_task(void (*entry)(void *), void *argument)
+static enum mm_result create_kernel_task(size_t cpu, bool ram_reaper,
+    void (*entry)(void *), void *argument)
 {
   KASSERT(arch_cpu_index() == 0);
   if (!schedulers || !entry) {
@@ -1090,7 +1093,9 @@ static enum mm_result create_kernel_task(void (*entry)(void *), void *argument)
   task->kind = TASK_KERNEL;
   task->kernel_entry = entry;
   task->argument = argument;
-  enqueue(&schedulers[0], task);
+  task->cpu_index = cpu;
+  task->ram_reaper = ram_reaper;
+  enqueue(&schedulers[cpu], task);
   return MM_OK;
 }
 
@@ -1100,9 +1105,29 @@ enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
   if (!vm_kernel_owner_try(&owner)) {
     return MM_BUSY;
   }
-  enum mm_result result = create_kernel_task(entry, argument);
+  enum mm_result result = create_kernel_task(0, false, entry, argument);
   vm_kernel_owner_release(&owner);
   return result;
+}
+
+enum mm_result kernel_ram_reaper_create(size_t cpu, void (*entry)(void *), void *argument)
+{
+  KASSERT(!vm_kernel_runtime() && cpu < arch_cpu_count());
+  struct vm_kernel_owner owner = {0};
+  KASSERT(vm_kernel_owner_try(&owner));
+  enum mm_result result = create_kernel_task(cpu, true, entry, argument);
+  vm_kernel_owner_release(&owner);
+  return result;
+}
+
+void task_ram_reapers_init(void)
+{
+  KASSERT(!vm_kernel_runtime() && !ram_retired);
+  ram_retired = kmalloc(arch_cpu_count() * sizeof(*ram_retired));
+  if (!ram_retired) {
+    panic("cannot allocate task RAM retirement queues");
+  }
+  memset(ram_retired, 0, arch_cpu_count() * sizeof(*ram_retired));
 }
 
 void task_space_close_setup(struct space *space)
@@ -1157,7 +1182,7 @@ static enum mm_result prepare_user_task(struct process *process, uintptr_t entry
                                  uintptr_t stack_top, size_t preferred_cpu,
                                  struct task **result)
 {
-  KASSERT(arch_cpu_index() == 0);
+  process_prepare_require(process);
   *result = NULL;
   if (!schedulers || !process || !process->startup_address ||
       !process_task_available(process) ||
@@ -1219,7 +1244,14 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
   *result = NULL;
   struct vm_kernel_owner owner = {0};
   if (!vm_kernel_owner_try(&owner)) {
-    return MM_BUSY;
+    /* The inactive child remains exclusively owned while this small shared
+     * stack reservation admits; unrelated private preparation stays parallel. */
+    cpu_enable_interrupts();
+    bool admitted = vm_kernel_owner_acquire(&owner);
+    cpu_disable_interrupts();
+    if (!admitted) {
+      return MM_BUSY;
+    }
   }
   enum mm_result status = prepare_user_task(process, entry, stack_top,
       preferred_cpu, result);
@@ -1229,10 +1261,17 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
 
 void user_task_discard_prepared(struct task *task)
 {
-  KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
-  KASSERT(vm_kernel_owner_held());
+  KASSERT(task && task->kind == TASK_USER);
+  process_prepare_require(task->process);
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    cpu_enable_interrupts();
+    vm_kernel_owner_cleanup(&owner);
+    cpu_disable_interrupts();
+  }
   process_task_discard(task->process, &task->process_member);
   free_task(task);
+  vm_kernel_owner_release(&owner);
 }
 
 static bool fs_context_valid(const struct private_context *context, uintptr_t base)
@@ -1244,7 +1283,7 @@ static bool fs_context_valid(const struct private_context *context, uintptr_t ba
 static enum call_status prepare_thread_task(struct task *creator, const struct thread_create *input,
     struct thread_control *control, struct task **result)
 {
-  KASSERT(arch_cpu_index() == 0 && creator && creator->kind == TASK_USER && control);
+  KASSERT(creator && creator->kind == TASK_USER && control);
   struct process *process = creator->process;
   process_vm_require_mutation(process);
   *result = NULL;
@@ -1300,7 +1339,7 @@ static enum call_status prepare_thread_task(struct task *creator, const struct t
   task->thread_control = control;
   task->fs_bound = input->context_identity != 0;
   task->cpu.fs_base = input->fs_base;
-  /* The creator's state was saved before the deferred BSP handoff. */
+  /* Kernel-root entry saved the creator state before preparation. */
   arch_user_state_inherit(&task->cpu, &creator->cpu);
   *result = task;
   return CALL_OK;
@@ -1322,7 +1361,7 @@ enum call_status task_thread_prepare(struct task *creator,
 
 void task_thread_discard(struct task *task)
 {
-  KASSERT(arch_cpu_index() == 0 && task && !task->process_member.task);
+  KASSERT(task && !task->process_member.task);
   KASSERT(vm_kernel_owner_held());
   private_context_unpin(&task->stack_context);
   private_context_unpin(&task->fs_context);
@@ -1337,7 +1376,7 @@ enum call_status task_thread_attach_locked(struct task *task)
 
 void task_thread_enqueue(struct task *task)
 {
-  KASSERT(arch_cpu_index() == 0 && task->process_member.task == task);
+  KASSERT(task->process_member.task == task);
   struct space *space = task->process->space;
   lock_queues();
   size_t cpu_index = place_locked(space, task->cpu_index);
@@ -1352,7 +1391,7 @@ void task_thread_enqueue(struct task *task)
 
 enum call_status task_thread_bind_fs(struct task *task, uint64_t identity, uintptr_t base)
 {
-  KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
+  KASSERT(task && task->kind == TASK_USER);
   process_vm_require_mutation(task->process);
   if (task->fs_bound) {
     return CALL_BUSY;
@@ -1377,6 +1416,10 @@ enum call_status task_thread_bind_fs(struct task *task, uint64_t identity, uintp
   spin_unlock(&task->process->lifetime_lock);
   if (status != CALL_OK) {
     private_context_unpin(&context);
+  } else if (task == task_current_user()) {
+    /* Keep the live FS register coherent with the retained state: leaving
+     * kernel-root execution saves it again before restoring the private root. */
+    arch_user_restore(&task->cpu);
   }
   return status;
 }
@@ -1391,13 +1434,13 @@ void task_thread_exit_request(uint64_t value)
 
 struct process *user_task_process(struct task *task)
 {
-  KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
+  KASSERT(task && task->kind == TASK_USER);
   return task->process;
 }
 
 void user_task_publish_group(struct task **tasks, size_t count)
 {
-  KASSERT(arch_cpu_index() == 0 && count && count <= LAUNCH_BATCH_MAX);
+  KASSERT(count && count <= LAUNCH_BATCH_MAX);
   /* Published tasks may run and retire as soon as the lock drops, so keep
    * only their destination indices for notification. */
   size_t destinations[LAUNCH_BATCH_MAX];
@@ -1441,6 +1484,9 @@ enum mm_result user_task_create(struct process *process, uintptr_t entry,
 static void complete_task(struct task *task)
 {
   KASSERT(!task->bsp_request && !task->deferred_request);
+  if (task->kind == TASK_USER) {
+    process_task_depart(task->process, arch_cpu_index());
+  }
   lock_queues();
   task->next = completed_head;
   completed_head = task;
@@ -1450,58 +1496,92 @@ static void complete_task(struct task *task)
   notify_remote_cpu(0);
 }
 
+/* Permanent BSP stack: detach one stop target, then transfer its owned storage.
+ * No VM admission or storage destruction happens on this scheduler stack. */
 static void reap_completed(void)
 {
-  struct vm_kernel_owner owner = {0};
-  if (!vm_kernel_owner_try(&owner)) {
-    return;
-  }
   lock_queues();
   struct task *task = completed_head;
-  completed_head = NULL;
-  unlock_queues();
-
-  while (task) {
-    struct task *next = task->next;
-    struct process *process = task->process;
-    if (task->kind == TASK_USER) {
-      struct process_result result;
-      process_task_detach(process, &task->process_member);
-      if (process_result_get(process, &result)) {
-        /* Fault entry elects the result without taking lifetime ownership.
-         * Stop only remaining members, after removing this retired target. */
-        process_request_stop(process);
-      }
-      size_t cpu_index = task->cpu_index;
-      struct private_context stack_context = task->stack_context;
-      struct private_context fs_context = task->fs_context;
-      struct thread_control *control = task->thread_control;
-      struct thread_result thread_result = task->thread_result;
-      bool faulted = task->faulted;
-      task->stack_context = (struct private_context){0};
-      task->fs_context = (struct private_context){0};
-      free_task(task);
-      private_context_unpin(&stack_context);
-      private_context_unpin(&fs_context);
-      if (control) {
-        if (!thread_result.kind) {
-          thread_result = (struct thread_result){.kind = THREAD_STOPPED};
-        }
-        thread_control_complete(control, thread_result);
-        object_release(&control->object);
-      }
-      bool finalized = process_task_reclaimed(process);
-      if (faulted) {
-        kinfo("userspace: CPU %zu faulted task released\n", cpu_index);
-      } else if (finalized && result.kind == PROCESS_TERMINATED) {
-        kinfo("userspace: CPU %zu terminated task released\n", cpu_index);
-      }
-    } else {
-      free_task(task);
-    }
-    task = next;
+  if (task) {
+    completed_head = task->next;
+    task->next = NULL;
   }
-  vm_kernel_owner_release(&owner);
+  unlock_queues();
+  if (!task) {
+    return;
+  }
+  if (task->kind == TASK_USER) {
+    process_task_detach(task->process, &task->process_member);
+    if (process_result_committed(task->process)) {
+      process_request_stop(task->process);
+    }
+  }
+  size_t cpu = task->cpu_index;
+  lock_queues();
+  task->next = ram_retired[cpu];
+  ram_retired[cpu] = task;
+  unlock_queues();
+  process_ram_cleanup_notify(cpu);
+}
+
+bool task_ram_retire_pending(void)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  lock_queues();
+  bool pending = ram_retired[arch_cpu_index()] != NULL;
+  unlock_queues();
+  return pending;
+}
+
+void task_reap_ram(void)
+{
+  KASSERT(cpu_interrupts_enabled());
+  struct vm_kernel_owner owner = {0};
+  uint64_t flags = cpu_save_interrupts();
+  lock_queues();
+  size_t cpu = arch_cpu_index();
+  struct task *task = ram_retired[cpu];
+  if (task) {
+    ram_retired[cpu] = task->next;
+    task->next = NULL;
+  }
+  unlock_queues();
+  cpu_restore_interrupts(flags);
+  if (!task) {
+    return;
+  }
+  vm_kernel_owner_cleanup(&owner);
+  flags = cpu_save_interrupts();
+  struct process *process = task->process;
+  struct execution_group *previous = object_cleanup_enter(process ?
+      process->execution_group : task->cleanup_group);
+  if (task->kind == TASK_USER) {
+    struct private_context stack = task->stack_context, fs = task->fs_context;
+    struct thread_control *control = task->thread_control;
+    struct thread_result result = task->thread_result;
+    bool faulted = task->faulted;
+    task->stack_context = task->fs_context = (struct private_context){0};
+    free_task(task);
+    vm_kernel_owner_release(&owner);
+    private_context_unpin(&stack);
+    private_context_unpin(&fs);
+    if (control) {
+      if (!result.kind) {
+        result = (struct thread_result){.kind = THREAD_STOPPED};
+      }
+      thread_control_complete(control, result);
+      object_release(&control->object);
+    }
+    process_task_reclaimed(process);
+    if (faulted) {
+      kinfo("userspace: CPU %zu faulted task released\n", cpu);
+    }
+  } else {
+    free_task(task);
+    vm_kernel_owner_release(&owner);
+  }
+  object_cleanup_leave(previous);
+  cpu_restore_interrupts(flags);
 }
 
 static void wake_sleepers(struct timer_clock *clock)
@@ -1559,10 +1639,11 @@ void kernel_task_sleep_until(uint64_t deadline)
 void kernel_task_yield_if_runnable(void)
 {
   uint64_t flags = cpu_save_interrupts();
-  KASSERT(arch_cpu_index() == 0 && (flags & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   struct scheduler *scheduler = local_scheduler();
   struct task *task = scheduler->current_task;
   KASSERT(task && task->kind == TASK_KERNEL && !task->exited);
+  KASSERT(arch_cpu_index() == 0 || task->ram_reaper);
 
   lock_queues();
   bool runnable = scheduler->ready_head != NULL;
@@ -1591,7 +1672,8 @@ void task_yield_masked(void)
   struct scheduler *scheduler = local_scheduler();
   struct task *task = scheduler->current_task;
   KASSERT(task && !task->exited && !task->vm_borrowers);
-  KASSERT(task->kind == TASK_USER ? task->in_syscall : arch_cpu_index() == 0);
+  KASSERT(task->kind == TASK_USER ? task->in_syscall :
+      task->ram_reaper || arch_cpu_index() == 0);
   lock_queues();
   bool runnable = scheduler->ready_head != NULL ||
       scheduler->expired_address_waits != NULL ||

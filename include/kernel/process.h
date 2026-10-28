@@ -59,12 +59,22 @@ struct process {
   enum process_lifetime lifetime;
   struct process_task_member *tasks; /* Stop targets, detached before storage reclamation. */
   size_t task_count; /* Linked tasks, including those awaiting BSP retirement. */
+  size_t departing_tasks; /* Attached tasks which have not left their final root/stack. */
   size_t task_storage_count; /* Includes detached storage and context pins until completion. */
   size_t cleanup_pins; /* lifetime_lock: retained cleanup borrowing process records. */
+  struct task *preparation_actor; /* Exclusive unpublished owner, NULL at boot. */
+  size_t preparation_cpu, retirement_cpu;
+  bool preparation_transferred;
+  enum {
+    PROCESS_CLEANUP_SESSIONS,
+    PROCESS_CLEANUP_VM,
+    PROCESS_CLEANUP_HOOKS,
+    PROCESS_CLEANUP_RECORDS,
+  } cleanup_phase;
   bool stopping;
   /* One packed first-event election, including fault entry without lifetime_lock. */
   atomic_uint_fast64_t terminal_result;
-  /* RETIRED and owned by the BSP reaper: its queue link, and the detached
+  /* RETIRED and exclusively owned by its current fixed/RAM cleanup phase: its queue link, and the detached
    * control and group membership completed after release. */
   struct process *retired_next;
   struct process_control *retired_control;
@@ -76,35 +86,34 @@ struct process {
  * interrupt/fault entry. The pointer cannot outlive this execution context. */
 struct process *process_current(void);
 
-/* BSP, IF=0, after heap and space initialization. The caller exclusively owns
+/* Retained kernel-root preparation, IF=0, after heap/space initialization.
+ * The caller exclusively owns
  * an inactive private address space. Success transfers it to the new process;
  * failure leaves it with the caller and clears *result when non-NULL. */
 enum mm_result process_create(struct space *space, struct vm_space *address_space,
                               struct process **result);
+/* IF=0, retained kernel-root actor exclusively owns this unpublished process. */
+void process_prepare_require(struct process *process);
+/* Transfer exclusive unpublished ownership to its preparation CPU RAM actor. */
+void process_prepare_transfer(struct process *process);
 
-/* BSP, IF=0, shared kernel structural owner held, exclusive unsubmitted
- * process, with no prepared task storage.
- * Submitted processes finalize through process_task_reclaimed(). Frees the address
- * space, private allocation records, capability table and process. Owned
- * keyboard, graphics and audio sessions are released first; if VM destruction fails,
- * the remaining resources stay intact. In-flight presentation may retain only pixel backing.
- * Audio exit invalidates ownership without allocation; its worker retains queue
- * storage and an attributed cleanup token, never the retired process.
- * Object references are released for BSP reaping; the owning space survives.
- * Detaches the control's borrowed process link without publishing completion.
- * Unpublished destruction only releases group storage. */
+/* Exclusive unpublished owner, IF=0, no task storage/receivers/sessions.
+ * Reclaims private backing in bounded steps, then allocation/capability/ENV
+ * records; may yield under retained kernel-root ownership. No process result
+ * is published. Logical handle closes run normally; fixed destructors keep
+ * their owners and group cleanup attribution. */
 enum mm_result process_destroy(struct process *process);
 
-/* BSP, IF=0, exclusive preparation. Exactly one task may be prepared, including
+/* Retained caller, IF=0, exclusive preparation. Exactly one task may be prepared, including
  * a blocked or not-yet-published task. Failure leaves both objects with caller. */
 bool process_task_available(struct process *process);
 void process_task_attach(struct process *process, struct process_task_member *member,
                          struct task *task);
 void process_task_discard(struct process *process, struct process_task_member *member);
-/* BSP, before ready-queue publication. Transfers process lifetime to finalization. */
+/* Exclusive preparation, before ready-queue publication. Transfers process lifetime to finalization. */
 void process_publish(struct process *process);
 
-/* BSP, IF=0, lifetime_lock held. Adds a sibling only while admission is open;
+/* Caller CPU, IF=0, lifetime_lock held. Adds a sibling only while admission is open;
  * retained storage, including retiring threads, counts toward the tunable bound.
  * The caller retains the guard through runnable publication and separately
  * serializes group stopping. Group SEAL does not close internal admission.
@@ -126,8 +135,9 @@ void process_set_result(struct process *process, struct process_result result);
 bool process_result_committed(struct process *process);
 bool process_result_get(struct process *process, struct process_result *result);
 
-/* BSP scheduler after the task has left its root/stack and returned every loan.
- * Detach the stop target, reclaim task storage, release context pins and publish
+/* BSP scheduler after root/stack departure detaches the stop target and records
+ * its actual departure CPU. That fixed RAM actor reclaims storage/context pins
+ * before publishing
  * native thread completion, then call reclaimed. The last detach elects EXITED/0
  * only when no process-wide event exists and closes VM admission. For the last
  * storage, reclaimed returns true and queues the process for the reaper only
@@ -136,20 +146,25 @@ bool process_result_get(struct process *process, struct process_result *result);
  * membership before queueing without allocation. The reaper releases
  * the address space in bounded interrupts-off steps, then the remaining
  * resources, and only then publishes control and group completion. */
+/* Permanent scheduler stack, after final root/stack departure, before enqueue. */
+void process_task_depart(struct process *process, size_t departure_cpu);
 void process_task_detach(struct process *process, struct process_task_member *member);
 bool process_task_reclaimed(struct process *process);
 /* IF=0, caller already keeps the submitted process live. Retain borrowed
  * process records through whole-record cleanup after the syscall returns.
  * Pin and unpin are any CPU while task storage remains. The final unpin after
- * all task storage is gone uses the existing BSP finalization owner. Process,
+ * all task storage is gone uses the recorded last departure CPU for RAM cleanup. Process,
  * control and group completion wait for both task storage and these pins.
  * No access to process is permitted after unpin without another live owner. */
 bool process_cleanup_pin(struct process *process);
 void process_cleanup_unpin(struct process *process);
-/* BSP, IF=0, after task_init(). Starts the BSP process reaper task. */
+/* Boot BSP, IF=0, after task_init(). Creates all mandatory fixed RAM actors
+ * and the coordinator for unchanged BSP device hooks before user admission. */
 void process_reaper_init(void);
 /* Any CPU, IF=0, after releasing the producer's retirement queue guard. Wake
  * the existing reaper for retained cleanup; no allocation or context switch. */
 void process_cleanup_notify(void);
+/* Wake the fixed RAM actor assigned to an already-owned retirement record. */
+void process_ram_cleanup_notify(size_t cpu);
 
 #endif

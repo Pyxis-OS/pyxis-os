@@ -6,6 +6,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/mm/kernel_owner.h>
+#include <kernel/memory.h>
 #include <kernel/object/object.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/process.h>

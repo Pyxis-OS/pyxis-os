@@ -301,7 +301,7 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
   pending->reply_address = reply_address;
   pending->request.vm_process = process;
   pending->request.vm_mutator = pending->caller;
-  bsp_request_submit_and_wait(&pending->request);
+  process_vm_private_call(&pending->request);
   struct syscall_result result = {pending->status, 0};
   struct thread_reply reply = pending->reply;
   reservation = pending->reservation;

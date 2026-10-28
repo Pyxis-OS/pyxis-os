@@ -94,7 +94,7 @@ bool forwarder_storage_release(struct kernel_object *object);
 /* Newly allocated wrapper metadata for a derived grant; retained target storage
  * and embedded lineage are accounted by their existing owners. */
 size_t forwarder_derived_storage_size(const struct forwarder_operation *lineage);
-/* BSP/IF=0. Moves a grant into a derived forwarder before external effects;
+/* Retained kernel-root actor, IF=0. Moves a grant into a derived forwarder before external effects;
  * ordinary operations without lineage take the existing no-allocation path. */
 enum capability_result forwarder_derive_grant(struct capability_grant *grant,
     const struct forwarder_operation *lineage);

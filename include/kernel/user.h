@@ -12,13 +12,13 @@ struct task;
  * to 16 bytes in the process's inactive address space. The scheduler places the
  * task on the least-loaded CPU its space allows and may later move it between
  * user-mode boundaries. Requires process_prepare_startup(); its record is passed
- * to the user entry. Requires task_init(), BSP execution, IF=0, outside
+ * to the user entry. Requires task_init(), retained kernel-root preparation, IF=0, outside
  * interrupt/fault entry. The caller must not access the process or its address
  * space after success, even if the task has not run yet. */
 enum mm_result user_task_create(struct process *process, uintptr_t entry,
                                 uintptr_t stack_top);
 
-/* BSP only. Preparation owns its stack and request/profile storage but borrows
+/* Retained caller CPU, kernel root, IF=0. Preparation owns its stack and request/profile storage but borrows
  * the inactive process until publication. PREFERRED_CPU only breaks placement
  * ties; SIZE_MAX expresses none. Failure leaves process ownership with the
  * caller. Discard prepared tasks before destroying their processes. All tasks
@@ -33,7 +33,7 @@ struct process *user_task_process(struct task *task);
 void user_task_publish_group(struct task **tasks, size_t count);
 
 /* Abandon the current task's kernel-entry stack. The scheduler switches to
- * its own stack and the kernel space before returning ownership to the BSP. */
+ * its own stack and the kernel space before transferring ownership through fixed device hooks to its CPU RAM reaper. */
 [[noreturn]] void user_exit(int status);
 [[noreturn]] void user_start_failed(uint32_t reason);
 [[noreturn]] void user_fault(void);

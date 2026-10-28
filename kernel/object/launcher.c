@@ -199,24 +199,27 @@ void launcher_request_execute(struct launcher_request *request)
   struct execution_group *previous = object_cleanup_enter(request->execution_group ?
       request->execution_group : request->request.cleanup_group);
   struct vm_kernel_owner owner = {0};
-  if (request->action == LAUNCH_CAPTURE_RAM || request->action == LAUNCH_START ||
-      request->action == LAUNCH_CREATE_SPACE || request->action == LAUNCH_BATCH_PREPARE) {
-    /* Reclamation yields while retaining the structural owner. Wait with
-     * interrupts enabled instead of reporting ordinary contention as a failed
-     * launch. The servicing request retains all inputs across this wait. */
+  bool capture_action = request->action == LAUNCH_CAPTURE_RAM;
+  bool space_action = request->action == LAUNCH_CREATE_SPACE ||
+      request->action == LAUNCH_SPACE_DEVICES || request->action == LAUNCH_SPACE_FINISH;
+  if ((capture_action || space_action) && !vm_kernel_owner_try(&owner)) {
     cpu_enable_interrupts();
-    bool admitted = vm_kernel_owner_acquire(&owner);
+    bool admitted;
+    if (request->action == LAUNCH_SPACE_FINISH) {
+      /* The child is already published or rollback completed. Finish its
+       * fixed-owner reporting rather than inventing a post-publication failure. */
+      vm_kernel_owner_cleanup(&owner);
+      admitted = true;
+    } else {
+      admitted = vm_kernel_owner_acquire(&owner);
+    }
     cpu_disable_interrupts();
     if (!admitted) {
       request->result = CALL_BUSY;
-      if (request->action == LAUNCH_CAPTURE_RAM ||
-          (request->capture->image && request->capture->image->backing == FILE_INITRD)) {
+      if (capture_action) {
         file_end_operation(request->capture->image);
       }
-      if (request->action != LAUNCH_CAPTURE_RAM) {
-        discard_capture(request->capture);
-      }
-      goto complete;
+      goto done;
     }
   }
   switch (request->action) {
@@ -246,7 +249,7 @@ void launcher_request_execute(struct launcher_request *request)
   default:
     KASSERT(false);
   }
-complete:
+done:
   if (owner.root) {
     vm_kernel_owner_release(&owner);
   }
