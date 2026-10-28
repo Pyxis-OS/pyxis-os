@@ -864,17 +864,17 @@ RFK completed bits mean completion on both PHYs, not either one. Native
 `f85199a6` passed one normal channel-1 request; it does not qualify repetition
 or hopping. Retained firmware/DMA is intentional after healthy completion.
 
-### Next slice proposal — repeated same-channel requests (not assigned)
+### Repeated same-channel qualification — accepted (chronium, 2026-10-28)
 
-**Decision: qualify retained-context repetition before implementing hopping.**
-Proposed default: two sequential explicit channel-1 requests on the same healthy
-DBCC activation, preserving the first immutable FILE across the second request.
-Each request has its own completion, bounded records and RX-retirement boundary;
-verify first-FILE bytes/rights remain unchanged, no extra startup or RFK occurs,
-and wired management survives. No automatic scan, retry or new application API.
-After this slice chronium can request channel 1 repeatedly without rebooting and
-keep independent result snapshots. No new native run or packet is authorized
-until this proposal receives its own go.
+Qualify two sequential explicit channel-1 requests on the same healthy DBCC
+activation, preserving the first immutable FILE across the second request.
+Each request has independent completion, bounded records and RX retirement;
+verify that the first FILE's bytes/rights remain unchanged, no extra startup or
+calibration occurs, and wired management survives. No automatic scan, retry or
+new application API. After this slice chronium can request channel 1 repeatedly
+without rebooting and keep independent result snapshots. The native packet is
+separate from the already passed single-request gate; this checklist remains
+unchecked until both requests and their retained-context boundary are observed.
 
 Do not combine this qualification with cancellation or hopping. Those require
 separate subsequent delivery: a confirmed STOP/END-and-drain reuse check, then
