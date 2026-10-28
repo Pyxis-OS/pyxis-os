@@ -30,16 +30,16 @@ struct process_interrupt_create_request {
   enum call_status status;
 };
 
-/* BSP, IF=0. Returns one owned reference or NULL. An unsubmitted process may
+/* IF=0. Returns one owned reference or NULL. An unsubmitted process may
  * release this without completing it; no observer may be running at that point. */
 struct process_control *process_control_create(void);
 
-/* BSP, IF=0. Attach during process creation, before any observer can be used;
- * detach before process destruction, including unpublished preparations. */
+/* IF=0. Exclusive unpublished actor attaches before any observer can be used.
+ * The retained retirement owner detaches before process destruction. */
 void process_control_attach_process(struct process_control *control, struct process *process);
 void process_control_detach_process(struct process_control *control);
 
-/* BSP, IF=0, with an owned reference. Publish once, only after execution
+/* IF=0, with an owned reference. Publish once, only after execution
  * resources are reclaimed. Detaches and wakes every waiter. */
 void process_control_complete(struct process_control *control, struct process_result result);
 

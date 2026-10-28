@@ -9,47 +9,27 @@
 struct kernel_object;
 struct process;
 struct launch_capture;
-struct launch_preparation;
 struct execution_group;
 
 enum launcher_action {
   LAUNCH_CREATE_EXECUTION_GROUP,
-  LAUNCH_ALLOCATE,
   LAUNCH_CAPTURE_RAM,
-  LAUNCH_DISCARD,
-  LAUNCH_START,
-  LAUNCH_BATCH_CREATE,
-  LAUNCH_BATCH_PREPARE,
-  LAUNCH_BATCH_PUBLISH,
-  LAUNCH_BATCH_DISCARD,
   LAUNCH_CREATE_SPACE,
+  LAUNCH_SPACE_DEVICES,
+  LAUNCH_SPACE_FINISH,
 };
 
-/* Capture/batch storage survives successive requests independently. START and
- * BATCH_PREPARE carry captured grants and stable image operations. Returned
- * grants consume reservations captured before request preparation. The table
- * remains synchronized rather than exclusively lent. Allocation results transfer
- * to the caller before release. CAPTURE_RAM borrows its capture and ends the lent RAM file
- * operation after copying; only BSP code accesses the resulting page backing.
- * START/CREATE_SPACE/DISCARD/PREPARE consume their capture and
- * PUBLISH/DISCARD consume their batch. No caller private mappings are mutated. */
+/* Fixed-owner setup/capture requests borrow stable heap storage from the
+ * retained caller. Heavy child preparation runs on the caller's kernel root;
+ * SPACE_DEVICES borrows its exclusive unpublished child until notification. */
 struct launcher_request {
   struct bsp_request request;
   enum launcher_action action;
   struct launch_capture *capture;
-  struct launch_preparation *group;
   struct process *parent;
   struct execution_group *execution_group; /* Borrowed from caller's launcher. */
-  /* Placement tie-break only: the caller stays in this syscall, on this CPU,
-   * until the request completes. Never used for admission. */
-  size_t parent_cpu;
-  struct launch_capture *capture_result;
-  struct launch_preparation *group_result;
   enum call_status result;
-  handle_t child;
-  handle_t children[LAUNCH_BATCH_MAX];
   struct execution_group_create_reply execution_reply;
-  size_t grant_count; /* Capture allocation only, bounded by the wire budget. */
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[2];
 };
@@ -66,7 +46,8 @@ struct execution_group *launcher_execution_group(const struct kernel_object *obj
 bool launcher_grant_allowed(struct execution_group *group, struct kernel_object *object);
 
 /* Current user task, IF=0, checked protocol tag. Captures input on caller CPU;
- * BSP owns preparation and allocation. May sleep, with no held spinlocks. */
+ * The retained caller owns preparation; file/device effects keep their fixed
+ * owners. May sleep, with no held spinlocks. */
 struct syscall_result launcher_call(struct kernel_object *object, uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);

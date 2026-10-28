@@ -33,7 +33,7 @@ static void destroy_service(struct kernel_object *object)
 
 struct kernel_object *thread_service_create(void)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   struct kernel_object *object = kmalloc(sizeof(*object));
   if (object) {
     object_init(object, OBJECT_THREAD_SERVICE, destroy_service);
@@ -50,7 +50,7 @@ static void destroy_control(struct kernel_object *object)
 
 struct thread_control *thread_control_create(void)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   struct thread_control *control = kmalloc(sizeof(*control));
   if (control) {
     *control = (struct thread_control){0};
@@ -62,7 +62,7 @@ struct thread_control *thread_control_create(void)
 
 void thread_control_complete(struct thread_control *control, struct thread_result result)
 {
-  KASSERT(arch_cpu_index() == 0 &&
+  KASSERT(!cpu_interrupts_enabled() &&
       (result.kind == THREAD_EXITED || result.kind == THREAD_STOPPED));
   lock_control(control);
   KASSERT(!control->complete);

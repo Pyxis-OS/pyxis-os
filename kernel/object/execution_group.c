@@ -289,7 +289,7 @@ void execution_group_launch_end(struct execution_group *group)
 enum call_status execution_group_publish(struct execution_group *group,
     struct task **tasks, size_t count)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   if (!group) {
     user_task_publish_group(tasks, count);
     return CALL_OK;
@@ -318,7 +318,7 @@ enum call_status execution_group_publish(struct execution_group *group,
 void execution_group_member_detach(struct execution_group *group,
     struct execution_group_member *member)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   struct process_result result;
   KASSERT(process_result_get(member->process, &result));
   if (result.kind != PROCESS_EXITED) {
@@ -337,7 +337,7 @@ void execution_group_member_detach(struct execution_group *group,
 
 void execution_group_member_complete(struct execution_group *group)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   lock_tree(group->space);
   KASSERT(group->members);
   --group->members;

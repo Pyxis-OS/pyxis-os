@@ -8,9 +8,11 @@ struct process;
 struct mount_config;
 struct space;
 
-/* BSP IF=0 query; IF=1 reaper owns deferred whole prepared batches. */
-bool launcher_retire_pending(void);
-void launcher_reap_prepared(void);
+/* Boot CPU0 IF=0, before admitting runtime callers. Allocates mandatory queues. */
+void launcher_ram_reapers_init(void);
+/* Current CPU IF=0 query; its fixed IF=1 RAM actor owns deferred whole batches. */
+bool launcher_ram_retire_pending(void);
+void launcher_reap_prepared_ram(void);
 
 /* Pure admission: zero selects the default; explicit sizes obey launcher ABI
  * bounds and page alignment. Clears SIZE on failure. No allocation or VM work. */
