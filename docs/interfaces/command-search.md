@@ -5,11 +5,11 @@ lists of directory capabilities, live package-command directories and an explici
 owned-selection resolver used by the shell, native Lua jobs and libuv.
 Bare-name lookup uses this list exclusively.
 
-The exported `commands` entry in the [process environment](environment.md) holds
+The exported `path` entry in the [process environment](environment.md) holds
 one `PROTOCOL_COMMAND_LIST` CAP with `COMMAND_LIST_RIGHT_READ`. Ordinary shell,
 session/remote, bundle, Lua and libuv launch adapters preserve that exported
 value from their owned environment capture. A withheld/private value is not
-inherited. An exported TEXT or wrong-protocol `commands` value refuses ordinary
+inherited. An exported TEXT or wrong-protocol `path` value refuses ordinary
 launch; it is not silently discarded. Explicit native job resource profiles
 still receive only their selected grants.
 
@@ -19,7 +19,7 @@ still receive only their selected grants.
 accepts a copied array of held directory handles, requested masks and diagnostic
 labels. It returns a new owned list without changing the environment table,
 generation or any name. Publishing it is a separate ordinary atomic SET of the
-`commands` CAP, optionally exported. This constructor provides no directory or
+`path` CAP, optionally exported. This constructor provides no directory or
 launcher authority the caller does not already hold.
 
 Each member preserves its native directory grant and revocation lineage. Requested
@@ -65,7 +65,7 @@ supported. Directory members may themselves be revocable or retargetable.
 The SDK exports [command_search.h](../../userspace/include/command_search.h),
 with create/info/get/publication helpers and an owned `command_search_capture`.
 Capture reads one immutable list publication and owns the returned member handles;
-close it once. A missing `commands` entry returns NOT_FOUND, while an empty list
+close it once. A missing `path` entry returns NOT_FOUND, while an empty list
 succeeds with zero members. Staging borrows that captured list until synchronous
 launch capture completes; failures preserve the caller's staging counts.
 

@@ -89,7 +89,7 @@ receive exactly LOOKUP, ENUMERATE and READ_FILES, with no mutation rights or
 parent-navigation escape. Source, output and writable user data stay outside the
 bundle and use explicitly delegated ordinary capabilities.
 
-An exported [`commands` capability](../interfaces/command-search.md) is preserved
+An exported [`path` capability](../interfaces/command-search.md) is preserved
 by ordinary bundle launch without a per-program grant declaration. It carries
 only its held read-only command directories, and does not supply a launcher.
 Explicit leaf job profiles may withhold it.

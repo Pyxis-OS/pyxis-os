@@ -66,7 +66,7 @@ on main `bc8de46`; the integrated image was rebuilt on parent main `63d84152`.
 A focused native caller in the same four-CPU QEMU configuration launched two
 children successfully over exported TEXT and wrong-protocol CAP parent entries.
 Both children exited zero. Without an override both malformed parents refused;
-a wrong-protocol override and explicitly supplied TEXT `commands` also refused.
+a wrong-protocol override and explicitly supplied TEXT `commands` also refused (the environment entry at that revision; now named `path`).
 The caller reported zero problems and the Remote session drained completely.
 Evidence: `override/check.jsonl`, `override/check.txt` and
 `override-image-build.log` below the shared qualification directory.
