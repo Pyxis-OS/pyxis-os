@@ -1,8 +1,8 @@
 # RTL8922AE bounded hopping qualification
 
-Implementation checkpoint, native qualification pending. The accepted contract
+The bounded 1+6 slice is natively qualified on vela (2026-10-28). The accepted contract
 is in the [milestone](../../wip/rtl8922ae-wifi.md#channel-hopping--accepted-chronium-2026-10-28).
-No native/PXE action is performed by these source/host checks.
+The orchestrator performed the native run; source/host checks are separate.
 
 ## Inputs and baseline
 
@@ -105,8 +105,8 @@ power-off sequence and one fresh power-on within the original request deadline;
 stop on failure, with no automatic firmware-download or scan retry. The active
 state is checked again by the second power-on attempt, as in the reference;
 there is no loop. This replaces the explicit startup-wrapper deferral. Raw
-results remain in the old packet's `results/` directory. Native hopping and the
-new inherited-active startup handling remain pending qualification.
+results remain in the old packet's `results/` directory. The subsequent hopping
+qualification below does not separately observe the inherited-active branch.
 
 The corrected kernel `aebf0ca52e865eee7d6be41db808ccb0afcf6ae9`, with the
 same userland pin, builds in the published builder and passes the same four-CPU
@@ -121,7 +121,36 @@ The fresh once-only packet is
 It retains the same two explicit 1+6 sweeps, helper, grants, firmware and power
 image, with a new kernel and archive marker. Its offline checker, parser and
 disposable stage/restore checks pass; the failed packet and results are kept
-unchanged. Native startup/hopping results are still pending.
+unchanged.
+
+## Native 1+6 repetition qualification (2026-10-28)
+
+The orchestrator ran that corrected packet once on vela. It verified running
+kernel `aebf0ca52e865eee7d6be41db808ccb0afcf6ae9`, userland
+`8cefca4017769e5e79d455cfff127947554a6fc3` and the archive marker. Both requests
+completed successfully on the same retained DBCC context:
+
+| Request | Requested channels | BSS records | Attributed record channels | Truncated / dropped | Power readbacks |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1, 6 | 4 | 1 | 0 / 0 | 11 |
+| 2 | 1, 6 | 5 | 1 | 0 / 0 | 12 |
+
+Firmware ENTER observations cover both requested channels (`hop=0x21`). Matched
+PPDU delivery was observed, without claiming a channel-6 BSS. The first FILE
+stayed held and unchanged through the second request and operation close; native
+object identities were independent, and the second FILE remained readable after
+the first closed. Rights, immutable-header, EOF, close and second-TAKE checks
+passed. The RFK bitmap remained `0xf`, boot state `3`, and the additional power
+check per sweep did not repeat startup/calibration. Fixed path limits remained
+64/64 quarter-dBm. Healthy context and wired management survived; the PXE menu
+was restored byte-for-byte. The helper exited successfully with no errors.
+
+The saved logs/status do not identify whether this boot entered the startup
+power-off/power-on branch: successful startup has no branch marker or retained
+flag. Do not infer branch execution from this pass or the previous active-MAC
+failure. No native capacity overflow, physical-rfkill, cancellation, general
+recovery, association or data path is qualified here. Raw evidence is retained
+under the corrected packet's `results/run/` directory.
 
 ## Limits and next evidence
 
@@ -130,9 +159,8 @@ flags/drop count persist after operation close. There is no legacy-format shim.
 SCAN STATUS stays its existing size. Kernel, SDK, CLI and private helper must
 match; no retained release ABI is listed by this development tree.
 
-Native qualification must establish firmware ENTER/END for 1+6, actual matched
-PPDU observations where an AP is heard, common-image endpoint checks, retained
-same-mask repetition, unchanged first FILE and independent close lifetimes,
-rfkill observations and wired management, followed by byte-exact PXE restoration.
-No nearby AP or per-channel nonempty result is guaranteed. No radiated-power,
-physical-rfkill, association, retry/recovery or full-mask claim.
+The native run establishes 1+6 completion, matched PPDU observations, endpoint
+power checks, retained repetition, independent immutable FILE lifetimes, rfkill
+observations and wired management. No nearby AP or per-channel nonempty result
+is guaranteed. Overflow remains CPU-qualified only; no radiated-power,
+physical-rfkill, association, general retry/recovery or full-mask claim.

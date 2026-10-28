@@ -1004,7 +1004,16 @@ refuse. No new grant, background scan, association or data path.
 
 - [x] CPU-only power compatibility and reference wire-format/lifetime qualification.
 - [x] Current integration QEMU, matched controls and sealed hands-free packet.
-- [ ] Native PPDU delivery, 1+6 completion, retained repetition and FILE independence.
+- [x] Native PPDU delivery, 1+6 completion, retained repetition and FILE independence.
+
+Qualified on vela (2026-10-28): two successful 1+6 sweeps returned 4 and 5
+records, both without truncation. Firmware visited channels 1 and 6; returned
+records were PPDU-attributed to channel 1. The first immutable FILE stayed held
+and unchanged through the second request, with independent result identities.
+Power readbacks advanced 11 to 12 without another startup/RFK; wired management
+and byte-exact PXE restoration passed. Execution of the startup active-MAC
+power-cycle branch was not observable in the saved logs. This qualifies the
+bounded slice, not the complete channel set, physical rfkill or general recovery.
 
 [Qualification record](../development/experiments/rtl8922ae-hopping.md).
 These checkboxes do not complete full admitted-mask discovery or cancellation.
