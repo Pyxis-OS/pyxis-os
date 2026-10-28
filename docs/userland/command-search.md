@@ -41,7 +41,13 @@ path = { "home://tools", "bin://", "boot://" },
 Absent uses the existing boot defaults; an explicit empty list searches nothing.
 The configured list does not append defaults or add a fixed personal directory.
 Locations resolve from the session's existing roots/cwd and become read-only
-native directory CAPs. User order wins, including shadowing ordinary command names.
+native directory CAPs. User order wins, including shadowing ordinary command names. Missing or inaccessible
+configured locations print a visible `path: LOCATION ..., skipped` warning at
+session start; the remaining entries keep their written order. They never stop
+the session merely because a location is unavailable. `which NAME` repeats the
+startup skips before reporting the winner, and `config validate` warns about
+unavailable configured locations while still accepting a well-formed file.
+Malformed syntax/types are refused before publication.
 On live boots, explicitly selecting only bin and boot also omits the separate
 live package-command entry from the default list. Installed bin is itself the
 live package-command view. These are the existing root meanings.
@@ -56,7 +62,10 @@ export path=(home://project/bin $path)
 Literal/expanded path strings resolve through held native directories. Directory
 CAP members are attenuated to held read rights; a held list such as `$path`
 splices its entries at that position in the same order. An empty `()` creates an
-empty list. The old publication remains unchanged if construction fails.
+empty list. The old publication remains unchanged if runtime list construction fails.
+Startup skip receipts are exported as diagnostic TEXT `path.skipped`; replacing
+path through ordinary assignment/export or the SDK publication helper clears
+that receipt. It is descriptive data and supplies no program-location authority.
 `path=...` is private and `export path=...` is inherited, like other environment
 values. Existing processes retain their captured list. Labels are bounded
 diagnostics, so `which` identifies entries by ordinal as well as label.

@@ -440,6 +440,8 @@ not wildcard-expanded. The lowercase `path` entry accepts only a valid list CAP;
 `path="home://tools"` refuses instead of replacing it with TEXT. Private assignment
 and exported inheritance retain their ordinary meanings. `which NAME` and Tab
 use the newly published list, while already-running children retain theirs.
+Persistent startup skips are printed by `which`; runtime replacement clears
+that diagnostic receipt, leaving the selected list as the lookup authority.
 
 ### Held output captures
 
@@ -1357,7 +1359,7 @@ table shape refuses the whole file.
 
 A name that currently holds a CAP, such as `tmp`, also refuses the whole file,
 and so does a name the shell supplies itself:
-- `home` and `path`;
+- `home`, `path` and its `path.skipped` startup-diagnostic receipt;
 - `DNS_SERVER` and `network.` names;
 - the stdio `.append` names.
 

@@ -155,6 +155,11 @@ nonempty directory-location strings. The selected live configuration is
 `boot://config/session.lua`; installed boot uses `system://config/session.lua`.
 `config validate` checks the list shape; resolution uses the session's held
 roots/cwd when that session starts. Configuration grants no new directory rights.
+A missing/inaccessible location warns visibly and is skipped, preserving the
+remaining order; it does not refuse the session. `which` reports retained startup
+skips, and `config validate` checks availability against its current held roots,
+warning without making a well-formed configuration invalid. Syntax/types still
+refuse. Resource/admission failures are reported separately.
 
 ```lua
 path = { "home://tools", "bin://", "boot://" },
