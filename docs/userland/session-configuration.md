@@ -170,6 +170,8 @@ User order is exact; defaults are not appended and no home directory is searched
 implicitly. The session constructs and exports the read-only native list once;
 ordinary panes and descendants inherit the selected path without reapplying the
 configuration over runtime edits. `environment.path` is not a TEXT override.
+The launcher retains its mux and remote-terminal images before applying user
+lookup policy, so an empty or fully skipped path still permits session startup.
 See [program lookup](command-search.md#configuration-and-runtime-edits) for runtime
 `export path=(...)`, root meanings and lifetime.
 
