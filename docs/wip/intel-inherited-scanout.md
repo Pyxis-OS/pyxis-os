@@ -192,10 +192,13 @@ The Xe3 hierarchy is PG1 → PGA/PGB/PG2, PG2 → PGC/PGD; PG0 has no software
 request knob and PW1 is HW/DMC-managed. Domain and fuse checks must follow
 that map, not an invented BIOS-request requirement for every ancestor.
 
-### Decision 1 — a temporary DC0 admission window
+### Decision 1 — explicit power opt-in and a temporary DC0 window
 
-**Recommended default:** opt-in, boot-only inventory on the qualified
-`8086:b0a0` / display-30.0 B0 device may save the inherited DC target and use the
+**Recommended default:** require `display.inventory.power=1` in addition to
+`display.inventory=1`; the existing option alone stays strictly read-only.
+The new option defaults off, with no default probe work or output. Under that
+explicit boot-only opt-in, the qualified `8086:b0a0` / display-30.0 B0 device
+may save the inherited DC target and use the
 reference's early DC-disable primitive at `DC_STATE_EN` (`0x45504`). Keep DC0
 through the entire snapshot, then restore only the inherited target fields.
 Preserve unrelated register bits through masked operations. Follow the
