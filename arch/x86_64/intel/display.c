@@ -516,6 +516,14 @@ static void observe_timing(void)
       initial_stamp[p] = last_stamp[p] = read_register(FRAME_TIMESTAMP(p));
     }
   }
+  bool any = false;
+  for (unsigned p = 0; p < PIPE_COUNT; ++p) {
+    any |= enabled[p];
+  }
+  if (!any) {
+    kinfo("intel-display: timing unavailable: no qualified active pipe\n");
+    return;
+  }
   uint64_t start = arch_monotonic_ns(), end = start + UINT64_C(40000000);
   do {
     if (!holds_stable()) {
@@ -597,6 +605,7 @@ static void unmap_window(uintptr_t *window)
   phys_addr_t physical;
   if (vm_unmap(vm_kernel_space(), *window, &physical) != MM_OK ||
       vm_release(vm_kernel_space(), *window, PAGE_SIZE) != MM_OK) {
+    fenced = true;
     kerror("intel-display: temporary CPU mapping retained until reboot\n");
     return;
   }
@@ -720,6 +729,14 @@ void intel_display_prepare(const struct boot_info *boot)
   }
   if (!fenced && release_holds()) {
     unmap_windows();
-    kinfo("intel-display: startup readout complete stable=%u; scanout ownership/latch/retirement unproven\n", stable);
+    if (fenced) {
+      return;
+    }
+    unsigned qualified_pipes = 0;
+    for (unsigned p = 0; p < PIPE_COUNT; ++p) {
+      qualified_pipes |= second_state.pipes[p].valid << p;
+    }
+    kinfo("intel-display: startup readout complete stable=%u qualified-pipes=%x; scanout ownership/latch/retirement unproven\n",
+        stable, qualified_pipes);
   }
 }
