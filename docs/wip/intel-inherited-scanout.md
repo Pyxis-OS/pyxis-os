@@ -135,9 +135,11 @@ make a stalled CPU MMIO transaction interruptible.
 - [x] Record inherited strategy, read-only identity and accepted access contract.
 - [x] Native PCI/GOP/GMD identity capture; no hardware writes.
 - [x] Implement ordinary matched-device admission and powered-state readout.
-- [ ] QEMU nonmatching/other-backend checks and one hands-free 2880×1800 vela
-  capture with before/after DC target, hold journal, skipped domains, raw layout,
-  bounded GGTT summaries and timing. QEMU does not qualify Intel MMIO.
+- [x] QEMU nonmatching startup with VirtIO-VGA and VGA configurations, Remote
+  echo, no Intel work/output, and the independent Renoir option retained.
+- [ ] One hands-free 2880×1800 vela capture with before/after DC target, hold
+  journal, skipped domains, raw layout, bounded GGTT summaries and timing.
+  QEMU does not qualify Intel MMIO.
 - [ ] Decide GGTT/plane programming, backing authority and retirement after the
   actual powered-state evidence. No writes implied by completing the inventory.
 

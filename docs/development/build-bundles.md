@@ -9,7 +9,7 @@ follows SDK, and userland follows ports.
 
 | Component / bundle | Local target | Tar payload |
 | --- | --- | --- |
-| kernel / kernel | `make bundle-kernel` | `build/caelum.elf`, `build/kernel.config`, `build/kernel-random-NOTICE`, `build/kernel-amd-NOTICE` |
+| kernel / kernel | `make bundle-kernel` | `build/caelum.elf`, `build/kernel.config`, `build/kernel-{random,amd,intel,wifi}-NOTICE` |
 | sdk / sdk | `make bundle-sdk` | `build/sdk` |
 | userland / userspace | `make bundle-userspace` | `build/userspace-root` |
 | ports / ports | `make bundle-ports` | `build/ports-root`, `build/ports-dev` |
