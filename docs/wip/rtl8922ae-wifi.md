@@ -879,9 +879,9 @@ byte-exact PXE restoration passed. See the
 After this slice chronium can request channel 1 twice without rebooting and
 keep independent result snapshots. No automatic scan, retry or new API.
 
-### Channel hopping — proposal, awaiting decisions
+### Channel hopping — accepted (chronium, 2026-10-28)
 
-Keep BE firmware scan offload. The proposed first hopping slice is an explicit
+Keep BE firmware scan offload. The first hopping slice is an explicit
 channel-1-plus-6 request in one firmware list, with the existing START/END,
 DBCC context and immutable FILE. It does not add a host-directed channel walk,
 automatic scanning, association, probes or data TX. First qualify channel
@@ -916,9 +916,9 @@ must not become an inferred hopping channel. Its existing PHY status bitmaps
 already include the reference's IE01. No new hardware readback-equality checks
 or stricter PPDU counter/timestamp matching are proposed.
 
-#### Decisions for chronium
+#### Accepted contract (chronium, 2026-10-28)
 
-1. **Channel evidence. Default: PPDU-attributed records for hopping.** Follow
+1. **Channel evidence: PPDU-attributed records for hopping.** Follow
    Linux's per-BB current-group matcher and report parsing, but omit hopping
    candidates without a valid matched requested-channel report. Keep the current
    fixed-channel fallback for single-channel requests. Missing, malformed,
@@ -927,18 +927,17 @@ or stricter PPDU counter/timestamp matching are proposed.
    than Linux's software-channel fallback, rather than presenting that fallback
    as proven attribution. No report cache, timestamp-equality gate or extra
    modulo-counter generation is introduced.
-2. **Pending storage and exhaustion. Default: 512 copied candidates shared by
-   two BB queues, with a 32 KiB candidate budget.** Copy only the parsed BSS
-   candidate plus correlation metadata (at most 64 bytes each), never whole
-   frames or borrowed DMA buffers. This is an authored capacity, not a claim
-   that RX-ring depth bounds pending lifetime. Preserve the existing 128 final
-   BSS-record limit. Pending-pool exhaustion returns FILE_TOO_LARGE after normal
-   operation retirement, with no successful partial FILE, as final-record
-   exhaustion already does. Alternatively, dropping excess pending candidates
-   would keep the request successful but lose additional observations. Drain
-   the captured RX endpoint at END/confirmed STOP before resolving or discarding
-   pending groups and publishing; clear all groups between operations.
-3. **Power across hops. Default: one conservative request-wide image before
+2. **Bounded pending records; retain a visibly truncated result on overflow.**
+   Use 512 copied candidates shared by two BB queues, at most 64 bytes each
+   (32 KiB). Copy parsed BSS/correlation metadata, never whole frames or borrowed
+   DMA. This is an authored capacity, not an RX-ring lifetime guarantee. Keep
+   the existing 128 final BSS-record bound. At either capacity, keep what fits,
+   count dropped candidate records where known and mark the immutable result
+   visibly TRUNCATED; overflow alone does not fail the scan. Missing/unmatched
+   PPDU metadata remains a separately counted omission, not proof of capacity
+   truncation. Drain captured RX at END/confirmed STOP before resolving pending
+   groups and publishing; clear all groups between operations.
+3. **Power across hops: one conservative request-wide image before
    RFK/START for the first explicit 1+6 slice.** Prepare both channels from the
    validated tables, regulatory rules and fixed SAR; take the lower signed
    ceiling for each corresponding normal/RU limit and physical-path SAR.
@@ -952,13 +951,15 @@ or stricter PPDU counter/timestamp matching are proposed.
    continuity cannot be established from the reference and programming evidence,
    stop before enabling hopping and bring that concrete difference back.
 
-These are proposals, not accepted behavior. No new grant, successful partial
-result format or ABI change is proposed. The common power image is an explicit
-Pyxis policy proposal; it is not claimed to be a Linux firmware-upload format.
+These decisions authorize implementation, not a claim that hopping is qualified.
+No new grant is needed. The immutable result carries truncation metadata so it
+outlives operation close; in-tree readers are updated together under the
+development ABI policy. The common power image is an explicit Pyxis policy,
+not a Linux firmware-upload format.
 Historical limit readbacks are not radiated-power measurements or proof of
 closed-firmware internals.
 
-#### Delivery and qualification after acceptance
+#### Assigned delivery and qualification
 
 1. Enable reference PPDU reporting/decoding and bounded per-BB correlation on
    channel 1; qualify known-channel records, omitted/unusable reports and FILE
@@ -977,5 +978,5 @@ Source/QEMU checks cover bounds, decoding and lifetime; only orchestrator-run
 native packets qualify PPDU delivery and firmware hopping on vela. No nearby AP
 or nonempty result is guaranteed. Channel attribution and programmed limits are
 separate evidence; neither proves radiated power. No native run is authorized
-by this proposal. The one-channel implementation and its reviewed power-limit
-correction are merged; this follow-up changes documentation only.
+by this document alone. The implementation and each native packet are qualified
+separately; the one-channel implementation and reviewed power correction are merged.
