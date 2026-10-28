@@ -102,10 +102,11 @@ nonlinear/DPT/compressed/rotated/protected layouts remain raw observations;
 no guessed framebuffer reconstruction. A linear GOP-source candidate is a
 register relationship, not flip or backing-ownership qualification.
 
-Xe's GGTT raw-PTE reader is separate from DMC register protection. Read only
-the GOP span and bounded admitted linear-plane edges through read-only MMIO;
-compare the GOP PTE snapshot twice. Report raw entries/presence/device-memory
-flags, without equating DMA addresses to CPU physical ownership. No PTE
+Xe's GGTT raw-PTE reader is separate from DMC register protection. Read the complete admitted linear-plane span through read-only GGTT MMIO;
+compare every PTE twice. For the matched Panther Lake device, compare each
+present DM entry with the GOP BAR2-relative device-memory offset, ignoring only
+the documented PAT fields. This is a translation check, not a CPU-physical or
+allocation-ownership claim. No PTE
 allocation/write/invalidation, stolen-memory reuse or unused-range claim is
 permitted. Zero PTEs do not establish ownership.
 
@@ -130,6 +131,49 @@ presentation continues. Retained holds/DC0 can increase power consumption
 until reboot. No scanout backing is allocated. Software wait bounds do not
 make a stalled CPU MMIO transaction interruptible.
 
+## Native startup qualification (2026-10-28)
+
+The orchestrator-run packet at `ab5e3445b2b6c410509dc4d923b93fb937298b80`
+returned `CAPTURED cleanup=confirmed mode=2880x1800 pipes=7 stable=1`.
+The single active route is pipe/transcoder A, plane 1: 2880×1800, pitch 11520,
+20,736,000 bytes, programmed and live GGTT surface `0xfec00000`. Timing totals
+are 3080×3840; scanline and frame-timestamp values progressed. This does not
+establish a pixel clock or refresh rate; Fedora's 120 Hz is a different setup.
+
+PG1/PGA/PGB/PG2/PGC were already DRIVER-held; all `added=0`. PGD was skipped
+as unqualified. BIOS `0x5405` and DRIVER `0xfc0f` were unchanged after cleanup.
+The inherited DC target was already zero, and both confirmations required zero
+rewrites. This qualifies the observed inherited-hold/read/release path. It does
+not exercise adding a BIOS-derived request, leaving a deep DC state, or an
+uncertain transition/cleanup. No plane/GGTT programming occurred. Raw evidence:
+`/shared/present/vela-tearing/startup-native-20261028/results-vela/`.
+
+### Format, PSR and the initial framebuffer
+
+`PLANE_CTL=0x84000008` selects enabled, linear 8888, RGBX clear;
+`COLOR_CTL=0x2000` has plane alpha disabled. Together with GOP channel shifts
+16/8/0 this is **XRGB8888, not a deep-colour plane**. Preserve unknown CTL bit 3.
+`PSR_CTL=0x1` and `PSR2_CTL=0x4811` both have enable bit 31 clear;
+`PSR_STATUS=0x04000000` decodes idle/full-on link, and PSR2 state is idle.
+`TRANS_DP2_CTL=0` has panel replay disabled. Nonzero status/control words do
+not establish enabled PSR. This capture needs no PSR-exit operation.
+
+The earlier `GOP-source-candidate=0` compared untranslated addresses. Linux's
+`detect_bar2_integrated()` explains the relevant newer integrated layout:
+DM GGTT PTE addresses are offsets from GSMBASE, DSM begins at 8 MiB, and its
+CPU I/O aperture begins at BAR2+8 MiB. Thus GGTT virtual `0xfec00000` with
+first PTE `0x00800003` maps the same *starting device-memory offset* as
+GOP `0x10000800000 = BAR2+0x00800000`. The last PTE `0x01bc6003` also agrees.
+Zeros at GGTT virtual 8 MiB say nothing about that high virtual mapping.
+
+**All-page equivalence is not yet measured.** The captured firmware code read
+only the edges. The active byte range is `[0xfec00000,0xfffc6800)`, covering
+5063 pages; every page must map consecutively to device-memory offsets
+`0x00800000` through `0x01bc6000`, present with DM set. The follow-up readout
+checks every entry twice, reports matched/total pages and the first mismatch,
+and corrects the address-space comparison. Even a complete match establishes
+an alias, not permission to allocate or overwrite nearby stolen memory.
+
 ## Tasks and qualification
 
 - [x] Record inherited strategy, read-only identity and accepted access contract.
@@ -137,8 +181,9 @@ make a stalled CPU MMIO transaction interruptible.
 - [x] Implement ordinary matched-device admission and powered-state readout.
 - [x] QEMU nonmatching startup with VirtIO-VGA and VGA configurations, Remote
   echo, no Intel work/output, and the independent Renoir option retained.
-- [ ] One hands-free 2880×1800 vela capture with before/after DC target, hold
-  journal, skipped domains, raw layout, bounded GGTT summaries and timing.
+- [x] One hands-free 2880×1800 vela capture at `ab5e3445b`: stable readout,
+  inherited DRIVER holds, PGD skipped and confirmed unchanged power controls.
+  Native limits and the follow-up complete-PTE check are recorded below.
   QEMU does not qualify Intel MMIO.
 - [ ] Decide GGTT/plane programming, backing authority and retirement after the
   actual powered-state evidence. No writes implied by completing the inventory.
