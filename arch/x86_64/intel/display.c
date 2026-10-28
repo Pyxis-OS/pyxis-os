@@ -109,7 +109,7 @@ static const struct boot_info *boot_info;
 static struct pci_device *display_device;
 static uint64_t register_bar, aperture_bar;
 static uint32_t inherited_bios, inherited_driver, owned_requests;
-static uint32_t saved_target;
+static uint32_t saved_target, gmd_identity;
 static bool fenced, dc_confirmed, gtt_mapping_failed;
 
 static bool map_page(uint32_t offset, bool writable, uintptr_t *window)
@@ -226,14 +226,19 @@ static bool inherited_hold(unsigned well)
       (read_register(POWER_DRIVER) & inherited_driver)) & request;
 }
 
-static bool holds_stable(void)
+static bool identity_stable(void)
 {
   uint16_t power;
   uint64_t registers, aperture;
-  if (!device_ready(display_device, &power) ||
-      !read_bar(display_device->address, 0, &registers) || registers != register_bar ||
-      !read_bar(display_device->address, 2, &aperture) || aperture != aperture_bar ||
-      (read_register(DC_STATE_EN) & DC_TARGET_MASK)) {
+  return device_ready(display_device, &power) &&
+      read_bar(display_device->address, 0, &registers) && registers == register_bar &&
+      read_bar(display_device->address, 2, &aperture) && aperture == aperture_bar &&
+      read_register(GMD_ID_DISPLAY) == gmd_identity;
+}
+
+static bool holds_stable(void)
+{
+  if (!identity_stable() || (read_register(DC_STATE_EN) & DC_TARGET_MASK)) {
     return false;
   }
   uint32_t driver = read_register(POWER_DRIVER), fuse = read_register(FUSE_STATUS);
@@ -658,12 +663,18 @@ void intel_display_prepare(const struct boot_info *boot)
     unmap_windows();
     return;
   }
+  gmd_identity = gmd;
   for (size_t i = 0; i < sizeof(register_pages) / sizeof(register_pages[0]); ++i) {
     if (!windows[i] && !map_page(register_pages[i], register_pages[i] == 0x45000, &windows[i])) {
       kinfo("intel-display: unavailable: register mapping at %x\n", register_pages[i]);
       unmap_windows();
       return;
     }
+  }
+  if (!identity_stable()) {
+    kinfo("intel-display: unavailable: identity changed before power admission\n");
+    unmap_windows();
+    return;
   }
   uint32_t initial_dc = read_register(DC_STATE_EN);
   saved_target = initial_dc & DC_TARGET_MASK;
