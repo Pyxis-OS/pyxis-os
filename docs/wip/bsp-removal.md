@@ -11,6 +11,9 @@ record is in [#1247](https://git.internal/PyxisOS/pyxis-os/pulls/1247).
 Chronium revised the sequence (2026-10-27): the [JIT grant](jit-grant.md)
 follows merged task 3 (#1500), before tasks 4–5 resume. This does not complete
 BSP removal; JIT uses the conservative caller-CPU quiesced path.
+Tasks 4–5 are assigned to Codex beta (chronium, 2026-10-28). Task 4 starts
+with the cleanup-placement/lifetime proposal below; task 5 raises its own
+remaining-consumer decisions when reached. No task 4 code is implemented here.
 
 ## Goal and boundary
 
@@ -170,6 +173,153 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 | 3. Invalidation and shared kernel VM (merged, #1500) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
 | 4. Preparation and reclamation | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
 | 5. Remaining VM consumers | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Complete the remaining VM-client audit and migration; the earlier JIT task already uses the common caller-CPU transaction. |
+
+## Task 4 scope and decisions — proposed, 2026-10-28
+
+Inspected main `af35537d6`, alpha's handoff and the task-3 caller audit. There is
+no in-progress task-4/5 implementation to adopt. Existing identity/pin atomics,
+private root drainage, shared ownership and acknowledgement outcomes remain
+settled; this proposal does not replace them.
+
+### Current boundaries
+
+- `launcher_request_execute` still performs image/process/task preparation and
+  batch rollback on CPU0. Image/startup copies also hold the shared kernel owner
+  over private preparation because they use a general kernel scratch range.
+- `reap_completed` leaves task storage and context pins owned until the scheduler
+  has left the task stack/private root. It then frees storage, unpins stack/TLS,
+  completes the thread observer and decrements `task_storage_count`, on CPU0.
+  `cleanup_pins` independently retain a process for prepared-batch rollback.
+- `reclaim_process` performs device-session closure, bounded private VM release,
+  record/table destruction and final result publication on the BSP reaper.
+  The capability/environment table walks are RAM work: their ordinary logical
+  close paths already run on caller CPUs. Actual device/object destructors and
+  the endpoint process weak-list hook have separate fixed-owner contracts.
+- A selected `image_capture` currently permits **only BSP buffer readers**.
+  Its existing retained-range reaper does not add a remote flush. Starting to
+  read that virtual address on an AP invalidates its present reuse proof.
+- The bounded parking correction is present as `1c572bc4e` (display/thread VM
+  admission, discussed on #1529). Preserve the drained private gate and retained
+  request while parking for the existing one-second shared-owner budget; do not
+  regress to try-only BUSY, add broad retries or collapse BUSY into NO_MEMORY.
+
+Source boundaries: [launch](../../kernel/object/launcher.c),
+[image preparation](../../kernel/image.c), [startup](../../kernel/user/startup.c),
+[task retirement](../../kernel/task.c), [process retirement](../../kernel/process.c),
+[context pins](../../kernel/mm/private.c),
+[capture contract](../../include/kernel/user/image_capture.h) and
+[admission qualification](../development/experiments/bsp-vm-admission.md).
+
+### Decision 10 — fixed RAM cleanup owners or exiting continuations?
+
+**Proposed default:** one fixed RAM-reaper task per online CPU, prepared before
+runtime user-task admission. Retired task storage stays with its departure CPU;
+record the last departing task's CPU as the process RAM-reclamation destination
+before task storage disappears. Later cleanup-pin release uses that recorded
+CPU; an unpublished rollback with no departing task uses its preparation CPU. No migration, stealing, CPU0 fallback or free-frame cache. Prepare the
+mandatory actors under the existing core-worker boot-failure policy; do not
+partially enable offload when an actor cannot be created. Their stacks/metadata
+are a new boot resource cost, to be recorded from actual artifacts.
+
+The permanent scheduler stack transfers whole owned retirement records after
+kernel-root departure. It does not free its executing stack, run a large cleanup
+batch or wait for VM admission. Fixed RAM actors can park for admission and yield
+between existing bounded steps. This requires deliberately supporting those
+fixed AP kernel actors' wait/yield paths; it is not a device-worker placement
+change or generic scheduler migration/priority facility. No allocation is needed
+to enqueue an already-owned terminal item. A task's structural owner token is
+released before handoff; the receiving actor acquires its own token.
+
+Keep fixed-owner session/endpoint hooks and object/device destruction with their
+existing owners and in their existing order. Move private backing/page tables,
+request/profile/FP storage, context-pin retirement, private allocation records,
+capability/environment walks and their storage onto the audited RAM owner.
+Synchronous logical grant-close callbacks still run under their existing guards;
+queueing actual destruction is not a substitute for those callbacks.
+Keep the process, controls, reservations, cleanup pins and group attribution
+owned across every phase. Thread/process observers complete after their actual
+storage/VM/record work, as now; execution-group completion additionally joins
+attributed deferred device/object cleanup. Do not newly make process WAIT promise
+that every asynchronous device callback has finished.
+
+Alternative: retain an exiting user task as the main teardown continuation,
+with another path for faults, remote stop, prepared rollback and freeing its own
+executing stack. This saves idle reaper stacks but introduces several lifetime
+routes; the fixed actors cover those existing terminal sources uniformly.
+
+### Decision 11 — preparation actor and captured-image retirement
+
+**Proposed default:** extend the existing retained caller-CPU, kernel-root
+continuation to heavy launch/image/startup/task preparation and its unpublished
+rollback. Keep the chosen child CPU/affinity and publication/stop linearization
+rules unchanged. Boot preparation keeps its explicit boot owner. No new public
+job, grant, cancellation mode or retry. A stop cannot discard admitted captures,
+provisional roots/tasks, reservations or cleanup attribution: finish commit or
+unwind, or transfer the complete owned rollback record to its RAM owner before
+retiring the caller. Preserve current pre-effect refusals and joined-cleanup
+semantics rather than making queued rollback look reclaimed.
+
+Keep the complete immutable selected-image snapshot. Transfer a single owned
+read phase from its fixed file/I/O owner to the preparation continuation; after
+handoff the producer retains no pointer to refill it. The capture remains owned
+through all loader reads. If the capture's shared virtual address has been read
+on an AP, close further reader admission and use the accepted shared-range
+confirmation/ACK protocol before unmapping or reusing its VA/backing. Never send
+it through the old BSP-only no-remote-translation retirement shortcut. On
+unconfirmed retirement, retain the whole range/cleanup attribution until reboot,
+with no late-ACK reclamation; any joined group cleanup remains pending rather
+than reporting the retained storage freed. These are the existing uncertainty
+rules applied to this newly shared consumer.
+
+Use the existing CPU-local frame aliases for bounded private-page image/startup
+copies, unmapping before yield; do not hold the general kernel structural owner
+for the entire unrelated private image load. This is not a new scratch allocator,
+recursive walker, live-root mutation or shared-table reclamation optimization.
+Fixed device/file workers keep their I/O owners. Ordinary shared-owner admission
+may still serialize the small kernel-range preparation/retirement portions.
+
+Alternative: keep capture access on the BSP and copy through bounded CPU-local
+views. That needs a loader/reader-interface change or an extra copy and retains
+part of preparation on CPU0; it is not chosen silently as a second path.
+
+### Delivery gates after these decisions
+
+1. **Before code:** capture a fresh current-main baseline, retaining exact kernel,
+   initrd, config, compiler and workload hashes. Reuse existing launch/thread/Go
+   and allocbench/ipcbench workloads, not the old task-1/2 images as today's A.
+   One warmup and three samples in fresh matched 1/4+ CPU boots; independent
+   processes on distinct allowed CPUs. Record CPU/HWP/XSAVE/clock, actual actor
+   CPUs, backing and host load. Existing 16-child warmup + 1024 `pyxis.run` echo
+   launches measures through real child completion; IPC and private MEMORY are
+   controls. Include existing large-process/managed-thread lifecycle workloads
+   to cover image copy and heavy exit. Attribute preparation/retirement only
+   where existing profiling or read-only GDB can establish it; total time alone
+   does not identify a phase. Record any change needed to old command spellings.
+2. Move preparation, inactive-root ownership, pin/unpin and unpublished rollback
+   together. Preserve the publication transaction, creator FP save, zero-before-
+   publication, exact BUSY/NO_MEMORY and stable queries. Qualify AP execution and
+   independent preparations rather than asserting CPU neutrality from wrappers.
+3. Integrate the chosen RAM retirement actors and fixed-owner handoffs. Qualify
+   ordinary stop/fault/exit, stack/TLS pins, real exhaustion/unwind, prepared-batch
+   refusal, captures/reservations, process/group completion and mixed device
+   output. Retained/uncertain cleanup must remain owned. New deliberate fault
+   scenarios require their own scope; task 3's delayed-ACK permission is not a
+   blanket authorization. Repeat the matched baseline workloads after code.
+4. Prepare a hands-free **vela** native A/B packet after QEMU qualification;
+   same archive/config/flags, HWP/AC checks, repeated interleaved samples, hashes,
+   explicit Remote commands and automatic collection. The orchestrator stages
+   and schedules it; no attended steps or native/PXE action is part of this note.
+   Packets follow `/shared/present/RUNSHEETS.md`; builds/caches stay VM-local.
+5. Then task 5 audits remaining VM consumers, including DISPLAY's VM segment,
+   stable queries, NPFS, DMA/PCI/scanout and direct architecture callers. Keep
+   device callbacks/IRQs, firmware windows and the heap's separate owner; raise
+   any new placement/lifetime/refusal choice when that caller is reached.
+
+**You should know:** these are proposed defaults, not implemented behavior.
+They add fixed cleanup actors and their boot storage if accepted. Cleanup
+contention can still delay real completion; uncertain shared capture retirement
+would retain memory and keep its joined cleanup pending. No public authority,
+status vocabulary, worker migration or new source of executable memory is added.
 
 ## Proof obligations, not shortcuts
 

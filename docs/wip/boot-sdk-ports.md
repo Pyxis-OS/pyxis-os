@@ -148,12 +148,11 @@ installed ThinkPad is open.
 
 ## Planned next kernel milestone
 
-[Remove BSP-owned allocation and VM mutation](bsp-removal.md): tasks 1–3 are
-merged, including #1500; tasks 1/2's hands-free native A/B/C record is complete.
-The [JIT grant](jit-grant.md) now follows task 3 before tasks 4–5 (chronium,
-2026-10-27), with all three initial grant decisions accepted. Preparation/reclamation
-placement and the remaining VM-client audit resume afterward; BSP removal is
-still active. No retained per-CPU frame cache or worker migration is authorized.
+[Remove BSP-owned allocation and VM mutation](bsp-removal.md): tasks 1–3 and the
+interposed JIT grant are merged. Tasks 4–5 are assigned to Codex beta (chronium,
+2026-10-28): task 4's cleanup-placement/lifetime proposal precedes code; the
+remaining VM-client audit follows. BSP removal remains active; no retained
+per-CPU frame cache or device-worker migration is authorized.
 
 ## Candidates for the next milestone
 
