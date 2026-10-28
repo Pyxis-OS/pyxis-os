@@ -153,10 +153,22 @@ uncertain transition/cleanup. No plane/GGTT programming occurred. Raw evidence:
 `PLANE_CTL=0x84000008` selects enabled, linear 8888, RGBX clear;
 `COLOR_CTL=0x2000` has plane alpha disabled. Together with GOP channel shifts
 16/8/0 this is **XRGB8888, not a deep-colour plane**. Preserve unknown CTL bit 3.
-`PSR_CTL=0x1` and `PSR2_CTL=0x4811` both have enable bit 31 clear;
-`PSR_STATUS=0x04000000` decodes idle/full-on link, and PSR2 state is idle.
-`TRANS_DP2_CTL=0` has panel replay disabled. Nonzero status/control words do
-not establish enabled PSR. This capture needs no PSR-exit operation.
+**PSR and PSR2 are disabled in the captured state.** Pinned Linux's
+`intel_psr_regs.h` defines both `EDP_PSR_ENABLE` and `EDP_PSR2_ENABLE` as
+bit 31 (`0x80000000`), not bit 0. The exact decoding is:
+
+| Captured register | Relevant field | Decoded result |
+| --- | --- | --- |
+| `PSR_CTL=0x00000001` | enable bit 31 | Clear: PSR disabled. Low nibble 1 is the idle-frame setting. |
+| `PSR2_CTL=0x00004811` | enable bit 31 | Clear: PSR2 disabled. The remaining bits are retained timing/configuration fields. |
+| `PSR_STATUS=0x04000000` | state bits 31:29; link bits 27:26 | State 0 (idle), link 1 (full on). Bit 26 is not an enable flag. |
+| `PSR2_STATUS=0x04000000` | state bits 31:28 | State 0 (idle), not deep sleep. |
+| `TRANS_DP2_CTL=0` | panel-replay enable bit 30 | Clear: replay disabled. |
+
+Nonzero control/status words therefore do not mean self-refresh is enabled.
+Preserve these words, including their timing fields; this captured path needs
+no PSR-exit operation. A different boot with an enable bit set needs the
+separate source/sink handling described in decision 2 below.
 
 The earlier `GOP-source-candidate=0` compared untranslated addresses. Linux's
 `detect_bar2_integrated()` explains the relevant newer integrated layout:
@@ -166,13 +178,19 @@ first PTE `0x00800003` maps the same *starting device-memory offset* as
 GOP `0x10000800000 = BAR2+0x00800000`. The last PTE `0x01bc6003` also agrees.
 Zeros at GGTT virtual 8 MiB say nothing about that high virtual mapping.
 
-**All-page equivalence is not yet measured.** The captured firmware code read
-only the edges. The active byte range is `[0xfec00000,0xfffc6800)`, covering
-5063 pages; every page must map consecutively to device-memory offsets
-`0x00800000` through `0x01bc6000`, present with DM set. The follow-up readout
-checks every entry twice, reports matched/total pages and the first mismatch,
-and corrects the address-space comparison. Even a complete match establishes
-an alias, not permission to allocate or overwrite nearby stolen memory.
+**All-page equivalence is now measured.** The orchestrator-run follow-up at
+`4c3164d8207bba63b8a49adf00bcd2ddcf5f0292` returned
+`INTEL GOP ALIAS PASS pages=5063/5063 stable=1 cleanup=confirmed`.
+Every PTE in active byte range `[0xfec00000,0xfffc6800)` was present, DM set,
+and mapped consecutively to device-memory offsets `0x00800000` through
+`0x01bc6000`. Both full snapshots matched and the final layout stayed stable:
+`GOP-DM-alias=1 matches=5063`, `GOP-source-candidate=1`. Thus plane 1 and the
+GOP CPU aperture expose the same framebuffer backing in this boot. The old
+zero candidate was the untranslated-address comparison, not different memory.
+The format/PSR readings above were unchanged and cleanup again confirmed.
+Evidence: `/shared/present/vela-tearing/alias-native-20261028/results-vela/`.
+This proves the alias, not authority to allocate or overwrite nearby stolen
+memory, nor a flip latch/retirement rule.
 
 ## Tasks and qualification
 
@@ -183,8 +201,10 @@ an alias, not permission to allocate or overwrite nearby stolen memory.
   echo, no Intel work/output, and the independent Renoir option retained.
 - [x] One hands-free 2880×1800 vela capture at `ab5e3445b`: stable readout,
   inherited DRIVER holds, PGD skipped and confirmed unchanged power controls.
-  Native limits and the follow-up complete-PTE check are recorded below.
+  Native limits and the complete-PTE follow-up are recorded above.
   QEMU does not qualify Intel MMIO.
+- [x] Native complete-plane alias check at `4c3164d82`: all 5063 PTEs matched
+  in both snapshots, layout stable and cleanup confirmed.
 - [ ] Decide GGTT/plane programming, backing authority and retirement after the
   actual powered-state evidence. No writes implied by completing the inventory.
 
@@ -194,10 +214,10 @@ presentation tear-free. Access limitations are tracked in [#1549](https://git.in
 
 ## Next slice: synchronized flips — proposed, not authorized
 
-The starting-buffer choice depends on the complete-PTE observation above.
-The two edge matches strongly suggest that GOP and plane 1 already share the
-same stolen backing through different address spaces. Do not allocate a new
-"initial front" merely because their untranslated addresses differ.
+The complete-PTE native observation establishes that GOP and plane 1 share
+stolen backing through different address spaces in the captured boot. Retest
+that relationship at admission; do not allocate a new "initial front" merely
+because the untranslated addresses differ.
 
 ### Decision 1: starting surface and owned back buffers
 
@@ -224,8 +244,11 @@ exclusions; it is not the default.
 
 **Recommended default:** one pending, synchronous update on the qualified
 pipe A/plane 1, leaving mode, clock, link, colour and scaler setup unchanged.
-Preserve PSR/replay controls: they are disabled in the measured boot. If a
-future inherited setup has them enabled, keep software presentation until a
+Preserve PSR/replay controls and their retained timing fields: their enable
+bits (PSR/PSR2 bit 31, replay bit 30) are clear in the measured boot. Nonzero
+`PSR=1`, `PSR2=0x4811` and status `0x04000000` do not contradict this; see the
+field decoding above. If a future inherited setup has them enabled, keep
+software presentation until a
 separate source/sink exit contract is accepted; do not write PSR enable bits
 in isolation. Display 30's async selector is SURF bit 0; keep it clear.
 
@@ -268,8 +291,8 @@ before enabling this backend, so the fallback never targets released storage.
 
 ### First task and qualification
 
-First finish the all-page alias capture and source-level mapping/cache/update
-contract, then prepare owned buffers and a single correlated flip/return under
+The all-page alias capture is complete. First finish the source-level
+mapping/cache/update contract, then prepare owned buffers and a single correlated flip/return under
 the accepted write list. If the applicable hardware completion or GGTT-access
 contract is absent, stop there for the next decision; no speculative native
 write is justified by the current inventory.
