@@ -841,14 +841,19 @@ struct syscall_result launcher_call(struct kernel_object *object, uint64_t right
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
+  /* Capturing can allocate and retire a selected image even before child
+   * preparation starts. Its cleanup must join this launcher's scope too. */
+  struct execution_group *previous = object_cleanup_enter(group ? group : task_cleanup_group());
   if (operation == LAUNCHER_CREATE_GROUP) {
     struct syscall_result result = create_group(group, request_size, reply_address, reply_capacity);
+    object_cleanup_leave(previous);
     execution_group_launch_end(group);
     return result;
   }
   struct syscall_result result = operation == LAUNCHER_LAUNCH_BATCH ?
       launch_batch(group, request_address, request_size, reply_address, reply_capacity) :
       launch_one(group, request_address, request_size, reply_address, reply_capacity);
+  object_cleanup_leave(previous);
   execution_group_launch_end(group);
   return result;
 }
