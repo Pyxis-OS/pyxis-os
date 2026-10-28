@@ -377,6 +377,20 @@ rendering into old backing and waits for a fresh generation before automatic
 retry. Query-only programs see changed geometry on their next SIZE call;
 other graphics ports retain fixed mappings until explicitly adapted.
 
+## Intel inherited-state startup
+
+Intel `8086:b0a0`, display 30.0/B0, receives ordinary boot-time DC0 admission
+and inherited-state readout before AP startup. No Intel inventory option is
+required. It holds only qualified inherited resources and parents, preserves
+BIOS requests, and skips gated/unproven domains. It restores only its own holds
+and the inherited sleep target; uncertain cleanup fences further probing and
+retains confirmed resources until reboot, which may cost power.
+
+This preserves firmware mode/link/clock programming and does not program planes
+or GGTT. Presentation still copies into the boot framebuffer and can tear.
+Other devices are unaffected. Raw readout uses debug-level records; see the
+[access contract and native qualification](../wip/intel-inherited-scanout.md).
+
 ## Read-only Renoir firmware timing
 
 The boot-framebuffer backend can observe the sole enabled Renoir OTG on a
