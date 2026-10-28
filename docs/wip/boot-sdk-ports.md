@@ -46,10 +46,6 @@ without conflict.
 
 Chosen by the owner, each starting with a proposal.
 
-[Atomic append](atomic-append.md): assigned to codex-beta (chronium, 2026-10-26).
-Native bounded FILE append, libc/shell and language/port migrations; first-round
-contract accepted, with QEMU before/after costs and a quick native check.
-
 [Bulk FILE reads](bulk-file-reads.md): accepted and assigned (chronium, 2026-10-25),
 with bounded provider/npfs reads preserving authority and owned lifetimes.
 The 0.0.9 release merge gate is lifted; new consumers need bulk-capable kernels.

@@ -331,7 +331,7 @@ Native files are unbuffered at this layer, so `File::flush` has no pending data;
 progress, checked close failures and actual metadata validity. Directory
 enumeration and namespace mutation are delivered separately above.
 
-The [native append milestone](atomic-append.md) replaces the Rust option guard
+The [native append implementation](../interfaces/atomic-append.md) replaces the Rust option guard
 with libc `O_APPEND`. Append implies write access; read plus append is read/write.
 Exclusive creation takes precedence, and append plus truncate remains invalid
 unless exclusive creation is selected. Native APPEND serializes EOF selection
