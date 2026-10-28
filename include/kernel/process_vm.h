@@ -81,7 +81,8 @@ bool process_vm_buffer_check(struct process *process, uintptr_t address,
 
 /* Stop targeting may remove a held task before scheduler-side termination. */
 void process_vm_unhold(struct process *process, struct task *task);
-/* BSP exclusive preparation or final reaping; closes admission permanently. */
+/* Exclusive unpublished preparation or drained final reaping, IF=0; closes
+ * admission permanently after all root/borrower/continuation activity ends. */
 void process_vm_retire(struct process *process);
 /* Zero-initialized unpublished process. False on root-incarnation exhaustion. */
 bool process_vm_activity_init(struct process *process);

@@ -135,10 +135,9 @@ void process_set_result(struct process *process, struct process_result result);
 bool process_result_committed(struct process *process);
 bool process_result_get(struct process *process, struct process_result *result);
 
-/* BSP scheduler after root/stack departure detaches the stop target and records
- * its actual departure CPU. That fixed RAM actor reclaims storage/context pins
- * before publishing
- * native thread completion, then call reclaimed. The last detach elects EXITED/0
+/* Permanent scheduler departure records the actual CPU before queueing. The
+ * BSP detaches the stop target, then that CPU's fixed RAM actor reclaims storage
+ * and context pins before native thread completion and reclaimed(). The last detach elects EXITED/0
  * only when no process-wide event exists and closes VM admission. For the last
  * storage, reclaimed returns true and queues the process for the reaper only
  * when no cleanup pins remain; the caller must not access it afterwards. The

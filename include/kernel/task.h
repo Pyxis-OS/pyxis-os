@@ -18,7 +18,7 @@ struct thread_control;
 struct address_wait_record;
 struct forwarder_operation;
 
-/* BSP, drained process mutation, creator parked. Preparation owns provisional
+/* Caller-CPU kernel-root continuation, drained mutation, creator state saved. Preparation owns provisional
  * task/control/context storage; failure leaves control with its caller. */
 enum call_status task_thread_prepare(struct task *creator, const struct thread_create *input,
     struct thread_control *control, struct task **result);

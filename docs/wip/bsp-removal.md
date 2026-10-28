@@ -13,7 +13,8 @@ follows merged task 3 (#1500), before tasks 4–5 resume. This does not complete
 BSP removal; JIT uses the conservative caller-CPU quiesced path.
 Tasks 4–5 are assigned to Codex beta (chronium, 2026-10-28). Task 4 starts
 with the accepted cleanup-placement/lifetime decisions below; task 5 raises its own
-remaining-consumer decisions when reached. No task 4 code is implemented here.
+remaining-consumer decisions when reached. Task 4 implementation and qualification
+are in progress; its fresh pre-code baseline is recorded below.
 
 ## Goal and boundary
 
@@ -171,7 +172,7 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 | 1. Private MEMORY on its caller CPU | Per-space owner proof, stable queries, counters/identities and pin synchronization; kernel-root continuations; all existing ordinary/guarded/sparse MEMORY operations. Preserve the BSP clients' use of the same gate. Check real AP execution, unrelated processes mutating concurrently, same-process competition, parked I/O and stop/unwind. | Run memory-heavy processes on APs without CPU0 servicing their MEMORY bodies; sibling quiescence still applies. |
 | 2. Frame allocation on each CPU | First measure PMM lock/search/zero/map costs with the routing bottleneck gone and bring chronium the decision whether to move frame allocation out. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
 | 3. Invalidation and shared kernel VM (merged, #1500) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
-| 4. Preparation and reclamation | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
+| [ ] 4. Preparation and reclamation (implementation; qualification in progress) | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
 | 5. Remaining VM consumers | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Complete the remaining VM-client audit and migration; the earlier JIT task already uses the common caller-CPU transaction. |
 
 ## Task 4 scope and decisions — accepted (chronium, 2026-10-28)
@@ -273,7 +274,7 @@ recursive walker, live-root mutation or shared-table reclamation optimization.
 Fixed device/file workers keep their I/O owners. Ordinary shared-owner admission
 may still serialize the small kernel-range preparation/retirement portions.
 
-### Delivery gates after these decisions
+### Task 4 delivery and qualification
 
 1. **Before code:** capture a fresh current-main baseline, retaining exact kernel,
    initrd, config, compiler and workload hashes. Reuse existing launch/thread/Go
@@ -306,8 +307,11 @@ may still serialize the small kernel-range preparation/retirement portions.
    device callbacks/IRQs, firmware windows and the heap's separate owner; raise
    any new placement/lifetime/refusal choice when that caller is reached.
 
-**You should know:** these accepted decisions are assigned for task 4, not
-yet implemented. They add fixed cleanup actors and their boot storage. Cleanup
+Implementation now follows these accepted decisions; see the
+[baseline and qualification record](../development/experiments/bsp-preparation.md).
+Matched after measurements and native A/B remain pending.
+
+**You should know:** fixed cleanup actors add boot storage. Cleanup
 contention can still delay real completion; uncertain shared capture retirement
 retains memory and keeps its joined cleanup pending. No public authority,
 status vocabulary, worker migration or new source of executable memory is added.

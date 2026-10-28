@@ -82,7 +82,7 @@ Native thread stack and FS contexts use guarded identities. A context pin
 exclusively retains the whole usable suffix until native retirement; a pinned
 reservation cannot be released and returns BUSY. Stack and FS identities must
 be distinct. These pins hold no short mapping/activity lease and do not block
-unrelated VM mutation. BSP thread-context clients acquire pins under the common drained mutation token
+unrelated VM mutation. Caller-CPU thread-context preparation acquires pins under the common drained mutation token
 and release them after the task has left its root/stack and its continuations have
 been reclaimed, before publishing native completion. Final process teardown
 requires every context pin to have been released. Pin release is an atomic final
@@ -132,8 +132,9 @@ this slice adds no live-root mutation or targeted TLB shootdown.
 
 Large eager backing and sparse commit/decommit/release yield between bounded
 page/extent steps while retaining exclusive ownership. They execute on the
-caller CPU, not the BSP VM worker. That worker remains for DISPLAY and native
-thread-context clients. RESERVE stays independent of the unused virtual span.
+caller CPU, not the BSP VM worker. That worker remains for DISPLAY; native
+thread-context preparation uses the same retained caller-CPU transaction. RESERVE
+stays independent of the unused virtual span.
 The current one-second quiescence budget is an implementation choice, not an ABI
 operation deadline. Failure returns BUSY before effects and preserves mappings
 and backing. Competing mutation also returns BUSY. Final retirement requires
@@ -175,9 +176,10 @@ whole region in one interrupts-off step on the calling CPU; large eager and
 guarded releases remain a latency tail. This task does not claim to bound them.
 
 Final destruction of a retired space releases backing, range records and page
-tables in bounded steps on the [BSP reaper](smp.md#scheduling-and-ownership).
-Its memory therefore returns to the PMM some milliseconds after the last task
-exits, not at once. A process that waits for the exit sees the memory freed,
+tables in bounded steps on the last departing task's
+[fixed RAM reaper](smp.md#scheduling-and-ownership), with device hooks retaining
+their owners. Memory returns after actual cleanup, rather than at task-departure
+publication. A process that waits for exit sees that RAM reclaimed,
 but a concurrent large allocation elsewhere can briefly find it still in use.
 
 Range records of the kernel space come from a static array of 4096 entries
