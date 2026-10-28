@@ -177,39 +177,12 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 
 ## Task 4 scope and decisions — accepted (chronium, 2026-10-28)
 
-Inspected main `af35537d6`, alpha's handoff and the task-3 caller audit. There is
-no in-progress task-4/5 implementation to adopt. Existing identity/pin atomics,
-private root drainage, shared ownership and acknowledgement outcomes remain
-settled; these decisions do not replace them.
-
-### Current boundaries
-
-- `launcher_request_execute` still performs image/process/task preparation and
-  batch rollback on CPU0. Image/startup copies also hold the shared kernel owner
-  over private preparation because they use a general kernel scratch range.
-- `reap_completed` leaves task storage and context pins owned until the scheduler
-  has left the task stack/private root. It then frees storage, unpins stack/TLS,
-  completes the thread observer and decrements `task_storage_count`, on CPU0.
-  `cleanup_pins` independently retain a process for prepared-batch rollback.
-- `reclaim_process` performs device-session closure, bounded private VM release,
-  record/table destruction and final result publication on the BSP reaper.
-  The capability/environment table walks are RAM work: their ordinary logical
-  close paths already run on caller CPUs. Actual device/object destructors and
-  the endpoint process weak-list hook have separate fixed-owner contracts.
-- A selected `image_capture` currently permits **only BSP buffer readers**.
-  Its existing retained-range reaper does not add a remote flush. Starting to
-  read that virtual address on an AP invalidates its present reuse proof.
-- The bounded parking correction is present as `1c572bc4e` (display/thread VM
-  admission, discussed on #1529). Preserve the drained private gate and retained
-  request while parking for the existing one-second shared-owner budget; do not
-  regress to try-only BUSY, add broad retries or collapse BUSY into NO_MEMORY.
-
-Source boundaries: [launch](../../kernel/object/launcher.c),
-[image preparation](../../kernel/image.c), [startup](../../kernel/user/startup.c),
-[task retirement](../../kernel/task.c), [process retirement](../../kernel/process.c),
-[context pins](../../kernel/mm/private.c),
-[capture contract](../../include/kernel/user/image_capture.h) and
-[admission qualification](../development/experiments/bsp-vm-admission.md).
+Runtime implementation uses caller-CPU preparation, fixed RAM reapers and
+confirmed shared capture retirement. See [SMP ownership](../kernel/smp.md),
+[memory](../kernel/memory.md) and the
+[baseline/qualification record](../development/experiments/bsp-preparation.md).
+Device hooks and actual object destructors retain their fixed owners. Task 4's
+native A/B remains required before its qualification gate closes.
 
 ### Decision 10 — fixed RAM cleanup owners
 
@@ -276,45 +249,42 @@ may still serialize the small kernel-range preparation/retirement portions.
 
 ### Task 4 delivery and qualification
 
-1. **Before code:** capture a fresh current-main baseline, retaining exact kernel,
-   initrd, config, compiler and workload hashes. Reuse existing launch/thread/Go
-   and allocbench/ipcbench workloads, not the old task-1/2 images as today's A.
-   One warmup and three samples in fresh matched 1/4+ CPU boots; independent
-   processes on distinct allowed CPUs. Record CPU/HWP/XSAVE/clock, actual actor
-   CPUs, backing and host load. Existing 16-child warmup + 1024 `pyxis.run` echo
-   launches measures through real child completion; IPC and private MEMORY are
-   controls. Include existing large-process/managed-thread lifecycle workloads
-   to cover image copy and heavy exit. Attribute preparation/retirement only
-   where existing profiling or read-only GDB can establish it; total time alone
-   does not identify a phase. Record any change needed to old command spellings.
-2. Move preparation, inactive-root ownership, pin/unpin and unpublished rollback
-   together. Preserve the publication transaction, creator FP save, zero-before-
-   publication, exact BUSY/NO_MEMORY and stable queries. Qualify AP execution and
-   independent preparations rather than asserting CPU neutrality from wrappers.
-3. Integrate the chosen RAM retirement actors and fixed-owner handoffs. Qualify
-   ordinary stop/fault/exit, stack/TLS pins, real exhaustion/unwind, prepared-batch
-   refusal, captures/reservations, process/group completion and mixed device
-   output. Retained/uncertain cleanup must remain owned. New deliberate fault
-   scenarios require their own scope; task 3's delayed-ACK permission is not a
-   blanket authorization. Repeat the matched baseline workloads after code.
-4. Prepare a hands-free **vela** native A/B packet after QEMU qualification;
-   same archive/config/flags, HWP/AC checks, repeated interleaved samples, hashes,
-   explicit Remote commands and automatic collection. The orchestrator stages
-   and schedules it; no attended steps or native/PXE action is part of this note.
-   Packets follow `/shared/present/RUNSHEETS.md`; builds/caches stay VM-local.
-5. Then task 5 audits remaining VM consumers, including DISPLAY's VM segment,
-   stable queries, NPFS, DMA/PCI/scanout and direct architecture callers. Keep
-   device callbacks/IRQs, firmware windows and the heap's separate owner; raise
-   any new placement/lifetime/refusal choice when that caller is reached.
+- [x] Fresh pre-code baseline at main `af35537d6`: exact builder/config/flags and
+  archive/workload hashes, one/four-CPU warmups and three fresh samples each.
+- [x] Caller-CPU preparation and whole-record rollback; existing local frame
+  aliases, bounded image/startup backing and root teardown, native thread/context
+  preparation under the common drained gate. Preserve creator FP state,
+  zero-before-publication, pre-effect BUSY/NO_MEMORY and publication/stop guards.
+- [x] Mandatory fixed RAM actors with explicit AP wait/yield and no terminal-queue
+  allocation; real last-departure CPU independent of BSP queue order; unchanged
+  fixed device/endpoint phases. Ordinary shared capture ACK/reclaim, transferred
+  batch rollback, exhaustion/reuse and thread stop/close pass in QEMU/GDB.
+- [x] Matched nested after cohorts and interleaved A/B, with host-load limits and
+  reproduced IPC cost recorded. Untimed GDB proves distinct AP preparation and
+  records a placement mechanism without claiming full phase attribution.
+- [ ] Hands-free vela native A/B: same frozen workload archive/config/flags,
+  actual AC/HWP/XSAVE/TSC checks, three interleaved fresh boots each, outcome and
+  final-drain checks. The orchestrator schedules/stages it; no attended steps.
+  New deliberate fault/uncertain-ACK scenarios still need separate scope; ordinary
+  successful ACK checks do not qualify the timeout/quarantine path.
 
-Implementation now follows these accepted decisions; see the
-[baseline and qualification record](../development/experiments/bsp-preparation.md).
-Matched after measurements and native A/B remain pending.
+The least-loaded placement and migration rules are unchanged. Caller preparation
+is now running load on its AP, unlike an old caller parked for BSP preparation;
+that can change the selected child CPU within the same affinity. The nested IPC
+cost reproduces; the [experiment](../development/experiments/bsp-preparation.md)
+records the observed publication/first-dispatch distinction. No new scheduler
+scoring exception was introduced; native cost remains pending.
 
-**You should know:** fixed cleanup actors add boot storage. Cleanup
-contention can still delay real completion; uncertain shared capture retirement
-retains memory and keeps its joined cleanup pending. No public authority,
-status vocabulary, worker migration or new source of executable memory is added.
+**You should know:** fixed cleanup actors add boot storage. Shared stack/capture
+admission can return BUSY after the existing bounded wait; cleanup contention can
+delay real completion. Unconfirmed shared capture retirement retains memory and
+joined cleanup until reboot. No public authority/status, worker migration or new
+source of executable memory is added.
+
+Task 5 next audits DISPLAY's VM segment, stable queries, NPFS, DMA/PCI/scanout
+and direct architecture callers. Keep device callbacks/IRQs, firmware windows and
+the heap's separate owner; raise each new placement/lifetime/refusal choice when
+its caller is reached. Task 4 does not implement those migrations.
 
 ## Proof obligations, not shortcuts
 

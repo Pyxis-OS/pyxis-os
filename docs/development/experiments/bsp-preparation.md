@@ -82,8 +82,82 @@ measurement. Source review corrected departure-CPU accounting independently of
 BSP queue order and preserved group attribution around early capture unwind.
 These debugging runs are functional evidence, not retained timing samples.
 
-Matched after measurements and hands-free vela qualification are pending. The
-fresh baseline remains frozen; no native action or PXE staging has occurred.
+Untimed GDB and existing commands at clean pre-rebase implementation `3093a00b0`
+(kernel SHA `5cb9730491462dab18d819cc91bf3ab8efa28e52daf1b66d2e8e379c146954b7`)
+confirm simultaneous retained preparation on CPUs 1 and 3, and RAM cleanup on
+recorded CPUs 1/3. One process prepared on CPU1 retired on CPU3; both its VM and
+record phases ran on CPU3. Copied echo and 32 copied Neovim launches exercise
+nonempty external captures (7,845,582-byte image, 7,847,936-byte backing), AP read
+closure and confirmed shared retirement. All inspected task/process/prepared/range
+queues drained; no retired or quarantined range remained. A rejected second
+pipeline stage transferred an intact PREPARING rollback to its preparation CPU.
+Existing `threadprobe refusal`, `stop`, `close` and real `exhaust` passed; the last
+reached 3,950 regions / 4,093,829,120 bytes, observed allocation/CREATE exhaustion,
+then successfully reused native/libc contexts. No deliberate timeout injection.
+
+That focused record predates the selected-group early-capture attribution fix
+and the unrelated Wi-Fi rebase; it is not labelled exact final-head qualification.
+Small evidence: `/shared/present/bsp-removal/task4/focused-3093/`.
+
+## Matched after measurements
+
+Same frozen archive/config, ordinary flags and collector workloads at clean
+`61072fb67c8c`, before rebasing the unchanged task-4 implementation onto the
+subsequent RTL Wi-Fi merges. Kernel SHA:
+`cffc601c6c635abe88ba911c744f613987a52f2c22df5a5df003925593064c43`.
+Both warmups and all six retained fresh boots passed. During the four-CPU series,
+an unrelated Mesa build saturated the shared host; no own build/debugger ran.
+Raw original before/after timings therefore do not establish a speedup or isolate
+a regression. All values below are median (range), ms:
+
+| Workload | After, 1 CPU | After, 4 CPUs |
+| --- | --- | --- |
+| 1,024 launches, client wall | 1020.136 (906.544–1089.019) | 1365.092 (953.325–1843.157) |
+| Private pages, guest elapsed | 19.055 (18.473–19.969) | 18.694 (18.025–23.840) |
+| CALL64 completion sum | 139.778 (130.189–162.024) | 919.296 (495.358–1168.250) |
+| CALL4096 completion sum | 158.052 (146.236–234.191) | 1055.630 (515.266–6181.114) |
+
+A focused four-CPU A1/B1/A2/B2/A3/B3 rerun retained the same full cohort on each
+fresh boot: A is frozen main `af35537d6`, B is `61072fb67`. Shared-host load still
+varied; exact loads, raw samples and outcome checks are retained. These are
+nested QEMU results, not native results or phase timings:
+
+| Workload | A | B |
+| --- | --- | --- |
+| 1,024 launches, client wall | 1556.739 (1382.663–6234.505) | 1559.371 (1465.743–2775.680) |
+| Private pages, guest elapsed | 21.168 (19.461–26.136) | 19.419 (18.793–21.401) |
+| CALL64 completion sum | 210.935 (181.934–345.271) | 583.038 (500.177–912.606) |
+| CALL4096 completion sum | 283.986 (205.438–330.632) | 996.526 (497.494–1104.818) |
+| Concurrent launches, six client observations | 2379.112 (2233.003–3263.232) | 1296.778 (1057.460–2501.956) |
+
+The four-CPU IPC increase reproduces with nonoverlapping ranges. A separate
+untimed GDB comparison attributes a placement mechanism: with BSP preparation,
+the sender is parked and both APs appear idle at receiver publication; the
+existing parent tie-break initially selects its CPU. With caller preparation,
+the sender is running on that AP and the same least-loaded rule selects the
+other idle AP. Twelve observed A publications all initially chose the sender CPU,
+but existing idle stealing moved six receivers before first dispatch. Twelve B
+receivers first dispatched on the other AP. Debugger stops perturb stealing;
+these counts do not establish an ordinary placement frequency or quantify the
+whole timing increase. The extra cross-CPU traffic explains the direction, and
+native IPC measurements remain required. No scheduler scoring, affinity,
+migration or priority policy was changed to hide the cost.
+
+Raw after samples/comparison and placement evidence live under
+`/shared/present/bsp-removal/task4/`; large artifacts remain local.
+
+## Native handoff
+
+The hands-free vela pair uses clean main `750cd0b99` as A and rebased task-4
+code `e647e2543` as B, so unrelated RTL Wi-Fi changes are present on both sides.
+Both use identical deliberately frozen workload archive bytes from the original
+`af35537d6` / userland `b714efef765` baseline, plus the existing identity qualifier.
+Their consumed launch/memory/IPC/system-info ABI is unchanged; this is not claimed
+to be a freshly rebuilt newer userland. Compiler/config/flags match. The packet
+records AC/HWP/XSAVE/TSC state and requires three interleaved fresh boots each.
+Reverse Remote admits one client, so native cohorts are sequential; QEMU supplies
+the independent-preparation evidence. No native speedup or native IPC cost is
+claimed before the orchestrator runs it. No native/PXE action has occurred here.
 
 ## Storage and remaining limits
 
