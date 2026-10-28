@@ -51,7 +51,7 @@
 #define SCAN_LIST_BYTES (4u + SCAN_CHANNEL_BYTES)
 #define SCAN_MACC_ROLE_WORDS 1u
 #define SCAN_OP_CHANNEL_WORDS 5u
-#define SCAN_MLO_2_PLUS_0_1RF UINT32_C(0x1002)
+#define SCAN_MLO_1_PLUS_1_1RF UINT32_C(0x1011)
 #define SCAN_ALL_6GHZ_DISABLED UINT64_C(0x07ffffffffffffff)
 #define FIRMWARE_WAIT_NS UINT64_C(100000000)
 #define SCAN_POLL_NS UINT64_C(50000)
@@ -375,7 +375,8 @@ static void scan_configuration(uint8_t payload[SCAN_CONFIG_BYTES], unsigned oper
   put32(payload + 8, SCAN_CHANNEL_INVALID << 24);
   put32(payload + 12, SCAN_PACKET_NONE << 24);
   put32(payload + 16, SCAN_PACKET_NONE | SCAN_PACKET_NONE << 8);
-  put32(payload + 20, SCAN_MLO_2_PLUS_0_1RF);
+  /* Match the coherent DBCC PHY/RFK topology. */
+  put32(payload + 20, SCAN_MLO_1_PLUS_1_1RF);
   /* Match the observed device's 59-channel bitmap, prohibiting every valid
    * 6 GHz channel without setting its five unused upper bits. */
   put32(payload + 24, (uint32_t)SCAN_ALL_6GHZ_DISABLED);

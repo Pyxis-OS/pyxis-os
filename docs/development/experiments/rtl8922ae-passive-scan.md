@@ -1,50 +1,69 @@
 # RTL8922AE: one-channel firmware passive discovery
 
-Local integration qualification and first native refusal, 2026-10-27. Native
-scan/RX is not qualified; the
-preceding [PHY/RFK pass](rtl8922ae-phy-init.md) does not qualify this protocol
-or ordinary frames. The [milestone](../../wip/rtl8922ae-wifi.md)
-records the accepted firmware-offload and retained-context contracts.
+Native one-channel discovery passed on vela on 2026-10-28. This is the first
+slice of the [0.0.11 milestone](../../wip/rtl8922ae-wifi.md), following the
+[PHY/RFK qualification](rtl8922ae-phy-init.md). It does not qualify hopping,
+repeated/cancelled scans, association or data transmission.
 
-## Revisions and source inspection
+## Revisions and configuration
 
-Candidate kernel `54f9ff7e86c99afdea4d05378a7d83b1f00eb6e6`, userland
-`e945b7bb39b0ae127497df4e3ae036bb73936533`; comparison kernel
-`eb92ab2b4e18a5f43c48dd8fea504db393bdf946`, userland
-`a1bece881e3c2bc833da3a1d71777d84d83ae487`. The candidate rebuilds the C SDK,
-runtime, six hash-checked cached libraries and C applications with
-`pyxis-llvm23.1.3-8a4d001`. No compiler rebuild, personal archive or game data.
-Subsequent documentation changes do not change the frozen candidate.
+Native candidate `f85199a6ffd167d46a24e84c5ca492260aae9304`, userland
+`b9776609ccfb56ec33fc7d9d80cedcaccdf1306f`; packet
+`/shared/present/rtl8922ae-passive-scan/native-dbcc-20261028/`, results in
+`results/run/`. Firmware 0.35.80.3, cut 2/RFE 1 with the accepted RFE-0 table
+fallback, country 00, TAS disabled, fixed validated SAR limits. Clean RAM-only
+PXE image, wired USB management, disk writes disabled; no association.
+The integration PR carries the tested DBCC driver sources, with current-main
+rebases and updated dependency pins qualified separately from this native head.
 
-Pinned Linux v6.18 `7d0a66e4bb9081d75c82ec4957c50034cb0ea449` selects
-modern BE scan offload for firmware0.35.80.3 (`fw.c:854–861`,
-`mac80211.c:1214–1247`). The native implementation follows its channel-list,
-START/STOP and END_SCAN path. A zero-SSID request uploads no probe templates;
-the unrestricted reference dwell is 45 ms (`fw.c:7439–7498`). It preserves the
-reference ordering of RX synchronization, EDCCA, CAM, receive filters and DIG
-at start and completion (`fw.c:8036–8142`, `core.c:5880–5948`).
+Reference: Linux v6.18 `7d0a66e4bb9081d75c82ec4957c50034cb0ea449`, BSD
+alternative; reached source notices remain in `kernel/wifi/NOTICE`. Successful
+Linux firmware/MMIO capture used Fedora 7.2.10 and the same device/firmware.
 
-BE ordinary RX supplies no channel number. This slice stays on the explicitly
-requested, already calibrated channel and drains preceding RX before opening
-collection; optional DS/HT information must agree. Inline RSSI uses the
-reference conversion; unavailable signal remains the native `-256` convention.
-No register equality refusal is added. The BSD alternative and reached source
-notices are retained in `kernel/wifi/NOTICE`.
+## Native result and attribution
 
-## Local build and QEMU
+One explicit channel-1 request returned a real immutable result FILE:
+`status=0 stage=complete count=2 rx=observed`. The helper verified read-only
+rights, second-TAKE refusal and unchanged reread after operation close.
 
-Kernel, rebuilt C userland and the private native result checker compile.
-QEMU configuration: q35/KVM, host CPU, four CPUs, 4 GiB, OVMF, virtio/slirp wired
-network, no disk or radio. Remote, beacon and debugger listeners bind loopback.
-The actual running kernel and archive marker were verified.
+| Observation | Native result |
+| --- | --- |
+| Radio | READY, healthy context retained |
+| Interrupts / firmware and ordinary packets | 32 / 55 |
+| Passive mask / PHY state | 1 / `0xcf` |
+| Effective-power verification boundaries | 10 |
+| Physical SAR ceilings, quarter-dBm A/B | 64 / 64 |
+| RFK completed / final report | `0xf` for both PHYs / OK, version 30 |
+| Valid rfkill observations | 30 |
+| OFLD_CFG DONE_ACK | raw `00`, sequence 1 |
+| Stop | Not attempted: healthy context retained as accepted |
+| Wired management / PXE restoration | Preserved / menu restored byte-for-byte |
 
-READ reports absent/unprepared radio, zero DMA and idle PHY/RFK before and after
-checks. `wifi scan --channel 0` and `15` reject malformed requests;
-`wifi scan --channel 1` and the private result checker honestly return
-UNAVAILABLE with no radio. Wired DHCP/Remote and log-to-RAM/read controls pass.
-Read-only GDB inspection confirms unclaimed transport and inactive scan state;
-it detached before benchmark samples. These checks do not execute RTL MMIO,
-firmware or ordinary radio RX.
+The preceding topology-only native head `08ae261d5c94` rejected START with
+`raw=03 code=03 seq=15` despite the complete source-derived START payload
+matching Linux. Its OFLD_CFG ACK succeeded. Earlier isolated OFLD_CFG and bitmap
+changes also left START rejected. Coherent DBCC initialization removed that
+rejection while preserving START bytes, RX filter, firmware, channel and limits.
+This identifies the missing DBCC initialization state in this comparison; it
+does not isolate a particular register or assign a firmware-internal name to 03.
+
+DBCC now includes CMAC1/BB1, reference quotas and notification, both indexed BB
+contexts, topology `0x1011` and required per-PHY calibration on channel 1.
+Power is applied/verified on both MAC banks with shared physical SAR before
+RFK and after every helper. RFK status reports the intersection of both PHYs'
+completion masks. The bounded checked BAR2 mapping is `0x60000` for PHY1 control
+registers; RTL8922A still downloads one BBMCU firmware image, as Linux does.
+
+## Local checks and matched controls
+
+The frozen DBCC kernel built using `pyxis-llvm23.1.3-8a4d001`; its archive reused
+unchanged SDK/userland/helpers/firmware apart from the private identity marker.
+Source review, exact-image QEMU/GDB and disposable full-image stage/restore
+passed. QEMU: q35/KVM, host CPU, four CPUs, 4 GiB, OVMF, virtio/slirp, no radio
+or disk. Running kernel/marker, wired Remote/log/RAM, invalid-channel refusal
+and honest absent-radio UNAVAILABLE passed; GDB detached and owned jobs retired.
+These checks do not execute RTL MMIO or firmware. Current integration checks
+and exact-head CI are recorded in the PR separately.
 
 The frozen production baseline used three existing iobench invocations, then
 matched controls ran B/A/B/A/B/A, one invocation per boot:
@@ -70,98 +89,15 @@ measurements or native performance. The original baseline and all variation
 remain in the raw records. Every owned guest/client/monitor was retired by
 recorded process identity; no native/PXE action occurred.
 
-## First native run: START completion failed
+## Limits
 
-The orchestrator ran `native-one-20261027` on vela with actual running kernel
-`54f9ff7e86c9` verified before and after the request. The helper reported
-`channel=1 status=19 stage=completion count=0 rx=unproved`. The kernel detail was
-`RTL8922AE scan START ACK failed/timed out`. No result FILE was delivered.
-PHY state was `0xdf`, all four RFK helpers completed, five power checks passed,
-and MAC-off/FLR stop was confirmed with last-status19. Wired management and
-byte-exact PXE restoration passed. This is a failed discovery run, not a
-regression in the preceding PHY/RFK gate or proof of ordinary RX.
+The native pass is one normal request on one channel and a retained healthy
+context, not a hardware-stop claim. It proves result publication and ordinary
+management-frame RX for that request. No repeated request, hopping, cancellation,
+physical rfkill, radiated-power, recovery or connection claim. No probe/null/data
+TX; initialization/RFK is TX-capable under the accepted regulatory/SAR profile.
+Historical stop qualification remains in the preceding PHY/RFK record.
 
-The combined detail establishes successful channel-list ACK and START DMA
-consumption, then loses the distinction between negative ACK, missing ACK and
-receive/transport failure. Status19 is native CALL_IO, not the firmware's ACK
-return byte. The preserved capture cannot establish the exact firmware-side
-cause.
-
-### Reference comparison and correction
-
-Pinned Linux source, unchanged from the commit above:
-
-| Step | Linux behavior and comparison |
-| --- | --- |
-| Version/layout | `fw.c:856–865`: firmware0.35.80.3 uses the current40-byte BE configuration and32-byte channel element with period in `w7`; no V0 fallback. |
-| List | `fw.c:5644–5748,7439–7498`: channel1,20MHz,45ms, pause-data, zero SSIDs/probes/nulls and eight packet IDs NONE match. Its DONE_ACK succeeded natively. |
-| START | `fw.c:8217–8236,5861–6080`: standalone, MACID/port/band0, no MACC or operating-channel entries, `opch_end=0xff`, MLO`0x1002` and size words10/1/5 match this single-PHY profile. |
-| Prohibited6GHz | `fw.c:5839–5857,5909,5973–5976`: with no exposed6GHz band Linux writes an all-prohibited bitmap. Pyxis left `w6/w7` zero; both now contain `0xffffffff`, also for STOP. |
-| Envelope | `fw.c:1453–1474`: category1/class9, functions`0x16/0x2c`,8-bit sequence and receive/done-ACK bits match. |
-| Completion | `fw.c:6074–6079`, `mac.c:5222–5230`: START waits DONE_ACK and checks the low six return bits. END_SCAN completes STOP (`mac.c:5744–5750`). The correction keeps that behavior. |
-| Timeout | `core.c:5403–5404`, `core.h:4568`:100ms completion window after TX returns. Pyxis previously started it before blocking DMA consumption. It now installs the wait before TX, then starts the same100ms window after TX returns, still bounded by the native operation deadline. |
-
-The omitted bitmap and reduced ACK window are source-proven differences; neither
-is proven to explain this native failure. Existing status detail now distinguishes
-malformed C2H, transport failure, timeout/interruption and a rejected DONE_ACK
-with raw return, masked code and sequence. It adds no ABI field, klog producer,
-retry, version fallback, longer timeout constant or new hardware refusal.
-
-## Fresh native packet
-
-A separate `native-start-reference-20261027/` packet under
-`/shared/present/rtl8922ae-passive-scan/` preserves the failed packet and results.
-It retains the one-request channel1 boundary, verifies actual kernel/archive
-identity, and checks a real immutable READ-only FILE, second-TAKE refusal and
-unchanged reread after operation close. No SSID/BSSID is printed. A valid empty
-FILE leaves ordinary RX unproved and never triggers a retry.
-
-Healthy completion must retain READY1, PHY`0xcf`, boot valid/state`1f/3`, all
-four RFK reports, power/rfkill observations and wired management. It leaves the
-radio powered with idle RX drained, not a hardware-stop claim. Failures collect
-observations and stop without a second RF request. No physical rfkill,
-repeated/cancelled hardware request, radiated-power, MSI-delivery, association,
-data or multi-channel discovery claim is made. The earlier disposable staging
-check preserved menu/other entries/root/EFI; fresh image checks and qualification
-are reported on the PR. Raw evidence remains under the shared task directory.
-Only the orchestrator schedules/runs the fresh native packet.
-
-## OFLD_CFG-only candidate, 2026-10-28
-
-The subsequent vela run verified `a31f3798f50c` and received START DONE_ACK
-`raw=03 code=03 seq=14`. A Linux reference capture on the same card and
-firmware0.35.80.3 completed one passive channel1 scan. It records the same
-channel-list, ROLE/JOIN and default CMAC/DMAC payloads, then successful list and
-START ACKs and END_SCAN. The diagnostic gate's36-byte-only report whitelist
-rejected the complete40-byte END report; offline decoding of its known status
-prefix confirms reason5/status1. Capture counters reconcile with no loss.
-This is Linux reference evidence, not a native Pyxis discovery pass.
-
-Linux also sends OFLD_CFG (`090000005e000000`, category1/class9/function0x14)
-during MAC initialization and receives a successful ACK. Native omitted this
-call. The isolated candidate adds it at the reference MAC-init point before
-BB/RF setup (`mac.c:4111–4112`, `fw.c:4471–4488` in the pinned source), requesting
-DONE_ACK without adding a firmware-ACK wait. Existing transport-consumption
-failure handling applies. PHY/RFK mode0x1002, scan payloads, RX filters, grants
-and deadlines are unchanged. Chronium authorized this candidate on2026-10-28;
-its native result is pending. The omission is proven, but code03's cause remains
-unproved until the isolated candidate is tested. Raw packet/offset comparisons
-and the corrected diagnostic interpretation are linked from PR#1528.
-
-The isolated OFLD_CFG candidate `6bb4793adf6a` was run natively on vela:
-START still received `raw=03 code=03 seq=15`, PHY`df`,14interrupts/28packets,
-confirmed stop/status19, preserved wired management and byte-exact PXE restore.
-The shifted sequence proves the added H2C was submitted, not that its ACK
-succeeded. Its DONE_ACK was discarded when it did not match the scan waiter.
-The next candidate retains that reply's raw return/sequence as a bounded status
-diagnostic; it adds no wait or admission condition and preserves the primary
-failure text when no suffix fits. No new ABI fields or log producer.
-
-The next single-variable protocol candidate matches the captured RTL8922AE
-6GHz prohibition bitmap: `0x07ffffffffffffff` instead of `U64_MAX`. Every one
-of the59 valid channel bits remains prohibited; only the unused upper five
-bits clear. This changes only START/STOP payload byte31, `ff` to `07`. It
-preserves the current one-PHY topology0x1002, calibration, all2.4GHz scan settings,
-OFLD_CFG, filters, grants and timeouts. It is a discriminating encoding test,
-not a finding that the reference's absent-band `U64_MAX` branch is universally
-wrong. No6GHz band or permission is exposed. Native result pending.
+Raw redacted reports and prior refusal/reference-comparison evidence stay under
+`/shared/present/rtl8922ae-passive-scan/` and PR #1528; SSIDs/BSSIDs and raw
+hardware identity are not part of repository evidence.

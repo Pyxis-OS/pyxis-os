@@ -41,7 +41,7 @@ static struct {
   struct rtl8922ae_sar_envelope sar;
   struct wifi_regdb_profile rules;
   struct rtl8922ae_power_image power;
-  struct rtl8922ae_rfk_commands rfk;
+  struct rtl8922ae_rfk_commands rfk[2];
   struct wifi_scan_work *pending;
   struct task_wait *worker_wait;
   struct rtl8922ae_discovery discovery;
@@ -339,11 +339,14 @@ static bool initialize_phy(uint64_t deadline, const char **detail)
     *detail = "RTL8922AE effective power image unsupported or incomplete";
     return false;
   }
-  if (!rtl8922ae_rfk_prepare(preparation.asset.data, preparation.asset.size,
-      &preparation.tables, &preparation.board, preparation.cut, preparation.channel,
-      &preparation.rfk, detail)) return false;
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    if (!rtl8922ae_rfk_prepare(phy, preparation.asset.data, preparation.asset.size,
+        &preparation.tables, &preparation.board, preparation.cut, preparation.channel,
+        &preparation.rfk[phy], detail)) return false;
+  }
   uint64_t flags = cpu_save_interrupts();
-  preparation.status.phy.thermal_default_paths = preparation.rfk.thermal_default_paths;
+  preparation.status.phy.thermal_default_paths = preparation.rfk[0].thermal_default_paths |
+      preparation.rfk[1].thermal_default_paths;
   cpu_restore_interrupts(flags);
   phase(WIFI_PHY_MAC);
   if (!rtl8922ae_phy_enable(deadline, detail) || !rtl8922ae_mac_init(deadline, detail)) return false;
@@ -362,29 +365,35 @@ static bool initialize_phy(uint64_t deadline, const char **detail)
   preparation.status.phy.state |= WIFI_PHY_CONFIGURED;
   cpu_restore_interrupts(flags);
   phase(WIFI_PHY_CHANNEL);
-  if (!rtl8922ae_phy_channel_enter(deadline, detail) ||
-      !rtl8922ae_mac_channel(preparation.channel, deadline, detail) ||
-      !rtl8922ae_phy_channel_tune(preparation.asset.data, preparation.asset.size,
-          &preparation.tables, &preparation.board, preparation.channel, deadline, detail)) return false;
-  phase(WIFI_PHY_POWER);
-  if (rtl8922ae_power_apply(&preparation.power, deadline, detail) != RTL8922AE_POWER_OK ||
-      !verify_power(deadline, detail)) return false;
+  if (!rtl8922ae_mac_channel(preparation.channel, deadline, detail)) return false;
   const uint8_t slots[2] = {0, 0};
-  if (!rtl8922ae_phy_channel_leave(slots, deadline, detail)) return false;
-  /* Linux continues this sequence after RFK helper errors. Keep every result
-   * observable and retain the first failure without skipping later RFK. Native
-   * request, transport and RF-ceiling gates still stop unsafe work. */
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    if (!rtl8922ae_phy_channel_enter(phy, deadline, detail) ||
+        !rtl8922ae_phy_channel_tune(phy, preparation.asset.data, preparation.asset.size,
+            &preparation.tables, &preparation.board, preparation.channel, deadline,
+            detail)) return false;
+    phase(WIFI_PHY_POWER);
+    if (rtl8922ae_power_apply(&preparation.power, deadline, detail) != RTL8922AE_POWER_OK ||
+        !verify_power(deadline, detail) ||
+        !rtl8922ae_phy_channel_leave(phy, slots, deadline, detail)) return false;
+  }
+  /* Reference late initialization visits PHY0 then PHY1. Preserve warning-only
+   * helper handling while keeping request, transport and RF-ceiling gates. */
   const char *rfk_failure = NULL;
   phase(WIFI_PHY_RFK);
-  bool completed = rtl8922ae_rfk_pre_notify(&preparation.rfk, deadline, detail);
-  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
-  completed = rtl8922ae_rfk_dack(deadline, detail);
-  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
-  completed = rtl8922ae_rfk_rxdck(&preparation.rfk, deadline, detail);
-  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    bool completed = rtl8922ae_rfk_pre_notify(&preparation.rfk[phy], deadline, detail);
+    if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+    completed = rtl8922ae_rfk_dack(phy, deadline, detail);
+    if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+    completed = rtl8922ae_rfk_rxdck(&preparation.rfk[phy], deadline, detail);
+    if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  }
   phase(WIFI_PHY_TSSI);
-  completed = rtl8922ae_rfk_tssi(&preparation.rfk, deadline, detail);
-  if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  for (unsigned phy = 0; phy < 2; ++phy) {
+    bool completed = rtl8922ae_rfk_tssi(&preparation.rfk[phy], deadline, detail);
+    if (!rfk_checkpoint(completed, deadline, &rfk_failure, detail)) return false;
+  }
   if (rfk_failure) {
     *detail = rfk_failure;
     return false;
@@ -635,7 +644,7 @@ void rtl8922ae_prepare(const struct boot_info *boot)
   }
   preparation.prepared = true;
   preparation.status.base.flags |= WIFI_PREPARED;
-  set_detail("RTL8922AE prepared; explicit SCAN required for one-PHY initialization");
+  set_detail("RTL8922AE prepared; explicit SCAN required for DBCC initialization");
 }
 
 void rtl8922ae_start(void)

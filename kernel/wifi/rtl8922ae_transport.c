@@ -19,7 +19,7 @@
 #include "rtl8922ae_transport.h"
 
 #define RTL_BAR 2u
-#define RTL_REGISTER_BYTES 0x40000u
+#define RTL_REGISTER_BYTES 0x60000u
 #define RTL_DMA_MAX ((UINT64_C(1) << 36) - 1)
 #define RTL_TX_QUEUES 13u
 #define RTL_RX_QUEUES 2u

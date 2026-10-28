@@ -24,7 +24,7 @@
 #define RFK_REPORT_BYTES 10u
 #define RFK_BOTH_PATHS 3u
 #define RFK_TSSI_SCAN 1u
-#define RFK_MLO_SINGLE_PHY UINT32_C(0x1002)
+#define RFK_MLO_DBCC UINT32_C(0x1011)
 #define TSSI_REFERENCE_THERMAL 0x38u
 #define TSSI_THERMAL_POINTS 128u
 #define TSSI_TRACKING_POINTS 30u
@@ -92,10 +92,10 @@ bool rtl8922ae_runtime_receive(const void *data, size_t bytes)
   return true;
 }
 
-static bool run(unsigned function, const void *data, size_t bytes, unsigned timeout_ms,
+static bool run(unsigned phy, unsigned function, const void *data, size_t bytes, unsigned timeout_ms,
     uint32_t bit, uint64_t deadline, const char **detail)
 {
-  if (rfk.active || rfk.fault || !rtl8922ae_transport_poll()) {
+  if (phy >= 2 || rfk.active || rfk.fault || !rtl8922ae_transport_poll()) {
     return fail(detail, "RTL8922AE RFK transport unavailable");
   }
   rfk.complete = false;
@@ -123,17 +123,19 @@ static bool run(unsigned function, const void *data, size_t bytes, unsigned time
     default: return fail(detail, "RTL8922AE TSSI completion failed/timed out");
     }
   }
-  rfk.observations.completed |= bit;
+  rfk.observations.phy_completed[phy] |= bit;
+  rfk.observations.completed = rfk.observations.phy_completed[0] &
+      rfk.observations.phy_completed[1];
   return true;
 }
 
-bool rtl8922ae_rfk_prepare(const void *asset, size_t bytes,
+bool rtl8922ae_rfk_prepare(unsigned phy, const void *asset, size_t bytes,
     const struct rtl8922ae_firmware_tables *tables,
     const struct rtl8922ae_board *board, uint8_t cut, uint8_t channel,
     struct rtl8922ae_rfk_commands *commands, const char **detail)
 {
   memset(commands, 0, sizeof(*commands));
-  if (!board->tssi_known || !channel || channel > 13) {
+  if (phy >= 2 || !board->tssi_known || !channel || channel > 13) {
     return fail(detail, "RTL8922AE TSSI factory inputs unavailable");
   }
   unsigned group = channel <= 2 ? 0 : channel <= 5 ? 1 : channel <= 8 ? 2 :
@@ -141,6 +143,7 @@ bool rtl8922ae_rfk_prepare(const void *asset, size_t bytes,
   uint8_t *tssi = commands->tssi;
   tssi[0] = sizeof(commands->tssi) & 255;
   tssi[1] = sizeof(commands->tssi) >> 8;
+  tssi[2] = phy;
   tssi[3] = channel;
   tssi[6] = 1; /* Reference hwtx_en: calibration is TX-capable. */
   tssi[7] = cut;
@@ -177,13 +180,16 @@ bool rtl8922ae_rfk_prepare(const void *asset, size_t bytes,
   }
   tssi[298] = RFK_TSSI_SCAN;
   tssi[299] = board->rfe;
-  /* First one-PHY context: both paths use their first vacant coefficient slot. */
+  /* Both admitted channel-1 contexts use their first vacant per-path slot. */
   for (unsigned path = 0; path < 2; ++path) {
     put32(commands->pre_notify + path * 12, channel);
     put32(commands->pre_notify + 52 + path * 4, channel);
   }
-  put32(commands->pre_notify + 48, RFK_MLO_SINGLE_PHY);
+  put32(commands->pre_notify + 48, RFK_MLO_DBCC);
+  put32(commands->pre_notify + 68, phy);
+  put32(commands->pre_notify + 72, 1); /* Reference mlo_1_1. */
   commands->channel = channel;
+  commands->phy = phy;
   commands->valid = true;
   return true;
 }
@@ -192,29 +198,30 @@ bool rtl8922ae_rfk_pre_notify(const struct rtl8922ae_rfk_commands *commands,
     uint64_t deadline, const char **detail)
 {
   if (!commands->valid) return fail(detail, "RTL8922AE RFK inputs unavailable");
-  return run(H2C_RFK_PRE_NOTIFY, commands->pre_notify, sizeof(commands->pre_notify), 5,
+  return run(commands->phy, H2C_RFK_PRE_NOTIFY, commands->pre_notify, sizeof(commands->pre_notify), 5,
       RTL8922AE_RFK_PRE_NOTIFY, deadline, detail);
 }
 
-bool rtl8922ae_rfk_dack(uint64_t deadline, const char **detail)
+bool rtl8922ae_rfk_dack(unsigned phy, uint64_t deadline, const char **detail)
 {
   uint8_t dack[12] = {0};
   put32(dack, sizeof(dack));
-  return run(H2C_RFK_DACK, dack, sizeof(dack), 58, RTL8922AE_RFK_DACK, deadline, detail);
+  put32(dack + 4, phy);
+  return run(phy, H2C_RFK_DACK, dack, sizeof(dack), 58, RTL8922AE_RFK_DACK, deadline, detail);
 }
 
 bool rtl8922ae_rfk_rxdck(const struct rtl8922ae_rfk_commands *commands,
     uint64_t deadline, const char **detail)
 {
   if (!commands->valid) return fail(detail, "RTL8922AE RFK inputs unavailable");
-  uint8_t rxdck[9] = {sizeof(rxdck), 0, 0, RFK_BOTH_PATHS, 0, 0, commands->channel, 0, 0};
-  return run(H2C_RFK_RXDCK, rxdck, sizeof(rxdck), 128, RTL8922AE_RFK_RXDCK, deadline, detail);
+  uint8_t rxdck[9] = {sizeof(rxdck), commands->phy, 0, RFK_BOTH_PATHS, 0, 0, commands->channel, 0, 0};
+  return run(commands->phy, H2C_RFK_RXDCK, rxdck, sizeof(rxdck), 128, RTL8922AE_RFK_RXDCK, deadline, detail);
 }
 
 bool rtl8922ae_rfk_tssi(const struct rtl8922ae_rfk_commands *commands,
     uint64_t deadline, const char **detail)
 {
   if (!commands->valid) return fail(detail, "RTL8922AE TSSI inputs unavailable");
-  return run(H2C_RFK_TSSI, commands->tssi, sizeof(commands->tssi), 6,
+  return run(commands->phy, H2C_RFK_TSSI, commands->tssi, sizeof(commands->tssi), 6,
       RTL8922AE_RFK_TSSI, deadline, detail);
 }
