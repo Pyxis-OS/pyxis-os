@@ -94,3 +94,38 @@ The source pin is not a claim that those kernels have identical initialization.
 - [GGTT implementation](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_ggtt.c):
   page-table location/extent and the distinction between reading existing PTEs
   and allocating, programming and invalidating owned mappings.
+
+## Task 1 implementation boundary
+
+The first probe reports PCI identity, existing D0/memory decode, BAR0/BAR2,
+GOP dimensions/pitch/colour shifts, and two `GMD_ID_DISPLAY` reads with a final
+PCI/BAR stability check. The GMD page is temporarily mapped read-only, NX and
+uncached; no PCI configuration or GPU register is written. All work and output
+are behind `display.inventory=1`. An absent/nonmatching device is reported
+without mapping its registers.
+
+**Powered-state inventory remains unavailable, rather than guessed safe.**
+The pinned reference exposes a prerequisite that a visible GOP image does not
+establish: on display version 30, `intel_de_read()` can acquire a DMC wakelock
+with a register write. Its `powered_off_ranges` include the pipe, transcoder,
+plane, cursor and scaler registers (`0x60000..0x7ffff`). Its DC5/6 DMC-touched
+list also includes `DC_STATE_EN`, power-well control registers and the DMC
+register block. Reading those registers is therefore not an independently
+proven write-free power guard. Linux's initial power setup disables DC states
+with a write and then acquires power references; this probe does neither.
+
+The native packet deliberately reports that limit and leaves those registers,
+GGTT entries and timing samples unread. It can establish the actual firmware
+GOP/PCI/GMD identity, but cannot yet establish the active plane, surface
+translation, latch or retirement rule. No writes are authorized by these
+partial observations. A later access contract requires source evidence and
+chronium's decision before any wake/power operation is introduced.
+
+Additional pinned references:
+
+- [DMC wake-lock ranges and read protection](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_dmc_wl.c):
+  `powered_off_ranges`, `xe3lpd_dc5_dc6_dmc_ranges` and `__intel_dmc_wl_take`.
+- [Display reads](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_de.h):
+  `intel_de_read` takes/releases the DMC wakelock.
+- [Power-well transitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display_power_well.c):
+  `gen9_set_dc_state` explains why disabling DC requires an MMIO write.

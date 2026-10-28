@@ -125,7 +125,7 @@ LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
 # The Pyxis Clang driver links P1F executables; Limine loads the kernel as ELF.
 LDFLAGS += -Wl,--oformat=elf
 
-C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c arch/x86_64/ps2/*.c kernel/input/touchpad.c kernel/input/hid_i2c.c kernel/input/hid_layout.c kernel/input/hid_touchpad.c kernel/input/hid_clickpad.c kernel/input/hid_pointer.c kernel/input/hid_i2c_metrics.c kernel/i2c/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/wifi/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/ui/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
+C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c arch/x86_64/intel/*.c arch/x86_64/ps2/*.c kernel/input/touchpad.c kernel/input/hid_i2c.c kernel/input/hid_layout.c kernel/input/hid_touchpad.c kernel/input/hid_clickpad.c kernel/input/hid_pointer.c kernel/input/hid_i2c_metrics.c kernel/i2c/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/wifi/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/ui/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
              third_party/tlsf/tlsf.c
 ifeq ($(POINTER_SYNTHETIC),1)
 C_SOURCES += kernel/input/synthetic_pointer.c

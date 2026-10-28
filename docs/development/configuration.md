@@ -166,6 +166,9 @@ For [Renoir flip inventory](experiments/renoir-flip-inventory/README.md),
 inventory at info level; default `0` adds no inventory output. Native task 1 uses
 `DISPLAY_TIMING=off LOG_UDP=1` with that flag, so the previous timing observer
 cannot interfere. It never allocates scanout storage or enables flips.
+On Intel `8086:b0a0`, the same option reports PCI/GOP/GMD identity only;
+[powered display-state access remains unproven](../wip/intel-inherited-scanout.md#task-1-implementation-boundary),
+so the probe does not read pipe/plane/GGTT registers or request power.
 
 For [Renoir cursor task 1](experiments/renoir-cursor-inventory/README.md),
 `DISPLAY_CURSOR_PROBE=1` adds `display.cursor.probe=1`: opt-in info-level,
