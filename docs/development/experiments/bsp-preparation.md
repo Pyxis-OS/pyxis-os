@@ -262,8 +262,10 @@ cost. No check was removed or redundant-check speedup claimed.
 
 Reports, exact source references, disassembly counts, hashes and small raw
 captures: `/shared/present/bsp-removal/task4/ipc-isolation/`. The default remains
-unfixed; the [placement proposal](../../wip/bsp-removal.md#initial-placement-after-caller-preparation--proposed-not-implemented)
-awaits a scheduling decision. Fixed RAM owners and confirmed capture retirement
+unfixed in these measured artifacts; the accepted
+[placement rule](../../wip/bsp-removal.md#initial-placement-after-caller-preparation--accepted)
+discounts only the executing user preparation actor and awaits matched
+qualification. Fixed RAM owners and confirmed capture retirement
 do not inherently require placing ordinary IPC peers on different CPUs.
 
 ## Storage and remaining limits

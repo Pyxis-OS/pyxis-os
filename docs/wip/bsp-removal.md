@@ -285,31 +285,22 @@ rises too. That trade-off is not accepted.
   removes the large IPC penalty with all kernel checks unchanged; it is not a
   delivered configuration workaround.
 
-### Initial placement after caller preparation — proposed, not implemented
+### Initial placement after caller preparation — accepted
 
-**Proposed default:** for initial child placement only, exclude the actual
+**Accepted (chronium, 2026-10-28):** for initial child placement only, exclude the actual
 executing preparation actor from the load and sibling-idleness scoring view.
 Keep the real scheduler running state truthful; keep affinity, preferred CPU,
 idle stealing and wakeup rules. Boot/fixed-worker publication gets no exclusion.
 Count every queued batch member normally. Apply
 the same rule to native-thread creation, which also moved from a parked creator
-to its caller CPU. This changes scoring semantics and needs chronium's decision;
+to its caller CPU. This is a narrowly scoped scoring rule;
 it adds no per-message check, placement reservation or retained load snapshot.
 It favors the existing parent-CPU tie-break when other allowed CPUs are equally
 idle; it does not reproduce every historical destination under arbitrary CPU0
 or SMT load. An independently runnable child can still be stolen by an idle CPU;
 QEMU and native remeasurement must establish whether the regression is fixed.
 
-Alternative: suspend the creator and publish from its CPU's permanent scheduler
-stack, with a complete retained publication record and explicit preparation-owner
-handoff. This avoids a scoring exception and CPU0, but adds a publication phase
-and context switches whose cost and ownership proof need qualification.
-
-Alternative: retain a short BSP publication handoff after caller-CPU heavy
-preparation. That restores the old parked-caller placement context, but keeps
-CPU0 in every launch and requires an explicitly owned preparation handoff; its
-extra request/wakeup cost has not been measured. Neither alternative removes
-the VM, endpoint or task-lifetime guards protecting live operations.
+Keep the VM, endpoint and task-lifetime guards protecting live operations.
 
 **You should know:** fixed cleanup actors add boot storage. Shared stack/capture
 admission can return BUSY after the existing bounded wait; cleanup contention can

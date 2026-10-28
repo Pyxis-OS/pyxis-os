@@ -145,7 +145,11 @@ retirement. See [threads](../interfaces/threads.md#lifecycle).
 Each CPU's load is its queued tasks plus one while a task occupies it, kept under
 the queue lock. A user task may run on any CPU in its space's effective set,
 the BSP included. Kernel workers queued on the BSP count toward its load. There
-are no priorities or other scoring.
+are no priorities. Initial process/thread placement discounts only its executing
+user preparation caller's one running contribution, including sibling-idleness
+scoring. This transient scoring view does not change actual running/queued
+accounting or idle stealing. Other actors and already-queued batch children count
+normally; boot and fixed-worker publication have no discounted caller.
 
 Each space keeps two CPU sets:
 

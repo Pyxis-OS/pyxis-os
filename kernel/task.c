@@ -425,6 +425,13 @@ static size_t load_locked(size_t cpu_index)
   return schedulers[cpu_index].queued + (schedulers[cpu_index].running ? 1 : 0);
 }
 
+static size_t placement_load_locked(size_t cpu_index, const struct task *preparer)
+{
+  struct scheduler *scheduler = &schedulers[cpu_index];
+  return load_locked(cpu_index) -
+    (preparer && scheduler->running && scheduler->current_task == preparer ? 1 : 0);
+}
+
 /* Only a user task outside a syscall can move: its saved state is a user-mode
  * boundary on its own kernel stack. A blocked syscall resumes where it was. */
 static bool task_movable(const struct task *task)
@@ -432,10 +439,11 @@ static bool task_movable(const struct task *task)
   return task->kind == TASK_USER && !task->in_syscall;
 }
 
-static bool siblings_idle_locked(size_t cpu_index)
+static bool siblings_idle_locked(size_t cpu_index, const struct task *preparer)
 {
   for (size_t other = 0; other < arch_cpu_count(); ++other) {
-    if (other != cpu_index && arch_cpus_share_core(cpu_index, other) && load_locked(other)) {
+    if (other != cpu_index && arch_cpus_share_core(cpu_index, other) &&
+        placement_load_locked(other, preparer)) {
       return false;
     }
   }
@@ -446,6 +454,10 @@ static bool siblings_idle_locked(size_t cpu_index)
  * then PREFERRED, then the lowest AP, then the BSP. */
 static size_t place_locked(const struct space *space, size_t preferred)
 {
+  /* Initial publication discounts only this caller's temporary preparation
+   * work. Actual running/queued state and idle stealing remain unchanged. */
+  struct task *preparer = task_current_user();
+  KASSERT(!preparer || (preparer->in_syscall && preparer->vm_kernel));
   size_t count = arch_cpu_count();
   size_t best = SIZE_MAX;
   size_t best_load = SIZE_MAX;
@@ -455,11 +467,11 @@ static size_t place_locked(const struct space *space, size_t preferred)
     if (!space_allows_cpu(space, cpu_index)) {
       continue;
     }
-    size_t load = load_locked(cpu_index);
+    size_t load = placement_load_locked(cpu_index, preparer);
     if (load > best_load) {
       continue;
     }
-    bool idle = siblings_idle_locked(cpu_index);
+    bool idle = siblings_idle_locked(cpu_index, preparer);
     if (best == SIZE_MAX || load < best_load || (idle && !best_idle) ||
         (idle == best_idle && cpu_index == preferred)) {
       best = cpu_index;
