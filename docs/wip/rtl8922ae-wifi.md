@@ -577,6 +577,18 @@ physical power qualification. The separate evidence that programmed effective
 limits constrain TX-capable firmware calibration is still required; selecting
 an arbitrary dBm cap would not establish it.
 
+### Numeric regulatory ceiling — corrected after review (2026-10-28)
+
+Before TX-capable calibration, the prepared image intersects each active
+normal/RU limit with the firmware regional value, normalized SAR and the
+selected regdb numeric EIRP ceiling, rounded down to half-dBm. Physical-path
+ceilings also take the SAR/regdb minimum. Firmware board/antenna constraints
+remain in force; this does not infer physical antenna gain or radiated power,
+add a guessed chain-count deduction, or add an antenna-availability refusal.
+Daybreak's AR channel-4/SAR-24 regression now caps 21/24 dBm values at 20 dBm
+without refusing admission. Vela's world/SAR-16 complete images are unchanged.
+See the [host regression record](../development/experiments/rtl8922ae-phy-init.md#numeric-regulatory-ceiling-correction-2026-10-28).
+
 ### Native input result and accepted fixed-SAR profile
 
 Native input capture completed on vela (2026-10-23), with verified menu restore:

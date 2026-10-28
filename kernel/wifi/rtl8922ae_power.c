@@ -29,6 +29,7 @@
 #define POWER_RFE 1u
 #define POWER_CUT 2u
 #define POWER_MAX_RECORDS 65536u
+#define POWER_MBM_PER_HALF_DBM 50
 
 /* Controls owned by this profile: no forced limit/rate/RU/MACID/coex value,
  * and no additive limit, beamforming, by-rate, RU or software offset. */
@@ -218,13 +219,14 @@ static enum rtl8922ae_power_result limit_value(const void *asset, size_t bytes,
 
 static enum rtl8922ae_power_result prepare_limits(const void *asset, size_t bytes,
     const struct rtl8922ae_firmware_tables *tables,
-    const struct rtl8922ae_sar_envelope *sar,
+    const struct rtl8922ae_sar_envelope *sar, int regulatory_half_dbm,
     struct rtl8922ae_power_image *image)
 {
   for (unsigned ntx = 0; ntx < 2; ++ntx) {
     const int16_t *limits = ntx ? sar->limits_2tx_eighth_dbm :
         sar->limits_1tx_eighth_dbm;
-    int sar_half = floor_divide(smaller(limits[0], limits[1]), 4);
+    int sar_half = smaller(floor_divide(smaller(limits[0], limits[1]), 4),
+        regulatory_half_dbm);
     for (unsigned slot = 0; slot < 4; ++slot) {
       unsigned width = slot == 1 ? 1 : 0;
       unsigned section = slot < 2 ? 0 : slot - 1;
@@ -393,6 +395,11 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
   if (rules->channel[channel - 1].flags & ~allowed_flags) {
     return RTL8922AE_POWER_UNSUPPORTED;
   }
+  /* Firmware tables retain board/antenna constraints; the numeric regdb rule
+   * is an additional ceiling, never authority to raise those limits. Round
+   * downward to the MAC limit unit, including negative values. */
+  int regulatory_half_dbm = floor_divide(
+      rules->channel[channel - 1].max_eirp_mbm, POWER_MBM_PER_HALF_DBM);
   image->channel = channel;
   enum rtl8922ae_power_result result = prepare_region(asset, bytes, tables,
       country, antenna_state, image);
@@ -402,6 +409,7 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
   for (unsigned path = 0; path < 2; ++path) {
     int limit = floor_divide(smaller(sar->limits_1tx_eighth_dbm[path],
         sar->limits_2tx_eighth_dbm[path]), 4);
+    limit = smaller(limit, regulatory_half_dbm);
     if (limit < -64 || limit > 63) {
       result = RTL8922AE_POWER_UNSUPPORTED;
       goto fail;
@@ -412,7 +420,7 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
   if (result != RTL8922AE_POWER_OK) {
     goto fail;
   }
-  result = prepare_limits(asset, bytes, tables, sar, image);
+  result = prepare_limits(asset, bytes, tables, sar, regulatory_half_dbm, image);
   if (result != RTL8922AE_POWER_OK) {
     goto fail;
   }

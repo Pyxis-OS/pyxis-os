@@ -38,8 +38,11 @@ struct rtl8922ae_power_image {
  * RTAG absence removes optional DAG correction; it says nothing about physical
  * antenna gain. When country rules enable DAG, only qualified absent
  * RTAG is supported. Inapplicable RTAG does not block these reference modes.
- * Rules must match the pinned regdb lookup.
- * No invented EIRP-to-path conversion, TAS or DA-table boost.
+ * Rules must match the pinned regdb lookup. Every active normal/RU limit is
+ * capped by the firmware table, SAR and the numeric regdb EIRP ceiling rounded
+ * down to half-dBm. Physical-path SAR ceilings are also capped by that rule.
+ * Firmware board/antenna limits remain in force; no invented antenna-gain or
+ * chain-count adjustment, TAS or DA-table boost.
  * Failure clears image. No RF or device operations occur. */
 enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
     size_t bytes, const struct rtl8922ae_firmware_tables *tables,

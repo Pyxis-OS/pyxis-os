@@ -34,6 +34,34 @@ interruption. These are software checks, not measured RF or proof of device
 programming. Modified units passed freestanding warnings-as-errors compilation;
 the integrated full image built successfully.
 
+### Numeric regulatory ceiling correction (2026-10-28)
+
+Daybreak's host review reproduced a missing numeric cap before calibration:
+country AR, channel 4, cut 2/RFE 1, valid SAR 24 dBm and regdb EIRP 20 dBm
+produced a 21 dBm active normal slot and a 24 dBm physical-path ceiling.
+The immutable image now intersects every active normal/RU limit with firmware,
+SAR and the selected numeric regdb ceiling; physical-path ceilings also take
+that regulatory minimum. Conversion floors mBm to the half-dBm MAC unit;
+inactive reference-layout slots remain zero. No new antenna-availability refusal
+or guessed chain-count adjustment is introduced. Firmware board/antenna limits
+remain in force. This extra numeric cap is not a measurement of radiated EIRP.
+
+Host regression uses the pinned firmware SHA-256
+`d11927f593c82879bd0437435475d7915a60932374747984b3dc906a23009dea`.
+The exact AR case changes normal 42 to 40 half-dBm and path 96 to 80
+quarter-dBm, still admitted. Across six country profiles, four SAR envelopes
+(including a negative value) and channels 1–13, both revisions admit 296 cases
+and refuse 16; numeric ceiling violations change from 527 to zero. This is a
+CPU-only image check, not RF evidence. Source/check commands and before/after
+records are retained in
+`/shared/present/rtl8922ae-phy-init/regulatory-ceiling-20261028/`.
+
+All 13 complete world-domain/SAR-16 images and return statuses are byte-identical
+before/after, including NO_IR refusals. Their combined stream has SHA-256
+`2ba4e75a3e8d4283f49b3aa6c59cd6d67176493e7dbc4f9fb2c2d350fa19f882`.
+Thus this correction does not change vela's qualified world/SAR-16 programming;
+the earlier native results stay tied to their exact historical heads.
+
 ## QEMU controls
 
 READ decoded the 600-byte status; absent-radio SCAN returned UNAVAILABLE without
