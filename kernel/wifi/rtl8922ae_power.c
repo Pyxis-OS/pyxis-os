@@ -438,6 +438,65 @@ fail:
   return result;
 }
 
+enum rtl8922ae_power_result rtl8922ae_power_prepare_common(const void *asset,
+    size_t bytes, const struct rtl8922ae_firmware_tables *tables,
+    const struct rtl8922ae_sar_envelope *sar,
+    enum acpi_wifi_state antenna_state, const char country[2],
+    const struct wifi_regdb_profile *rules, uint32_t channels,
+    struct rtl8922ae_power_image *image)
+{
+  if (!image) {
+    return RTL8922AE_POWER_INVALID;
+  }
+  memset(image, 0, sizeof(*image));
+  if (channels != ((1u << 0) | (1u << 5))) {
+    return RTL8922AE_POWER_UNSUPPORTED;
+  }
+  enum rtl8922ae_power_result result = rtl8922ae_power_prepare(asset, bytes,
+      tables, sar, antenna_state, country, rules, 1, image);
+  if (result != RTL8922AE_POWER_OK) {
+    return result;
+  }
+  struct rtl8922ae_power_image other;
+  result = rtl8922ae_power_prepare(asset, bytes, tables, sar, antenna_state,
+      country, rules, 6, &other);
+  if (result != RTL8922AE_POWER_OK) {
+    goto fail;
+  }
+  if (memcmp(image->byrate, other.byrate, sizeof(image->byrate)) ||
+      image->rate_offsets != other.rate_offsets ||
+      image->region != other.region || image->shape != other.shape) {
+    result = RTL8922AE_POWER_UNSUPPORTED;
+    goto fail;
+  }
+  for (unsigned ntx = 0; ntx < 2; ++ntx) {
+    for (unsigned slot = 0; slot < 4; ++slot) {
+      unsigned section = slot < 2 ? 0 : slot - 1;
+      for (unsigned bf = 0; bf < 2; ++bf) {
+        if (bf && (section != 2 || !ntx)) {
+          continue;
+        }
+        unsigned index = slot * 2 + bf;
+        image->normal[ntx][index] = (uint8_t)smaller(
+            (int8_t)image->normal[ntx][index], (int8_t)other.normal[ntx][index]);
+      }
+    }
+    for (unsigned ru = 0; ru < 5; ++ru) {
+      unsigned index = ru * 16;
+      image->ru[ntx][index] = (uint8_t)smaller(
+          (int8_t)image->ru[ntx][index], (int8_t)other.ru[ntx][index]);
+    }
+  }
+  for (unsigned path = 0; path < 2; ++path) {
+    image->sar_quarter_dbm[path] = smaller(image->sar_quarter_dbm[path],
+        other.sar_quarter_dbm[path]);
+  }
+  return RTL8922AE_POWER_OK;
+fail:
+  memset(image, 0, sizeof(*image));
+  return result;
+}
+
 static bool power_checkpoint(uint64_t deadline, const char **detail)
 {
   if (rtl8922ae_sleep(0, deadline)) {
