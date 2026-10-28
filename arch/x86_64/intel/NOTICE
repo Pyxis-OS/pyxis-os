@@ -1,0 +1,36 @@
+Intel inherited display startup: register and sequence adaptations
+
+Pinned reference: Linux v6.19, commit
+05f7e89ab9731565d8a62e3b5d1ec206485eeb0b.
+https://github.com/torvalds/linux/tree/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm
+
+Adapted subset: i915/display/intel_display_power_well.c DC-state settling and
+additive BIOS-held power-well requests; intel_display_regs.h,
+skl_universal_plane_regs.h, intel_cursor_regs.h and intel_vdsc_regs.h numeric
+register definitions; xe/xe_ggtt.c inherited raw-PTE read layout.
+
+Local changes: matched-profile startup, retained inherited request ownership,
+read-only configuration/GGTT mappings, a two-register control write boundary,
+bounded observations and uncertain-cleanup retention. No Linux power manager,
+DMC firmware loader, modesetting, interrupt programming or BO manager is imported.
+No upstream source is fetched by the build.
+
+Copyright © 2021, 2022, 2023, 2024, 2025 Intel Corporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.

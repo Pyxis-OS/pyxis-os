@@ -125,7 +125,7 @@ LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
 # The Pyxis Clang driver links P1F executables; Limine loads the kernel as ELF.
 LDFLAGS += -Wl,--oformat=elf
 
-C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c arch/x86_64/ps2/*.c kernel/input/touchpad.c kernel/input/hid_i2c.c kernel/input/hid_layout.c kernel/input/hid_touchpad.c kernel/input/hid_clickpad.c kernel/input/hid_pointer.c kernel/input/hid_i2c_metrics.c kernel/i2c/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/wifi/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/ui/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
+C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c arch/x86_64/intel/*.c arch/x86_64/ps2/*.c kernel/input/touchpad.c kernel/input/hid_i2c.c kernel/input/hid_layout.c kernel/input/hid_touchpad.c kernel/input/hid_clickpad.c kernel/input/hid_pointer.c kernel/input/hid_i2c_metrics.c kernel/i2c/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/wifi/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/ui/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
              third_party/tlsf/tlsf.c
 ifeq ($(POINTER_SYNTHETIC),1)
 C_SOURCES += kernel/input/synthetic_pointer.c
@@ -164,10 +164,13 @@ build/kernel-wifi-NOTICE: | kernel
 build/kernel-amd-NOTICE: | kernel
 	@test -f $@
 
+build/kernel-intel-NOTICE: | kernel
+	@test -f $@
+
 build/kernel-random-NOTICE: | kernel
 	@test -f $@
 else
-kernel: build/caelum.elf build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE
+kernel: build/caelum.elf build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-intel-NOTICE build/kernel-wifi-NOTICE
 	CC="$(CC)" LOG_LEVEL="$(LOG_LEVEL)" CPPFLAGS="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" ./scripts/bundle.sh record kernel
 
 build/kernel-wifi-NOTICE: kernel/wifi/NOTICE
@@ -175,6 +178,10 @@ build/kernel-wifi-NOTICE: kernel/wifi/NOTICE
 	cp $< $@
 
 build/kernel-amd-NOTICE: arch/x86_64/amd/NOTICE
+	@mkdir -p build
+	cp $< $@
+
+build/kernel-intel-NOTICE: arch/x86_64/intel/NOTICE
 	@mkdir -p build
 	cp $< $@
 
@@ -417,12 +424,12 @@ recovery-initrd: build/recovery.cpio
 
 # Select the rescue payload directly from component roots, before personal image
 # overrides are applied. Never build recovery from the complete live archive.
-build/recovery.cpio: userspace ports Makefile build/packages.lua packages/signing/repository-floors.lua boot/rescue.list scripts/recovery-initrd.lua scripts/stage-tree.lua scripts/assemble-recovery-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE
+build/recovery.cpio: userspace ports Makefile build/packages.lua packages/signing/repository-floors.lua boot/rescue.list scripts/recovery-initrd.lua scripts/stage-tree.lua scripts/assemble-recovery-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-intel-NOTICE
 	./scripts/assemble-recovery-initrd.sh
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware $(RTL8922AE_FIRMWARE_DEPENDENCY) build/recovery.cpio Makefile packages/signing/repository-floors.lua boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-wifi-NOTICE build/os-release build/distribution build/packages.lua \
+build/initrd.cpio: userspace ports ax200-firmware ax200-wifi-firmware $(RTL8922AE_FIRMWARE_DEPENDENCY) build/recovery.cpio Makefile packages/signing/repository-floors.lua boot/initrd.lua boot/rescue.list scripts/stage-tree.lua scripts/assemble-initrd.sh build/kernel-random-NOTICE build/kernel-amd-NOTICE build/kernel-intel-NOTICE build/kernel-wifi-NOTICE build/os-release build/distribution build/packages.lua \
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE $(IMAGE_HOSTNAME_TOOL)
 	./scripts/assemble-initrd.sh
 

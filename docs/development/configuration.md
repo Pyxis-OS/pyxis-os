@@ -166,6 +166,9 @@ For [Renoir flip inventory](experiments/renoir-flip-inventory/README.md),
 inventory at info level; default `0` adds no inventory output. Native task 1 uses
 `DISPLAY_TIMING=off LOG_UDP=1` with that flag, so the previous timing observer
 cannot interfere. It never allocates scanout storage or enables flips.
+Intel `8086:b0a0` display startup is independent of this option; its
+[matched-profile admission and inherited-state reads](../wip/intel-inherited-scanout.md)
+run normally. No `display.inventory.power` option exists.
 
 For [Renoir cursor task 1](experiments/renoir-cursor-inventory/README.md),
 `DISPLAY_CURSOR_PROBE=1` adds `display.cursor.probe=1`: opt-in info-level,

@@ -44,7 +44,7 @@ return function(inputs)
     entries[#entries + 1] = { tree = inputs.ports .. "/share/licenses/" .. name,
       at = "share/licenses/" .. name }
   end
-  for _, name in ipairs({ "random", "amd" }) do
+  for _, name in ipairs({ "random", "amd", "intel" }) do
     entries[#entries + 1] = { file = "build/kernel-" .. name .. "-NOTICE",
       at = "share/licenses/kernel-" .. name .. "/NOTICE" }
   end
