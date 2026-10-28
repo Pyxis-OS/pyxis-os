@@ -513,44 +513,15 @@ static enum rtl8922ae_firmware_plan_result plan_security_section(
   return RTL8922AE_FIRMWARE_PLAN_OK;
 }
 
-static enum rtl8922ae_firmware_plan_result build_plan(const uint8_t *data,
-    size_t bytes, uint8_t live_cut, const uint8_t security_bytes[4],
-    struct rtl8922ae_firmware_plan *plan)
+static enum rtl8922ae_firmware_plan_result plan_image(const uint8_t *data,
+    size_t bytes, struct rtl8922ae_firmware_plan *plan)
 {
-  if (!rtl8922ae_firmware_decode_security(security_bytes, &plan->security)) {
-    return RTL8922AE_FIRMWARE_PLAN_SECURITY_INVALID;
-  }
-  if (!data || bytes < MFW_HEADER_BYTES || data[0] != MFW_SIGNATURE || !data[1]) {
+  if (!span_valid(bytes, plan->image_offset, plan->image_bytes)) {
     return RTL8922AE_FIRMWARE_PLAN_INVALID;
   }
-  size_t directory_bytes = MFW_HEADER_BYTES + (size_t)data[1] * MFW_ENTRY_BYTES;
-  if (directory_bytes > bytes) {
-    return RTL8922AE_FIRMWARE_PLAN_INVALID;
-  }
-  const uint8_t *selected = NULL;
-  for (size_t i = 0; i < data[1]; ++i) {
-    const uint8_t *entry = data + MFW_HEADER_BYTES + i * MFW_ENTRY_BYTES;
-    size_t offset = read_le32(entry + 4);
-    size_t length = read_le32(entry + 8);
-    if (!span_valid(bytes, offset, length)) {
-      return RTL8922AE_FIRMWARE_PLAN_INVALID;
-    }
-    if (entry[1] != MFW_NORMAL || entry[2] || entry[0] > live_cut) {
-      continue;
-    }
-    if (!selected || entry[0] > selected[0]) {
-      selected = entry;
-    }
-  }
-  if (!selected) {
-    return RTL8922AE_FIRMWARE_PLAN_NO_IMAGE;
-  }
-  plan->image_offset = read_le32(selected + 4);
-  plan->image_bytes = read_le32(selected + 8);
-  plan->cut = selected[0];
   const uint8_t *image = data + plan->image_offset;
   size_t image_bytes = plan->image_bytes;
-  if (plan->image_offset < directory_bytes || image_bytes < FW_VERSION_HEADER_BYTES) {
+  if (image_bytes < FW_VERSION_HEADER_BYTES) {
     return RTL8922AE_FIRMWARE_PLAN_INVALID;
   }
   unsigned version = image[15];
@@ -643,6 +614,47 @@ static enum rtl8922ae_firmware_plan_result build_plan(const uint8_t *data,
   return RTL8922AE_FIRMWARE_PLAN_OK;
 }
 
+static enum rtl8922ae_firmware_plan_result build_plan(const uint8_t *data,
+    size_t bytes, uint8_t live_cut, const uint8_t security_bytes[4],
+    struct rtl8922ae_firmware_plan *plan)
+{
+  if (!rtl8922ae_firmware_decode_security(security_bytes, &plan->security)) {
+    return RTL8922AE_FIRMWARE_PLAN_SECURITY_INVALID;
+  }
+  if (!data || bytes < MFW_HEADER_BYTES || data[0] != MFW_SIGNATURE || !data[1]) {
+    return RTL8922AE_FIRMWARE_PLAN_INVALID;
+  }
+  size_t directory_bytes = MFW_HEADER_BYTES + (size_t)data[1] * MFW_ENTRY_BYTES;
+  if (directory_bytes > bytes) {
+    return RTL8922AE_FIRMWARE_PLAN_INVALID;
+  }
+  const uint8_t *selected = NULL;
+  for (size_t i = 0; i < data[1]; ++i) {
+    const uint8_t *entry = data + MFW_HEADER_BYTES + i * MFW_ENTRY_BYTES;
+    size_t offset = read_le32(entry + 4);
+    size_t length = read_le32(entry + 8);
+    if (!span_valid(bytes, offset, length)) {
+      return RTL8922AE_FIRMWARE_PLAN_INVALID;
+    }
+    if (entry[1] != MFW_NORMAL || entry[2] || entry[0] > live_cut) {
+      continue;
+    }
+    if (!selected || entry[0] > selected[0]) {
+      selected = entry;
+    }
+  }
+  if (!selected) {
+    return RTL8922AE_FIRMWARE_PLAN_NO_IMAGE;
+  }
+  plan->image_offset = read_le32(selected + 4);
+  plan->image_bytes = read_le32(selected + 8);
+  plan->cut = selected[0];
+  if (plan->image_offset < directory_bytes) {
+    return RTL8922AE_FIRMWARE_PLAN_INVALID;
+  }
+  return plan_image(data, bytes, plan);
+}
+
 enum rtl8922ae_firmware_plan_result rtl8922ae_firmware_plan(const void *data,
     size_t bytes, uint8_t live_cut, const uint8_t security_bytes[4],
     struct rtl8922ae_firmware_plan *plan)
@@ -656,6 +668,61 @@ enum rtl8922ae_firmware_plan_result rtl8922ae_firmware_plan(const void *data,
   if (result != RTL8922AE_FIRMWARE_PLAN_OK) {
     *plan = (struct rtl8922ae_firmware_plan){0};
   }
+  return result;
+}
+
+enum rtl8922ae_firmware_plan_result rtl8922ae_firmware_plan_bbmcu0(const void *data,
+    size_t bytes, uint8_t live_cut, const uint8_t security_bytes[4],
+    struct rtl8922ae_firmware_plan *plan)
+{
+  if (!plan) {
+    return RTL8922AE_FIRMWARE_PLAN_INVALID;
+  }
+  *plan = (struct rtl8922ae_firmware_plan){0};
+  if (!rtl8922ae_firmware_decode_security(security_bytes, &plan->security)) {
+    return RTL8922AE_FIRMWARE_PLAN_SECURITY_INVALID;
+  }
+  const uint8_t *asset = data;
+  struct rtl8922ae_firmware_info inspection;
+  enum rtl8922ae_firmware_plan_result result = RTL8922AE_FIRMWARE_PLAN_INVALID;
+  if (!rtl8922ae_firmware_inspect(data, bytes, &inspection)) {
+    goto failed;
+  }
+  size_t cursor = MFW_HEADER_BYTES + (size_t)asset[1] * MFW_ENTRY_BYTES;
+  for (size_t i = 0; i < asset[1]; ++i) {
+    const uint8_t *entry = asset + MFW_HEADER_BYTES + i * MFW_ENTRY_BYTES;
+    size_t end = (size_t)read_le32(entry + 4) + read_le32(entry + 8);
+    if (end > cursor) {
+      cursor = end;
+    }
+  }
+  if (!align_element(cursor, &cursor)) {
+    goto failed;
+  }
+  while (span_valid(bytes, cursor, FW_ELEMENT_HEADER_BYTES + 1)) {
+    const uint8_t *header = asset + cursor;
+    size_t length = read_le32(header + 4);
+    size_t payload = cursor + FW_ELEMENT_HEADER_BYTES;
+    if (!span_valid(bytes, payload, length)) {
+      goto failed;
+    }
+    if (read_le32(header) == FW_ELEMENT_BBMCU0 && length && header[24] <= live_cut) {
+      plan->image_offset = payload;
+      plan->image_bytes = length;
+      plan->cut = header[24];
+      result = plan_image(asset, bytes, plan);
+      if (result == RTL8922AE_FIRMWARE_PLAN_OK) {
+        return result;
+      }
+      goto failed;
+    }
+    if (!align_element(payload + length, &cursor)) {
+      goto failed;
+    }
+  }
+  result = RTL8922AE_FIRMWARE_PLAN_NO_IMAGE;
+failed:
+  *plan = (struct rtl8922ae_firmware_plan){0};
   return result;
 }
 
@@ -689,6 +756,12 @@ bool rtl8922ae_firmware_copy_section(const void *data, size_t bytes,
 }
 
 #define TABLE_REGISTER_BYTES 8u
+#define TABLE_AFE_BYTES 24u
+#define TABLE_AFE_ACTION_WRITE 0u
+#define TABLE_AFE_ACTION_DELAY 1u
+#define TABLE_AFE_ACTION_POLL 2u
+#define TABLE_AFE_CATEGORY_MAX 5u
+#define TABLE_AFE_CLASS_MAX 5u
 #define TABLE_BYRATE_BYTES 11u
 #define TABLE_LIMIT_BYTES 7u
 #define TABLE_LIMIT_6G_BYTES 8u
@@ -939,9 +1012,9 @@ static enum rtl8922ae_tables_result table_check(const uint8_t *data,
     if (!table->records) {
       return RTL8922AE_TABLES_MISSING;
     }
-    if (id >= RTL8922AE_ELEMENT_RADIO_A && id <= RTL8922AE_ELEMENT_RADIO_D &&
-        header[24] >= 4) {
-      return RTL8922AE_TABLES_MALFORMED;
+    if (id >= RTL8922AE_ELEMENT_RADIO_A && id <= RTL8922AE_ELEMENT_RADIO_D) {
+      if (header[24] >= 4) return RTL8922AE_TABLES_MALFORMED;
+      table->radio_index = header[24];
     }
     return table_headline(p, table, rfe, cut) ? RTL8922AE_TABLES_OK :
         RTL8922AE_TABLES_MISSING;
@@ -983,7 +1056,28 @@ static enum rtl8922ae_tables_result table_check(const uint8_t *data,
     return (bitmap & TABLE_TRACKING_2G_MASK) == TABLE_TRACKING_2G_MASK ?
         RTL8922AE_TABLES_OK : RTL8922AE_TABLES_MISSING;
   }
-  /* Log/AFE contents have no consumer in this CPU-only qualification step. */
+  if (id == RTL8922AE_ELEMENT_AFE) {
+    if (!table->bytes || table->bytes % TABLE_AFE_BYTES) {
+      return RTL8922AE_TABLES_MALFORMED;
+    }
+    table->stride = TABLE_AFE_BYTES;
+    table->records = table->bytes / TABLE_AFE_BYTES;
+    for (size_t i = 0; i < table->records; ++i) {
+      const uint8_t *record = p + i * TABLE_AFE_BYTES;
+      uint32_t action = read_le32(record);
+      if (action > TABLE_AFE_ACTION_POLL ||
+          read_le32(record + 4) > TABLE_AFE_CATEGORY_MAX ||
+          read_le32(record + 8) > TABLE_AFE_CLASS_MAX) {
+        return RTL8922AE_TABLES_UNSUPPORTED;
+      }
+      if ((action == TABLE_AFE_ACTION_WRITE || action == TABLE_AFE_ACTION_POLL) &&
+          (!read_le32(record + 16) || (read_le32(record + 12) & 3))) {
+        return RTL8922AE_TABLES_MALFORMED;
+      }
+    }
+    return RTL8922AE_TABLES_OK;
+  }
+  /* Log contents have no consumer in this CPU-only qualification step. */
   return RTL8922AE_TABLES_UNSUPPORTED;
 }
 
@@ -1111,6 +1205,43 @@ enum rtl8922ae_tables_result rtl8922ae_firmware_tables(const void *data,
   if (result == RTL8922AE_TABLES_MALFORMED) {
     *tables = (struct rtl8922ae_firmware_tables){0};
   }
+  return result;
+}
+
+enum rtl8922ae_tables_result rtl8922ae_firmware_afe_table(const void *asset,
+    size_t bytes, struct rtl8922ae_firmware_table *table)
+{
+  *table = (struct rtl8922ae_firmware_table){0};
+  struct rtl8922ae_firmware_info info;
+  if (!rtl8922ae_firmware_inspect(asset, bytes, &info)) {
+    return RTL8922AE_TABLES_MALFORMED;
+  }
+  const uint8_t *data = asset;
+  size_t offset = MFW_HEADER_BYTES + (size_t)data[1] * MFW_ENTRY_BYTES;
+  for (size_t i = 0; i < data[1]; ++i) {
+    const uint8_t *entry = data + MFW_HEADER_BYTES + i * MFW_ENTRY_BYTES;
+    size_t start = read_le32(entry + 4), length = read_le32(entry + 8);
+    if (!span_valid(bytes, start, length)) return RTL8922AE_TABLES_MALFORMED;
+    if (start + length > offset) offset = start + length;
+  }
+  if (!align_element(offset, &offset)) return RTL8922AE_TABLES_MALFORMED;
+  enum rtl8922ae_tables_result result = RTL8922AE_TABLES_MISSING;
+  struct rtl8922ae_firmware_table candidate = {0};
+  while (offset < bytes) {
+    if (!span_valid(bytes, offset, FW_ELEMENT_HEADER_BYTES)) return RTL8922AE_TABLES_MALFORMED;
+    const uint8_t *header = data + offset;
+    size_t length = read_le32(header + 4), payload = offset + FW_ELEMENT_HEADER_BYTES;
+    if (!span_valid(bytes, payload, length)) return RTL8922AE_TABLES_MALFORMED;
+    if (read_le32(header) == RTL8922AE_ELEMENT_AFE) {
+      struct rtl8922ae_firmware_table selected = {.offset = payload, .bytes = length};
+      result = table_check(data, RTL8922AE_ELEMENT_AFE, header, &selected, 0, 0);
+      if (result != RTL8922AE_TABLES_OK) return result;
+      selected.selected = true;
+      candidate = selected;
+    }
+    if (!align_element(payload + length, &offset)) return RTL8922AE_TABLES_MALFORMED;
+  }
+  if (result == RTL8922AE_TABLES_OK) *table = candidate;
   return result;
 }
 

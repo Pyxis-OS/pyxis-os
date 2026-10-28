@@ -1,11 +1,15 @@
 # Vela RTL8922AE Wi-Fi
 
-**Plan accepted (chronium, 2026-10-22).** Stage 1 is qualified. The stage-2
-firmware-first cut is implemented for review; native firmware/reset
-qualification remains pending. Scan and later stages need a separate go. Native runs on vela go through the orchestrator. This expands
-[Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages),
-after the delivered [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
-The three accepted decisions below define the initial scope.
+**Plan accepted (chronium, 2026-10-22). Target: 0.0.11, not 0.0.10
+(chronium, 2026-10-26).** Stage 1 and the stage-2 firmware-first/checked-stop
+cut and request-driven one-PHY initialization/RFK/checked stop are native
+qualified on vela. The implementation remains a draft; passive discovery,
+physical rfkill response and radiated-power behavior are not qualified. Native
+runs on vela go through the orchestrator. This expands
+[Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages), after the delivered
+[AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
+The accepted decisions below define the initial scope; this track must preserve
+the released status prefix and does not land as part of 0.0.10.
 
 **Fresh read-only inventory completed, 2026-10-22**, through Tailscale SSH after
 chronium approved its check. No known_hosts change or host-check bypass was
@@ -354,17 +358,12 @@ prepares all supported messages masked and enables only message zero. BAR
 sizing, insufficient BAR2 extent, mapping, MSI layout/programming and command
 readback failures have separate status details. Extended Message Data Enable
 is cleared and checked; the message uses only the programmed 16-bit data.
-Download-mode DMAC failure detail identifies the substep, register, observed
-value, mask and expected bits before checked stop resets the device. Quota
-failures retain the actual readback; readiness failures snapshot the register
-when the wait fails, rather than claiming it was the final polling sample.
-This reporting leaves programming order, checks and deadlines unchanged.
-The DMAC clock RMW accepts its observed all-ones pre-read and uses bounded
-WDE/PLE functional readiness instead of a sentinel post-read check
-(chronium, 2026-10-22). The DCPU platform RMW at `0x0888` accepts the observed
-`0xdeadbeef` value for that access only: successful Linux startup performs the
-same RMW. Every other sentinel check, quota and deadline remains. This does not
-establish the undocumented meaning of either register's read value.
+Download-mode readiness failures retain the substep, register, sampled value,
+mask and expected condition before stop. Ordinary RMW, ring/quota programming,
+and table writes follow the pinned reference without value whitelists or
+blanket write/read equality. `0x8404`, `0x0888` and `0x9c94` no longer need
+individual exceptions to a generic refusal rule. This does not establish the
+undocumented meaning of their read values.
 
 VFIO and three native warm-reboot cohorts confirm firmware 0.35.80.3
 initialization, live board observations and completed MAC-off/FLR. The trace
@@ -374,18 +373,25 @@ regulatory permission. The independent native wired controls complete without
 a material regression in this run. See the
 [qualification record](../development/experiments/rtl8922ae-firmware-first.md#native-warm-reboot-qualification-2026-10-23).
 
-Two deliberate differences from the Linux reference remain: power-on requires
-MAC state zero, whereas Linux rejects only active state one and its wrapper
-powers off/retries after failure (`mac.c:1484–1488,1517–1527`). This first cut
-keeps its one-attempt policy, so other inherited states refuse startup. After
-the off handshake and scoreboard write, it additionally polls for MAC state
-zero; Linux's power-off sequence does not make that final observation. A
-timeout therefore reports an unconfirmed MAC stop even if the subsequent PCI
-reset succeeds. If both startup and shutdown fail, status retains the startup
-failure detail; independent completed-action bits show which stop steps
-confirmed. The unobserved initial-state and failure cases remain limits despite
-the successful native warm-reboot profile. Stage 2 remains incomplete until
-separately authorized scan work and qualification are delivered.
+Register access and readiness checks follow pinned rtw89 predicates
+(chronium, 2026-10-27). Power-on rejects active WLMAC state one, not every
+nonzero state. Power-off uses the reference handshakes without a final
+`0x03f0 == 0` requirement. DMA pre-deinit posts the reference sequence; terminal
+PCI reset supplies the DMA-halt proof. Request cancellation, rfkill, outer
+budgets and backing retention remain native lifetime constraints. The
+power-off/retry wrapper is still deferred under the one-attempt policy.
+
+The exceptions protect specific admitted hardware effects: PCI/MSI/DMA
+ownership and bounds, suppression of autonomous packet TX, factory-board input
+validity without defaults, and the numeric SAR/regulatory ceiling with its
+force/additive bypass controls. They are not general register-integrity tests.
+Broad by-rate, reference, shape, TSSI and MACID equality checks are removed;
+only enforcement fields are checked before and after TX-capable RFK. RFK
+reports use the latest completion as in Linux, and semantic helper failures do
+not skip later reference-ordered helpers while native safety gates hold.
+Qualification still records failure if any required RFK helper failed; an
+attempt is never described as verified calibration merely because writes ran.
+See the [register audit and native limit](../development/experiments/rtl8922ae-phy-init.md#register-refusal-audit-2026-10-27).
 
 ### Qualification and next review point
 
@@ -571,6 +577,18 @@ physical power qualification. The separate evidence that programmed effective
 limits constrain TX-capable firmware calibration is still required; selecting
 an arbitrary dBm cap would not establish it.
 
+### Numeric regulatory ceiling — corrected after review (2026-10-28)
+
+Before TX-capable calibration, the prepared image intersects each active
+normal/RU limit with the firmware regional value, normalized SAR and the
+selected regdb numeric EIRP ceiling, rounded down to half-dBm. Physical-path
+ceilings also take the SAR/regdb minimum. Firmware board/antenna constraints
+remain in force; this does not infer physical antenna gain or radiated power,
+add a guessed chain-count deduction, or add an antenna-availability refusal.
+Daybreak's AR channel-4/SAR-24 regression now caps 21/24 dBm values at 20 dBm
+without refusing admission. Vela's world/SAR-16 complete images are unchanged.
+See the [host regression record](../development/experiments/rtl8922ae-phy-init.md#numeric-regulatory-ceiling-correction-2026-10-28).
+
 ### Native input result and accepted fixed-SAR profile
 
 Native input capture completed on vela (2026-10-23), with verified menu restore:
@@ -646,17 +664,91 @@ See the [follow-up record](../development/experiments/rtl8922ae-scan-inputs.md#n
    complete. Hardware limit programming/readback and calibration enforcement
    remain task 2's gate before newly enabled RF. See the
    [source/QEMU record](../development/experiments/rtl8922ae-scan-inputs.md).
-2. **One-PHY receive initialization and checked stop.** Implement the required
+2. [x] **One-PHY receive initialization and checked stop.** Implement the required
    BBMCU/MAC/BB/RF path, power limits, regulatory-authorized RFK and ongoing
    rfkill/cancellation, with no scan result publication yet. Qualify firmware
    acknowledgments/completions, RX/IRQ ownership and stop before proceeding.
    **After this task chronium can:** boot an explicitly qualified radio-preparation
    profile and verify its inputs, calibration outcome and quiescence.
+
+   Assigned (chronium, 2026-10-23); normal-path native qualification passed
+   (2026-10-27) on audited kernel `eb92ab2b` and helper `a1bece88`: PHY `df`,
+   all four RFK completions/final OK, five power checks and confirmed MAC-off/FLR.
+   Four interrupts and seven firmware packets were observed; wired management
+   survived. This does not qualify ordinary-frame RX, hopping or physical rfkill.
+   Boot and READ now reserve/observe only; one SCAN operation owns startup,
+   regulatory-authorized calibration and checked stop. This cut completes with
+   UNAVAILABLE and no result FILE even after successful preparation, keeping
+   WIFI_READY clear until discovery exists. The selected 20 MHz calibration
+   channel excludes NO_IR and other unqualified restrictions. A fixed effective
+   normal/RU/path-SAR image is read back before RFK and its hard limits checked
+   after each serialized PRE_NOTIFY, DACK, RXDCK and TSSI completion. No TAS,
+   dynamic power boost or ordinary packet/automatic-response path is enabled.
+
+   GPIO9 is configured and checked immediately after MAC power-on, before
+   security/firmware startup. Current rfkill/cancellation checkpoints bound
+   waits to 10 ms; the unpowered AFE/power-on interval cannot read live GPIO.
+   Cleanup continues independently after withdrawal/deadline/rfkill, retaining
+   all backing until reboot. Status exposes historical readbacks and RFK/stop
+   facts, not measured radiated power. Source/QEMU checks cannot establish
+   native programming, calibration outcome or a physical rfkill response.
+   See the [source/QEMU qualification record](../development/experiments/rtl8922ae-phy-init.md).
 3. **Bounded unassociated passive discovery.** Use admitted channels only, no
    probe packets, no association/packet offloads; validate bounded records and
    preserve existing operation/FILE lifetime and cancellation semantics.
    **After this task chronium can:** request repeated explicit passive scans on
    the supported profile while wired management remains independent.
+
+### Next passive-results task — proposal (2026-10-27)
+
+No implementation is authorized by this proposal. Keep the accepted native
+SCAN operation, deadlines, cancellation and immutable result FILE. The current
+transport consumes only C2H and drops ordinary RX packets; passive results need
+BE RX decoding and management-frame collection, not a new application API.
+
+Decisions for chronium, with proposed defaults:
+
+1. **Host-directed channel walk first.** Reuse the qualified MAC/PHY tuning and
+   power machinery with bounded passive dwell, no probe templates or packet
+   offload. Linux has both software scanning and BE firmware scan offload; the
+   latter adds role/channel-list/start-stop and packet-template state before
+   native management RX is qualified. Default: host control for this first
+   delivery; firmware offload can be considered from measured need later.
+2. **Keep calibration inside the request's channel authority.** Default: select
+   the initial calibration anchor from requested channels where the effective
+   rules permit its TX-capable calibration. A first request containing only
+   NO_IR channels refuses before startup; do not silently calibrate elsewhere.
+   A normal world-domain request includes legal anchors and may subsequently
+   listen on channels 12–13 after same-band receive-only retuning is qualified.
+   Match the reference's channel/power update and band/PHY-dependent TSSI hooks,
+   not full RFK on every hop. No probes or calibration TX on NO_IR channels.
+   Alternative: separately authorize initialization on an effective-profile
+   channel outside the requested discovery mask.
+3. **Drain idle RX on the retained healthy context.** Repeated explicit scans
+   on that context are already accepted; this settles its idle behavior.
+   Default: retain driver-owned firmware/DMA, continuously drain/drop RX outside
+   an active operation, keep autonomous TX disabled and monitor rfkill. No
+   background channel walk, calibration, result cache or retained caller pointer.
+   Confirmed healthy completion/cancellation retires the operation before reuse;
+   uncertain command/transport/stop or rfkill closes admission and uses checked
+   terminal stop, with no restart this boot. Real retry/reset recovery remains
+   a separate requirement before everyday use. Alternative: power off after
+   every scan, which would require a new repeated-start/recovery contract.
+
+Start with one explicitly selected legal channel: bounded RTL descriptor,
+CRC/ICV and management-frame decoding; reuse the native SSID/RSN accumulation
+semantics and publish an actual FILE after retiring collection. Then add the
+host channel walk and retained-context operation boundaries. Keep the existing
+128-record limit, BSSID/channel de-duplication, security-conflict handling and
+honest overflow/error outcomes. RTL signal/channel metadata must come from the
+Realtek descriptor/report, not Intel energy fields or the latest software
+channel variable. Drain/correlate frames across retunes before attribution.
+
+Qualification progresses from that one-channel result to a complete admitted
+channel set, repeated explicit requests, cancellation/timeout/final-close,
+rfkill where controllable, warm handoff and independent USB-wired controls.
+SSID/BSSID captures stay private/redacted. Successful initialization alone is
+not a passive-scan result, and an incomplete/failed scan publishes no success FILE.
 
 QEMU/source checks cover data bounds, narrowing and lifecycle, not RF. Separately
 scheduled VFIO/native checks must cover unknown/malformed inputs, channel/power
