@@ -1,8 +1,8 @@
 # Script launch authority
 
 Accepted by chronium, 2026-10-28. The exact held native Pyxis shell is implemented.
-The Lua follow-up is assigned (chronium, 2026-10-28); its scope decisions below
-are proposed, not accepted. No Lua implementation has started.
+The Lua follow-up decisions below are accepted (chronium, 2026-10-28), and
+implementation is assigned. The Lua changes are not delivered yet.
 
 ## Accepted contract
 
@@ -79,11 +79,11 @@ the two manifests/CLI patches and [Lua launch behaviour](../userland/lua.md#nati
 Some prose in the Lua guide predates the current 5.5 CLI; implementation will
 refresh it against the actual port rather than preserve those stale claims.
 
-## Lua decisions requested (round 1)
+## Accepted Lua decisions (chronium, 2026-10-28)
 
 ### 1. Which entry points qualify?
 
-**Recommended default:** the two shipped standalone native interpreter images,
+**Accepted:** the two shipped standalone native interpreter images,
 Lua 5.5.1 and Lua 5.1.5. Include a script FILE, `-e`, stdin and the REPL: deciding
 by argv would suggest a security distinction that executing Lua code does not
 provide. A shebang and an explicit invocation of the same held interpreter get
@@ -104,7 +104,7 @@ by linking liblua or luv.
 
 ### 2. Which child-launch APIs change?
 
-**Recommended default:** source-preserving interpreter continuation and ordinary
+**Accepted:** source-preserving interpreter continuation and ordinary
 declared child launch through Lua 5.5 `pyxis.run` and Lua 5.1 luv spawn. Factor
 common inventory selection into the shared launch path; do not grow independent
 shell, Lua and libuv interpreter-extras lists. Offer existing sources to child
@@ -122,30 +122,48 @@ a leaf request fails. Existing exact resource/root/environment selectors stay
 bounds. Supporting nested launcher scripts inside those jobs would need its own
 scoped-job ownership work; use `pyxis.run` or luv for launcher scripts now.
 
-### 3. Who owns descendants of a Lua launcher script?
+### 3. Lua follows the shell lifetime rule exactly
 
-**Recommended default:** standalone Lua owns a private execution subtree for
-its child launches, using existing native execution groups. All child launchers,
-including luv asynchronous launches, are bound within it; the owner CONTROL is
-private native interpreter state, not a Lua variable, environment root or child
-grant. Synchronous run retains a command scope so its completion includes owned
-descendant cleanup. Existing capture/jobs keep their own more restrictive owners.
+**Accepted with chronium's amendment:** no Lua-only stricter lifetime. Preserve
+the shell's distinction between handed scripts and explicit positional scripts:
 
-Normal interpreter exit and an unhandled error stop and wait for this subtree;
-termination/crash closes the final controller and requests the same stop. A
-caught Lua error or collection of unrelated Lua objects does not stop the whole
-interpreter. `os.exit` must not leave descendants outside ownership merely because
-upstream bypasses `lua_close`. There is no implicit detached escape or ancestor
-launcher. Existing group-depth and allocated-group admission bounds apply; no new limit.
+| Shell invocation | Foreground children | Background/service and successor children | Script exit |
+| --- | --- | --- | --- |
+| Handed `script` FILE, including a native shebang | The script's foreground subgroup; nested launchers stay bound beneath it | Launched outside that foreground subgroup through the original permitted launcher | Normal completion, error or `exit` stops and waits for the foreground subgroup only |
+| Explicit `shell FILE` or `shell -c` | The positional script's subgroup | Confined under that same positional script owner rather than escaping it | Ending the script retires its owned subtree; waiting successor policy can delay exit |
+| Interactive shell | Existing per-command foreground scope | Existing background or successor route | No script-wide foreground group |
 
-Establish this ownership before the first child launch; pure Lua without launch
-authority still runs. If required ownership cannot be established, fail that
-launch before effects rather than run it unsupervised. Optional private job
-provisioning uses fresh confined trees and enclosing-owner retirement, never
-forwards a client leaf as a provisioner. Terminal and input eligibility remain
-those of the invocation; no parent interrupt reader is transferred.
+Closing the script's final CONTROL on termination requests the same stop for its
+owned subgroup. Being outside the script's foreground subgroup is **not** a
+promise to outlive an enclosing owner: an outer foreground group, capture,
+Remote disconnect or session retirement may still stop those processes. Local
+successor handoff ends the script after accepted launch; the existing Remote
+waiting policy waits and propagates the successor result before exit. The known
+rootless positional SESSION refusal remains an existing limit, not a newly
+promised route. These are the current shell routes in userland `797f95c3`:
+`delegated_launcher`, `shell_script_group_open/close`, script startup in `main.c`
+and SESSION selection/wait in `launch.c`.
 
-## Delivery after decisions
+Map Lua to the corresponding entry form: handed/shebang FILE to handed shell
+script; explicit filename, `-e` or stdin script to explicit script/`-c`; REPL to
+interactive shell. Lua 5.5 `pyxis.run` is foreground; luv's asynchronous spawn is
+the background route. Lua has no new successor builtin in this task; an existing
+shell successor launch keeps that shell's rule. A caught Lua error or unrelated
+GC is not script exit. Normal return, unhandled error and **`os.exit`** use the
+same applicable cleanup/routing as shell script completion, error and `exit`;
+`os.exit` cannot bypass it merely because upstream bypasses `lua_close`.
+
+Use the existing native group/launcher machinery and share its routing/cleanup
+with the shell instead of adding a Lua-wide "kill every child" policy. Do not
+copy ancestor CONTROL into Lua variables, environment roots or children. Where
+the shell establishes a script group before executing code, standalone Lua does
+the same when delegated launch authority is present; failed scope admission is
+an explicit startup failure. Pure Lua without launch authority still runs.
+Optional private job trees retain their existing enclosing-owner cleanup; client
+leaves never become provisioners. Existing group-depth/allocated-group admission
+bounds, stream selection and terminal/input ownership are unchanged.
+
+## Lua delivery
 
 - [ ] Shared inventory/held-interpreter preparation and standalone interpreter
   lifetime integration; keep the shell contract and normal native profiles.
@@ -161,8 +179,8 @@ those of the invocation; no parent interrupt reader is transferred.
 
 ## You should know
 
-The proposal deliberately changes the old "a child may outlive Lua" behaviour
-for interpreter-owned launches. Lua GC is not a cancellation button. Captured
-jobs remain leaf jobs, and an embedded Lua engine does not become a shell.
-No JIT source is created when the launching context lacks it. Implementation and
-qualification wait for the decisions above; no code or new API is delivered here.
+A Lua launcher is not a sandbox. Its foreground/background/exit behaviour follows
+the corresponding shell invocation, not a new Lua-wide descendant shutdown rule.
+Captured jobs remain leaf jobs; embedded Lua gains no interpreter authority.
+No JIT source is created when the launching context lacks it. Lua implementation
+and qualification are assigned but not yet delivered.
