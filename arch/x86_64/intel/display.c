@@ -155,7 +155,7 @@ static uint32_t read_register(uint32_t offset)
 static uint32_t write_control(uint32_t offset, uint32_t clear, uint32_t set)
 {
   KASSERT(!fenced && ((offset == DC_STATE_EN &&
-      !((clear | set) & ~(DC_TARGET_MASK | DC3CO_STATUS))) ||
+      !((clear | set) & ~(DC_TARGET_MASK | DC3CO_STATUS)) && !(set & DC3CO_STATUS)) ||
       (offset == POWER_DRIVER && !((clear | set) & ~POWER_REQUEST_MASK))));
   uint32_t value = (read_register(offset) & ~clear) | set;
   for (size_t i = 0; i < sizeof(register_pages) / sizeof(register_pages[0]); ++i) {
