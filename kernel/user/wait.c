@@ -115,8 +115,8 @@ enum call_status readiness_interest_authority(const struct kernel_object *object
     required = OUTPUT_RIGHT_COLLECT;
   } else if (object->type == OBJECT_PIPE) {
     const struct pipe_end *end = (const struct pipe_end *)object;
-    uint64_t allowed = end->reader ? WAIT_READABLE | WAIT_PEER_FIN :
-        WAIT_WRITABLE | WAIT_WRITE_CLOSED;
+    uint64_t allowed = end->reader ? WAIT_READABLE | WAIT_PEER_FIN | WAIT_READ_STATUS :
+        WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_WRITE_STATUS;
     if (events & ~allowed) {
       return CALL_BAD_REQUEST;
     }
@@ -137,19 +137,19 @@ enum call_status readiness_interest_authority(const struct kernel_object *object
       required |= TERMINAL_RIGHT_INJECT;
     }
   } else if (object->type == OBJECT_CONSOLE || object->type == OBJECT_TERMINAL_INPUT) {
-    uint64_t allowed = WAIT_READABLE | WAIT_INTERRUPT | WAIT_RESIZED;
+    uint64_t allowed = WAIT_READABLE | WAIT_READ_STATUS | WAIT_INTERRUPT | WAIT_RESIZED;
     if (object->type == OBJECT_TERMINAL_INPUT) {
       allowed |= WAIT_PEER_FIN;
     } else {
-      allowed |= WAIT_WRITABLE | WAIT_WRITE_CLOSED;
+      allowed |= WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_WRITE_STATUS;
     }
     if (events & ~allowed) {
       return CALL_BAD_REQUEST;
     }
-    if (events & (WAIT_READABLE | WAIT_PEER_FIN)) {
+    if (events & (WAIT_READABLE | WAIT_PEER_FIN | WAIT_READ_STATUS)) {
       required |= CONSOLE_RIGHT_READ;
     }
-    if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) {
+    if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_WRITE_STATUS)) {
       required |= CONSOLE_RIGHT_WRITE;
     }
     if (events & WAIT_INTERRUPT) {
@@ -159,7 +159,7 @@ enum call_status readiness_interest_authority(const struct kernel_object *object
       return CALL_DENIED;
     }
   } else if (object->type == OBJECT_TERMINAL_OUTPUT) {
-    if (events & ~(WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_RESIZED)) {
+    if (events & ~(WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_WRITE_STATUS | WAIT_RESIZED)) {
       return CALL_BAD_REQUEST;
     }
     required = CONSOLE_RIGHT_WRITE;

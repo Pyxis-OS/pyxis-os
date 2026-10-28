@@ -1170,14 +1170,14 @@ uint64_t terminal_application_ready(struct kernel_object *object, uint64_t event
   if ((events & WAIT_READABLE) && !session->reader_active && session->input_count && clipboard_ordinary_allowed(&session->input.object)) {
     ready |= WAIT_READABLE;
   }
-  if ((events & (WAIT_READABLE | WAIT_PEER_FIN)) && session->input_closed) {
+  if ((events & (WAIT_READABLE | WAIT_PEER_FIN | WAIT_READ_STATUS)) && session->input_closed) {
     ready |= WAIT_PEER_FIN;
   }
   if ((events & WAIT_WRITABLE) && !session->hung_up && !session->output_closed &&
       TERMINAL_OUTPUT_CAPACITY - session->output_count > sizeof(struct terminal_record)) {
     ready |= WAIT_WRITABLE;
   }
-  if ((events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) && session->output_closed) {
+  if ((events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_WRITE_STATUS)) && session->output_closed) {
     ready |= WAIT_WRITE_CLOSED;
   }
   if (events & WAIT_INTERRUPT) {

@@ -850,14 +850,14 @@ uint64_t pipe_ready(struct pipe_end *end, uint64_t events)
     if ((events & WAIT_READABLE) && (pair->count || pair->value_count)) {
       ready |= WAIT_READABLE;
     }
-    if ((events & (WAIT_READABLE | WAIT_PEER_FIN)) && pair->writer_closed) {
+    if ((events & (WAIT_READABLE | WAIT_PEER_FIN | WAIT_READ_STATUS)) && pair->writer_closed) {
       ready |= WAIT_PEER_FIN;
     }
   } else {
     if ((events & WAIT_WRITABLE) && !pair->reader_closed && pair->count < PIPE_CAPACITY) {
       ready |= WAIT_WRITABLE;
     }
-    if ((events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) && pair->reader_closed) {
+    if ((events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED | WAIT_WRITE_STATUS)) && pair->reader_closed) {
       ready |= WAIT_WRITE_CLOSED;
     }
   }
