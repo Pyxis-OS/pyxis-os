@@ -40,6 +40,44 @@ still admits 296 / refuses 16 cases with zero numeric ceiling violations; invali
 common-mask/input preparation clears its output. This proves CPU construction,
 not physical RF enforcement.
 
+## Integrated QEMU and matched controls
+
+Candidate kernel `4c09ccb240cdef4e4e5c29068cc9528e8c85d79a`, pinned userland
+`8cefca4017769e5e79d455cfff127947554a6fc3`, built with the same published
+builder. Matching SDK/CLI/private helper rebuilt; unchanged ordinary control
+executables and archive fixture reused intentionally. Four-CPU q35/KVM/OVMF
+checks passed actual kernel/archive identity, wired/log/status, new CSV syntax,
+invalid channels and absent-radio refusal before either helper scan. GDB showed
+64-byte pending entries, zero queued candidates and collection disabled. Every
+owned guest/client/monitor was retired. This does not emulate Realtek RF.
+
+The existing iobench command was run three times per boot, three verified samples
+per invocation after its warmup, interleaved A1/B1/A2/B2/A3/B3 (27 samples each):
+
+```sh
+boot://iobench.pxe read boot://share/iobench.bin --rounds 3 --buffer 4096
+```
+
+| Nested RAM control | A: main750cd0b99 | B: candidate4c09ccb24 |
+| --- | --- | --- |
+| Payload median (range), ms | 0.247 (0.230–0.573) | 0.249 (0.233–0.314) |
+| Complete median (range), ms | 0.257 (0.237–0.593) | 0.256 (0.240–0.324) |
+| Per-boot payload medians, ms | 0.258 / 0.247 / 0.239 | 0.251 / 0.250 / 0.238 |
+
+Ranges overlap, and pair direction changes. No isolated radio-performance gain
+or regression follows. Both have no radio; B also contains the merged poll
+integration. Interval VM observations were mostly idle with no steal; initial
+since-boot vmstat rows are not cohort observations. Native wired/RF cost remains
+unmeasured by these nested controls.
+
+Packet parser checks passed 16 synthetic host cases, including valid empty and
+truncated results and refusal of inconsistent metadata/extra host RFK. Full-image
+stage/restore passed on a disposable local PXE fixture under umask077, including
+byte-identical menu, other entry/root/EFI preservation and readable TFTP payloads.
+No real PXE path or target was touched. The finished once-only native packet is
+`/shared/present/rtl8922ae-passive-scan/native-hopping-20261028/`; its manifest
+records exact production heads and hashes. Native qualification is pending.
+
 ## Limits and next evidence
 
 The immutable result grows from 16 to 24 header bytes in the development ABI;

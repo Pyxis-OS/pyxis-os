@@ -997,7 +997,7 @@ Known single-channel requests keep fallback; different retained masks still
 refuse. No new grant, background scan, association or data path.
 
 - [x] CPU-only power compatibility and reference wire-format/lifetime qualification.
-- [ ] Current integration QEMU, matched controls and sealed hands-free packet.
+- [x] Current integration QEMU, matched controls and sealed hands-free packet.
 - [ ] Native PPDU delivery, 1+6 completion, retained repetition and FILE independence.
 
 [Qualification record](../development/experiments/rtl8922ae-hopping.md).
