@@ -6,7 +6,9 @@ OpenArena and local corresponding-source publication. The
 records an attended Vela timedemo and listening observation; broader native/audio
 qualification and public recipient access remain separate. The JIT grant is merged. llvmpipe is implemented and QEMU-qualified; the
 [attended vela check](../development/experiments/llvmpipe.md) passed OpenArena
-and SoH, with tearing remaining. Matched Pyxis/Fedora timedemos remain pending.
+and SoH, with tearing remaining. The [native comparison](../development/experiments/llvmpipe.md#native-vela-complete-stack-comparison-2026-10-28)
+records 81.2 fps on Pyxis and 110.4 fps on Fedora at 320×240; it compares the
+complete rendering stacks, not just their kernels.
 Remaining direction and decisions follow. The
 softpipe delivery is in the [0.0.9 release notes](../releases.md#009-2026-10-25);
 llvmpipe follows the JIT grant, in the next kernel push after it. Its sources are
@@ -55,7 +57,7 @@ design below is a proposal except where marked decided.
 Smaller choices that I would apply unless chronium objects are listed under
 [Routine choices](#routine-choices).
 
-Tasks 5–6 are implemented; task 7's paired native timedemo remains pending.
+Tasks 5–7 are implemented and qualified, including the paired native timedemo.
 BSP-removal tasks 4–5 wait for this assigned delivery. The runtime profile below is
 accepted. Earlier routine suggestions do not override its authority or runtime
 policy.
@@ -477,7 +479,7 @@ Small tasks, each with a first check. Repositories in parentheses.
 6. [x] **Mesa with llvmpipe** (pyxis-ports `ports/mesa`, pyxis-llvm). Switch LLVM on.
    *Check:* the task 2 program reports llvmpipe and renders the same image, with
    `LP_NUM_THREADS=0` first, then with workers.
-7. **ioquake3 on llvmpipe** (pyxis-ports). Same game, the real rasterizer.
+7. [x] **ioquake3 on llvmpipe** (pyxis-ports). Same game, the real rasterizer.
    *Check:* the task 4 map plays; time demo recorded as in
    [Measurement](#measurement).
 8. **Quake 3 Arena and Team Arena** (private recipe outside the repository).
@@ -644,7 +646,8 @@ the pin, and a git mirror preserves it.
   range or closure of broader audio qualification. Public upload/recipient access,
   broader qualification remains open. The JIT grant is merged and the
   [attended llvmpipe check](../development/experiments/llvmpipe.md) passed; the
-  matched native timedemo remains pending.
+  [paired native timedemo](../development/experiments/llvmpipe.md#native-vela-complete-stack-comparison-2026-10-28)
+  passed on both systems. Tearing remains on vela's firmware-framebuffer path.
 - The [kernel JIT design](jit-grant.md) follows merged BSP-removal task 3.
   Its operation/budget/lifetime choices are accepted (chronium, 2026-10-27);
   tasks 4–5 resume afterward.
