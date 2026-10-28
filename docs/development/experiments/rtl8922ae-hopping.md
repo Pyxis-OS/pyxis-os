@@ -108,6 +108,21 @@ there is no loop. This replaces the explicit startup-wrapper deferral. Raw
 results remain in the old packet's `results/` directory. Native hopping and the
 new inherited-active startup handling remain pending qualification.
 
+The corrected kernel `aebf0ca52e865eee7d6be41db808ccb0afcf6ae9`, with the
+same userland pin, builds in the published builder and passes the same four-CPU
+no-radio QEMU configuration: exact kernel/archive identity, ordinary wired and
+log/status reads, malformed-channel and absent-radio refusals. GDB confirms the
+new power-off branch in the running kernel; no MMIO or hardware state was
+injected. Guest, debugger, Remote clients and monitor were retired. This checks
+the image and unaffected paths, not execution of the active-MAC branch.
+
+The fresh once-only packet is
+`/shared/present/rtl8922ae-passive-scan/native-hopping-startup-20261028/`.
+It retains the same two explicit 1+6 sweeps, helper, grants, firmware and power
+image, with a new kernel and archive marker. Its offline checker, parser and
+disposable stage/restore checks pass; the failed packet and results are kept
+unchanged. Native startup/hopping results are still pending.
+
 ## Limits and next evidence
 
 The immutable result grows from 16 to 24 header bytes in the development ABI;
