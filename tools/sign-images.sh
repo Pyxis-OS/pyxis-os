@@ -1,8 +1,9 @@
 #!/bin/sh
 # Usage: tools/sign-images.sh DIR
 #
-# Signs DIR/SHA256SUMS, the checksums of every published install ISO
-# (docs/wip/pkg-upgrade.md, decision 75), as DIR/SHA256SUMS.sig. Only chronium
+# Signs DIR/SHA256SUMS, the checksums of every published install ISO and QEMU
+# image (docs/wip/pkg-upgrade.md, decision 75; docs/wip/qemu-image.md), as
+# DIR/SHA256SUMS.sig. Only chronium
 # runs this, on his machine: the signer key comes from 1Password through a pipe
 # and is never written to disk. Nothing is uploaded; the upload order is printed
 # at the end.
@@ -35,15 +36,15 @@ esac
 for certificate in "$signer_cert" "$signing_ca"; do
   [ -f "$certificate" ] || fail "missing $certificate"
 done
-if grep -vxE '[0-9a-f]{64}  pyxis-[0-9a-z][0-9a-z.-]{0,63}\.iso' "$sums" >/dev/null; then
-  fail "$sums has a line that is not a pyxis-VERSION.iso checksum"
+if grep -vxE '[0-9a-f]{64}  pyxis-[0-9a-z][0-9a-z.-]{0,63}\.(iso|qcow2)' "$sums" >/dev/null; then
+  fail "$sums has a line that is not a pyxis-VERSION.iso or .qcow2 checksum"
 fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 trap 'exit 1' HUP INT TERM
 
-# Every published ISO stays, so DIR must keep every line clients can see.
+# Every published file stays, so DIR must keep every line clients can see.
 published=$(curl -sS -o "$work/published" -w '%{http_code}' "${package_host}images/SHA256SUMS") ||
   fail "cannot read ${package_host}images/SHA256SUMS"
 case "$published" in
@@ -56,14 +57,15 @@ case "$published" in
   *) fail "${package_host}images/SHA256SUMS answered HTTP $published" ;;
 esac
 
-# Each ISO in DIR must be listed and match; ISOs published earlier may be absent.
-for iso in "$directory"/pyxis-*.iso; do
-  [ -e "$iso" ] || continue
-  awk -v name="$(basename "$iso")" '$2 == name { found = 1 } END { exit !found }' "$sums" ||
-    fail "$iso is not listed in SHA256SUMS"
+# Each ISO and image in DIR must be listed and match; files published earlier may
+# be absent.
+for image in "$directory"/pyxis-*.iso "$directory"/pyxis-*.qcow2; do
+  [ -e "$image" ] || continue
+  awk -v name="$(basename "$image")" '$2 == name { found = 1 } END { exit !found }' "$sums" ||
+    fail "$image is not listed in SHA256SUMS"
 done
 (cd "$directory" && sha256sum --check --strict --ignore-missing SHA256SUMS) ||
-  fail "an ISO in $directory does not match SHA256SUMS"
+  fail "a file in $directory does not match SHA256SUMS"
 
 op document get "$key_item" --vault "$key_vault" |
   openssl dgst -sha256 -sign /dev/stdin -out "$work/SHA256SUMS.sig" "$sums"
@@ -91,7 +93,7 @@ mv "$work/SHA256SUMS.sig" "$sums.sig"
 cat <<EOF
 Signed $sums.
 Upload, in this order, after chronium's OK for this publish:
-  1. ISOs in $directory that the bucket does not hold yet
+  1. ISOs and images in $directory that the bucket does not hold yet
   2. $(basename "$signer_cert") and $(basename "$signing_ca"), if the bucket does not hold them yet
   3. SHA256SUMS
   4. SHA256SUMS.sig, last

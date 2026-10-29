@@ -18,7 +18,7 @@ const LAYOUT = [
   [/^\/(public|releases)\/packages\/[^\/]+\/[^\/]+\.tar$/, YEAR],
   [/^\/images\/SHA256SUMS(\.sig)?$/, 30],
   [/^\/images\/(signer[A-Za-z0-9._-]*|pyxis-signing-ca)\.pem$/, 3600],
-  [/^\/images\/pyxis-[0-9a-z][0-9a-z.-]*\.iso$/, YEAR],
+  [/^\/images\/pyxis-[0-9a-z][0-9a-z.-]*\.(iso|qcow2)$/, YEAR],
 ];
 
 function cacheSeconds(path) {
