@@ -71,8 +71,28 @@ compressed; the 0.0.9 `core` archive 26.2 MB, or 11.3 MB with gzip -9; the
 kernel 8.3 MB, or 4.0 MB. gzip's 32 KiB window misses repeats that lie far
 apart, such as the rescue programs repeated in the core archive's recovery
 archive. zstd's long mode would reach 11.6 and 3.0 MB, but it needs a decoder
-in Caelum; that is revisited only if native PXE timing shows the remaining
-bytes cost material TFTP time.
+in Caelum.
+
+### Native PXE result
+
+vela, 2026-10-29: a PXE boot of revision `bfaa64c9`'s `full` payload, one run
+for each entry. Times come from horse's dnsmasq journal and the arrival of the
+first `log.udp` datagram, all on horse's clock.
+
+| Phase | Plain | gzip |
+| --- | ---: | ---: |
+| PXE start to `BOOTX64.EFI` sent (firmware discovery) | 9.03 s | 9.03 s |
+| `BOOTX64.EFI` to initrd sent (TFTP) | 6.95 s | 2.62 s |
+| Initrd sent to first log line | 10.03 s | 10.36 s |
+| End to end | 26.0 s | 22.0 s |
+
+Plain sends 77,958,144 initrd bytes in 6.24 s, so vela's TFTP rate is about
+12.5 MB/s. Limine's gzip decompression costs about 0.3 s, and the net saving
+is about 4.0 s.
+
+Caelum-side zstd would save about 18 MB more, roughly 1.4 s at that rate, so
+it is not pursued. Firmware discovery is about 9 s in both runs and is
+unaffected by compression.
 
 ## Manifest and publication
 
