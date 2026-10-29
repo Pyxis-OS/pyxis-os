@@ -286,6 +286,27 @@ work off the BSP are separate decisions from these ownership boundaries. Device
 assignment/revocation, accounting, domain lifetime and sharing policy remain open.
 Do not introduce placeholder structures or restructure current drivers for this.
 
+### Hardware DMA isolation
+
+Idea (chronium, 2026-10-29), not an assigned task: an IOMMU driver could map only
+owned buffers into each driver's/device's DMA domain, supply valid translated
+device addresses for GPU UMA buffers, and limit out-of-domain DMA from buggy
+devices. It would also provide a foundation for later VFIO-like device assignment
+to isolated userspace drivers or virtual machines. Isolation granularity depends
+on the PCI topology; some devices must share an isolation group.
+
+Prerequisites include Intel DMAR/AMD IVRS discovery and firmware-reserved ranges;
+requester/bridge/ACS isolation groups; domain page tables and a driver DMA API;
+pinned-buffer accounting, cache synchronization and joined IOTLB invalidation
+before reuse; fault reporting; and reset/quiescence, interrupt-remapping and
+revocation contracts. Preserve boot-critical firmware/device access during
+handoff. Passthrough additionally needs the corresponding execution/VM authority
+and lifecycle; an IOMMU alone does not supply those. GPU cache policy and GGTT
+ownership still need their own validation.
+
+References: [DMA address/lifetime model](https://docs.kernel.org/core-api/dma-api-howto.html)
+and [isolation groups/device assignment](https://docs.kernel.org/driver-api/vfio.html).
+
 ## Multiple users and restricted permissions
 
 Multi-user support is a requirement, with an earlier

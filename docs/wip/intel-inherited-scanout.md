@@ -310,13 +310,13 @@ of Fedora's modeset. A native tear-free claim waits for this evidence.
 GOP alias and the exact owned-buffer/write/retirement contract, or one reported
 prerequisite that prevents a safe first flip.
 
-## Setup decisions exposed by source qualification (pending)
+## Accepted setup contract (chronium, 2026-10-29)
 
-The accepted buffer/power/retirement decisions stand. No new flip writes have
-been implemented. The first implementation step exposed these additional
-boundaries, which need decisions before their effects are introduced.
+The buffer/power/retirement decisions above remain accepted. The following
+source-qualified setup effects are also authorized. Implementation still follows
+the matched baseline; no new flip writes have been implemented yet.
 
-1. **Auxiliary GT access for cache validation. Recommended default:** permit
+1. **Auxiliary GT access for cache validation:** permit
    only the reference bootstrap access needed to verify graphics PAT index 3,
    not program it: GT forcewake kernel request (`0xa188`, write-mask bit 16
    and request bit 0; acknowledgement at `0xdfc`), the firmware-shared MCR
@@ -331,17 +331,17 @@ boundaries, which need decisions before their effects are introduced.
    media-GMD write after each 63 PTE writes. No GT reset, firmware load, engine
    submission, PAT programming or generic GT TLB invalidation. Existing display
    DC0/well holds do not substitute for this GT access protocol.
-2. **UMA DMA admission. Recommended default:** initially admit new UMA only
+2. **UMA DMA admission:** initially admit new UMA only
    when the relevant VT-d remapper is proven to have translation disabled;
    otherwise retain GOP copy presentation and report why flips are unavailable.
    Read DMAR scopes and remapper status, without changing firmware/IOMMU policy.
    The saved vela DMAR table names a dedicated IGD remapper at `0xfc800000`
    for PCI `0:2.0`; its live translation state remains unmeasured. DM-set stolen
    scanout proves no identity-DMA relationship for DM-clear system pages. Pyxis
-   currently has no IGD IOMMU mapping implementation; adding one is outside this
-   slice. Absence of a complete remapper-coverage proof also refuses admission.
-3. **Presentation baseline versus unattended OLED blanking. Recommended
-   default:** authorize a bounded visible baseline/candidate run, with kernel
+   currently has no IGD IOMMU mapping implementation; the
+   [IOMMU idea](later-os-directions.md#hardware-dma-isolation) remains outside
+   this slice. Absence of a complete remapper-coverage proof also refuses admission.
+3. **Presentation baseline versus unattended OLED blanking:** authorize a bounded visible baseline/candidate run, with kernel
    idle blanking at 900 s and host collection deadline 840 s; restore the usual
    immediately-blank standing PXE image and reboot through Remote after capture.
    This is a run-sheet exception, not a new shipped blanking default. The normal
