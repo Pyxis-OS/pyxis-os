@@ -6,6 +6,7 @@
 #include <kernel/object/execution_group.h>
 #include <kernel/spinlock.h>
 #include <kernel/process_vm.h>
+#include <kernel/display_retire.h>
 #include <abi/process.h>
 
 struct space;
@@ -20,6 +21,7 @@ struct bulk_gate;
 struct clipboard_receiver;
 struct execution_group;
 struct task;
+struct display_object;
 
 enum process_lifetime {
   PROCESS_PREPARING,
@@ -67,10 +69,18 @@ struct process {
   bool preparation_transferred;
   enum {
     PROCESS_CLEANUP_SESSIONS,
+    PROCESS_CLEANUP_DISPLAY_UNMAP,
+    PROCESS_CLEANUP_DISPLAY_FINISH,
     PROCESS_CLEANUP_VM,
     PROCESS_CLEANUP_HOOKS,
     PROCESS_CLEANUP_RECORDS,
   } cleanup_phase;
+  struct {
+    struct display_object *display;
+    uintptr_t address;
+    size_t bytes;
+    struct display_retirement retirement;
+  } display_exit;
   bool stopping;
   /* One packed first-event election, including fault entry without lifetime_lock. */
   atomic_uint_fast64_t terminal_result;
@@ -165,5 +175,8 @@ void process_reaper_init(void);
 void process_cleanup_notify(void);
 /* Wake the fixed RAM actor assigned to an already-owned retirement record. */
 void process_ram_cleanup_notify(size_t cpu);
+/* Display retirement transfers an owned process cleanup record back to its RAM
+ * actor only after all unleased display backing has actually been reclaimed. */
+void process_display_cleanup_ready(struct process *process);
 
 #endif

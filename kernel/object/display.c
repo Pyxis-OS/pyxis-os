@@ -4,6 +4,7 @@
 #include <arch/cpu.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/object/display.h>
 #include <kernel/pointer.h>
 #include <kernel/display.h>
@@ -35,68 +36,37 @@ struct display_object *display_create(struct space *space)
   return display;
 }
 
-/* Every link change is BSP IF=0; the reaper retains a removed frame privately. */
-static struct display_frame *retired_frames;
+/* Metadata and references stay on the fixed display owner. */
+static bool geometry_busy;
+static size_t committing_transactions;
 
-bool display_retire_pending(void)
+bool display_geometry_begin(void)
 {
-  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
-  return retired_frames != NULL;
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled() && !geometry_busy);
+  if (committing_transactions) {
+    return false;
+  }
+  geometry_busy = true;
+  return true;
+}
+
+void display_geometry_end(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled() && geometry_busy);
+  geometry_busy = false;
+}
+
+static void release_frame(struct display_frame *frame, struct display_retirement *retirement)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled() && frame->references);
+  if (!--frame->references) {
+    display_frame_retire(frame, retirement);
+  }
 }
 
 void display_frame_release(struct display_frame *frame)
 {
-  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled() && frame->references);
-  if (--frame->references) {
-    return;
-  }
-  /* Process teardown already holds exclusion: unleased backing must be gone
-   * before its completion is published. */
-  if (vm_kernel_owner_held()) {
-    struct execution_group *group = frame->cleanup_group;
-    KASSERT(vm_free(vm_kernel_space(), frame->fb.address, frame->fb.size) == MM_OK);
-    kfree(frame);
-    if (group) {
-      execution_group_cleanup_end(group);
-    }
-    return;
-  }
-  if (!frame->cleanup_group) {
-    frame->cleanup_group = object_cleanup_defer();
-  }
-  frame->retire_next = retired_frames;
-  retired_frames = frame;
-  process_cleanup_notify();
-}
-
-void display_reap_frames(void)
-{
-  KASSERT(arch_cpu_index() == 0 && cpu_interrupts_enabled());
-  struct vm_kernel_owner owner = {0};
-  vm_kernel_owner_cleanup(&owner);
-  uint64_t flags = cpu_save_interrupts();
-  struct display_frame *frame = retired_frames;
-  if (!frame) {
-    vm_kernel_owner_release(&owner);
-    cpu_restore_interrupts(flags);
-    return;
-  }
-  retired_frames = frame->retire_next;
-  struct execution_group *group = frame->cleanup_group;
-  struct execution_group *previous = object_cleanup_enter(group);
-  struct vm_reclaim reclaim = {0};
-  KASSERT(vm_free_begin(vm_kernel_space(), frame->fb.address, frame->fb.size,
-      &reclaim) == MM_OK);
-  while (!vm_free_step(&reclaim, 64)) {
-    kernel_task_yield_masked();
-  }
-  kfree(frame);
-  object_cleanup_leave(previous);
-  if (group) {
-    execution_group_cleanup_end(group);
-  }
-  vm_kernel_owner_release(&owner);
-  cpu_restore_interrupts(flags);
+  release_frame(frame, NULL);
 }
 
 static void retain_frame(struct display_frame *frame)
@@ -138,6 +108,9 @@ static void unmap_pixels(struct process *process, uintptr_t address, size_t size
   for (size_t offset = 0; offset < size; offset += PAGE_SIZE) {
     phys_addr_t physical;
     KASSERT(vm_unmap(process->address_space, address + offset, &physical) == MM_OK);
+    if ((offset / PAGE_SIZE + 1) % 64 == 0) {
+      task_yield_masked();
+    }
   }
 }
 
@@ -153,15 +126,58 @@ static enum call_status allocate_frame(const struct framebuffer *layout,
   if (!frame) {
     return CALL_NO_MEMORY;
   }
-  *frame = (struct display_frame){.fb = *layout, .references = 1};
-  enum mm_result allocated = vm_alloc(vm_kernel_space(), slot_size(layout), PAGE_SIZE,
-      PAGE_WRITE, &frame->fb.address);
-  if (allocated != MM_OK) {
+  *frame = (struct display_frame){.fb = *layout, .references = 1,
+      .preparation_cpu = arch_cpu_index()};
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_try(&owner)) {
+    cpu_enable_interrupts();
+    bool admitted = vm_kernel_owner_acquire(&owner);
+    cpu_disable_interrupts();
+    if (!admitted) {
+      kfree(frame);
+      return CALL_BUSY;
+    }
+  }
+  size_t bytes = slot_size(layout);
+  enum mm_result status = vm_reserve(vm_kernel_space(), bytes, PAGE_SIZE, &frame->fb.address);
+  if (status == MM_OK) {
+    struct vm_backing backing = {0};
+    status = vm_back_begin(vm_kernel_space(), frame->fb.address, bytes, PAGE_WRITE, &backing);
+    if (status == MM_OK) {
+      while (!vm_back_step(vm_kernel_space(), &backing, 64)) {
+        task_yield_masked();
+      }
+      status = backing.status;
+    }
+    if (status != MM_OK) {
+      KASSERT(vm_release(vm_kernel_space(), frame->fb.address, bytes) == MM_OK);
+    }
+  }
+  vm_kernel_owner_release(&owner);
+  if (status != MM_OK) {
     kfree(frame);
-    return allocated == MM_BUSY ? CALL_BUSY : CALL_NO_MEMORY;
+    return status == MM_BUSY ? CALL_BUSY : CALL_NO_MEMORY;
   }
   *result = frame;
   return CALL_OK;
+}
+
+/* Unpublished backing has only been accessed by its preparation actor. */
+static void discard_frame(struct display_frame *frame)
+{
+  KASSERT(frame->preparation_cpu == arch_cpu_index() && frame->references == 1);
+  struct vm_kernel_owner owner = {0};
+  cpu_enable_interrupts();
+  vm_kernel_owner_cleanup(&owner);
+  cpu_disable_interrupts();
+  struct vm_reclaim reclaim = {0};
+  KASSERT(vm_free_begin(vm_kernel_space(), frame->fb.address, slot_size(&frame->fb),
+      &reclaim) == MM_OK);
+  while (!vm_free_step(&reclaim, 64)) {
+    task_yield_masked();
+  }
+  vm_kernel_owner_release(&owner);
+  kfree(frame);
 }
 
 static enum call_status map_frame(struct process *process, const struct display_frame *frame,
@@ -177,17 +193,21 @@ static enum call_status map_frame(struct process *process, const struct display_
       unmap_pixels(process, address, mapped);
       return result == MM_BUSY ? CALL_BUSY : CALL_NO_MEMORY;
     }
+    if ((mapped / PAGE_SIZE + 1) % 64 == 0) {
+      task_yield_masked();
+    }
   }
   return CALL_OK;
 }
 
 /* Allocates and maps one zeroed slot set at a disjoint user range. Failure
  * leaves nothing allocated or mapped. */
-static enum call_status prepare_slots(struct display_object *display,
-    struct process *process, struct display_frame *slots[DISPLAY_SLOT_COUNT],
-    struct display_buffer *reply)
+static enum call_status prepare_slots(struct display_request *request)
 {
-  const struct framebuffer *layout = display->space->fb;
+  struct process *process = request->loan;
+  struct display_frame **slots = request->slots;
+  struct display_buffer *reply = &request->reply.buffer;
+  const struct framebuffer *layout = &request->layout;
   if (!layout->size || layout->size > SIZE_MAX - (PAGE_SIZE - 1) ||
       slot_size(layout) > SIZE_MAX / DISPLAY_SLOT_COUNT) {
     return CALL_LIMIT;
@@ -222,7 +242,7 @@ static enum call_status prepare_slots(struct display_object *display,
       KASSERT(vm_release(process->address_space, address, size * DISPLAY_SLOT_COUNT) == MM_OK);
     }
     while (prepared) {
-      display_frame_release(slots[--prepared]);
+      discard_frame(slots[--prepared]);
     }
     return status;
   }
@@ -233,7 +253,7 @@ static enum call_status prepare_slots(struct display_object *display,
     .width = layout->width,
     .height = layout->height,
     .pitch = layout->pitch,
-    .generation = display->space->tty->geometry_generation,
+    .generation = request->geometry,
     .red_shift = layout->red_shift,
     .green_shift = layout->green_shift,
     .blue_shift = layout->blue_shift,
@@ -242,31 +262,10 @@ static enum call_status prepare_slots(struct display_object *display,
   return CALL_OK;
 }
 
-static enum call_status acquire_display(struct display_object *display,
-    struct process *process, struct display_buffer *reply)
-{
-  if (display->owner) {
-    return CALL_BUSY;
-  }
-  if (display->mapping_identity == UINT64_MAX) {
-    return CALL_LIMIT;
-  }
-  enum call_status status = prepare_slots(display, process, display->slots, reply);
-  if (status != CALL_OK) {
-    return status;
-  }
-  display->pending = DISPLAY_SLOT_COUNT;
-  clipboard_space_cancel(display->space);
-  ++display->mapping_identity;
-  display->owner = process;
-  display->user_address = reply->address;
-  ++display->visual_generation;
-  return CALL_OK;
-}
-
 /* A preempted presenter, or the session's on-screen reference, may still hold
  * a retired frame. The last holder releases the backing and pending cleanup. */
-static void retire_frame(struct process *process, struct display_frame *frame)
+static void retire_frame(struct process *process, struct display_frame *frame,
+    struct display_retirement *retirement)
 {
   if (frame->references > 1 && !frame->cleanup_group) {
     struct execution_group *group = process->execution_group;
@@ -277,35 +276,30 @@ static void retire_frame(struct process *process, struct display_frame *frame)
       frame->cleanup_group = object_cleanup_defer();
     }
   }
-  display_frame_release(frame);
+  release_frame(frame, retirement);
 }
 
-/* Unmaps every slot and drops the session's slot references. The on-screen
- * reference is the caller's to keep or release. */
-static void retire_slots(struct display_object *display, struct process *process)
+/* Private aliases are gone. The presenter may retain its own current frame. */
+static void retire_slots(struct display_object *display, struct process *process,
+    struct display_retirement *retirement)
 {
-  size_t size = slot_size(&display->slots[0]->fb);
   for (size_t i = 0; i < DISPLAY_SLOT_COUNT; ++i) {
-    unmap_pixels(process, display->user_address + i * size, size);
-  }
-  KASSERT(vm_release(process->address_space, display->user_address,
-      size * DISPLAY_SLOT_COUNT) == MM_OK);
-  for (size_t i = 0; i < DISPLAY_SLOT_COUNT; ++i) {
-    retire_frame(process, display->slots[i]);
+    retire_frame(process, display->slots[i], retirement);
     display->slots[i] = NULL;
   }
   display->pending = DISPLAY_SLOT_COUNT;
 }
 
-static void release_display(struct display_object *display)
+static void release_display(struct display_object *display,
+    struct display_retirement *retirement)
 {
   clipboard_space_cancel(display->space);
   pointer_surface_ended(display->space);
   struct display_frame *current = display->current;
   display->current = NULL;
-  retire_slots(display, display->owner);
+  retire_slots(display, display->owner, retirement);
   if (current) {
-    retire_frame(display->owner, current);
+    retire_frame(display->owner, current, retirement);
   }
   display->presented = false;
   display->visible = false;
@@ -325,40 +319,6 @@ void display_select_layer(struct display_object *display, bool graphics)
   display->visible = graphics;
   ++display->visual_generation;
   space_display_changed(display->space, graphics);
-}
-
-static enum call_status replace_display(struct display_object *display,
-    struct process *process, uint64_t generation, uintptr_t reply_address,
-    struct display_buffer *reply)
-{
-  if (display->mapping_identity == UINT64_MAX) {
-    return CALL_LIMIT;
-  }
-  if (generation != display->space->tty->geometry_generation) {
-    return CALL_BUSY;
-  }
-  size_t size = slot_size(&display->slots[0]->fb) * DISPLAY_SLOT_COUNT;
-  if (reply_address < display->user_address + size &&
-      display->user_address < reply_address + sizeof(*reply)) {
-    return CALL_BAD_BUFFER;
-  }
-
-  struct display_frame *slots[DISPLAY_SLOT_COUNT];
-  enum call_status status = prepare_slots(display, process, slots, reply);
-  if (status != CALL_OK) {
-    return status;
-  }
-  /* The frame on screen keeps its own reference until a new frame replaces it. */
-  retire_slots(display, process);
-  for (size_t i = 0; i < DISPLAY_SLOT_COUNT; ++i) {
-    display->slots[i] = slots[i];
-  }
-  display->user_address = reply->address;
-  clipboard_space_cancel(display->space);
-  ++display->mapping_identity;
-  pointer_geometry_changed(display->space);
-  ++display->visual_generation;
-  return CALL_OK;
 }
 
 static enum call_status submit_display(struct display_object *display, uint64_t slot,
@@ -386,8 +346,8 @@ static enum call_status submit_display(struct display_object *display, uint64_t 
 }
 
 static enum call_status service_display(struct display_object *display,
-    struct process *process, uint64_t operation, uint64_t generation, uint64_t slot,
-    uintptr_t reply_address, union display_reply *reply)
+    struct process *process, uint64_t operation, uint64_t slot,
+    union display_reply *reply)
 {
   KASSERT(arch_cpu_index() == 0);
   if (display->space != process->space) {
@@ -395,9 +355,6 @@ static enum call_status service_display(struct display_object *display,
   }
   if (operation != DISPLAY_RELEASE && !display_available()) {
     return CALL_UNAVAILABLE;
-  }
-  if (operation == DISPLAY_ACQUIRE) {
-    return acquire_display(display, process, &reply->buffer);
   }
   if (operation == DISPLAY_SIZE) {
     bool locked = log_begin();
@@ -420,105 +377,275 @@ static enum call_status service_display(struct display_object *display,
   if (display->owner != process) {
     return CALL_DENIED;
   }
-  if (operation == DISPLAY_REPLACE) {
-    return replace_display(display, process, generation, reply_address, &reply->buffer);
+  KASSERT(operation == DISPLAY_SUBMIT);
+  return submit_display(display, slot, &reply->submit);
+}
+
+static enum call_status reserve_display(struct display_request *request)
+{
+  struct display_object *display = request->display;
+  struct process *process = request->loan;
+  if (display->space != process->space) {
+    return CALL_DENIED;
   }
-  if (operation == DISPLAY_SUBMIT) {
-    return submit_display(display, slot, &reply->submit);
+  if (display->transaction || display->retiring_process) {
+    return CALL_BUSY;
   }
-  KASSERT(operation == DISPLAY_RELEASE);
-  release_display(display);
+  if (request->operation != DISPLAY_RELEASE && (!display_available() || geometry_busy)) {
+    return geometry_busy ? CALL_BUSY : CALL_UNAVAILABLE;
+  }
+  if (request->operation == DISPLAY_ACQUIRE) {
+    if (display->owner) {
+      return CALL_BUSY;
+    }
+  } else if (display->owner != process) {
+    return CALL_DENIED;
+  }
+  if (request->operation != DISPLAY_RELEASE && display->mapping_identity == UINT64_MAX) {
+    return CALL_LIMIT;
+  }
+  request->geometry = display->space->tty->geometry_generation;
+  if (request->operation == DISPLAY_REPLACE && request->generation != request->geometry) {
+    return CALL_BUSY;
+  }
+  request->layout = *display->space->fb;
+  request->mapping_identity = display->mapping_identity;
+  if (display->owner) {
+    request->previous_address = display->user_address;
+    request->previous_size = slot_size(&display->slots[0]->fb) * DISPLAY_SLOT_COUNT;
+    if (request->operation == DISPLAY_REPLACE &&
+        request->reply_address < request->previous_address + request->previous_size &&
+        request->previous_address < request->reply_address + sizeof(struct display_buffer)) {
+      return CALL_BAD_BUFFER;
+    }
+  }
+  display->transaction = request;
   return CALL_OK;
+}
+
+static enum call_status begin_commit(struct display_request *request)
+{
+  struct display_object *display = request->display;
+  KASSERT(display->transaction == request && !request->committing);
+  if (request->operation != DISPLAY_RELEASE &&
+      (geometry_busy || request->geometry != display->space->tty->geometry_generation)) {
+    return CALL_BUSY;
+  }
+  KASSERT(display->mapping_identity == request->mapping_identity);
+  if (!task_operation_start()) {
+    return CALL_DENIED;
+  }
+  ++committing_transactions;
+  request->committing = true;
+  return CALL_OK;
+}
+
+static void end_control(struct display_request *request)
+{
+  KASSERT(request->display->transaction == request);
+  request->display->transaction = NULL;
+  if (request->committing) {
+    KASSERT(committing_transactions);
+    --committing_transactions;
+    request->committing = false;
+  }
+}
+
+static void publish_display(struct display_request *request)
+{
+  struct display_object *display = request->display;
+  KASSERT(display->transaction == request && request->committing);
+  if (request->operation == DISPLAY_RELEASE) {
+    release_display(display, &request->retirement);
+  } else {
+    if (request->operation == DISPLAY_REPLACE) {
+      retire_slots(display, request->loan, &request->retirement);
+    }
+    for (size_t i = 0; i < DISPLAY_SLOT_COUNT; ++i) {
+      display->slots[i] = request->slots[i];
+      request->slots[i] = NULL;
+    }
+    if (request->operation == DISPLAY_ACQUIRE) {
+      display->pending = DISPLAY_SLOT_COUNT;
+      display->owner = request->loan;
+    }
+    display->user_address = request->reply.buffer.address;
+    clipboard_space_cancel(display->space);
+    ++display->mapping_identity;
+    if (request->operation == DISPLAY_REPLACE) {
+      pointer_geometry_changed(display->space);
+    }
+    ++display->visual_generation;
+  }
+  end_control(request);
 }
 
 void display_request_execute(struct display_request *request)
 {
-  KASSERT(arch_cpu_index() == 0 && request->loan && request->display);
-  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(request->request.state == BSP_REQUEST_SERVICING ||
-      request->request.state == BSP_REQUEST_FORWARDED);
-  struct vm_kernel_owner owner = {0};
-  bool mutating = request->operation == DISPLAY_ACQUIRE ||
-      request->operation == DISPLAY_REPLACE || request->operation == DISPLAY_RELEASE;
-  if (mutating && !vm_kernel_owner_try(&owner)) {
-    /* The drained process gate remains owned; no mapping loan or short lock
-     * spans this pre-effect wait for a different kernel mutator. */
-    cpu_enable_interrupts();
-    bool admitted = vm_kernel_owner_acquire(&owner);
-    cpu_disable_interrupts();
-    if (!admitted) {
-      request->result = CALL_BUSY;
-      request->loan = NULL;
-      request->display = NULL;
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  if (request->control == DISPLAY_CONTROL_DIRECT) {
+    if (!task_operation_start()) {
+      request->result = CALL_DENIED;
       return;
     }
-  }
-  if (request->operation == DISPLAY_ACQUIRE || request->operation == DISPLAY_REPLACE ||
-      request->operation == DISPLAY_RELEASE) {
-    process_vm_require_mutation(request->loan);
-    if (request->operation != DISPLAY_RELEASE &&
-        !process_vm_buffer_check(request->loan, request->reply_address,
-          sizeof(struct display_buffer), true)) {
-      request->result = CALL_BAD_BUFFER;
-      vm_kernel_owner_release(&owner);
-      request->loan = NULL;
-      request->display = NULL;
-      return;
-    }
-  }
-  if (!task_operation_start()) {
-    request->result = CALL_DENIED;
-    if (mutating) {
-      vm_kernel_owner_release(&owner);
-    }
-    request->loan = NULL;
-    request->display = NULL;
+    request->result = service_display(request->display, request->loan,
+        request->operation, request->slot, &request->reply);
     return;
   }
-  request->result = service_display(request->display, request->loan,
-      request->operation, request->generation, request->slot, request->reply_address,
-      &request->reply);
-  if (mutating) {
-    vm_kernel_owner_release(&owner);
+  struct display_request *transaction = request;
+  if (request->control == DISPLAY_CONTROL_RESERVE) {
+    request->control_result = reserve_display(transaction);
+  } else if (request->control == DISPLAY_CONTROL_COMMIT) {
+    request->control_result = begin_commit(transaction);
+  } else if (request->control == DISPLAY_CONTROL_PUBLISH) {
+    publish_display(transaction);
+    request->control_result = CALL_OK;
+  } else {
+    KASSERT(request->control == DISPLAY_CONTROL_CANCEL);
+    end_control(transaction);
+    request->control_result = CALL_OK;
   }
-  request->loan = NULL;
-  request->display = NULL;
+}
+
+static enum call_status control_display(struct display_request *transaction,
+    enum display_control control)
+{
+  KASSERT(!vm_kernel_owner_held());
+  KASSERT(&transaction->request == task_bsp_request_current());
+  KASSERT(transaction->request.state == BSP_REQUEST_PREPARED ||
+      transaction->request.state == BSP_REQUEST_COMPLETE);
+  transaction->request = (struct bsp_request){
+    .service = BSP_SERVICE_DISPLAY, .state = BSP_REQUEST_PREPARED,
+    .wait = task_wait_prepare(), .cleanup_group = transaction->vm_request.cleanup_group,
+    .operation = transaction->vm_request.operation,
+  };
+  transaction->control = control;
+  bsp_request_submit_and_wait(&transaction->request);
+  return transaction->control_result;
+}
+
+static void unmap_slots(struct process *process, uintptr_t address, size_t bytes)
+{
+  if (address) {
+    unmap_pixels(process, address, bytes);
+    KASSERT(vm_release(process->address_space, address, bytes) == MM_OK);
+  }
+}
+
+void display_vm_request_execute(struct bsp_request *base)
+{
+  struct display_request *request = (void *)((char *)base -
+      offsetof(struct display_request, vm_request));
+  struct process *process = request->loan;
+  process_vm_require_mutation(process);
+  display_retirement_init(&request->retirement);
+  if (request->operation != DISPLAY_RELEASE &&
+      !process_vm_buffer_check(process, request->reply_address, sizeof(struct display_buffer), true)) {
+    request->result = CALL_BAD_BUFFER;
+    return;
+  }
+  request->result = control_display(request, DISPLAY_CONTROL_RESERVE);
+  if (request->result != CALL_OK) {
+    return;
+  }
+  if (request->operation != DISPLAY_RELEASE) {
+    request->result = prepare_slots(request);
+  }
+  if (request->result == CALL_OK) {
+    request->result = task_stop_requested() ? CALL_DENIED :
+        control_display(request, DISPLAY_CONTROL_COMMIT);
+  }
+  if (request->result != CALL_OK) {
+    if (request->reply.buffer.address) {
+      unmap_slots(process, request->reply.buffer.address,
+          request->reply.buffer.size * DISPLAY_SLOT_COUNT);
+      for (size_t i = 0; i < DISPLAY_SLOT_COUNT; ++i) {
+        discard_frame(request->slots[i]);
+        request->slots[i] = NULL;
+      }
+    }
+    KASSERT(control_display(request, DISPLAY_CONTROL_CANCEL) == CALL_OK);
+    return;
+  }
+  unmap_slots(process, request->previous_address, request->previous_size);
+  KASSERT(control_display(request, DISPLAY_CONTROL_PUBLISH) == CALL_OK);
+  display_retirement_wait(&request->retirement);
+  request->result = CALL_OK;
 }
 
 static enum call_status request_display(struct display_object *display,
     uint64_t operation, uint64_t generation, uint64_t slot, uintptr_t reply_address,
     union display_reply *reply, bool *reply_owned)
 {
-  struct display_request *request =
-      (struct display_request *)bsp_request_prepare(BSP_SERVICE_DISPLAY);
-  request->loan = process_current();
-  KASSERT(request->loan);
-  if (operation == DISPLAY_ACQUIRE || operation == DISPLAY_REPLACE ||
-      operation == DISPLAY_RELEASE) {
-    request->request.vm_process = request->loan;
-    request->request.vm_mutator = task_current_user();
+  struct process *process = process_current();
+  if (operation == DISPLAY_ACQUIRE || operation == DISPLAY_REPLACE || operation == DISPLAY_RELEASE) {
+    /* Both typed records live in provisioned shared task storage. The VM
+     * header stays local; only its control header enters the BSP queue. */
+    struct display_request *transaction = (void *)bsp_request_prepare(BSP_SERVICE_DISPLAY);
+    transaction->vm_request = (struct bsp_request){
+      .service = BSP_SERVICE_DISPLAY, .state = BSP_REQUEST_PREPARED,
+      .vm_process = process, .vm_mutator = task_current_user(),
+      .cleanup_group = transaction->request.cleanup_group,
+      .operation = transaction->request.operation,
+    };
+    transaction->loan = process;
+    transaction->display = display;
+    transaction->operation = operation;
+    transaction->generation = generation;
+    transaction->reply_address = reply_address;
+    process_vm_private_call(&transaction->vm_request);
+    *reply = transaction->reply;
+    *reply_owned = transaction->vm_request.vm_reply_owned;
+    enum call_status result = transaction->result;
+    if (transaction->request.state == BSP_REQUEST_PREPARED) {
+      bsp_request_cancel_prepared(&transaction->request);
+    } else {
+      bsp_request_release(&transaction->request);
+    }
+    return result;
   }
+  struct display_request *request = (void *)bsp_request_prepare(BSP_SERVICE_DISPLAY);
+  request->loan = process;
   request->display = display;
   request->operation = operation;
-  request->generation = generation;
   request->slot = slot;
-  request->reply_address = reply_address;
-  request->reply = (union display_reply){0};
-
   bsp_request_submit_and_wait(&request->request);
   *reply = request->reply;
-  *reply_owned = request->request.vm_reply_owned;
+  *reply_owned = false;
   enum call_status result = request->result;
   bsp_request_release(&request->request);
   return result;
 }
 
-void display_process_exit(struct process *process)
+void display_process_exit_prepare(struct process *process)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
   struct display_object *display = process->space->display;
+  display_retirement_init(&process->display_exit.retirement);
   if (display->owner == process) {
-    release_display(display);
+    KASSERT(!display->transaction && !display->retiring_process);
+    display->retiring_process = process;
+    process->display_exit.display = display;
+    process->display_exit.address = display->user_address;
+    process->display_exit.bytes = slot_size(&display->slots[0]->fb) * DISPLAY_SLOT_COUNT;
+  }
+}
+
+void display_process_exit_unmap(struct process *process)
+{
+  KASSERT(arch_cpu_index() == process->retirement_cpu && !cpu_interrupts_enabled());
+  unmap_slots(process, process->display_exit.address, process->display_exit.bytes);
+}
+
+void display_process_exit_finish(struct process *process)
+{
+  KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
+  struct display_object *display = process->display_exit.display;
+  if (display) {
+    KASSERT(display->retiring_process == process && display->owner == process);
+    release_display(display, &process->display_exit.retirement);
+    display->retiring_process = NULL;
+    process->display_exit.display = NULL;
   }
 }
 

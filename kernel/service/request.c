@@ -483,11 +483,7 @@ static void service_request(struct bsp_request *request)
     pointer_request_execute((struct pointer_request *)request);
     break;
   case BSP_SERVICE_DISPLAY:
-    if (request->vm_process) {
-      object_cleanup_leave(previous);
-      process_vm_mutation_forward(request);
-      return;
-    }
+    KASSERT(!request->vm_process);
     display_request_execute((struct display_request *)request);
     break;
   case BSP_SERVICE_THREAD:
@@ -559,6 +555,5 @@ void bsp_requests_init(void)
   }
   readiness_init();
   clipboard_init();
-  process_vm_init();
   initialized = true;
 }

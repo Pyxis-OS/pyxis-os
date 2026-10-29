@@ -941,7 +941,7 @@ static void resize_buffers_quarantine(const struct resize_buffers *buffers)
 
 /* Sole presenter, between frame leases. Device waits retain the published
  * TTY set, including output that APs write while scanout is being changed. */
-static void resize_display(void)
+static void resize_display_transaction(void)
 {
   struct vm_kernel_owner owner = {0};
   if (!vm_kernel_owner_acquire(&owner)) {
@@ -1084,6 +1084,20 @@ static void resize_display(void)
   cpu_restore_interrupts(flags);
   kinfo("display: resized to %lux%lu; copied %lu TTYs' cells in %lu ns\n",
       screen->width, screen->height, count, elapsed);
+}
+
+static void resize_display(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool admitted = display_geometry_begin();
+  cpu_restore_interrupts(flags);
+  if (!admitted) {
+    return;
+  }
+  resize_display_transaction();
+  flags = cpu_save_interrupts();
+  display_geometry_end();
+  cpu_restore_interrupts(flags);
 }
 
 /* A session keeps its original extent and pitch. The destination alone changes;
