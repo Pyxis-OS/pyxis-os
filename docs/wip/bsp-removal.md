@@ -313,28 +313,33 @@ green CI do not satisfy that gate.
 
 Keep the VM, endpoint and task-lifetime guards protecting live operations.
 
-### Native SEND phase result — instrumentation removed
+### Native SEND result — temporary instrumentation removed
 
-Chronium authorized local-only, bounded 4 KiB SEND timing on 2026-10-29. All
-four native observer-control A/B pairs pass; the uninstrumented residual remains
-9.5%. The sampled increase is concentrated in payload copy and the following
-lease release, with unchanged validation/acquisition/page-check costs. Rare
-release tails dominate its mean; its median and hot instructions are unchanged.
-See the [phase result](../development/experiments/bsp-preparation.md#native-send-phase-result).
-This localizes the delay, but does not distinguish pending-store completion,
-cache-line ownership or actual lock contention. None is a proved root cause.
-No new per-message guard, pin or acknowledgement is implicated or removed.
-The temporary code, branches and images are removed; no diagnostic is delivered.
+Chronium authorized both bounded native controls on 2026-10-29. The first
+localizes the sampled increase to copy/release tails; the second separates
+store completion from release acquisition. In the second pair all 385 sampled
+acquisitions per variant succeed on their first exchange. B's plain acquisition
+is 110.11 ns versus A's 25.82 ns; after the explicit store-drain control it is
+19.60 versus 19.56 ns, with B's tails appearing in the fence window instead.
+This strongly supports preceding-store completion/ordering cost at the first
+atomic acquisition, not an observed busy-spin or added borrower-check cost.
+See the [release control](../development/experiments/bsp-preparation.md#native-release-store-control).
 
-Task 4's accepted design does not require additional per-message copy/release
-work. A justified corrective change within task 4 is still not established;
-there is no evidence that this is an unavoidable design cost. Keep the task
-unchecked and PR draft. A further diagnostic needs its own bounded scope:
-**proposed default:** one matched native A/B pair separating the existing
-release lock's acquisition from its guarded body, with an explicit store-drain
-control, to distinguish lock wait from completion of preceding payload stores.
-Keep every guard; no product change or diagnostic implementation is authorized
-by this proposal.
+The fence also drains marker stores, and cases observe different messages.
+Neither individual tails nor mean costs are conserved between cases. The exact
+task-4 allocation/cache/preparation change causing the underlying delay remains
+unproved; no safe specific fix within task 4 is established. A production fence,
+guard removal or speculative padding/copy rewrite as a fix is not justified. The design
+does not require new per-message release work, but that is not proof of a fix.
+Keep task 4 unchecked and PR draft: native SEND completion still rises 8.1% in
+this instrumented pair. No performance waiver is accepted.
+
+Both temporary timing probes, their local branches/worktrees and their images
+are removed; only methods/results remain. Source-level locality/placement
+attribution is still open. The next ordinary existing-tool control mirrors
+only the process object's 392-to-432-byte size growth on main, with no task-4
+execution changes or timing mechanism. This is a local diagnostic allocation
+control, not a selected production fix.
 
 **You should know:** fixed cleanup actors add boot storage. Shared stack/capture
 admission can return BUSY after the existing bounded wait; cleanup contention can

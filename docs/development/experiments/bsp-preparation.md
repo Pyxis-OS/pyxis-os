@@ -481,16 +481,76 @@ of median whole-pass time. Receiver/drain work is not instrumented.
 
 Task 4 does not inherently require this extra per-message work. No particular
 corrective change is established by the data, so no guard removal, copy rewrite
-or performance waiver follows; merge remains blocked. A focused distinction
-between release-lock acquisition/body and explicit store completion is proposed
-in the [remaining plan](../../wip/bsp-removal.md#native-send-phase-result--instrumentation-removed),
-not implemented. Local timing code/branches and experiment images are removed;
-only small evidence/methods remain. Source/product runtime is unchanged.
+or performance waiver follows; merge remains blocked. Chronium subsequently authorized a focused release-lock/store-completion
+control. Its result follows. Local timing
+code/branches and experiment images from both controls are removed; only small
+evidence/methods remain. Source/product runtime is unchanged.
 
 Evidence: `/shared/present/bsp-removal/task4/native-send-phase/` contains
 `comparison.json`, raw results and stage/reboot records. Ordinary final QEMU
 controls and host snapshot analysis pass; their variable timings do not explain
 this native residual. The directory is retired as a deployable packet.
+
+### Native release/store control
+
+Chronium authorized the further local-only control (2026-10-29). Same fixed
+A `c65430c61e` and task-4 B base `fc0a97e67b`, builder/config/archive/CPU1-only
+profile as above. Local probe heads A `7ac04335e`, B `744351a1b`; no diagnostic
+source was pushed or merged. The orchestrator completed two fresh vela boots,
+all PASS, then returned the default entry to its ordinary image. Whole SEND4096
+completion median 0.6795 → 0.7345 ms (+8.1%), admission 0.101 → 0.135 ms;
+CALL64 1.2065 → 1.1985 ms and CALL4096 1.4040 → 1.4095 ms remain near parity.
+One independent boot per variant; plain/fenced cases are interleaved within it,
+not separate boots or a repeated confidence estimate.
+
+Each variant verifies 25,856 sends and 385 samples, split into 193 plain and
+192 fenced samples in alternating blocks of eight selected sends. Both cases
+cover all eight slots with matching stable low12 layouts. All phase counts,
+telescoping/histograms, guard-acquisition counts and joint-tail checks pass.
+The added timestamps separately bracket optional MFENCE, acquisition, guarded
+borrower decrement/unlock and return. Sample means, ns at matched 3686.4 MHz,
+including marker/helper overhead:
+
+| Window | Plain A → B | MFENCE A → B |
+| --- | --- | --- |
+| Store control | 17.29 → 17.57 | 32.51 → 79.57 |
+| Release lock acquisition | 25.82 → 110.11 | 19.56 → 19.60 |
+| Guarded release body | 21.42 → 24.69 | 21.55 → 24.09 |
+| Payload copy | 107.62 → 137.39 | 107.17 → 132.43 |
+| Total instrumented admission | 441.38 → 580.48 | 448.81 → 539.82 |
+
+**All 385 sampled acquisitions per variant have zero failed exchanges.** The
+unfenced B acquisition has five ≥4096-tick samples; fenced B has none there
+and three in the store-control interval. A has neither. Joint counters show
+no simultaneous store/acquisition overflow or acquisition tail with a failed
+exchange. The large release cost is at the first successful acquisition, not
+an observed retry loop. The guarded body has no overflow and stays small.
+
+The fence removes the measured A/B acquisition gap (84.29 → 0.04 ns); its own
+A/B store-window gap rises from 0.28 to 47.06 ns. This strongly supports prior
+store completion/ordering cost being paid at the first locked exchange. It is
+not a claim that the same five events moved into three events, that mean costs
+are conserved, or that the fence is a performance fix. MFENCE also drains probe
+marker stores, and the control changes ordering on different selected messages.
+The earlier architectural [ordering reference](https://cdrdv2-public.intel.com/812386/253668-sdm-vol-3a.pdf)
+explains why an uncontended locked operation can wait for prior stores; the
+native control supplies the observed association, not a hardware stall counter.
+
+**Fixability within task 4 remains unproved.** The original lifetime guard and
+its borrower work are unchanged. Preparation/reclamation CPU and allocation
+chronology, process size and fixed boot storage change in task 4, but no
+physical-cache-neighbor trace or isolated allocation control identifies which
+change produced the extra store-completion latency. No safe concrete patch
+follows yet. A production MFENCE would add ordering and move cost; removing the
+guard would break the current ownership invariant. Neither is delivered.
+No native performance waiver follows, and the task remains blocked on cause/fix.
+
+Both timing probes' temporary kernel source/branches/worktrees, patches/builds
+and packet images are removed. Raw results, comparison and run log are checksum-preserved under
+`/shared/present/bsp-removal/task4/native-send-release/`; `attribution/` contains
+small numeric/source/cleanup notes. The directory is now evidence only.
+Product runtime is unchanged. Ordinary A/B QEMU and frozen host-parser checks
+passed before the native run; they are not native latency evidence.
 
 ## Storage and remaining limits
 
