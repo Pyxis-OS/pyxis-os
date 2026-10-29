@@ -189,8 +189,8 @@ hangup nor EOF terminates processes; execution groups provide separate supervisi
 escape sequence. The line editor returns TERM_LINE_EOF and discards an unfinished
 line; it never executes text lacking Enter. Ctrl+D remains byte 0x04: on an empty
 line it asks the editor to finish with TERM_LINE_EOF, and otherwise is ignored.
-It does not close terminal input. Kilo exits on actual EOF, reporting failure if
-unsaved edits would be lost. Framebuffer console input still has no EOF operation.
+It does not close terminal input. Framebuffer console input still has no EOF
+operation.
 
 ## Readiness and ownership
 

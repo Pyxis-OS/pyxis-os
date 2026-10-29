@@ -4,7 +4,7 @@ Qualification for task 3 of the [Neovim milestone](../../../userland/neovim.md#m
 the alternate screen, scroll regions, insert/delete line, reverse index, saved
 cursor and charset designations in the kernel TTY and the multiplexer's pane
 terminal, as listed in the [sequence table](../../../userland/terminal.md#tty-output-controls),
-and BusyBox vi, less, Kilo and Links running on the alternate screen.
+and BusyBox vi, less and Links running on the alternate screen.
 
 ## Configuration
 
@@ -70,7 +70,7 @@ In a tab and in a pane on the final image, by screenshots:
   its colors and the cursor after the command. Kernel and pane results matched.
 - **Mux history:** after the program, history held the shell's output only,
   with none of the 60 region lines.
-- **Programs:** `vi`, `kilo`, `ls boot:// | less` and `links` each drew on the
+- **Programs:** `vi`, `ls boot:// | less` and `links` each drew on the
   alternate screen and, on quitting, returned the shell's screen with the
   earlier `ls` output intact. Before this change each left a cleared screen
   with the prompt at the top. Saved files read back with `cat`; Up recalled
@@ -87,27 +87,27 @@ In a tab and in a pane on the final image, by screenshots:
 
 On the ThinkPad, 2026-10-10, the owner booted a PXE build of this branch from
 the default entry, at the panel's native mode:
-- **Tab:** `vi`, `kilo`, `ls boot:// | less` and `links` each returned the
+- **Tab:** `vi`, `ls boot:// | less` and `links` each returned the
   shell's screen intact on quitting.
 - **Multiplexer pane: passed with Neovim (2026-10-10).** The live image has no
   multiplexer space, so the owner ran Neovim in multiplexer panes on the
   installed stick. The shell screens were intact after exit, and colours and
-  status lines were correct in four panes at once. The vi, kilo, less and links
+  status lines were correct in four panes at once. The vi, less and links
   programs were not separately repeated in a pane.
 
 The pane check not yet repeated for those programs:
 
 1. Run `ls boot://`, then `vi home://t.txt`; type `ihello`, Escape, `:wq`. The
    `ls` output should still be on screen, with the prompt below it.
-2. Repeat with `kilo home://k.txt` (Ctrl-S, Ctrl-Q), `ls boot:// | less` (`q`)
-   and `links home://t.txt` (`q`, then `y`).
+2. Repeat with `ls boot:// | less` (`q`) and `links home://t.txt` (`q`, then `y`).
 3. Scroll back with the wheel afterwards: history shows the shell's output,
    not the programs' screens.
 4. Note any flicker, leftover text or a misplaced cursor after quitting.
 
 ## Limits
 
-- Native: tab behaviour checked for all four programs, pane behaviour only with Neovim; no native timing.
+- Native: tab behaviour checked for the listed programs, pane behaviour only
+  with Neovim; no native timing.
 - Pane timings measure queueing; mux's drawing shows only in the CPU window,
   which also includes QEMU's own work.
 - The resize check used growth only; shrinking follows the same cropping as

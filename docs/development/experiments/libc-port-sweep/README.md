@@ -42,7 +42,7 @@ behaviour; adaptations that encode a Pyxis policy stay.
 - **eduke32:** output redirection stays off (no `freopen` or `setvbuf`).
 - **fmt:** `FMT_OS` stays off; `fmt/os.h` also needs `dup2`, `pipe` and
   `fcntl`.
-- **libuv, fastfetch, kilo, sbase, mbedtls, zlib, libpng, doom,
+- **libuv, fastfetch, sbase, mbedtls, zlib, libpng, doom,
   chocolate-quake, devilutionx:** nothing tied to these functions. libuv and
   fastfetch already use the real working path and environment; mbedtls's
   time hooks use the native clock.

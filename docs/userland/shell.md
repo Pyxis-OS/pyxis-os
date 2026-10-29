@@ -298,7 +298,7 @@ limits.
 `sync path...` requests synchronization for each explicit file or directory
 path, in argument order. It continues after an individual error and exits with
 failure if any target failed; with no arguments it prints usage and fails.
-Success is quiet. For example, after Kilo closes a saved file, run
+Success is quiet. For example, after an editor closes a saved file, run
 `sync host://work/hello.c host://work` to request file and parent-directory
 synchronization. The command resolves each path when invoked, so a concurrent
 rename can make it sync a different object. Native callers that must sync the
@@ -879,8 +879,9 @@ control or termination authority. See [graphics layers](../interfaces/graphics.m
 
 Programs that read lines through libterm hold passthrough only while editing a
 line. In the Lua REPL, Ctrl+C cancels a typed line, but running code is
-terminated. Kilo holds passthrough for its whole session, so Ctrl+C never ends
-it or discards unsaved edits; quit with Ctrl-Q.
+terminated. vi holds passthrough for its whole session, so Ctrl+C never ends
+it or discards unsaved edits; press Escape and enter `:wq` to save and quit, or
+`:q!` to discard changes.
 
 - **Background, service and session launches** are never armed.
 - **Without the right or a clock**, jobs wait without interruption, as before.

@@ -311,8 +311,8 @@ were exercised through the ordinary keyboard/console paths:
 
 - Initial shell, horizontal/vertical BSP splits, equal/BSP switching, focus,
   eight-pane admission and ninth-pane rejection.
-- Kilo editing, save, quit and `cat` readback of `home://a`; another pane's
-  shell remained usable while Kilo ran, and Kilo redrew after layout resizing.
+- The then-editor's editing, save, quit and `cat` readback of `home://a`; another
+  pane's shell remained usable while it ran, and it redrew after layout resizing.
 - Lua output of 1,100 numbered lines; history filled to 1,024 retained rows,
   Page Up/Home browsed the oldest retained rows, and Escape returned to live.
 - Natural root exit retained status/text; dismissal reclaimed sibling space.

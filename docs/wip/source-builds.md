@@ -126,7 +126,7 @@ than following upstream branches.
 ## Possible order
 
 1. Hosted Clang: compile, link and run one C program inside Pyxis.
-2. Build one small port by hand inside Pyxis, such as Lua or Kilo.
+2. Build one small port by hand inside Pyxis, such as Lua.
 3. Run the ports runner inside Pyxis, then build userland's programs with its
    Makefiles.
 4. Ninja or CMake, for the CMake-based ports.

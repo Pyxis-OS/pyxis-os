@@ -443,8 +443,8 @@ file fill cap. Probe programs were uncommitted.
 - Sha256sum `-c` with manifests from a file, a redirect and a pipe, and stdin
   hashing, matched the host. Update streams followed the contract above:
   `w+` write/seek/read, `r+` write after read-ahead without `fseek`, refetch
-  after `fseek` and input `fflush`, and `a+` append. TCC compile/run, a
-  Bucharest `date`, and Kilo open/edit/save on `host://` also worked.
+  after `fseek` and input `fflush`, and `a+` append. TCC compile/run and a
+  Bucharest `date` also worked.
 
 `fgetc`/`getc`/`getchar`, `fgets`, `fputc`/`putc`/`putchar`, `fputs` and `puts` are
 provided. `fgets` retains a newline and terminates successful input. Capacity one

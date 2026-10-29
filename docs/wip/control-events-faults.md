@@ -88,3 +88,19 @@ migration is introduced. TERM/HUP, owned-child CHLD and clock ALRM still need
 source-specific consumer/ownership decisions. Continuum's accepted control
 resource belongs to that milestone; the compatibility layer does not create a
 competing stop/reload channel.
+
+## Accepted second libc slice
+
+Accepted 2026-10-29: an initial-thread libc loop bridge and queued libuv callbacks.
+Persistent watchers for catchable numbers are admitted; only WINCH/INT deliver.
+Others remain dormant, so Neovim keeps upstream watcher setup. Bridge names
+remain for PR review. BusyBox vi's nonlocal-exit bundle stays disabled. No later
+signal source, arbitrary-thread delivery or Go integration is added.
+
+The same decision sunsets Kilo's port and package; its earlier qualification
+and timed-read idle-cost evidence remain in the handoff report. Editing uses
+[vi](../userland/vi.md) or [Neovim](../userland/neovim.md).
+See [cooperative signals](../userland/cooperative-signals.md#initial-thread-event-loops)
+for the ownership, callback and rebuild contracts.
+
+- [x] Implement and QEMU-qualify the second slice.

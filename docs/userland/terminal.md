@@ -208,15 +208,6 @@ changes as distinct events. It requires an explicitly delegated clock READ
 handle; stock sessions provide one. Line helpers fall back to ordinary key
 reading when that resource is absent, preserving existing grants.
 
-Kilo uses the raw termios subset and upstream byte/escape parser. A small
-native wait hook observes input and resize together, retaining a single Escape
-deadline across resize. Its adapter is retained during the first
-[cooperative-signal consumer slice](cooperative-signals.md). Its status
-messages expire on a later keypress, as upstream does. It retains its minimum
-of two columns and three rows and the native viewport rules. Pinned upstream
-Home/End soft keys are not dispatched by its keypress handler; End can insert
-byte 0xee rather than moving the cursor. This application defect is unchanged.
-
 ## Tab completion
 
 `term_read_line_completing(term, prompt, history, completion, marked, buffer, capacity)`
@@ -361,7 +352,7 @@ invalid region (top not above bottom, or past the screen) is ignored. Switching
 screens and resizing reset the region to the whole screen.
 
 **Alternate screen.** libterm's `term_alternate_screen(term, enabled)` writes
-`CSI ? 1049 h/l`. vi, less, Kilo and Links run on the alternate screen, so
+`CSI ? 1049 h/l`. vi, less and Links run on the alternate screen, so
 quitting returns the shell's screen as it was. Entering saves the cursor as `ESC 7` does and shows a
 cleared second screen; leaving restores the first screen's cells, colors and
 saved cursor. Each screen has its own saved cursor. Entering while already on
@@ -380,8 +371,8 @@ stop advances to the next one. Tabs only move the cursor: they preserve existing
 cells, never wrap or scroll, and cancel pending wrap even at the right edge.
 The next printable character then writes at that column, setting pending wrap
 if it fills the last cell. Like CR/LF/BS, a tab ends an incomplete escape sequence.
-Cat passes tabs through unchanged; Kilo still controls their display inside the
-editor.
+Cat passes tabs through unchanged; editors such as vi control tab display
+inside their own screen.
 
 `term_set_tab_width(term, columns)` uses the output handle to set spacing on
 that console's TTY through `console_set_tab_width`. `CONSOLE_SET_TAB_WIDTH`

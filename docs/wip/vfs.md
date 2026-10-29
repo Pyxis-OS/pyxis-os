@@ -120,7 +120,7 @@ Parked ideas, not a settled security design or implementation task:
   management and the trust mechanism remain undecided.
 - Explicit development spaces would allow local/self signing and more permissive
   grant policy within their assigned authority. This would not relax other spaces
-  or automatically confer machine-wide privileges. The current Kilo/Clang
+  or automatically confer machine-wide privileges. The current editor/Clang
   edit/build/run workflow would remain available there when signed admission arrives.
 - Locally built applications could also run outside development spaces through
   explicit trust in their self-signed bundles. Time-limited approval/signing is an

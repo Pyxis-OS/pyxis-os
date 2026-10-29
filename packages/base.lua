@@ -18,7 +18,6 @@ return {
     { id = "grep" },
     { id = "http" },
     { id = "jq" },
-    { id = "kilo" },
     { id = "less" },
     { id = "links" },
     { id = "ln" },
