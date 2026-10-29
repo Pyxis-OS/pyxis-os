@@ -983,4 +983,8 @@ may be observed after at most one63-store batch. This removes repeated early
 HPET queries without changing clock selection, the budget, hardware wait limits,
 ownership checks or failure retention. Immediate zero checks still precede every
 store. The native figures above qualify ownership batching with per-PTE deadline
-checks; this further deadline change needs its own native measurement.
+checks. The further deadline change also passes natively on vela (chronium,
+2026-10-29): publication falls from269.788ms to45.8ms and the flip-prepared step
+from580.824ms to387.9ms. Both OpenArena workloads complete at48.3/15.7fps
+(low/native), with the flip backend confirmed. These remain single samples.
+Chronium selects the fully qualified follow-up for0.0.10.
