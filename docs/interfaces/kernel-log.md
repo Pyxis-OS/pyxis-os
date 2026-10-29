@@ -72,6 +72,34 @@ lost line. The ring needs no heap, clock, network or initialized CPU-local state
 It is volatile and does not survive reboot.
 
 
+## System log writes (accepted, chronium, 2026-10-29)
+
+Spaces, services and programs get a system log to write to instead of an
+interactive terminal. Accepted decisions, with the first slice noted:
+
+- **Authority (L1):** a `LOG_RIGHT_WRITE` on the `log` resource, forwarded to space
+  inits, services and shells. Nothing else writes, except the allocator's
+  `LOG_PUTCHAR`.
+- **Record (L2):** a level plus a source the kernel stamps from the caller's
+  space, shown as a `NAME: ` prefix; the ring header carries the source index.
+- **Bounds (L3):** 255 bytes per line; per space 1000 lines/s sustained, burst 5000;
+  beyond that lines are dropped and the kernel logs one warn summary per second.
+  The rate is a starting point, to be tuned from real use.
+- **Services (L4):** a service's stdout and stderr are bound by default to a
+  write-only log stream (stdout info, stderr warn); `service start --terminal` keeps
+  the space console.
+- **Background jobs (L5):** `&` jobs stay on the terminal; an opt-in redirect to
+  the log is a later slice.
+- **Storage (L6):** the one existing ring; no per-source ring; no persistence.
+- **Display (L7):** the Caelum pane and serial at `log.level` with the prefix;
+  `log -s NAME`; the UDP wire carries the source.
+- **`LOG_PUTCHAR` (L8):** kept for the allocator. First slice: `system_log()` and
+  `LOG_PUTCHAR` are unchanged; moving `system_log()` to `LOG_WRITE` is a follow-up.
+- **Sanitising (L9):** control bytes other than tab become `?`; over-long text is
+  truncated.
+- **Validation (L10):** per-write cost against a terminal write and `LOG_PUTCHAR`
+  before merge.
+
 ## Read authority and cursors
 
 The explicitly delegated `log` resource implements
