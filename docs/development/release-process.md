@@ -87,6 +87,35 @@ confirmed that the signed and uploaded trees are
 published `current` serial 2. This location is evidence for that publish, not
 a default location to infer for later releases.
 
+Seed each signing tree from what is published, then restore its working index.
+B2 holds only the signed snapshots (`index/N.lua`), never the working `index.lua`
+that `pxpkg` packs into, so a tree seeded with `rclone copy` has no working index
+and the packer starts a new one with only the new builds (0.0.10 hit this; luna
+restored the index by hand). Rebuild it from the snapshot named by `current`
+before any pack; the result is byte-identical to the index that snapshot was
+published from. Run this from the repository root:
+
+```sh
+python3 - "$OUT/public" <<'EOF'
+import sys
+from pathlib import Path
+sys.path.insert(0, "tools")
+import pxpkg
+
+root = Path(sys.argv[1])
+serial = pxpkg.read_current(root)
+if not serial:
+    sys.exit("restore-index: no published serial in " + str(root))
+_, entries = pxpkg.load_snapshot(root, serial)
+pxpkg.write_atomically(root / pxpkg.INDEX_NAME, pxpkg.index_document(entries))
+print("restore-index: serial %d, %d entries" % (serial, len(entries)))
+EOF
+```
+
+Do the same for `$OUT/releases`. The preservation check below, run before packing,
+should then report no entries added and no problems; on an unrestored tree it
+reports every published entry as missing.
+
 Before signing, check each signing tree (seeded from the published tree, then
 packed) in three ways. `check --abi` alone is not enough, and `check --abi
 <previous>` must not be run: a release adds packages that have no build for the
