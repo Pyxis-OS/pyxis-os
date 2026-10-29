@@ -5,7 +5,10 @@
 otherwise 0.0.11 (chronium, 2026-10-28). Stage 1 and the stage-2
 firmware-first/checked-stop cut, request-driven PHY initialization/RFK/checked stop and one-channel DBCC
 passive discovery, including two sequential same-channel requests with independent
-FILEs, are native qualified on vela. Channel hopping, physical rfkill response and radiated-power behavior remain unqualified. Native
+FILEs, and repeated 1+6 firmware sweeps are native qualified on vela. Returned
+hopping records have only demonstrated channel-1 attribution; channel 6,
+complete admitted-mask discovery, physical rfkill response and radiated-power
+behavior remain unqualified. Native
 runs on vela go through the orchestrator. This expands
 [Wi-Fi stage 5](wifi.md#qualification-and-proposed-stages), after the delivered
 [AX200 WPA2 profile](../devices/ax200-wifi.md#wpa2-personal).
@@ -917,10 +920,10 @@ Reference is Linux v6.18 `7d0a66e4bb9081d75c82ec4957c50034cb0ea449`,
   (`mac.c:5042–5085`); the RTL8922A scan RFK hook is empty
   (`rtw8922a.c:2137–2142`). Post-ENTER writes cannot establish pre-hop ordering.
 
-Current Pyxis drops PPDU packet type 1 and uses fixed-channel metadata, which
-must not become an inferred hopping channel. Its existing PHY status bitmaps
-already include the reference's IE01. No new hardware readback-equality checks
-or stricter PPDU counter/timestamp matching are proposed.
+The preceding fixed-channel cut dropped PPDU packet type 1. The delivered
+hopping decoder now uses the reference's IE01 and per-BB matching; fixed-channel
+fallback is not evidence of a hopping channel. No new hardware readback-equality
+checks or stricter PPDU counter/timestamp matching are introduced.
 
 #### Accepted contract (chronium, 2026-10-28)
 
@@ -1024,3 +1027,142 @@ Open qualification items (chronium, 2026-10-28):
 
 [Qualification record](../development/experiments/rtl8922ae-hopping.md).
 These checkboxes do not complete full admitted-mask discovery or cancellation.
+
+## Next discovery slice — proposal (2026-10-29)
+
+**Proposal only; decisions pending.** Recommend closing the two observation
+gaps, then broadening the same firmware-offload path to the admitted channel
+1–11 set. This is a useful world-domain sweep, not complete 2.4 GHz support.
+Keep the existing opt-in backend, READ/SCAN grants, world/configured-country
+rules, platform/SAR restrictions and request-driven activation. Release target
+remains 0.0.10 if ready before release, otherwise 0.0.11.
+
+### Current source boundary
+
+Inspected main `397a22bffdd8b8be79829754e381abfdb6eb5e2e`, userland
+`8cefca4017769e5e79d455cfff127947554a6fc3`, ports
+`18b56bf05ec2e2d50f7aec383a0b452d4f36f1ec`:
+
+- [`rtl8922ae.c:760–779`](../../kernel/wifi/rtl8922ae.c#L760) admits one
+  channel or exactly 1+6, refuses unqualified rule profiles and retains one
+  prepared mask. A zero/default request is currently refused.
+- [`rtl8922ae_scan.c:51–53,411–440`](../../kernel/wifi/rtl8922ae_scan.c#L411)
+  has an authored two-element list bound; BE entries are 32 bytes with a
+  four-byte list header. Eleven entries fit the existing 2,000-byte H2C payload
+  bound and Linux's BE list limit (`fw.h:338–344`). Follow pinned Linux
+  `fw.c:5644–5750,7774–7877` for this list; no host channel walker or new
+  transport is needed.
+- [`rtl8922ae_power.c:441–494`](../../kernel/wifi/rtl8922ae_power.c#L441)
+  specializes common-image preparation to channels 1 and 6. Extending the
+  channel list alone would not establish a power image for the broader sweep.
+- Existing extended PHY status has historical observations but no fact showing
+  that the startup active-MAC branch ran. Successful scanning cannot supply it.
+
+### Decisions for this delivery
+
+1. **Channel profile and default request. Proposed default:** support any
+   nonempty explicit subset of channels 1–11 admitted by the effective host,
+   regdb and existing calibration profile. An omitted/zero mask selects that
+   complete admitted set; publish the actual selected mask in the result.
+   An explicit request is exact: refuse unsupported/restricted bits before
+   effects rather than silently dropping them. An empty admitted set remains
+   unavailable. Keep channels 12–13, NO_IR-only startup and channel 14 outside
+   this delivery, even if a configured country permits more. No probes or
+   automatic scan is added. This avoids calling a 1–11 scan a complete
+   world-domain or full-band scan.
+2. **Power and retained context. Proposed default:** generalize the accepted
+   conservative image to every requested channel: lower corresponding signed
+   firmware/SAR/numeric-regdb limits, with compatible by-rate/shape/other
+   controls, before any TX-capable RFK. Initialize both existing DBCC contexts
+   on the lowest requested eligible channel. Keep that image through the BE
+   firmware sweep; no post-ENTER power race or per-hop host RFK. If compatible
+   controls cannot be established, stop for review instead of inventing a
+   fallback. Retain the current exact-mask reuse limit: another mask refuses
+   before effects; this task adds no reset/reinitialization recovery. The
+   default full-set request can repeat without changing that mask. Starting
+   with a narrow explicit request still requires a fresh boot before a broader
+   default request; this is a slice limit, not the eventual connection contract.
+3. **Observable proof. Proposed default:** retain validity-qualified historical
+   startup facts in the existing extended PHY STATUS state word: initial MAC
+   state observed, active state seen, normalization attempted and normalization
+   completed. Completed means the power-off handshakes and ensuing power-on
+   both succeeded, not merely that the second state read was non-active.
+   Preserve reply sizes and released-prefix delivery; add no command,
+   authority or klog line. Qualify real channel-6 attribution using an
+   orchestrator-provided AP whose channel is independently known, with its
+   identities kept private. Use natural warm handoffs to observe the startup
+   branch; do not force hardware state or fabricate frames. A non-active initial
+   MAC or absent channel-6 BSS leaves that observation open, not a driver
+   failure or permission for an unplanned retry.
+
+### Ordered delivery
+
+Each implementation task needs its own assignment; native windows are separately
+scheduled by the orchestrator. The first two tasks implement the proposed slice.
+
+1. **Small first task: status facts and targeted attribution.** Capture the
+   current baseline before changes, add the observational startup facts and
+   matching SDK flag validation/status reader, then qualify the existing 1+6 path against the known
+   channel-6 AP. Check a genuine PPDU-attributed record for that AP, independent
+   FILEs across repetition and the startup facts. Report only redacted results;
+   preserve unresolved observations without claiming coverage.
+   **After this task chronium can:** tell whether startup normalized an active
+   MAC, and inspect evidence for a genuinely second-channel BSS.
+2. **Admitted 1–11 sweep.** Generalize common-image construction and the bounded
+   BE list, implement the default-mask semantics and retain existing 512-candidate/
+   128-result bounds, successful TRUNCATED handling and immutable publication
+   after END/RX retirement. Qualify explicit subsets and the default full set,
+   both known channels, repeated retained scans/held FILEs, unchanged RFK,
+   endpoint power checks, deadlines and wired management. Use shared 1+6 scans
+   and wired controls for matched interleaved current/new measurements; report
+   the new wider sweep's cost separately. Distinguish first startup from retained
+   scans; QEMU cannot qualify this radio.
+   **After this task chronium can:** run `wifi scan` for the currently admitted
+   channel 1–11 set without spelling a mask.
+
+### Route from discovery to association
+
+The following are later tasks, not decisions or implementation authorizations
+in this proposal. Raise their shaping choices when each task is assigned.
+
+3. **Remaining passive profile and lifecycle.** Separately qualify receive-only
+   retuning/listening on NO_IR channels 12–13, cancellation/withdrawal, physical
+   rfkill where available and safe re-admission. Keep the accepted recovery
+   requirement; a reboot-only bring-up limit is not the everyday contract.
+   NO_IR support need not block an explicit OPEN target on a qualified channel.
+   **After this task chronium can:** distinguish broader passive discovery and
+   qualified cancellation/recovery from the initial 1–11 profile.
+4. **Legacy station transport and OPEN target.** Establish real management/data
+   TX, release/completion, RX metadata and retirement before auth/association.
+   Replace the scan-only NOLINK role with a reference-aligned station transition;
+   factor the necessary AX200-specific CONNECT, auth-wakeup and network dispatch
+   boundaries without changing AX200 behavior. Then qualify one explicit legal
+   2.4 GHz/20 MHz OPEN test AP, controlled-port admission, independent DHCP and
+   verified data, lease/CUT/close/loss cleanup and wired management. Preserve
+   existing authority; do not add Linux sockets or a successful fake TX.
+   **After this task chronium can:** use the isolated OPEN test AP on vela.
+5. **WPA2 through the existing port.** Ports already provides pinned
+   [wpa_supplicant 2.12](../../ports/wpa-supplicant/metadata.lua) as `libwpa-rsn.a`,
+   used by the trusted native
+   [RSN worker](../../userspace/wifi-supplicant/rsn.c). Reuse its sealed-credential,
+   private SUPPLICANT and EAPOL/key boundary. Before protected data, establish
+   RTL CAM install/remove confirmation, host-owned TX PN allocation/exhaustion,
+   authenticated RX/replay metadata and GTK transitions; H2C DMA consumption
+   or a receive ACK is not key installation proof. Qualify credentials,
+   controlled-port/key/replay behavior and failure retirement independently of
+   AX200. No second supplicant port or four-way handshake is needed.
+   **After this task chronium can:** use the selected WPA2-PSK/CCMP profile with
+   an explicit connection request.
+6. **Remembered connection and everyday recovery.** Deliver the already accepted
+   reconnect-across-reboots-until-manual-disconnect requirement using the trusted
+   requester and existing credential grants. Decide store ownership, durable
+   clear/update and retry/loss semantics at that task; do not choose a store or
+   permanent shutdown policy here. The accepted temporary plaintext-key limit
+   remains [debt #1287](https://git.internal/PyxisOS/pyxis-os/issues/1287).
+   **After this task chronium can:** reboot vela and have its remembered Wi-Fi
+   connection restored without retyping the key.
+
+These stages retain the initial legacy profile; WPA3, 5/6 GHz, roaming and
+Wi-Fi 6/7 are not implied by a successful WPA2 connection. New firmware commands
+and hardware guards must follow the pinned reference, with native evidence;
+the AX200 path supplies reusable contracts, not Realtek hardware proof.
