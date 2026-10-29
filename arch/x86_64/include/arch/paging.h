@@ -76,6 +76,17 @@ enum mm_result arch_kernel_unmap_prepared(uintptr_t virtual, phys_addr_t *physic
 /* BSP IF=0 before AP startup, caller-proven driver-owned scanout page.
  * No generic RAM use; PAT[5] must remain WC. */
 enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical);
+/* Unmapped caller-owned PMM frame, BSP/IF=0 before AP startup. Flush prior WB
+ * cache lines through the temporary scratch alias, then withdraw that alias
+ * before the caller installs its sole WC scanout mapping. */
+bool arch_frame_prepare_scanout(phys_addr_t physical);
+/* Same cache transition, at most PMM_FRAME_BATCH_MAX frames. Every cache line
+ * and per-frame MFENCE is retained; no WB scratch pointer survives the call. */
+bool arch_frames_prepare_scanout(const phys_addr_t *physical, size_t count);
+/* Same bootstrap scanout contract, at most PMM_FRAME_BATCH_MAX frames and no
+ * leaf-table crossing. Prevalidate the run before publishing; report progress. */
+enum mm_result arch_page_map_scanout_run(uintptr_t virtual, const phys_addr_t *physical,
+    size_t count, size_t *mapped);
 /* Display-only fixed WC aperture, BSP/IF=0 before AP startup. A supplied boot
  * framebuffer must start at physical. Its existing leaves remain unchanged;
  * new leaves persist until reboot and never belong to a VM reservation. */

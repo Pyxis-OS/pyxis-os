@@ -1508,6 +1508,22 @@ enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical)
   return arch_page_map_scanout(base, physical);
 }
 
+enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped)
+{
+  require_kernel_owner(&kernel_space);
+  *mapped = 0;
+  struct vm_range *range = range_containing(&kernel_space, base);
+  if (range && range->quarantined) {
+    return MM_BUSY;
+  }
+  if (!range || range->state != RANGE_RESERVED || !physical || !count ||
+      count > PMM_FRAME_BATCH_MAX || count > range->pages - (base - range->base) / PAGE_SIZE) {
+    return MM_INVALID;
+  }
+  return arch_page_map_scanout_run(base, physical, count, mapped);
+}
+
 bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes)
 {
   const struct vm_physical_range range = {physical, bytes};
