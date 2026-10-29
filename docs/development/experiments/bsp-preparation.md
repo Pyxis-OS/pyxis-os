@@ -268,7 +268,7 @@ discounts only the executing user preparation actor and awaits matched
 qualification. Fixed RAM owners and confirmed capture retirement
 do not inherently require placing ordinary IPC peers on different CPUs.
 
-### Accepted placement correction — QEMU, native pending
+### Accepted placement correction
 
 At clean signed `4c4b6625e398874309402f49471f34d130600c39`, initial
 process/thread placement discounts only the executing user preparation caller's
@@ -309,8 +309,71 @@ Small reports and raw evidence:
 `/shared/present/bsp-removal/task4/native-placement-fix/` preserves A and workload
 bytes, fixes B at the exact hash above, and keeps the six-boot A1/B1/A2/B2/A3/B3
 shape and identical `resolution: 2880x1800x32`. It performs no staging itself.
-Native IPC at main's level with the launch gain retained is still the merge
-requirement. No corrected native result is claimed here.
+Native IPC at main's level with the launch gain retained remains the merge
+requirement; the corrected native result follows.
+
+### Corrected native result — residual SEND cost
+
+The orchestrator completed all six fresh placement-fix boots on vela, all PASS,
+at the exact A/B hashes above. Target launch median 1032.882 → 873.793 ms
+(−15.4%); private pages 25.418 → 25.581 ms, overlapping ranges. IPC milliseconds
+per 256-message pass, median (range) across three boot medians:
+
+| Interval | A | Corrected B | Change |
+| --- | --- | --- | --- |
+| CALL64 completion | 1.2430 (1.2270–1.2905) | 1.2595 (1.2510–1.2700) | +1.3% |
+| CALL4096 completion | 1.4110 (1.4060–1.4135) | 1.4565 (1.4475–1.4765) | +3.2% |
+| SEND64 completion | 0.6225 (0.6190–0.6235) | 0.6805 (0.6770–0.6835) | +9.3% |
+| SEND4096 completion | 0.6795 (0.6790–0.6795) | 0.7550 (0.7525–0.7640) | +11.1% |
+| SEND64 admission | 0.0720 (0.0720–0.0730) | 0.0790 (0.0785–0.0795) | +9.7% |
+| SEND4096 admission | 0.0965 (0.0960–0.0990) | 0.1235 (0.1215–0.1295) | +28.0% |
+
+Chronium assesses CALL as parity; the nonoverlapping SEND cost is not an accepted
+trade-off. Paired per-pass completion-minus-admission medians leave about
+49.5/50.0 microseconds additional cost outside admission for 64/4096 bytes.
+That is about 1.55 microseconds per eight-message group, but this remainder is
+not a separate DRAIN timer. The native packet's `comparison.json` and six result
+directories retain full samples. Merge remains blocked pending explanation.
+
+### Residual investigation — 2026-10-29
+
+Read-only source audit and separate untimed four-CPU GDB observations find:
+
+- Both variants can migrate SEND receivers after initial placement. A fully
+  split sample makes 32 remote notification requests per direction for its
+  32 DRAIN control calls. No such request occurs during raw SEND admission;
+  data is queued in groups of eight before DRAIN. These stops do not establish
+  natural migration frequency or delivered/coalesced interrupt counts.
+- In a further bounded B64 observation, no RAM actor was current/ready at six
+  stable publication snapshots or the sampled SEND/control points. Two of 192
+  DRAIN snapshots could not safely traverse a remotely held readyqueue; other
+  actor/pending observations were empty. All 15 observed RAM-actor yields were
+  in STOP cleanup with local queued=0. This supplies no causal basis for changing
+  the cleanup yield or process WAIT contract.
+- No added per-message pin, capture ACK, endpoint/copy/timer path or new guard
+  explains the residual. Existing native identity samples identify P-core APICs,
+  not the IPC peers' CPU histories or instantaneous frequency. No CPU-frequency
+  or SMT explanation is established.
+
+A fresh exact-kernel configuration control uses the existing IPC commands with
+normal `{1,3}` versus CPU1-only. Four discarded warmup boots precede three pairs
+per configuration. A concurrent compiler burst contaminated the first retained
+pair of each initial series; all raw samples remain, and separate pairs 2/3/4
+replace those preidentified contaminated pairs. The replacements had 13.2–13.9%
+host busy, no own debugger/build, and an unrelated idle QEMU co-tenant. Summed
+100-pass completion intervals, milliseconds, median (range):
+
+| Control | Normal A → B | CPU1-only A → B |
+| --- | --- | --- |
+| SEND64 | 69.095 (67.195–70.086) → 66.676 (64.405–68.344) | 64.016 (62.509–65.292) → 62.113 (61.894–63.040) |
+| SEND4096 | 78.980 (75.313–80.506) → 71.198 (69.024–72.502) | 69.809 (69.136–70.878) → 67.639 (67.573–69.030) |
+
+The persistent native residual does not reproduce in these controls. That does
+not dismiss it or establish a fix. No justified kernel change follows yet.
+Small source, observer and timing evidence is under
+`/shared/present/bsp-removal/task4/send-residual-20261029/`. The next native
+diagnostic compares the same kernels under normal, CPU1-only and CPU3-only
+allowances to distinguish CPU/placement effects; it changes no product policy.
 
 ## Storage and remaining limits
 

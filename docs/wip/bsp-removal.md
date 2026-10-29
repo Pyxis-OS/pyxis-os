@@ -302,8 +302,14 @@ The implementation and both full QEMU packet collectors pass at `4c4b6625e`;
 three normal-affinity A/B pairs no longer reproduce the old threefold CALL
 penalty, with substantial A-side variation. The new sealed native six-boot
 pair is `/shared/present/bsp-removal/task4/native-placement-fix/`.
+Corrected native launch improves 15.4% and CALL is at parity in chronium's
+assessment; SEND retains a nonoverlapping 9–11% completion cost. The residual
+does not reproduce in the subsequent QEMU controls, and no cleanup/check
+change is justified by the current observations. See the
+[residual investigation](../development/experiments/bsp-preparation.md#residual-investigation--2026-10-29).
 Native IPC must reach main's level and retain the launch gain before merge;
-QEMU improvement and green CI do not satisfy that gate.
+chronium decides after the SEND residual is explained. QEMU improvement and
+green CI do not satisfy that gate.
 
 Keep the VM, endpoint and task-lifetime guards protecting live operations.
 
