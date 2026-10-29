@@ -57,7 +57,7 @@ over `syscall.Terminal*`, a `pyxis` terminfo entry) as an ordered vendor patch.
 
 ## Tasks
 
-- [ ] **1. Go terminal waits (pyxis-go).** A blocking, cancellable resize wait on
+- [x] **1. Go terminal waits (pyxis-go).** A blocking, cancellable resize wait on
   the actual terminal `os.File`, parked on the readiness netpoller and woken by
   Close. Confirm, or implement, that a read deadline on console stdin wakes a
   parked Read. Pyxis pins the new Go commit; the Go prefix is rebuilt, not the
