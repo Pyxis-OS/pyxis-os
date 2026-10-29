@@ -727,39 +727,67 @@ The MM batching foundation is split into [#1587](https://git.internal/PyxisOS/py
 based on main, with its own CI. #1563 is linearly based on that published head.
 Merge order: #1587, then #1563. The MM bodies have no remaining diff in #1563.
 
-### Remaining prerequisite: non-GGTT PAT consumers
+### Accepted boot submitter proof for conditional PAT3 programming
 
-The accepted conditional PAT3 write is not yet implemented: the available
-readout does not prove absence of inherited PPGTT consumers. Pinned xe stores
-PPGTT roots in logical context state (`xe_lrc.c:1005–1010`) and selects PPGTT
-through context-descriptor privilege (`1513–1521`); the GGTT scan alone does not
-cover those mappings. `GUC_STATUS.GS_MIA_IN_RESET` is a GuC-reset indication,
-not an all-consumer certificate. GSC can survive GT reset and D3hot, and its
-loaded-status read itself needs GSC forcewake beyond the current GT-only holds.
+**Accepted (chronium, 2026-10-29):** the submitter argument replaces the earlier
+requirement to find a separate documented all-consumer certificate. A saved
+context cannot run without submission: GuC, GSC firmware and the host are the
+possible submitters. Pyxis has no GT submission/firmware-start path. Before
+programming PAT3, under the bounded qualified forcewake holds and exclusive
+bootstrap owner, recheck all of the following:
 
-A tempting legacy shortcut is invalid: the Gen12 PRM, Vol2c Part1, printed
-page1036, limits `GFX_MODE` bit9 to ring scheduling; execlist mode selects through
-context descriptors. The bit also does not take effect until the page-directory
-registers are programmed. A zero read therefore cannot certify GGTT-only access.
-No graphics30 replacement certificate was found in the pinned xe code. These
-are source limits, not a measurement that vela actually has an active PPGTT user.
+- Graphics and media GuC MIA reset bits set, stable and readable.
+- GSC firmware initialization-complete bit clear, stable and readable.
+- Every fuse-present engine idle: HEAD=TAIL, CTL=0, current LRCA=0 and the
+  execution queue invalid with no valid, pending or active entry. Do not
+  interpret historical switch reasons or the undefined reset context ID as
+  pending work. Retain two raw status snapshots in the log.
+- A complete import of every inherited GGTT entry, including the complete GOP
+  alias, finds no present PTE selecting PAT3. Any unknown/read failure refuses.
 
-**Accepted (chronium, 2026-10-29):** retain copying and extend a
-bounded read-only inventory to the fused engine/context and GuC/GSC consumers,
-with the additional Linux-qualified forcewake holds explicitly listed before
-implementation. No reset, stop-ring, firmware command or submission. Keep the
-PAT3 write conditional; unestablished consumer ownership still means no write.
-This explicitly extends the earlier GT-only power/access fields. It does not
-relax the separate condition on programming PAT3. A complete inherited
-consumer proof may require a later GT takeover rather than status sampling.
+The engine queue predicate uses the modern execution-queue layout (Gen12 PRM,
+Vol2c Part1, printed pages893–895); pinned xe reads the same status registers
+and uses active bit7. It does not use the old Gen8 execlist port bit layout.
+References at Linux`05f7e89ab9731565d8a62e3b5d1ec206485eeb0b`:
+[engine status](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_execlist.c),
+[GuC reset](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_guc.c),
+[GSC initialization](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gsc.c).
 
-References at Linux `05f7e89ab9731565d8a62e3b5d1ec206485eeb0b`:
-[context roots and descriptors](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_lrc.c),
-[GSC lifetime](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gsc.c),
-and [Gen12 PRM, Vol2c Part1](https://cdrdv2-public.intel.com/703046/intel-gfx-prm-osrc-tgl-vol-02-c-command-reference-registers-part-1.pdf).
-R5 is the newly authorized observation packet, not a write-capable flip run.
-It collects this missing evidence while retaining ordinary copying.
+Keep all relevant holds through the GGTT import and final recheck. With the
+proof confirmed, the existing MCR multicast protocol may program only PAT3
+with`0x3c`, logging before/after; PAT0–2 and all inherited PTEs remain untouched.
+An already-qualified inherited uncached entry needs no PAT write. Only the two
+new UMA buffers use the selected index. Any failed/uncertain condition keeps
+ordinary GOP copying; uncertain hardware cleanup fences and retains resources
+until reboot. The independent DMA, power, mode, GGTT ownership and correlated
+flip-retirement checks remain mandatory. No GuC/GSC start or context submission
+may be added later without revisiting this ownership contract.
 
+This explicitly accepts the submitter proof for dormant PPGTT mappings; it does
+not claim that saved context memory was enumerated or that its page tables were
+read. No context-memory access, reset, submission or firmware command is added.
+
+### Native consumer observation and MM batching result
+
+R5 on vela captured all seven engines (RCS0/BCS0/BCS8/CCS0/VCS0/VECS0/GSCCS0),
+with stable idle-looking samples, both GuCs in MIA reset, GSC initialization
+incomplete, PAT0–3 zero, and confirmed cleanup. It performed no PAT/GGTT/plane
+writes. This native observation informed the accepted submitter argument above;
+R6 independently rechecks it at each boot before its conditional write.
+
+Single native observations, same matched archive/profile; not repeated samples:
+
+| Preparation phase | R4 | R5 including MM #1587 |
+| --- | ---: | ---: |
+| Display register windows | 376.9 ms | 3.3 ms |
+| GT identity windows | 187.9 ms | 1.1 ms |
+| GT cache windows | 188.0 ms | 1.3 ms |
+| GOP alias inspection | 202.7 ms | 15.8 ms |
+| Total display preparation | 1175.6 ms | 112.7 ms |
+
+R5 includes the additional consumer inventory; total preparation nevertheless
+fell about90%. Raw captures stay outside the repository at
+`/shared/present/vela-tearing/flips-native-20261029-r5/results-vela-r5/`.
 
 ### Implemented bounded consumer inventory (r5)
 
@@ -794,11 +822,10 @@ and retains mappings/holds until reboot; ordinary CPU-copy boot may continue
 with a proven unchanged GOP. CPU mapping refusal cleans up confirmed resources.
 Other consumer/status windows are RO/NX/UC and map once with batched alias proof.
 
-This **read-only observation slice intentionally ends before write admission**,
+The R5 **read-only observation slice ended before write admission**,
 even if a usable inherited PAT entry happens to exist: no PAT, GGTT PTE or plane
-write is issued. It returns to copying after confirmed GT cleanup. PAT3=0x3c
-remains authorized only after the independent complete-consumer proof succeeds;
-this inventory does not fabricate that proof from raw samples. No reset,
+write is issued. It returned to copying after confirmed GT cleanup. R6 supersedes that
+observation-only boundary with the explicitly accepted submitter proof above. No reset,
 submission, firmware command, modeset or arbitrary context-memory read occurs.
 
 R5 is hands-free, immediately blanks the OLED on presentation, has no game or
