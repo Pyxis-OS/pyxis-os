@@ -27,10 +27,13 @@ and required platform/SAR inputs are available. WCPU plus BBMCU0 initialize
 both MAC/PHY contexts and both RF paths. Fixed firmware/SAR/numeric-regdb limits
 are applied before TX-capable PRE_NOTIFY/DACK/RXDCK/TSSI calibration. No probes,
 association, null/data packets or ordinary automatic responses are enabled.
-Calibration stays on requested channel 1 for a 1+6 sweep; NO_IR-only startup
-and unqualified restrictive channels refuse before calibration.
+Both contexts calibrate on the lowest requested channel that permits initiation;
+NO_IR-only startup refuses without borrowing a channel outside the request.
 
-The first profile accepts one explicit legal channel or the explicit 1+6 mask.
+Default scans select the admitted channel 1–13 set; explicit subsets are exact.
+The firmware period is 232 TU per channel within the existing 15-second deadline.
+World channels 12–13 use Linux's NO_IR listen-only entries, without probes or
+calibration there. Unsupported channel/rule profiles refuse before startup.
 BE firmware offload completes the requested list; results publish only after
 END/confirmed STOP and captured RX retirement. PPDU reports supply hopping
 frame channels with separate correlation groups per BB. Unmatched metadata is
@@ -42,7 +45,7 @@ Healthy firmware/DMA stays retained and idle RX is drained/dropped. Another
 exact-mask request needs no startup/RFK; a changed mask is unsupported in this
 slice. Uncertainty/rfkill takes the existing checked terminal-stop path, retaining
 backing if stop cannot be confirmed. No RTL network interface or CONNECT path.
-The common 1+6 power image intersects both channels' signed ceilings before
+The common power image intersects every requested channel's signed ceilings before
 RFK/START and is checked again after result collection closes. These historical
 endpoint checks do not measure radiated power or prove continuous enforcement
 inside closed firmware. Native qualification and remaining gates are in the

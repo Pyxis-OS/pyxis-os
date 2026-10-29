@@ -28,7 +28,6 @@
 #define RTL8922AE_SCAN_MS 15000u
 #define RTL8922AE_RFKILL_NS UINT64_C(10000000)
 #define RTL8922AE_STOP_MS 10000u
-#define RTL8922AE_HOP_CHANNELS ((UINT32_C(1) << 0) | (UINT32_C(1) << 5))
 
 /* The BSP owns preparation and the sole worker. Status publication uses IF=0;
  * archive bytes, plans, PCI context and DMA backing survive the worker. */
@@ -343,7 +342,7 @@ static bool initialize_phy(uint64_t deadline, const char **detail)
   /* Validate every CPU-only RFK and power input before programming the PHY.
    * A table fallback supplies data, never additional regulatory authority. */
   enum rtl8922ae_power_result power;
-  if (preparation.channels == RTL8922AE_HOP_CHANNELS) {
+  if (preparation.channels & (preparation.channels - 1)) {
     power = rtl8922ae_power_prepare_common(preparation.asset.data, preparation.asset.size,
         &preparation.tables, &preparation.sar, preparation.platform.rtag.state,
         preparation.status.base.country, &preparation.rules, preparation.channels,
@@ -576,7 +575,8 @@ static void rtl8922ae_worker(void *argument)
       rtl8922ae_discovery_start(&preparation.discovery, work->channels);
       rtl8922ae_mac_scan_filter(true);
       rtl8922ae_phy_scan_dig();
-      completed = rtl8922ae_scan_run(work->channels, work->deadline_ns, &detail);
+      completed = rtl8922ae_scan_run(work->channels, &preparation.rules,
+          work->deadline_ns, &detail);
     }
     /* CLOSE/CUT/deadline cannot cancel the independent firmware/RX retirement.
      * A confirmed STOP can preserve a healthy context after cancellation, but
@@ -598,7 +598,7 @@ static void rtl8922ae_worker(void *argument)
       retired = false;
     }
     rtl8922ae_discovery_stop(&preparation.discovery);
-    if (retired && preparation.channels == RTL8922AE_HOP_CHANNELS) {
+    if (retired && (preparation.channels & (preparation.channels - 1))) {
       retired = verify_power(cleanup, &cleanup_detail);
     }
     preparation.stopping = false;
@@ -765,33 +765,36 @@ enum call_status rtl8922ae_scan(struct wifi_scan_work *work)
     return CALL_UNAVAILABLE;
   }
   if (!wifi_regdb_profile(preparation.status.base.country, &preparation.rules)) return CALL_BAD_REQUEST;
-  uint32_t admitted = preparation.rules.channels & preparation.status.base.policy_channels;
+  uint32_t admitted = preparation.rules.channels & preparation.status.base.policy_channels &
+      RTL8922AE_SCAN_CHANNELS;
   if (!admitted) return CALL_UNAVAILABLE;
   if (work->channels & ~admitted) return CALL_BAD_REQUEST;
-  if (!work->channels || ((work->channels & (work->channels - 1)) &&
-      work->channels != RTL8922AE_HOP_CHANNELS)) {
-    set_detail("RTL8922AE requires one explicit channel or the 1+6 sweep");
-    return CALL_UNAVAILABLE;
-  }
-  for (unsigned i = 0; i < WIFI_CHANNEL_24_COUNT; ++i) {
-    if (!(work->channels & (UINT32_C(1) << i))) continue;
+  uint32_t channels = work->channels ? work->channels : admitted;
+  uint8_t channel = 0;
+  for (unsigned i = 0; i < RTL8922AE_CHANNELS_2G; ++i) {
+    if (!(channels & (UINT32_C(1) << i))) continue;
     uint32_t restrictive = preparation.rules.channel[i].flags &
-        ~(WIFI_RULE_AUTO_BW | WIFI_RULE_NO_HT40);
+        ~(WIFI_RULE_AUTO_BW | WIFI_RULE_NO_HT40 | WIFI_RULE_NO_IR);
     if (restrictive) {
-      set_detail("RTL8922AE request contains an unqualified calibration channel");
+      set_detail("RTL8922AE request contains an unsupported rule profile");
       return CALL_UNAVAILABLE;
     }
+    if (!channel && !(preparation.rules.channel[i].flags & WIFI_RULE_NO_IR)) channel = i + 1;
   }
-  if (preparation.live && work->channels != preparation.channels) {
+  if (!channel) {
+    set_detail("RTL8922AE request has no calibration-eligible channel; no startup");
+    return CALL_UNAVAILABLE;
+  }
+  if (preparation.live && channels != preparation.channels) {
     set_detail("RTL8922AE retained scan context supports its prepared mask only");
     return CALL_UNAVAILABLE;
   }
-  uint8_t channel = __builtin_ctz(work->channels) + 1;
   uint64_t maximum = task_deadline_after_ms(RTL8922AE_SCAN_MS);
   if (!work->deadline_ns || work->deadline_ns > maximum) work->deadline_ns = maximum;
   if (task_deadline_expired(work->deadline_ns)) return CALL_TIMED_OUT;
+  work->channels = channels;
   preparation.channel = channel;
-  preparation.channels = work->channels;
+  preparation.channels = channels;
   preparation.abort_status = CALL_OK;
   if (!preparation.live) {
     preparation.status.phy = (struct wifi_phy_facts){.channel = preparation.channel};

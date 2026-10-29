@@ -1142,8 +1142,10 @@ No fixed period guarantees reception of every AP or beacon interval. The matched
 
 ### Ordered delivery
 
-Task 1 is assigned (chronium, 2026-10-29). Later implementation tasks need their
-own assignment; native windows are separately scheduled by the orchestrator.
+Task 1 is qualified. Task 2 is assigned (chronium, 2026-10-29): the full
+admitted 1–13 passive sweep, period 232 and unchanged 15-second deadline, with
+first-startup and retained-scan timings reported separately. Further tasks
+need their own go; native windows are scheduled by the orchestrator.
 
 1. [x] **Status facts and channel-6 bug investigation.** Capture the
    current baseline before changes, add the observational startup facts and
@@ -1172,6 +1174,27 @@ own assignment; native windows are separately scheduled by the orchestrator.
    **After this task chronium can:** run `wifi scan` for the currently admitted
    channel 1–13 set without spelling a mask, including world-domain passive
    listening on 12–13.
+
+### Full-sweep implementation and qualification
+
+The candidate admits zero/default as the complete effective 1–13 set, returns
+that selected mask in the immutable FILE, and keeps explicit requests exact.
+The same-mask retained check uses the selected mask, so default followed by
+explicit full mask reuses the context. A different mask still refuses before
+effects. NO_IR-only cold requests refuse before firmware startup; no calibration
+channel is borrowed. Both contexts initialize on the lowest requested eligible
+channel under a common firmware/SAR/numeric-EIRP image covering the entire mask.
+
+The BE list has at most 13 entries (420 bytes), no probe IDs/null/random TX,
+period **232 TU**, and the reference DFS/listen-only bit plus dwell 20 for NO_IR
+entries (`fw.c:7487–7494,7814–7818`). The accepted value is unchanged; TU names
+the firmware's units, not a new duration choice. Successful END and captured RX
+retirement remain the publication boundary; no ENTER-notification gate is added.
+The 15-second end-to-end deadline and existing cleanup contract are unchanged.
+
+[Full-sweep record](../development/experiments/rtl8922ae-full-sweep.md).
+CPU wire/power checks and builds are separate from native RF qualification.
+Native admitted-set/NO_IR behavior and elapsed timings remain pending.
 
 ### Route from discovery to association
 
