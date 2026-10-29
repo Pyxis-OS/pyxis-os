@@ -947,7 +947,19 @@ parent's ownership.
    selects an immutable, **small non-game** kernel/archive pair under
    `EFI/pyxis/recovery`. Normal publication never replaces or cleans that config
    or pair; retain it in addition to current and previous. Never overwrite a
-   foreign fallback. Audit all higher-priority Limine config candidates and
+   foreign fallback. **Legacy Coexist exception, accepted 2026-10-29:** Update
+   may replace the identified legacy Pyxis rescue fallback with the canonical
+   recovery pair and ownership manifest used by 0.0.10 installations. Verify
+   the exact selected-ESP GUID-bound legacy rescue template and complete known
+   Pyxis payload hashes first; a title or pathname alone proves no ownership.
+   Stage, sync and verify the new pair, manifest, retained old fallback and new
+   fallback before a bounded checked replacement. Never truncate the live
+   fallback. Retain the old pair and a durable copy of its fallback; reject
+   edited/foreign inputs, collisions and partial migration artifacts. Explicitly
+   show this migration and verified primary-entry adoption in Review. Preserve
+   all foreign menu bytes, Fedora files and the existing firmware boot order.
+   This exception does not permit replacing an existing new-style recovery.
+   Audit all higher-priority Limine config candidates and
    refuse shadowing. A fresh installation is recoverable only after the first
    complete fallback provision is confirmed. Review must account for actual
    rounded allocation of **current + previous + pinned rescue**, configuration

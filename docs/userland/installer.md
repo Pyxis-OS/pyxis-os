@@ -422,3 +422,20 @@ trip; see the
 The [program reference](../../userspace/installer/README.md) describes its SDK
 boundary; the [format and host tools](../../fs/docs/npfs-host-tools.md) remain
 owned by pyxis-fs.
+
+### Legacy Coexist Update
+
+Update recognizes the identified 0.0.9 manual Coexist menu and the owner's
+0.0.8 bootstrap rescue. Review explicitly adopts only the GUID-bound Pyxis
+normal/rescue entries after checking their immutable attempt manifests and all
+payload hashes. Other primary-menu bytes, including an existing previous entry,
+remain unchanged; retained menus protect the attempts they still reference.
+
+As the accepted legacy-only exception, Update replaces the proven Pyxis rescue
+fallback with the canonical `EFI/pyxis/recovery` pair and ownership manifest.
+The new pair and staged fallback are synchronized and verified first. A checked,
+bounded rename replaces `boot/limine.conf`; its original bytes remain in
+`EFI/pyxis/recovery/legacy-fallback.conf`, and the old pair is retained. Foreign
+fallbacks, modified legacy bytes and partial migration artifacts refuse instead
+of being overwritten. Existing new-style recovery is never replaced. Fedora
+files and the selected firmware-order policy remain unchanged.
