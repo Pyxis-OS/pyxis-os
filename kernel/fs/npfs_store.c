@@ -1695,22 +1695,34 @@ struct npfs_store_pool *npfs_store_inode_pool(struct npfs_store_inode *inode)
   return inode->volume->pool;
 }
 
+/* One uninterrupted scan owns io[0] until it returns or starts an inode read
+ * or mutation. Decoded entries own their names; the scratch page never escapes. */
+struct directory_walk {
+  uint64_t logical;
+  bool loaded;
+};
+
 static enum call_status directory_record(struct npfs_store_context *context, struct npfs_store_inode *directory,
-  uint64_t position, struct npfs_dirent *entry)
+  struct directory_walk *walk, uint64_t position, struct npfs_dirent *entry)
 {
   struct npfs_store_pool *pool = directory->volume->pool;
-  uint64_t physical;
-  enum call_status status = map_read(context, pool, directory->record.pointers,
-    position / NPFS_BLOCK_SIZE, &physical);
-  if (status != CALL_OK) {
-    return status;
-  }
-  if (!physical) {
-    return corrupt(context);
-  }
-  status = read_metadata_block(context, pool, physical, pool->io[0]);
-  if (status != CALL_OK) {
-    return status;
+  uint64_t logical = position / NPFS_BLOCK_SIZE;
+  if (!walk->loaded || walk->logical != logical) {
+    uint64_t physical;
+    enum call_status status = map_read(context, pool, directory->record.pointers,
+      logical, &physical);
+    if (status != CALL_OK) {
+      return status;
+    }
+    if (!physical) {
+      return corrupt(context);
+    }
+    status = read_metadata_block(context, pool, physical, pool->io[0]);
+    if (status != CALL_OK) {
+      return status;
+    }
+    walk->logical = logical;
+    walk->loaded = true;
   }
   unsigned offset = (unsigned)(position % NPFS_BLOCK_SIZE);
   return format_failure(context, npfs_dirent_decode(&pool->header, pool->io[0] + offset,
@@ -1727,10 +1739,11 @@ static enum call_status directory_find(struct npfs_store_context *context, struc
     return CALL_BAD_REQUEST;
   }
   bool match = false;
+  struct directory_walk walk = {0};
   uint64_t offset = 0;
   while (offset < directory->record.size) {
     struct npfs_dirent entry;
-    enum call_status status = directory_record(context, directory, offset, &entry);
+    enum call_status status = directory_record(context, directory, &walk, offset, &entry);
     if (status != CALL_OK) {
       return status;
     }
@@ -1797,11 +1810,12 @@ enum call_status npfs_store_enumerate(struct npfs_store_context *context, struct
   if ((!generation && position) || position > directory->record.size) {
     return CALL_BAD_REQUEST;
   }
+  struct directory_walk walk = {0};
   if (position < directory->record.size) {
     uint64_t boundary = position - position % NPFS_BLOCK_SIZE;
     while (boundary < position) {
       struct npfs_dirent previous;
-      enum call_status status = directory_record(context, directory, boundary, &previous);
+      enum call_status status = directory_record(context, directory, &walk, boundary, &previous);
       if (status != CALL_OK) {
         return status;
       }
@@ -1812,7 +1826,7 @@ enum call_status npfs_store_enumerate(struct npfs_store_context *context, struct
     }
   }
   while (position < directory->record.size) {
-    enum call_status status = directory_record(context, directory, position, entry);
+    enum call_status status = directory_record(context, directory, &walk, position, entry);
     if (status != CALL_OK) {
       return status;
     }
@@ -2418,9 +2432,10 @@ static enum call_status directory_insert(struct npfs_store_context *context, str
   uint16_t needed = (uint16_t)((NPFS_DIRENT_HEADER_SIZE + length + 7) & ~7u);
   uint64_t position = 0;
   struct npfs_dirent free_entry = {0};
+  struct directory_walk walk = {0};
   bool available = false;
   while (position < directory->record.size) {
-    enum call_status status = directory_record(context, directory, position, &free_entry);
+    enum call_status status = directory_record(context, directory, &walk, position, &free_entry);
     if (status != CALL_OK) {
       return status;
     }
@@ -2474,9 +2489,10 @@ static enum call_status directory_insert(struct npfs_store_context *context, str
 
 static enum call_status directory_empty(struct npfs_store_context *context, struct npfs_store_inode *directory)
 {
+  struct directory_walk walk = {0};
   for (uint64_t position = 0; position < directory->record.size;) {
     struct npfs_dirent entry;
-    enum call_status status = directory_record(context, directory, position, &entry);
+    enum call_status status = directory_record(context, directory, &walk, position, &entry);
     if (status != CALL_OK) {
       return status;
     }
