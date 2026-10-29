@@ -2,9 +2,9 @@
 
 [Task 1](../../wip/rtl8922ae-wifi.md#next-discovery-slice--accepted-chronium-2026-10-29)
 adds startup observations and investigates a known nearby channel-6 network.
-Its BSSID and raw captures remain private. Channel-6 reception in Pyxis is not
-qualified; the accepted period change awaits matched native qualification; no decoder,
-RF retune or filter fix has been introduced.
+Its BSSID and raw captures remain private. Channel-6 reception and attribution
+are qualified on vela with period 232. No decoder, RF retune or filter change
+was needed.
 
 ## Software baseline and observation boundary
 
@@ -85,13 +85,13 @@ for passive/no-SSID visits (`net/mac80211/scan.c:27,966–973`); rtw89's firmwar
 offload retains its separate policy above. The successful control supports a
 longer listen interval, but does not yet isolate the Pyxis cause.
 
-## Temporary diagnostics and remaining gate
+## Temporary diagnostics and matched native qualification
 
 Chronium allowed packet-only bounded pre-filter metadata (2026-10-29): 512
 frame records and 16 firmware-step events across the pair, copied before
 filtering, no SSID/payload or DMA pointers. Raw identifiers stayed private and
-UDP log export was disabled. The diagnostic worktree/builds are retired; no
-trace code enters the production PRs. Immutable source/evidence packets remain.
+UDP log export was disabled. No trace code enters the production PRs; diagnostic source and provenance
+are retained in the sealed packets. Immutable source/evidence packets remain.
 Old Linux exporter limitations (integer-only frequencies and exact-size scan
 reports) were corrected only in later packet tools; old seals/results remain
 unchanged. Unknown report tails are never exported publicly.
@@ -100,5 +100,33 @@ The [accepted candidate](../../wip/rtl8922ae-wifi.md#passive-scan-period--accept
 is the same Pyxis 1+6 sequence with only period 45 changed to 232, retaining all
 power/RFK/filter/deadline and FILE checks. Chronium accepted it on 2026-10-29
 for the 1+6 profile and the default passive sweep. Implementation changes only
-the period constant; matched native known-BSSID evidence is pending. A fixed dwell cannot guarantee every AP;
-empty/partial results or capture loss never authorize an automatic retry.
+the period constant. A fixed dwell cannot guarantee every AP; empty/partial
+results or capture loss never authorize an automatic retry.
+
+
+### Matched period-232 Pyxis result (vela, 2026-10-29)
+
+Chronium/orchestrator ran sealed `native-period232-20261029`, private kernel
+`73430606243a41788ffbe5687a4d7441ca7620df` derived from production
+`f9397f4206e2a781f9561fe2c60b353a95c5699b`, userland
+`d28deaf9d97aba95a5d3a2b7e3fc326f046408fe`, firmware 0.35.80.3, world `00`.
+Production behavior changed only period 45 to 232; bounded pre-filter/visit
+tracing was packet-only. Run `sequence.py` as sealed in that packet's README.
+Public evidence: `/shared/present/rtl8922ae-passive-scan/native-period232-20261029/results/run/summary.json`.
+
+Both sequential 1+6 scans completed: 5 and 7 immutable FILE records, no
+truncation, both result-channel masks `0x21`. ENTER/LEAVE order was 1 then 6
+in each scan; all four visits reported actual/expected period 232. The known
+channel-6 AP appeared four times (twice per scan): PPDU/raw/advertised/step
+channel all 6, matched and accepted. Of 66 copied pre-filter frames, 51 had
+PPDU channel 1 and 15 channel 6; no capture drops. The first FILE remained
+held and unchanged across scan 2; result objects were independent. RFK stayed
+`0xf`, power readbacks advanced 11 to 12, healthy context and wired management
+were retained, and PXE restored byte-for-byte. This boot found a non-active MAC;
+startup cycling is established by the earlier capture, not inferred here.
+
+The matched period-only intervention resolves the observed channel-6 miss
+for this profile and demonstrates correct PPDU attribution. It does not
+establish a universal minimum dwell or qualify the full 1–13 sweep, NO_IR
+retuning, radiated power, cancellation, recovery or association. The exact
+Linux known-BSSID comparison remains deferred to the next Fedora window.

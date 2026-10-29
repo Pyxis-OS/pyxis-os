@@ -1020,10 +1020,12 @@ bounded slice, not the complete channel set, physical rfkill or general recovery
 
 Open qualification items (chronium, 2026-10-28):
 
-- [ ] Demonstrate channel-6 PPDU attribution. The native sweep visited both
-  channels, but all returned records were attributed to channel 1.
-- [ ] Prove execution of the startup active-MAC power-off/power-on branch.
-  The successful boot's saved logs do not identify whether that branch ran.
+- [x] Channel-6 PPDU attribution demonstrated by the period-232 native scans
+  (2026-10-29): the known AP was received twice per scan, with PPDU, raw,
+  advertised and firmware-step channel all 6.
+- [x] Startup active-MAC power-off/power-on observed in the earlier attribution
+  capture (2026-10-29). The period-232 boot found a non-active MAC and did not
+  need that branch. See the [attribution record](../development/experiments/rtl8922ae-attribution.md).
 
 [Qualification record](../development/experiments/rtl8922ae-hopping.md).
 These checkboxes do not complete full admitted-mask discovery or cancellation.
@@ -1127,7 +1129,12 @@ Qualify the same two sequential 1+6 scans with the first immutable FILE held
 through the second. Verify firmware-reported period 232 and the known channel-6
 BSSID using horse's private input. Keep pre-filter tracing temporary and
 packet-only. Report empty/partial results or capture loss honestly, never
-retrying automatically. Native channel-6 qualification is pending.
+retrying automatically. Native qualification passed on vela (2026-10-29): both
+scans completed with 5/7 records and no truncation; all four firmware visits
+reported actual/expected period 232. The privately identified channel-6 AP
+appeared twice per scan, correctly attributed and accepted. The first FILE
+stayed held and unchanged through the second scan; independent snapshots,
+retained context, wired management and byte-exact PXE restoration passed.
 
 Passive visits last longer; caller deadlines and cancellation remain effective.
 No fixed period guarantees reception of every AP or beacon interval. The matched
@@ -1138,16 +1145,17 @@ No fixed period guarantees reception of every AP or beacon interval. The matched
 Task 1 is assigned (chronium, 2026-10-29). Later implementation tasks need their
 own assignment; native windows are separately scheduled by the orchestrator.
 
-1. [ ] **Small first task: status facts and channel-6 bug investigation.** Capture the
+1. [x] **Status facts and channel-6 bug investigation.** Capture the
    current baseline before changes, add the observational startup facts and
    matching SDK flag validation/status reader, and audit channel decoding against
    pinned Linux. Compare observed BSSIDs privately with the known channel-6
    network, fix any demonstrated decoder/receive bug, then qualify the existing
    1+6 path and independent FILEs across repetition. Report only redacted results;
    an unexplained missing known network remains a bug, not a qualification pass.
-   Native checkpoint (2026-10-29): the active-MAC startup cycle is observed;
-   the known channel-6 BSSID is missing before filtering, so attribution remains
-   unqualified. See the [capture interpretation](../development/experiments/rtl8922ae-attribution.md#native-and-linux-controls-vela-2026-10-29).
+   Native qualification (2026-10-29): startup normalization observed in the
+   earlier capture; the period-only change to 232 demonstrated correct known-AP
+   channel-6 reception and independent repeated results. No decoder, retune or
+   filter fix was needed. See the [capture interpretation](../development/experiments/rtl8922ae-attribution.md#native-and-linux-controls-vela-2026-10-29).
    **After this task chronium can:** tell whether startup normalized an active
    MAC, and inspect evidence for a genuinely second-channel BSS.
 2. [ ] **Admitted 1–13 sweep.** Generalize common-image construction and the bounded
