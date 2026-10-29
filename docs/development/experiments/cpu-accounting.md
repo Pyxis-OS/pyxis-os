@@ -73,10 +73,36 @@ vela's TSC is 3.6864 GHz.
   timer never lands in the kernel.
 - **QEMU** showed the same pattern.
 
+## The implementation on vela
+
+The implemented accounting reads the TSC once per dispatch return and once per
+idle wake, and splits user and kernel time with two more reads per syscall. A
+`nosplit` build left out the syscall reads. Five boots per image, compared only
+within the packet (base was main `c65430c6`):
+
+| Workload | nosplit | with split | split alone |
+| --- | --- | --- | --- |
+| ipcbench call, median | +2.6% | +3.9% | +1.3% (+62 ns) |
+| ipcbench call, p10 | +2.6% | +4.2% | +1.6% (+70 ns) |
+| ipcbench send, p10 | 0 | +3.7% | +3.7% (+82 ns) |
+| launch | +1.1% | +3.1% | +1.9% (+22 µs) |
+
+- **Single read:** one read per dispatch saved nothing over B. In QEMU (4
+  CPUs, a counting build), 2.0 of the 2.1 dispatches per call round trip
+  follow an idle wake, and the wake's read sits where B's pre-switch read was.
+  One read between wake and dispatch is the minimum for exact timing.
+- **Split:** two reads per syscall; a call round trip has about 2.5 syscalls
+  and a sent message about 3.1.
+- **Per-CPU totals:** this build kept them in the packed, 16-byte-aligned
+  `schedulers` array, on cache lines shared with other CPUs' queue fields. The
+  merged design moves them to one line per CPU and keeps the syscall path to the
+  task (chronium, 2026-10-29).
+
+**Split rule (chronium, 2026-10-29):** the user/kernel split stays if the
+re-measure of that design shows it at or under about +1.5% on ipcbench call;
+otherwise it is dropped and user/kernel time is recorded as technical debt.
+
 ## Limits
 
 - One native machine, at one CPU count.
 - IPC figures are the benchmark's batch means.
-- The implemented accounting differs from experiment B: it reads the TSC once
-  per dispatch and splits user and kernel time at syscall entry and leave. Its
-  own measurements are in its PR.

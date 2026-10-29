@@ -103,11 +103,18 @@ struct scheduler {
   size_t queued;
   bool running;
   struct task_wait *expired_address_waits; /* Local CPU writes; queues_locked, not notified. */
-  /* Local scheduler loop only: the last TSC boundary and this CPU's totals. */
-  uint64_t cpu_mark, cpu_user_cycles, cpu_kernel_cycles, cpu_idle_cycles;
 };
 
+/* Written only by its own CPU's scheduler loop. Each slot fills its own cache
+ * line: the packed schedulers array shares lines with fields other CPUs write
+ * when they queue work, which would stall the wake and dispatch paths. */
+struct cpu_time {
+  uint64_t mark; /* The last TSC boundary on this CPU. */
+  uint64_t busy_cycles, idle_cycles;
+} __attribute__((aligned(64)));
+
 static struct scheduler *schedulers;
+static struct cpu_time cpu_times[ARCH_CPU_LIMIT];
 static struct task *completed_head;
 static struct task **ram_retired; /* queues_locked; indexed by departure CPU. */
 static atomic_bool started;
@@ -344,20 +351,18 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
   finish_user_task((struct process_result){.kind = PROCESS_TERMINATED});
 }
 
-/* Charges the current task's time since its last boundary on this CPU to user
- * or kernel time. IF=0, on the CPU that runs or just ran TASK. */
+/* Charges TASK's time since its last boundary on this CPU to user or kernel
+ * time. IF=0, on the CPU that runs or just ran TASK. Touches only the task, so
+ * the syscall path writes no shared line. */
 static uint64_t account_task(struct task *task, bool kernel)
 {
-  struct scheduler *scheduler = local_scheduler();
   uint64_t now = arch_tsc_read();
   uint64_t cycles = now > task->cpu_mark ? now - task->cpu_mark : 0;
   task->cpu_mark = now;
   if (kernel) {
     task->cpu_kernel_cycles += cycles;
-    scheduler->cpu_kernel_cycles += cycles;
   } else {
     task->cpu_user_cycles += cycles;
-    scheduler->cpu_user_cycles += cycles;
   }
   return now;
 }
@@ -1745,8 +1750,9 @@ void task_yield_masked(void)
   }
 
   struct scheduler *scheduler = local_scheduler();
+  struct cpu_time *local_time = &cpu_times[cpu_index];
   arch_timer_deadline_start();
-  scheduler->cpu_mark = arch_tsc_read();
+  local_time->mark = arch_tsc_read();
   for (;;) {
     task_timer_service();
     cancel_expired_address_waits(scheduler);
@@ -1763,8 +1769,8 @@ void task_yield_masked(void)
        * The timer still services deadlines and BSP-only request/cleanup queues. */
       cpu_wait_interrupt();
       uint64_t now = arch_tsc_read();
-      scheduler->cpu_idle_cycles += now > scheduler->cpu_mark ? now - scheduler->cpu_mark : 0;
-      scheduler->cpu_mark = now;
+      local_time->idle_cycles += now > local_time->mark ? now - local_time->mark : 0;
+      local_time->mark = now;
       continue;
     }
 
@@ -1798,9 +1804,11 @@ void task_yield_masked(void)
     }
     /* One TSC read per dispatch: the return below closes this task's interval
      * and opens the next, so loop work in between is charged to the next task. */
-    task->cpu_mark = scheduler->cpu_mark;
+    task->cpu_mark = local_time->mark;
     arch_context_switch(&scheduler->stack, task->saved_stack);
-    scheduler->cpu_mark = account_task(task, task->kind != TASK_USER || task->in_syscall);
+    uint64_t now = account_task(task, task->kind != TASK_USER || task->in_syscall);
+    local_time->busy_cycles += now > local_time->mark ? now - local_time->mark : 0;
+    local_time->mark = now;
 
     /* We are back on this CPU's permanent stack. Drop the private root and
      * flush translations before publishing completion to the BSP reaper. */
