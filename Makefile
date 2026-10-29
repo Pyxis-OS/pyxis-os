@@ -543,11 +543,17 @@ endif
 
 image: build/pyxis.iso
 
-usb-image: build/caelum.elf build/initrd.cpio build/limine.conf fs-tools \
+# Boot media load these through Limine's `$` gzip URIs; installed disks and the
+# release package keep the uncompressed files (docs/development/boot-archive.md).
+build/caelum.elf.gz build/initrd.cpio.gz: build/%.gz: build/%
+	gzip -n -6 -c $< > $@.tmp
+	mv $@.tmp $@
+
+usb-image: build/caelum.elf.gz build/initrd.cpio.gz build/limine.conf fs-tools \
            third_party/limine/BOOTX64.EFI | image-inputs
 	./scripts/make-usb-image.sh
 
-build/pyxis.iso: build/caelum.elf build/initrd.cpio \
+build/pyxis.iso: build/caelum.elf.gz build/initrd.cpio.gz \
                  build/limine.conf scripts/make-image.sh \
                  third_party/limine/BOOTX64.EFI third_party/limine/limine-uefi-cd.bin | image-inputs
 	./scripts/make-image.sh

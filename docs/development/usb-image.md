@@ -53,7 +53,7 @@ space after the ESP. Thus its size is `USB_IMAGE_MIB - USB_ESP_MIB - 2` MiB.
 
 | GPT entry | Type | Contents |
 | --- | --- | --- |
-| 1, `Pyxis EFI` | Standard EFI System Partition | `EFI/BOOT/BOOTX64.EFI`, `boot/caelum.elf`, `boot/initrd.cpio`, `boot/limine/limine.conf` |
+| 1, `Pyxis EFI` | Standard EFI System Partition | `EFI/BOOT/BOOTX64.EFI`, `boot/caelum.elf.gz`, `boot/initrd.cpio.gz` ([compressed](boot-archive.md#compressed-boot-media)), `boot/limine/limine.conf` |
 | 2, `Pyxis pool` | Pyxis pool, `1a8194a3-8a07-4dff-830e-4cb4ed7aac00` | One `usb-test` npfs volume containing `README.txt`, `SAFE_TO_WIPE` and `bin/cat.pxe` captured from the matching archive |
 
 The pool type is an image metadata convention introduced by this builder.

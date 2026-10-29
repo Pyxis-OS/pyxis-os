@@ -39,6 +39,41 @@ without copying payloads. The archive view includes final padding and reuses the
 reader's existing mapping; it is not a reconstructed collection of members.
 The running kernel image is not a substitute for the original ELF file.
 
+## Compressed boot media
+
+Accepted by chronium on 2026-10-29. `build/initrd.cpio.gz` and
+`build/caelum.elf.gz` are `gzip -n -6` copies of the archive and kernel,
+rebuilt only when their input changes. The ISO, the USB image and the owner's
+PXE trees carry only the `.gz` files. Their Limine entries load them through
+the pinned Limine's built-in gzip layer (pdgzip, listed in
+`third_party/limine/3RDPARTY.md`). Limine applies that layer only to a URI
+prefixed with `$`:
+
+```
+path: $boot():/boot/caelum.elf.gz
+module_path: $boot():/boot/initrd.cpio.gz
+```
+
+PXE entries use `$tftp():` the same way. A `$` URI naming an uncompressed file
+makes Limine panic with `gzip: decompression error`, and a gzip file without
+`$` reaches Caelum compressed and fails the archive check. The `.gz` suffix
+keeps the two visibly paired.
+
+Caelum, the archive reader and the installer's boot views receive the
+uncompressed bytes, unchanged. The installer therefore writes an uncompressed
+`initrd.cpio` and `caelum.elf` with its own plain entry, and the release
+package keeps the uncompressed files. Installed disks load from local storage,
+where size matters least. `build/caelum.elf` and `build/initrd.cpio` remain the
+build's outputs for the release package, bundles and debuggers.
+
+Measured sizes on 2026-10-29: the `full` archive was 75.7 MB, or 28.4 MB
+compressed; the 0.0.9 `core` archive 26.2 MB, or 11.3 MB with gzip -9; the
+kernel 8.3 MB, or 4.0 MB. gzip's 32 KiB window misses repeats that lie far
+apart, such as the rescue programs repeated in the core archive's recovery
+archive. zstd's long mode would reach 11.6 and 3.0 MB, but it needs a decoder
+in Caelum; that is revisited only if native PXE timing shows the remaining
+bytes cost material TFTP time.
+
 ## Manifest and publication
 
 A trusted host Lua manifest receives named input paths and returns file/tree
