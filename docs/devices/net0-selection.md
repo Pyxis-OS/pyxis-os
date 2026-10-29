@@ -13,11 +13,11 @@ The stock [network profile](networking.md#boot-configuration-and-use) enables
 `wired = { auto = true, exclude = {} }` and
 `wifi = { auto = true, exclude = {} }` with an empty explicit interface list.
 After complete boot discovery, explicit entries reserve names and controllers;
-remaining supported prepared controllers get unused `ethN` or `wlanN` names in
-ascending boot-local ID order within each class. Carrier-down or unknown-carrier
-Ethernet controllers are included. Generated entries have independent optional
-DHCP clients. `wired.exclude` and optional `wifi.exclude` omit listed MACs from
-IP configuration and delegated scopes, not mandatory driver draining; an exact
+remaining supported Ethernet controllers and prepared Wi-Fi controllers get
+unused `ethN` or `wlanN` names in ascending boot-local ID order within each
+class. Carrier-down or unknown-carrier Ethernet controllers are included. Generated entries have independent optional
+DHCP clients. Known excluded MACs are omitted from automatic definitions and
+delegated scopes, not mandatory driver draining; an exact
 selector naming an excluded controller is refused. Ethernet linked roles filter
 exclusions before preference/ID ranking and reservation, including late binding.
 A required linked role with no permitted prepared candidate refuses setup; a
@@ -40,6 +40,8 @@ cannot be reassigned until reboot.
 
 ## Wi-Fi identity and automatic binding
 
+Accepted (chronium, 2026-10-29).
+
 Without Wi-Fi MAC selectors or exclusions, automatic Wi-Fi entries bind prepared
 controller IDs immediately, even before MAC identity is available. Configuration
 does not start firmware or issue a radio operation to discover a MAC. With Wi-Fi
@@ -47,7 +49,9 @@ MAC pins or exclusions, affected bindings remain pending until a separately
 authorized Wi-Fi request reveals identity. Explicit roles and exclusions are
 resolved before automatic binding. If an explicit role takes a controller
 provisionally assigned to a generated name, that generated slot stays unbound
-and inert until reboot; it is not reassigned to another radio.
+and inert until reboot; it is not reassigned to another radio. The same applies
+when a late identity matches `wifi.exclude`: its already-declared slot and scope
+remain inert, without a controller binding or packet traffic.
 
 Automatic naming uses the currently selected native Wi-Fi backend; it does not
 add a multi-radio backend. Binding and optional DHCP grant no READ, SCAN or
