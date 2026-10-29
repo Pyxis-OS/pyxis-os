@@ -439,3 +439,9 @@ bounded rename replaces `boot/limine.conf`; its original bytes remain in
 fallbacks, modified legacy bytes and partial migration artifacts refuse instead
 of being overwritten. Existing new-style recovery is never replaced. Fedora
 files and the selected firmware-order policy remain unchanged.
+
+Newly published normal entries include `nvme.write=1` so an installed NVMe pool
+can finish package activation and provide writable home/configuration volumes.
+Rescue entries remain read-only. Exact released normal entries without that
+opt-in still verify against their existing boot binding until Update replaces
+the pair; a verified legacy entry's existing write intent is not lost.
