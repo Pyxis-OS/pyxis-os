@@ -265,6 +265,9 @@ The merged host packer/checker (2a, #706) stays; bin placement is merged
 [Release ideas](release-ideas.md): ideas and directions collected for 0.1.0 and
 later releases, each with its status and target; the first is disk management.
 
+[Ready-to-run QEMU image](qemu-image.md): a qcow2 with the release installed, built in the
+release flow beside the ISO; plan accepted in part (2026-10-29), tasks not started.
+
 [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
 [filesystems and namespaces](vfs.md): working drafts.
 
