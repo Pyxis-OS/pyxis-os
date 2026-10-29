@@ -61,3 +61,34 @@ inputs, existing collector adaptation and full raw records:
 with fresh output paths. Keep identical control bytes for matched after-runs;
 no repeated runs merely to increase sample count. Shared-memory behavior and
 native qualification remain tasks of the [milestone](../../wip/shared-memory.md).
+
+## Refreshed common base after process listing — 2026-10-29
+
+Before any shared-memory kernel edit, main moved through #1605/#1606 to
+`8d4f8b3d1bd75e91dc670d0a2a54c6cb0bef432b`. Process/space metadata and
+launch/retirement accounting changed, so this is the comparison baseline for
+implementation, not a speedup comparison against the earlier run.
+Kernel SHA-256 `5a1face2ea253a4a3ddfdc8e9b518318c3ffa5caf60bea595315a940e47085ae`.
+Same compiler/effective kernel config and exact frozen control archives,
+Remote client and parsers; MEMORY/IPC/launch/system-info ABI remains compatible.
+The new process-view protocol/syscall/header is additive and unused here.
+
+One fresh successful boot each at 1/4 vCPUs, same QEMU/workload configuration;
+all counts and FINAL drains pass. No startup failure on this refreshed base.
+IPC intervals remain within-boot median [min,max] milliseconds:
+
+| Guest interval | 1 vCPU | 4 vCPUs |
+| --- | --- | --- |
+| 1,024 launches, ms | 843.982 | 825.786 |
+| Private pages, ms | 18.137 | 17.778 |
+| CALL64 completion, ms | 1.266 [1.251, 1.579] | 1.230 [1.215, 2.662] |
+| CALL4096 completion, ms | 1.421 [1.387, 1.720] | 1.381 [1.340, 1.678] |
+| SEND64 completion, ms | 0.654 [0.636, 0.707] | 0.650 [0.632, 0.959] |
+| SEND4096 completion, ms | 0.710 [0.680, 0.809] | 0.702 [0.677, 1.264] |
+| SEND64 admission, ms | 0.077 [0.076, 0.096] | 0.078 [0.077, 0.128] |
+| SEND4096 admission, ms | 0.106 [0.100, 0.177] | 0.110 [0.102, 0.223] |
+
+Both guests stopped; source clean. Earlier 20c results/inputs remain intact.
+No boot-variance, regression or native claim. Small refreshed evidence:
+`/shared/present/shared-memory/baseline-8d4f/`; frozen local images/source and
+full raw records: `/home/chronium/build/shared-memory/baseline-8d4f/`.

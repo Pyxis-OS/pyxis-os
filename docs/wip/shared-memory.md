@@ -123,6 +123,20 @@ No new general hard process/space quota is added. Physical, virtual and metadata
 exhaustion remain honest failures; accounting does not reserve core RAM or
 isolate untrusted holders. A future hard budget needs a separate decision.
 
+## Native interface shape
+
+| Operation | Captured input | Result / authority |
+| --- | --- | --- |
+| MEMORY CREATE_SHARED | Nonzero size, rounded to pages; unused words zero | One owned region handle and rounded size; CREATE_SHARED required |
+| Shared region MAP | R or RW request, unused words zero | `memory_reservation` identity/address/size in the caller; READ or READ+WRITE required |
+| MEMORY RELEASE_RESERVATION | Exact caller-owned view identity | Status only; MANAGE required, aliases removed and region reference dropped |
+| Generic COPY / DESCRIBE | Existing capability ABI | Attenuated native rights or provider-free size/type metadata |
+
+Numeric protocol/operation identifiers and fixed-layout structs are assigned with
+their implementation; no unsupported operation or placeholder is exposed just
+to reserve a future ABI number. MAP reserves its persistent registration and
+cleanup ownership before any user mapping effect.
+
 ## Coherency and synchronization
 
 Normal WB CPU mappings are coherent. Initialization is visible at MAP completion;
@@ -139,17 +153,14 @@ Each task updates its checkbox and records validation, limits and exact heads.
 Focused dependencies publish before a parent pin; do not expose revocable MAP
 without its connected withdrawal implementation.
 
-- [ ] **1. Baseline and concrete interface closure.** The
-  [before-code 1/4-CPU controls](../development/experiments/shared-memory.md) pass
-  at clean main `20c99b3fa`; no implementation yet. Completion boundaries below
-  are now accepted; the baseline is refreshed for the intervening process-listing
-  main changes before kernel edits. Freeze current main and
-  compiler/configuration; run existing launch/private-pages/CALL/SEND64/4096
-  controls before implementation, one run/config for threshold questions. Record
-  source/ABI, CPU/clock/HWP/XSAVE, backing and variation. Finalize routine native
-  request/reply layout without inventing compatibility readers.
-  After this task chronium can review reproducible before-code costs and the
-  exact public authority/mapping contract.
+- [x] **1. Baseline and concrete interface closure.** The
+  [before-code 1/4-CPU controls](../development/experiments/shared-memory.md)
+  pass at clean main `20c99b3fa`, refreshed at `8d4f8b3d1` after process-listing
+  changes with the exact same frozen apps/archives. Both completion boundaries
+  are accepted. Source/compiler/configuration and observed ranges are recorded;
+  routine native layout follows the contract below without compatibility readers.
+  After this task chronium can review the before-code costs and the exact
+  public authority/mapping contract.
 - [ ] **2. Region ownership and backing.** Native region/storage, zeroed fixed
   allocation, READ/WRITE attenuation/DESCRIBE, origin accounting and last-reference
   reclamation. Reserve required mapping/cleanup storage before exposure. Focused
