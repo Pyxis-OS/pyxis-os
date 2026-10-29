@@ -870,3 +870,37 @@ ordinary R1 result; archive bytes differ only for the log reader, with game,
 demo, workload and renderer unchanged. A successful collector result requires
 confirmed Intel flip transactions; ordinary fallback is never labelled a flip
 pass. A firmware-start/submission implementation later must revisit PAT ownership.
+
+### R6 native flips and optical observation (2026-10-29)
+
+Vela, USB-C AC/no dock,2880x1800 inherited approximately60Hz, liveRAM,
+llvmpipe LLVM23.1.3 with upstream default workers. R6 at`913480dfa` passes
+terminal output/scroll and both1803-frame OpenArena workloads. The native log
+records`submitter proof qualified=1`, full GGTT`entries=1048576
+present-PAT3-references=0`, then`PAT3 programmed before=0 after=3c` with PAT0–2
+untouched. Initial owned flip and GOP return both confirm. The last sampled
+counter has4080 submitted/4080 confirmed, no deferrals or timeouts.
+
+| OpenArena workload | R1 ordinary A | R6 flip B |
+| --- | ---: | ---: |
+|360x221 integer8x|47.1fps /38.3s|50.3fps /35.9s|
+|2880x1800|15.6fps /115.6s|15.9fps /113.7s|
+
+These are single native runs, not repeated statistics. Chronium visually
+observed **no tearing** in both OpenArena runs on2026-10-29. This is his optical
+observation, not an automated tear-free proof; no separate attended terminal
+observation is claimed. Evidence stays at
+`/shared/present/vela-tearing/flips-native-20261029-r6/results-vela-B-r6/`.
+
+The flip-mode`copy` metric is the CPU transfer of the completed compositor
+staging image into the inactive owned WC UMA back buffer, including its store
+fence. It does not copy into the actively scanned front and does not include
+the subsequent flip wait. Composition remains separate. At2880x1800 the reported
+means are about1.92ms composition and1.1ms back-buffer copy; this is synchronized
+presentation, not zero-copy rendering.
+
+Keep the PR draft while addressing the startup regression: native preparation
+was2967ms total, with2947ms after alias inspection. The existing timestamps
+bracket approximately1570ms for DMA/GGTT mapping/import plus a consumer recheck,
+and1273ms after PAT admission for buffer setup, PTE publication and cleanup.
+They do not yet isolate the individual operations inside either interval.
