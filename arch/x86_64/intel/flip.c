@@ -77,6 +77,7 @@ static bool fixed_layout(void)
       intel_display_read(PLANE1 + PLANE_SIZE) != inherited_size ||
       intel_display_read(PLANE1 + PLANE_POSITION) ||
       intel_display_read(PLANE1 + PLANE_OFFSET) ||
+      (intel_display_read(CURSOR_BASE(0)) & CURSOR_MODE_MASK) ||
       (intel_display_read(JOINER_BASE(0)) & JOINER_MASK) ||
       (intel_display_read(JOINER_BASE(0) + 4) & JOINER_MASK) ||
       (intel_display_read(PIPE_A_IIR) & PIPE_FAULTS)) {
