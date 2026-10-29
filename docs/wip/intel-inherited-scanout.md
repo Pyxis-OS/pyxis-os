@@ -744,18 +744,76 @@ registers are programmed. A zero read therefore cannot certify GGTT-only access.
 No graphics30 replacement certificate was found in the pinned xe code. These
 are source limits, not a measurement that vela actually has an active PPGTT user.
 
-**Proposed next qualification scope — default:** retain copying and extend a
+**Accepted (chronium, 2026-10-29):** retain copying and extend a
 bounded read-only inventory to the fused engine/context and GuC/GSC consumers,
 with the additional Linux-qualified forcewake holds explicitly listed before
 implementation. No reset, stop-ring, firmware command or submission. Keep the
 PAT3 write conditional; unestablished consumer ownership still means no write.
-This is a new power/access scope beyond the accepted GT-forcewake fields, not
-an automatic consequence of permission to program PAT3. A complete inherited
+This explicitly extends the earlier GT-only power/access fields. It does not
+relax the separate condition on programming PAT3. A complete inherited
 consumer proof may require a later GT takeover rather than status sampling.
 
 References at Linux `05f7e89ab9731565d8a62e3b5d1ec206485eeb0b`:
 [context roots and descriptors](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_lrc.c),
 [GSC lifetime](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gsc.c),
 and [Gen12 PRM, Vol2c Part1](https://cdrdv2-public.intel.com/703046/intel-gfx-prm-osrc-tgl-vol-02-c-command-reference-registers-part-1.pdf).
-No write-capable r5 is claimed until this prerequisite is established; do not
-spend a native run on a packet that is known to retain the same copy fallback.
+R5 is the newly authorized observation packet, not a write-capable flip run.
+It collects this missing evidence while retaining ordinary copying.
+
+
+### Implemented bounded consumer inventory (r5)
+
+Rebased on main including merged MM query PR#1587. The development packet is
+the gate; no new boot option or public ABI is introduced. For the matched
+graphics30.1/media30.0 topology, read CCS presence from`0x9114[19:16]` and
+media presence from`0x389140[7:0,19:16]` under the corresponding GT forcewake.
+One means present. Include RCS0, BCS0 and BCS8, all fuse-present CCS0–3,
+VCS0–7 and VECS0–3, and GSCCS0. Do not apply Linux software CCS reductions or
+its own missing-firmware filter to inherited state. Media GSI translation
+applies only below`0x40000`; engine bases and GSC HECI1 remain untranslated.
+
+Each present engine is read twice under its matching acknowledged domain:
+head, tail, control, MI_MODE, execlist status low/high, current LRCA and mode.
+Both GuC status registers and GSC FWSTS1 are read twice. Logs retain raw values
+and a stability observation; no idle/reset/loaded bit is treated as proof that
+all inherited PPGTT consumers are absent. No context-memory pointer is followed.
+
+Only kernel request bit0 with write-mask bit16 is written on these controls:
+
+| Domain | Control | Acknowledge |
+| --- | --- | --- |
+| Main/media GT | `0xa188` / `0x38a188` | `0xdfc` / `0x380dfc` |
+| Main render | `0xa278` | `0xd84` |
+| Present media VDBOX n | `0x38a540+4*n` | `0x380d50+4*n` |
+| Present media VEBOX n | `0x38a560+4*n` | `0x380d70+4*n` |
+| Media GSC | `0x38a618` | `0x380df8` |
+
+Preserve inherited kernel requests; release only added requests, children before
+parents. ACK waits keep the Linux50ms bound. Unknown acquisition/cleanup fences
+and retains mappings/holds until reboot; ordinary CPU-copy boot may continue
+with a proven unchanged GOP. CPU mapping refusal cleans up confirmed resources.
+Other consumer/status windows are RO/NX/UC and map once with batched alias proof.
+
+This **read-only observation slice intentionally ends before write admission**,
+even if a usable inherited PAT entry happens to exist: no PAT, GGTT PTE or plane
+write is issued. It returns to copying after confirmed GT cleanup. PAT3=0x3c
+remains authorized only after the independent complete-consumer proof succeeds;
+this inventory does not fabricate that proof from raw samples. No reset,
+submission, firmware command, modeset or arbitrary context-memory read occurs.
+
+R5 is hands-free, immediately blanks the OLED on presentation, has no game or
+benchmark autorun and leaves NVMe writes off. It includes a log reader rebuilt
+for current main's log wire format; the other exercised file/launch ABI remains
+unchanged from the qualification archive. The Remote collector saves masked
+kernel/Intel logs and checks topology, two samples per present engine, GuC/GSC
+records and joined release/cleanup. `CAPTURED` means those observations arrived;
+it is not a flip, absence or optical-tearing qualification.
+
+Qualification before the native inventory: actual-code host checks pass for
+all20 potential engines, zero/single/full fuse masks and the write whitelist
+(rejecting PAT, engine mode/control and GuC command writes). CPU-only QEMU/GDB
+checks pass for25 RO/NX/UC inventory windows, idempotent reuse, capacity refusal
+without mutation and two complete cleanup cycles; no synthetic MMIO window is
+dereferenced. Independent pinned-source review found no topology, offset,
+parent-domain or cleanup defect. These checks do not emulate GT hardware or
+qualify native forcewake/status reads; r5 supplies those observations.

@@ -8,7 +8,10 @@
 /* One boot-only transaction, BSP/IF=0. Caller owns the matched PTL endpoint,
  * keeps it in D0 with stable BAR0 and display DC0, and excludes other CPU GGTT
  * writers. No PAT programming, reset, firmware load or GT invalidation occurs.
- * prepare holds GT forcewake until finish. Failure prohibits further writes;
+ * The current read-only consumer slice returns false after observation:
+ * no PAT/GGTT/plane writes, ordinary copying. Confirmed holds are released;
+ * uncertain cleanup follows the retention rule below. Future admission requires
+ * the independent inherited-consumer proof. Failure prohibits further writes;
  * uncertain hardware/cleanup retains mappings and requests until reboot. */
 bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar);
 /* On true, the caller must retain its display power holds and MMIO mappings. */

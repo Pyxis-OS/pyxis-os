@@ -315,19 +315,24 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
       return false;
     }
   }
-  kinfo("intel-flip: setup DMA admission; total budget=%lu ms\n", SETUP_TIMEOUT_NS / 1000000);
-  if (!setup_in_time("DMA admission") || !intel_display_claim() ||
-      !intel_dma_identity(boot, device->address)) {
-    kinfo("intel-flip: unavailable: exclusive device/DMA admission failed\n");
-    return false;
-  }
-  if (!setup_in_time("GT cache admission")) {
+  kinfo("intel-flip: setup consumer observation; total budget=%lu ms\n", SETUP_TIMEOUT_NS / 1000000);
+  if (!setup_in_time("GT consumer access") || !intel_display_claim()) {
+    kinfo("intel-flip: unavailable: exclusive consumer-observation access failed\n");
     return false;
   }
   if (!intel_gt_profile_prepare(boot, bar)) {
     if (intel_gt_profile_fenced()) {
       return abandon_setup("GT setup ownership uncertain");
     }
+    return false;
+  }
+  /* Register observation does not need an identity-DMA assumption. Any future
+   * write admission still proves it before allocating new scanout backing. */
+  if (!setup_in_time("DMA admission") || !intel_dma_identity(boot, device->address)) {
+    if (!intel_gt_profile_finish()) {
+      return abandon_setup("GT cleanup after DMA refusal uncertain");
+    }
+    kinfo("intel-flip: unavailable: DMA admission failed\n");
     return false;
   }
   /* Cache policy is a prerequisite: reject it before scanning all GGTT PTEs. */

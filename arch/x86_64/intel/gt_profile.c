@@ -1,6 +1,7 @@
-/* Portions adapted from Linux: Copyright © 2022, 2023, 2024 Intel Corporation.
+/* Portions adapted from Linux: Copyright © 2021, 2022, 2023, 2024 Intel Corporation.
  * Linux v6.19 05f7e89a: xe_force_wake.c, xe_gt_mcr.c, xe_pat.c,
- * xe_ggtt.c and xe_wa_oob.rules. See NOTICE. */
+ * xe_ggtt.c, xe_wa_oob.rules, xe_pci.c, xe_hw_engine.c and xe_gsc.c.
+ * Register layout from xe_engine_regs.h/xe_gt_regs.h. See NOTICE. */
 #include <arch/intel/gt_profile.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
@@ -31,17 +32,79 @@
 #define GMD_STEP_B0 4u
 #define GGTT_WRITE_BATCH 63u
 
+enum {
+  FW_GT, FW_MEDIA_GT, FW_RENDER, FW_VDBOX0,
+  FW_VEBOX0 = FW_VDBOX0 + 8, FW_GSC = FW_VEBOX0 + 4, FW_COUNT,
+};
+enum engine_presence { ENGINE_ALWAYS, ENGINE_CCS, ENGINE_VDBOX, ENGINE_VEBOX };
+static const struct {
+  const char *name;
+  uint32_t base;
+  unsigned domain;
+  enum engine_presence presence;
+  unsigned bit;
+} engines[] = {
+  {"rcs0", 0x002000, FW_RENDER, ENGINE_ALWAYS, 0},
+  {"bcs0", 0x022000, FW_RENDER, ENGINE_ALWAYS, 0},
+  {"bcs8", 0x3ee000, FW_RENDER, ENGINE_ALWAYS, 0},
+  {"ccs0", 0x01a000, FW_RENDER, ENGINE_CCS, 0},
+  {"ccs1", 0x01c000, FW_RENDER, ENGINE_CCS, 1},
+  {"ccs2", 0x01e000, FW_RENDER, ENGINE_CCS, 2},
+  {"ccs3", 0x026000, FW_RENDER, ENGINE_CCS, 3},
+  {"vcs0", 0x1c0000, FW_VDBOX0 + 0, ENGINE_VDBOX, 0},
+  {"vcs1", 0x1c4000, FW_VDBOX0 + 1, ENGINE_VDBOX, 1},
+  {"vcs2", 0x1d0000, FW_VDBOX0 + 2, ENGINE_VDBOX, 2},
+  {"vcs3", 0x1d4000, FW_VDBOX0 + 3, ENGINE_VDBOX, 3},
+  {"vcs4", 0x1e0000, FW_VDBOX0 + 4, ENGINE_VDBOX, 4},
+  {"vcs5", 0x1e4000, FW_VDBOX0 + 5, ENGINE_VDBOX, 5},
+  {"vcs6", 0x1f0000, FW_VDBOX0 + 6, ENGINE_VDBOX, 6},
+  {"vcs7", 0x1f4000, FW_VDBOX0 + 7, ENGINE_VDBOX, 7},
+  {"vecs0", 0x1c8000, FW_VEBOX0 + 0, ENGINE_VEBOX, 0},
+  {"vecs1", 0x1d8000, FW_VEBOX0 + 1, ENGINE_VEBOX, 1},
+  {"vecs2", 0x1e8000, FW_VEBOX0 + 2, ENGINE_VEBOX, 2},
+  {"vecs3", 0x1f8000, FW_VEBOX0 + 3, ENGINE_VEBOX, 3},
+  {"gsccs0", 0x11a000, FW_GSC, ENGINE_ALWAYS, 0},
+};
+/* xe graphics30.1/media30.0: two fuses, both GuCs, and GSC HECI1 status. */
+static const uint32_t inventory_registers[] = {
+  0x009114, 0x389140, 0x00c000, 0x38c000, 0x116c40,
+};
+enum {
+  BASE_MAPPINGS = 6,
+  MMIO_WINDOWS = BASE_MAPPINGS + sizeof(inventory_registers) / sizeof(*inventory_registers) +
+      sizeof(engines) / sizeof(*engines),
+};
+_Static_assert(MMIO_WINDOWS <= 64, "bounded bootstrap mapping mask");
 static struct {
   uint32_t page;
   uintptr_t window;
-} mappings[] = {
+} mappings[MMIO_WINDOWS] = {
   {0x000000, 0}, {0x004000, 0}, {0x00a000, 0},
   {0x190000, 0}, {0x380000, 0}, {0x38a000, 0},
 };
+static size_t mapping_count = BASE_MAPPINGS;
 static struct {
-  uint32_t base;
-  bool held, owned;
-} forcewake[] = {{0, false, false}, {MEDIA_BASE, false, false}};
+  const char *name;
+  uint32_t request, ack;
+  bool enabled, held, owned;
+} forcewake[FW_COUNT] = {
+  [FW_GT] = {.name = "gt", .request = GT_FORCEWAKE, .ack = GT_ACK},
+  [FW_MEDIA_GT] = {.name = "media-gt", .request = MEDIA_BASE + GT_FORCEWAKE, .ack = MEDIA_BASE + GT_ACK},
+  [FW_RENDER] = {.name = "render", .request = 0x00a278, .ack = 0x000d84},
+  [FW_VDBOX0 + 0] = {.name = "vdbox0", .request = 0x38a540, .ack = 0x380d50},
+  [FW_VDBOX0 + 1] = {.name = "vdbox1", .request = 0x38a544, .ack = 0x380d54},
+  [FW_VDBOX0 + 2] = {.name = "vdbox2", .request = 0x38a548, .ack = 0x380d58},
+  [FW_VDBOX0 + 3] = {.name = "vdbox3", .request = 0x38a54c, .ack = 0x380d5c},
+  [FW_VDBOX0 + 4] = {.name = "vdbox4", .request = 0x38a550, .ack = 0x380d60},
+  [FW_VDBOX0 + 5] = {.name = "vdbox5", .request = 0x38a554, .ack = 0x380d64},
+  [FW_VDBOX0 + 6] = {.name = "vdbox6", .request = 0x38a558, .ack = 0x380d68},
+  [FW_VDBOX0 + 7] = {.name = "vdbox7", .request = 0x38a55c, .ack = 0x380d6c},
+  [FW_VEBOX0 + 0] = {.name = "vebox0", .request = 0x38a560, .ack = 0x380d70},
+  [FW_VEBOX0 + 1] = {.name = "vebox1", .request = 0x38a564, .ack = 0x380d74},
+  [FW_VEBOX0 + 2] = {.name = "vebox2", .request = 0x38a568, .ack = 0x380d78},
+  [FW_VEBOX0 + 3] = {.name = "vebox3", .request = 0x38a56c, .ack = 0x380d7c},
+  [FW_GSC] = {.name = "gsc", .request = 0x38a618, .ack = 0x380df8},
+};
 static uint32_t graphics_gmd, media_gmd;
 static unsigned pending_writes;
 static unsigned pat_index = GGTT_PAT_ENTRIES;
@@ -109,13 +172,13 @@ static bool map_page(uint64_t bar, unsigned i, bool writable)
   return true;
 }
 
-static bool map_pages(const struct boot_info *boot, uint64_t bar, unsigned mask,
-    unsigned writable)
+static bool map_pages(const struct boot_info *boot, uint64_t bar, uint64_t mask,
+    uint64_t writable)
 {
-  struct vm_physical_range ranges[sizeof(mappings) / sizeof(mappings[0])];
+  struct vm_physical_range ranges[MMIO_WINDOWS];
   size_t count = 0;
-  for (unsigned i = 0; i < sizeof(mappings) / sizeof(mappings[0]); ++i) {
-    if (mask & (1u << i)) {
+  for (unsigned i = 0; i < mapping_count; ++i) {
+    if ((mask & (UINT64_C(1) << i)) && !mappings[i].window) {
       ranges[count] = (struct vm_physical_range){bar + mappings[i].page, PAGE_SIZE};
       if (!physical_available(boot, ranges[count].physical)) {
         return false;
@@ -128,8 +191,9 @@ static bool map_pages(const struct boot_info *boot, uint64_t bar, unsigned mask,
   }
   /* Bootstrap has no AP/interleaved mapper; checked reserved device pages
    * cannot become page-table/allocator backing while filling these windows. */
-  for (unsigned i = 0; i < sizeof(mappings) / sizeof(mappings[0]); ++i) {
-    if ((mask & (1u << i)) && !map_page(bar, i, writable & (1u << i))) {
+  for (unsigned i = 0; i < mapping_count; ++i) {
+    if ((mask & (UINT64_C(1) << i)) && !mappings[i].window &&
+        !map_page(bar, i, writable & (UINT64_C(1) << i))) {
       return false;
     }
   }
@@ -138,7 +202,7 @@ static bool map_pages(const struct boot_info *boot, uint64_t bar, unsigned mask,
 
 static volatile uint32_t *reg(uint32_t offset)
 {
-  for (unsigned i = 0; i < sizeof(mappings) / sizeof(mappings[0]); ++i) {
+  for (unsigned i = 0; i < mapping_count; ++i) {
     if ((offset & ~(uint32_t)(PAGE_SIZE - 1)) == mappings[i].page) {
       KASSERT(mappings[i].window && !(offset & 3));
       return (volatile uint32_t *)(mappings[i].window + (offset & (PAGE_SIZE - 1)));
@@ -153,14 +217,22 @@ static uint32_t read_reg(uint32_t offset)
   return *reg(offset);
 }
 
+static bool write_allowed(uint32_t offset, uint32_t value)
+{
+  for (unsigned i = 0; i < FW_COUNT; ++i) {
+    if (forcewake[i].enabled && offset == forcewake[i].request) {
+      return value == FORCEWAKE_KERNEL_MASK ||
+          value == (FORCEWAKE_KERNEL_MASK | FORCEWAKE_KERNEL);
+    }
+  }
+  return (offset == MCR_SELECTOR && value == MCR_MULTICAST) ||
+      (offset == STEER_SEMAPHORE && value == 1) ||
+      (offset == MEDIA_BASE + GMD_ID && value == 0 && write_workaround);
+}
+
 static void write_reg(uint32_t offset, uint32_t value)
 {
-  KASSERT(!fenced);
-  KASSERT((offset == GT_FORCEWAKE || offset == MEDIA_BASE + GT_FORCEWAKE) ?
-      value == FORCEWAKE_KERNEL_MASK || value == (FORCEWAKE_KERNEL_MASK | FORCEWAKE_KERNEL) :
-      (offset == MCR_SELECTOR && value == MCR_MULTICAST) ||
-      (offset == STEER_SEMAPHORE && value == 1) ||
-      (offset == MEDIA_BASE + GMD_ID && value == 0 && write_workaround));
+  KASSERT(!fenced && write_allowed(offset, value));
   *reg(offset) = value;
 }
 
@@ -168,7 +240,7 @@ static bool wait_ack(unsigned i, bool awake)
 {
   uint64_t start = arch_monotonic_ns();
   do {
-    uint32_t ack = read_reg(forcewake[i].base + GT_ACK);
+    uint32_t ack = read_reg(forcewake[i].ack);
     if (ack == UINT32_MAX) {
       return false;
     }
@@ -182,19 +254,26 @@ static bool wait_ack(unsigned i, bool awake)
 
 static bool hold_forcewake(unsigned i)
 {
-  uint32_t request = read_reg(forcewake[i].base + GT_FORCEWAKE);
+  KASSERT(i < FW_COUNT && forcewake[i].enabled);
+  if (forcewake[i].held) {
+    return true;
+  }
+  uint32_t request = read_reg(forcewake[i].request);
   if (request == UINT32_MAX) {
     return fail("unreliable forcewake request read");
   }
   if (!(request & FORCEWAKE_KERNEL)) {
     forcewake[i].owned = true;
-    write_reg(forcewake[i].base + GT_FORCEWAKE,
+    write_reg(forcewake[i].request,
         FORCEWAKE_KERNEL_MASK | FORCEWAKE_KERNEL);
   }
   if (!wait_ack(i, true)) {
+    kerror("intel-consumer: hold acknowledgment failed domain=%s\n", forcewake[i].name);
     return fail("GT forcewake awake acknowledgment failed");
   }
   forcewake[i].held = true;
+  kinfo("intel-consumer: hold domain=%s request=%x inherited=%u\n",
+      forcewake[i].name, request, !forcewake[i].owned);
   return true;
 }
 
@@ -203,17 +282,38 @@ static bool holds_valid(void)
   if (read_reg(GMD_ID) != graphics_gmd || read_reg(MEDIA_BASE + GMD_ID) != media_gmd) {
     return fail("graphics/media identity changed");
   }
-  for (unsigned i = 0; i < 2; ++i) {
+  for (unsigned i = 0; i < FW_COUNT; ++i) {
     if (!forcewake[i].held) {
       continue;
     }
-    uint32_t request = read_reg(forcewake[i].base + GT_FORCEWAKE);
-    uint32_t ack = read_reg(forcewake[i].base + GT_ACK);
+    uint32_t request = read_reg(forcewake[i].request);
+    uint32_t ack = read_reg(forcewake[i].ack);
     if (request == UINT32_MAX || ack == UINT32_MAX ||
         !(request & FORCEWAKE_KERNEL) || !(ack & FORCEWAKE_KERNEL)) {
       return fail("GT forcewake hold changed");
     }
   }
+  return true;
+}
+
+static bool release_forcewake(unsigned i)
+{
+  if (!forcewake[i].held && !forcewake[i].owned) {
+    return true;
+  }
+  if (!holds_valid()) {
+    return false;
+  }
+  bool owned = forcewake[i].owned;
+  if (owned) {
+    write_reg(forcewake[i].request, FORCEWAKE_KERNEL_MASK);
+    if (!wait_ack(i, false) || (read_reg(forcewake[i].request) & FORCEWAKE_KERNEL)) {
+      return fail("forcewake release acknowledgment failed");
+    }
+  }
+  forcewake[i].held = false;
+  forcewake[i].owned = false;
+  kinfo("intel-consumer: release domain=%s added=%u confirmed=1\n", forcewake[i].name, owned);
   return true;
 }
 
@@ -291,7 +391,7 @@ static bool drain_writes(void)
 
 static bool unmap_pages(void)
 {
-  for (unsigned i = 0; i < sizeof(mappings) / sizeof(mappings[0]); ++i) {
+  for (unsigned i = 0; i < mapping_count; ++i) {
     uintptr_t *window = &mappings[i].window;
     if (!*window) {
       continue;
@@ -344,20 +444,10 @@ bool intel_gt_profile_finish(void)
   if (!intel_gt_profile_ready() || !drain_writes()) {
     return false;
   }
-  for (unsigned i = 2; i-- > 0;) {
-    if (!forcewake[i].owned) {
-      continue;
-    }
-    if (!holds_valid()) {
+  for (unsigned i = FW_COUNT; i-- > 0;) {
+    if (!release_forcewake(i)) {
       return false;
     }
-    write_reg(forcewake[i].base + GT_FORCEWAKE, FORCEWAKE_KERNEL_MASK);
-    if (!wait_ack(i, false) ||
-        (read_reg(forcewake[i].base + GT_FORCEWAKE) & FORCEWAKE_KERNEL)) {
-      return fail("GT forcewake release acknowledgment failed");
-    }
-    forcewake[i].held = false;
-    forcewake[i].owned = false;
   }
   active = false;
   if (!unmap_pages()) {
@@ -365,6 +455,132 @@ bool intel_gt_profile_finish(void)
   }
   log_phase("released");
   kinfo("intel-gt: bootstrap complete; owned forcewake released, inherited requests preserved\n");
+  return true;
+}
+
+/* CPU mappings are RO; adding a window does not access an unpowered register. */
+static bool map_inventory_registers(const struct boot_info *boot, uint64_t bar,
+    const uint32_t *offsets, size_t count)
+{
+  uint64_t mask = 0;
+  for (size_t n = 0; n < count; ++n) {
+    uint32_t page = offsets[n] & ~(uint32_t)(PAGE_SIZE - 1);
+    size_t i = 0;
+    while (i < mapping_count && mappings[i].page != page) {
+      ++i;
+    }
+    if (i == mapping_count) {
+      if (mapping_count == MMIO_WINDOWS) {
+        return false;
+      }
+      mappings[mapping_count++].page = page;
+    }
+    mask |= UINT64_C(1) << i;
+  }
+  return map_pages(boot, bar, mask, 0);
+}
+
+static bool engine_present(size_t i, uint32_t ccs, uint32_t media)
+{
+  unsigned mask;
+  switch (engines[i].presence) {
+  case ENGINE_ALWAYS: return true;
+  case ENGINE_CCS: mask = (ccs >> 16) & 0xf; break;
+  case ENGINE_VDBOX: mask = media & 0xff; break;
+  case ENGINE_VEBOX: mask = (media >> 16) & 0xf; break;
+  default: KASSERT(false); return false;
+  }
+  return mask & (1u << engines[i].bit);
+}
+
+static bool inventory_consumers(const struct boot_info *boot, uint64_t bar)
+{
+  if (!map_inventory_registers(boot, bar, inventory_registers,
+          sizeof(inventory_registers) / sizeof(*inventory_registers))) {
+    kinfo("intel-consumer: unavailable: read-only topology/status windows\n");
+    return false;
+  }
+  if (!holds_valid()) {
+    return false;
+  }
+  uint32_t ccs = read_reg(0x009114), media = read_reg(0x389140);
+  if (ccs == UINT32_MAX || media == UINT32_MAX ||
+      ccs != read_reg(0x009114) || media != read_reg(0x389140) || !holds_valid()) {
+    kinfo("intel-consumer: unavailable: topology fuse read unstable or unqualified\n");
+    return false;
+  }
+  kinfo("intel-consumer: topology graphics=3001 media=3000 CCS_FUSE=%x MEDIA_FUSE=%x ccs=%x vdbox=%x vebox=%x\n",
+      ccs, media, (ccs >> 16) & 0xf, media & 0xff, (media >> 16) & 0xf);
+  uint32_t offsets[sizeof(engines) / sizeof(*engines)];
+  size_t count = 0;
+  for (size_t i = 0; i < sizeof(engines) / sizeof(*engines); ++i) {
+    if (engine_present(i, ccs, media)) {
+      offsets[count++] = engines[i].base;
+      forcewake[engines[i].domain].enabled = true;
+    }
+  }
+  if (!map_inventory_registers(boot, bar, offsets, count)) {
+    kinfo("intel-consumer: unavailable: read-only engine windows\n");
+    return false;
+  }
+  log_phase("consumer-windows-ready");
+  uint32_t guc[2][2];
+  bool stable = true;
+  for (unsigned i = 0; i < 2; ++i) {
+    uint32_t offset = i ? 0x38c000 : 0x00c000;
+    guc[i][0] = read_reg(offset);
+    guc[i][1] = read_reg(offset);
+    stable &= guc[i][0] == guc[i][1];
+    kinfo("intel-consumer: guc gt=%s status=%x/%x reset-bit=%u/%u; absence-unproven\n",
+        i ? "media" : "graphics", guc[i][0], guc[i][1], guc[i][0] & 1, guc[i][1] & 1);
+  }
+  /* These are raw supported diagnostics, not an idle/PPGTT-absence predicate. */
+  static const uint32_t registers[] = {0x34, 0x30, 0x3c, 0x9c, 0x234, 0x238, 0x240, 0x29c};
+  for (size_t i = 0; i < sizeof(engines) / sizeof(*engines); ++i) {
+    if (!engine_present(i, ccs, media)) {
+      continue;
+    }
+    if (!hold_forcewake(engines[i].domain) || !holds_valid()) {
+      return false;
+    }
+    uint32_t values[2][sizeof(registers) / sizeof(*registers)];
+    for (unsigned sample = 0; sample < 2; ++sample) {
+      for (size_t n = 0; n < sizeof(registers) / sizeof(*registers); ++n) {
+        values[sample][n] = read_reg(engines[i].base + registers[n]);
+        if (sample) {
+          stable &= values[0][n] == values[1][n];
+        }
+      }
+      kinfo("intel-consumer: engine=%s domain=%s base=%x sample=%u head=%x tail=%x ctl=%x mi=%x el=%x/%x lrca=%x mode=%x\n",
+          engines[i].name, forcewake[engines[i].domain].name, engines[i].base, sample,
+          values[sample][0], values[sample][1], values[sample][2], values[sample][3],
+          values[sample][4], values[sample][5], values[sample][6], values[sample][7]);
+    }
+    if (!holds_valid()) {
+      return false;
+    }
+  }
+  /* GSCCS is part of this descriptor even if Linux has no firmware file.
+   * Status is read only after the matching GSC domain was acknowledged. */
+  KASSERT(forcewake[FW_GSC].held);
+  uint32_t gsc = read_reg(0x116c40), gsc_second = read_reg(0x116c40);
+  stable &= gsc == gsc_second;
+  kinfo("intel-consumer: gsc FWSTS1=%x/%x loaded-bit=%u/%u; absence-unproven\n",
+      gsc, gsc_second, !!(gsc & (1u << 9)), !!(gsc_second & (1u << 9)));
+  if (!holds_valid()) {
+    return false;
+  }
+  for (unsigned i = FW_COUNT; i-- > FW_RENDER;) {
+    if (!release_forcewake(i)) {
+      return false;
+    }
+  }
+  if (!write_workaround && !release_forcewake(FW_MEDIA_GT)) {
+    return false;
+  }
+  kinfo("intel-consumer: capture engines=%zu ccs=%x vdbox=%x vebox=%x stable=%u proof=unestablished PAT3-write=0\n",
+      count, (ccs >> 16) & 0xf, media & 0xff, (media >> 16) & 0xf, stable);
+  log_phase("consumer-observation-complete");
   return true;
 }
 
@@ -376,7 +592,7 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
   attempted = true;
   started_ns = phase_ns = arch_monotonic_ns();
   log_phase("begin");
-  if (!boot || !bar || (bar & (PAGE_SIZE - 1)) || bar > UINT64_MAX - MEDIA_BASE - 0xb000) {
+  if (!boot || !bar || (bar & (PAGE_SIZE - 1)) || bar > UINT64_MAX - 0x400000) {
     return false;
   }
   /* GMD has an early, forcewake-free read path in xe_pci.c. */
@@ -401,7 +617,8 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
     return false;
   }
   write_workaround = (media_gmd & GMD_STEP_MASK) < GMD_STEP_B0;
-  unsigned mask = (1u << 1) | (1u << 2) | (1u << 3) | (write_workaround ? 1u << 5 : 0);
+  bool inventory_profile = release == 1;
+  unsigned mask = (1u << 1) | (1u << 2) | (1u << 3) | ((write_workaround || inventory_profile) ? 1u << 5 : 0);
   if (!map_pages(boot, bar, mask, (1u << 2) | (1u << 5))) {
     if (!fenced) {
       unmap_pages();
@@ -409,26 +626,39 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
     return false;
   }
   log_phase("cache-windows-ready");
-  if (!hold_forcewake(0) || (write_workaround && !hold_forcewake(1))) {
+  forcewake[FW_GT].enabled = true;
+  forcewake[FW_MEDIA_GT].enabled = write_workaround || inventory_profile;
+  if (!hold_forcewake(FW_GT) ||
+      (forcewake[FW_MEDIA_GT].enabled && !hold_forcewake(FW_MEDIA_GT))) {
     return false;
   }
+  active = true;
   log_phase("forcewake-acknowledged");
+  if (inventory_profile && !inventory_consumers(boot, bar)) {
+    if (!fenced) {
+      intel_gt_profile_finish();
+    }
+    return false;
+  }
+  if (!inventory_profile) {
+    kinfo("intel-consumer: unavailable: engine topology is not qualified for this GMD profile\n");
+  }
   uint32_t pat[GGTT_PAT_ENTRIES];
   if (!read_pat(pat)) {
     return false;
   }
-  active = true;
   log_phase("PAT-read");
   kinfo("intel-gt: inherited PAT0=%x PAT1=%x PAT2=%x PAT3=%x media-A0-write-WA=%u\n",
       pat[0], pat[1], pat[2], pat[3], write_workaround);
   pat_index = select_pat(pat);
-  if (pat_index == GGTT_PAT_ENTRIES) {
-    if (intel_gt_profile_finish()) {
-      kinfo("intel-gt: no inherited GGTT-reachable uncached PAT entry; keeping GOP copy\n");
-    }
-    return false;
+  if (pat_index != GGTT_PAT_ENTRIES) {
+    kinfo("intel-gt: inherited PAT%u=%x qualifies as UC; not activated during read-only consumer qualification\n",
+        pat_index, pat[pat_index]);
   }
-  kinfo("intel-gt: selected inherited PAT%u=%x for new UMA PTEs only; table unchanged\n",
-      pat_index, pat[pat_index]);
-  return intel_gt_profile_ready();
+  /* This slice observes registers only. Neither an idle sample nor a GuC
+   * status bit proves that inherited PPGTT contexts cannot select PAT3. */
+  if (intel_gt_profile_finish()) {
+    kinfo("intel-consumer: observation finished cleanup=confirmed proof=unestablished PAT3-write=0 GGTT-write=0 plane-write=0; keeping GOP copy\n");
+  }
+  return false;
 }
