@@ -49,6 +49,13 @@ contract. Arguments with no native meaning are documented as such. For example,
 `mkdir`'s `mode` has no effect because npfs has no permissions. Missing authority
 or support returns a real error, never a successful stub.
 
+Owner decision, 2026-10-29: `chmod(path, mode)` is available for port linking,
+but always fails with ENOTSUP without resolving or modifying the path. Native
+files have no Unix permission bits or change-mode operation. Revisit this
+contract if npfs gains a read-only bit; it does not introduce Unix permissions
+or successful ignored modes. The wider permission model remains deferred in
+[debt #1369](https://git.internal/PyxisOS/pyxis-os/issues/1369).
+
 ## Ownership and stdio integration
 
 Userland's private `libc/descriptor.c` stores the native handle, backend kind,
