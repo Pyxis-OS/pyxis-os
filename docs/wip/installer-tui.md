@@ -957,7 +957,9 @@ parent's ownership.
    fallback. Retain the old pair and a durable copy of its fallback; reject
    edited/foreign inputs, collisions and partial migration artifacts. Explicitly
    show this migration and verified primary-entry adoption in Review. Preserve
-   all foreign menu bytes, Fedora files and the existing firmware boot order.
+   all foreign menu bytes and Fedora files. Legacy Update with keep-order
+   requests no firmware variable write or new boot option; its existing
+   firmware/GRUB route remains authoritative.
    This exception does not permit replacing an existing new-style recovery.
    Audit all higher-priority Limine config candidates and
    refuse shadowing. A fresh installation is recoverable only after the first

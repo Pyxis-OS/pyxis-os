@@ -445,3 +445,8 @@ can finish package activation and provide writable home/configuration volumes.
 Rescue entries remain read-only. Exact released normal entries without that
 opt-in still verify against their existing boot binding until Update replaces
 the pair; a verified legacy entry's existing write intent is not lost.
+
+For this legacy adoption, selecting keep existing firmware order issues no UEFI
+registration or variable write: the existing firmware/GRUB route continues to
+load the same pinned Pyxis EFI file. Review states this explicitly; it does not
+append a new Pyxis option to `BootOrder`.
