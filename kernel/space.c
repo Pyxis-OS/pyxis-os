@@ -954,6 +954,19 @@ static void resize_display_transaction(bool *preparing)
     cpu_restore_interrupts(flags);
     return;
   }
+  /* An idle presenter must not close mapping admission while merely polling
+   * or waiting for a VM owner. Reserve geometry only for a real candidate. */
+  uint64_t geometry_flags = cpu_save_interrupts();
+  bool admitted = display_geometry_begin();
+  cpu_restore_interrupts(geometry_flags);
+  if (!admitted) {
+    display_resize_defer();
+    geometry_flags = cpu_save_interrupts();
+    vm_kernel_owner_release(&owner);
+    cpu_restore_interrupts(geometry_flags);
+    return;
+  }
+  *preparing = true;
   struct resize_buffers buffers = {0};
   uint64_t flags = cpu_save_interrupts();
   struct space *registry_tail = last_space;
@@ -1092,15 +1105,9 @@ static void resize_display_transaction(bool *preparing)
 
 static void resize_display(void)
 {
-  uint64_t flags = cpu_save_interrupts();
-  bool admitted = display_geometry_begin();
-  cpu_restore_interrupts(flags);
-  if (!admitted) {
-    return;
-  }
-  bool preparing = true;
+  bool preparing = false;
   resize_display_transaction(&preparing);
-  flags = cpu_save_interrupts();
+  uint64_t flags = cpu_save_interrupts();
   if (preparing) {
     display_geometry_end();
   }
