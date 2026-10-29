@@ -1,8 +1,9 @@
-# Intel game plane and native-resolution UI — proposal
+# Intel game plane and native-resolution UI
 
-Status: proposal only, based on `474e2d7043b5` (0.0.10). No implementation is
-started or authorized by this document. Chronium assigned the proposal on
-2026-10-29; main remains frozen until the release uploads finish.
+Status: decisions 1–3 accepted and implementation authorized (chronium,
+2026-10-29), starting from `474e2d7043b5` (0.0.10). Task 1 is assigned to alpha.
+The release freeze is lifted. Later task-local decisions remain explicit gates;
+accepted direction is not a substitute for missing hardware evidence.
 
 ## Goal and already-decided behaviour
 
@@ -16,7 +17,7 @@ composition, not GPU rendering acceleration or the later 120 Hz modesetting work
 with filtering for non-integer scaling. Never independently fit X and Y or
 stretch the aspect ratio. Integer nearest-neighbour scaling with centred borders
 is a per-program bundle option, not a space toggle. Put destination-aspect modes
-first. Keep the tab bar. The destination choice below is still proposed.
+first. Keep the tab bar in the initial tasks. The later auto-hide task is recorded below.
 
 ## Current evidence and the missing work
 
@@ -40,11 +41,11 @@ It does not yet qualify second-plane enable, DDB/DBUF allocation, watermarks,
 inherited CDCLK/MBUS/memory-power conditions, scaler state, paired completion or
 general restoration. DC0 and PSR-off alone do not establish those conditions.
 
-## Round 1: three decisions, with recommended defaults
+## Accepted decisions (chronium, 2026-10-29)
 
 ### 1. Destination: below navigation, with no covered game pixels
 
-**Default:** use the content rectangle below the always-visible tab bar. Tell
+**Accepted:** use the content rectangle below the always-visible tab bar. Tell
 native clients and SDL the destination dimensions and generation. At today's
 vela geometry, exact-aspect modes include **2880x1768, 1440x884, 720x442 and
 360x221**. Advertise these first, then useful conventional game resolutions;
@@ -60,13 +61,12 @@ Pixel/subpixel rounding and the hardware's representable phase/rectangle rules
 must be settled before scaler/API code; this does not authorize separate X/Y
 fit factors or a hidden crop. Exact content-aspect modes avoid that ambiguity.
 
-Alternative: scale against the full 2880x1800 panel and put the bar over it.
-That hides part of the game and requires an occlusion/safe-area contract. Do not
-auto-hide the bar or quietly call the panel size the usable game area.
+The initial destination excludes navigation; do not quietly call the whole
+panel the usable game area. Auto-hide and an overlaid bar are a later task.
 
 ### 2. One source-resolution contract, including the software fallback
 
-**Default:** extend native DISPLAY acquisition/replacement to request exact source
+**Accepted:** extend native DISPLAY acquisition/replacement to request exact source
 width/height and a scaling preference. `(0,0)` retains the ordinary native-size
 client case. Returned slots describe source pixels; SIZE describes the physical
 content destination. Return/query the accepted source-to-destination transform.
@@ -96,7 +96,7 @@ otherwise compose in software, including after a supported destination resize.
 Do not shrink or enlarge the reservation implicitly, conflate the two capacities,
 or silently substitute another source. The mode list does not promise acceleration.
 
-Proposed bundle preferences, separate from grants:
+Accepted bundle preferences, separate from grants:
 
 ```json
 "display": {
@@ -113,10 +113,6 @@ Trusted launchers carry validated preferences as private TEXT startup values
 using existing launch entries, replacing inherited companions for each bundle.
 These grant no authority and are not implicitly forwarded to other programs.
 
-Alternative: keep source negotiation/CPU scaling separately in SDL. That leaves
-native clients and other libraries with different modes, geometry and policies.
-The recommendation is the shared native contract, not another SDL-only path.
-
 There is no arbitrary native/2 cap: the byte capacity, fitting policy and
 applicable format/extent checks govern admission. Exact request layouts,
 preference names and raster rounding are task-local interface details to settle
@@ -126,7 +122,7 @@ follows.
 
 ### 3. Kernel-owned two-plane presentation, with bounded inherited ownership
 
-**Default:** automatically promote only the selected space's visible graphics
+**Accepted:** automatically promote only the selected space's visible graphics
 session when the matched Intel configuration qualifies; no new application plane
 grant, space toggle or wrapper. Use primary plane1 for opaque XRGB game pixels,
 plane2 above it for native premultiplied ARGB UI. Keep kernel-owned game scanout
@@ -158,9 +154,9 @@ If safe operation requires a new clock, memory-power/firmware policy or wider
 ownership, report that decision before writes; do not assume the existing holds
 prove it. Unknown/insufficient resources keep software composition.
 
-The alternatives are direct user-slot scanout or taking full display/clock
-ownership first. Both expand the present lifetime or hardware scope. The default
-is owned low-resolution copies and bounded inherited-mode admission.
+Direct user-slot scanout and full display/clock ownership are outside this
+slice. Owned low-resolution copies and bounded inherited-mode admission are the
+accepted starting point.
 
 ## Presentation, input and recovery requirements
 
@@ -208,20 +204,35 @@ physical shrink are task-local decisions,
 not silently accepted defaults. Raise them when the inventory/API work establishes
 what is required, before implementing the affected step.
 
-## Small task sequence and qualification
+## Tasks
 
-1. Read-only resource/completion inventory on vela; report whether inherited
-   clocks/memory-power state can support the pair. No new plane/scaler writes.
-2. Calculate and validate DDB/watermarks/scaler/format state, then qualify static
-   two-plane composition and reversible GOP restoration. Settle transition policy
-   from that evidence before enable code; no blanket Linux modesetting import.
-3. Add common source selection/fitting and manifest preferences, then native/SDL
-   adapters. Settle rounding/input details first. Keep ordinary clients,
-   software rendering and GL on the same source/destination contract.
-4. Integrate paired flips, UI/space selection, overlays, blanking, capture and
-   teardown. Qualify source replacement, exit during presentation, both planes'
-   retirement and honest refusal. A native underrun/ownership error stops further
-   attempts for analysis; no automatic retry hides it.
+| Task | Scope | Status |
+|---|---|---|
+| 1 | Baseline and read-only DDB/watermark/clock/resource/completion inventory; no new plane or scaler writes | Assigned: alpha |
+| 2 | Reference-derived fetch/scaler/watermark admission, static two-plane composition and confirmed reversible GOP restoration | Pending task 1 evidence and transition decisions |
+| 3 | Native source selection, fitting, mode list and bundle preferences; native/SDL software and GL adapters | Pending rounding/input interface decisions |
+| 4 | Paired presentation, UI/space/layer transitions, pointer, blanking, capture and teardown | Pending capture/retirement details |
+| 5 | Tab-bar auto-hide for full-screen sessions | Later: record only; no design or implementation now |
+
+1. Capture matched revisions/configuration and existing presentation results;
+   inventory DDB allocation/slices, latencies, inherited CDCLK/MBUS/memory-power
+   state and completion inputs on vela. Report whether the inherited resources
+   can support the pair. Unknown facts stay unknown; no new programming.
+2. Calculate/validate the linear8888 pair and qualify static composition/GOP
+   return. Settle allocation-transition policy (including any necessary blank
+   frame) from the inventory before enable code. Do not import blanket modesetting.
+3. Settle source/transform rounding and input identity details before native/SDL
+   code. Preserve the shown old frame/transform until a replacement presents.
+4. Integrate grouped flips and overlays, then qualify source replacement,
+   switching/exit during presentation, capture and both planes' retirement.
+   Hardware underrun/ownership errors stop further attempts for analysis.
+5. **Later direction (chronium, 2026-10-29):** tab-bar auto-hide for full-screen
+   sessions. A runtime key (for example Super+F) toggles it for the focused
+   full-screen session, and a session/desktop preference selects auto-hide for
+   full-screen sessions. It is not a per-bundle option. While hidden, the game's
+   destination becomes the whole panel; Super or top-edge pointer brings the bar
+   back as an overlay. Do not design the key, configuration schema, geometry or
+   transition behaviour in the initial tasks; decide them when task 5 starts.
 
 QEMU checks the ABI, geometry/policy, SDL modes, software fallback, lifetime and
 space/input/capture paths. It cannot qualify Intel fetch timing or DDB hardware.
@@ -257,5 +268,5 @@ byte budget would return LIMIT without changing the session; a fixed hardware
 reservation mismatch instead selects software composition. It does not
 add application GPU/plane authority, direct user-buffer scanout or 120Hz ownership.
 DDB/watermark qualification and confirmed restoration are gates, not established
-facts from the existing tear-free primary-plane result. Only this proposal is
-being delivered; implementation waits for the decisions.
+facts from the existing primary-plane result. Tasks proceed in order, raising
+new material decisions before the affected code; task 5 remains later work.

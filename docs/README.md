@@ -39,8 +39,9 @@ records runtime evidence and limits.
 
 The [display reference](kernel/display.md) covers driver selection, transactional
 local resizing, panic ownership and application adaptation. The
-[Intel two-plane scaling proposal](wip/intel-two-plane-scaling.md) considers a
-hardware-scaled game beneath native-resolution UI; it is not implemented.
+[Intel two-plane scaling milestone](wip/intel-two-plane-scaling.md) records the
+accepted hardware-scaled game and native-resolution UI direction; implementation
+starts with read-only resource qualification.
 The [pointer input reference](devices/pointer-input-quality.md) covers report
 USB mice, shared scroll policy and calibrated Synaptics activation/filtering.
 [Screen capture](interfaces/screen-capture.md) describes whole-screen CAPTURE
