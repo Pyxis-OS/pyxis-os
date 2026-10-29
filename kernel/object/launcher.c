@@ -199,10 +199,9 @@ void launcher_request_execute(struct launcher_request *request)
   struct execution_group *previous = object_cleanup_enter(request->execution_group ?
       request->execution_group : request->request.cleanup_group);
   struct vm_kernel_owner owner = {0};
-  bool capture_action = request->action == LAUNCH_CAPTURE_RAM;
   bool space_action = request->action == LAUNCH_CREATE_SPACE ||
       request->action == LAUNCH_SPACE_DEVICES || request->action == LAUNCH_SPACE_FINISH;
-  if ((capture_action || space_action) && !vm_kernel_owner_try(&owner)) {
+  if (space_action && !vm_kernel_owner_try(&owner)) {
     cpu_enable_interrupts();
     bool admitted;
     if (request->action == LAUNCH_SPACE_FINISH) {
@@ -216,9 +215,6 @@ void launcher_request_execute(struct launcher_request *request)
     cpu_disable_interrupts();
     if (!admitted) {
       request->result = CALL_BUSY;
-      if (capture_action) {
-        file_end_operation(request->capture->image);
-      }
       goto done;
     }
   }

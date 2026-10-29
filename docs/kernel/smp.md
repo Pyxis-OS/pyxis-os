@@ -610,12 +610,15 @@ writing CPU under their existing contracts.
 
 Selected-image snapshots from npfs, FAT32 and host files acquire that owner in
 their sleep-safe worker context, with the existing one-second admission
-budget, and release it before storage reads. RAM snapshots and child/space/batch
-preparation likewise wait with interrupts enabled in the retained launch request
-before entering the interrupts-off mutation. Ordinary contention with the
-yielding reclaimer therefore waits rather than failing an immediate owner try;
-an exhausted admission budget still returns `BUSY`. The request retains its
-image operation and grants until admission or the normal failure cleanup.
+budget, and release it before storage reads. RAM capture allocation also waits
+before shared mutation. Caller-CPU child/batch preparation retains its private
+VM actor proof; only shared task-stack and fixed space/device mutations acquire
+the structural owner. That owner must be released before waiting for a different
+fixed actor. Ordinary contention with the yielding reclaimer therefore waits
+rather than failing an immediate owner try; an exhausted admission budget still
+returns `BUSY`. The producer retains its image operation and grants until
+admission or normal failure cleanup. Caller-owned captures are discarded by the
+caller, with confirmed AP retirement before reuse.
 
 Three lower layers are safe on any CPU with interrupts disabled,
 outside interrupt and fault entry:

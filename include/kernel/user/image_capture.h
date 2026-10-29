@@ -38,7 +38,8 @@ void image_capture_read_end(struct image_capture *capture);
  * then allocates eager RW/NX whole pages. Failure leaves output empty and frees
  * any partial data backing/reservation. LIMIT for excess, BAD_REQUEST for zero,
  * NO_MEMORY for backing, metadata or virtual-range exhaustion; BUSY on shared
- * structural-owner contention. */
+ * structural-owner admission expiry. Waiting may temporarily enable interrupts;
+ * the retained producer must hold no short lock. */
 enum call_status image_capture_allocate(uint64_t size, struct image_capture *capture);
 
 /* BSP worker, IF=1. Bounded shared-owner admission before allocation;

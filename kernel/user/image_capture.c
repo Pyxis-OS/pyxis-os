@@ -58,7 +58,6 @@ enum call_status image_capture_allocate_wait(uint64_t size, struct image_capture
   return status;
 }
 
-
 const void *image_capture_read_begin(struct image_capture *capture)
 {
   KASSERT(!cpu_interrupts_enabled() && arch_space_active(arch_kernel_space()));
