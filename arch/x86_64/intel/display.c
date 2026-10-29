@@ -412,19 +412,28 @@ static bool snapshot(struct display_state *s)
   return true;
 }
 
-static bool read_gtt(uint64_t gpu, uint64_t *value)
+static uint64_t *gtt_entry(uint64_t gpu)
 {
   if (gtt_mapping_failed || gpu >= GGTT_ADDRESS_BYTES) {
-    return false;
+    return NULL;
   }
   uint32_t offset = (uint32_t)((gpu / PAGE_SIZE) * sizeof(uint64_t));
   unsigned index = offset / PAGE_SIZE;
   if (!gtt_windows[index] &&
       !map_page(GGTT_BASE + index * PAGE_SIZE, false, &gtt_windows[index], false)) {
     gtt_mapping_failed = true;
+    return NULL;
+  }
+  return (uint64_t *)(gtt_windows[index] + (offset & (PAGE_SIZE - 1)));
+}
+
+static bool read_gtt(uint64_t gpu, uint64_t *value)
+{
+  uint64_t *entry = gtt_entry(gpu);
+  if (!entry) {
     return false;
   }
-  *value = *(const volatile uint64_t *)(gtt_windows[index] + (offset & (PAGE_SIZE - 1)));
+  *value = *(const volatile uint64_t *)entry;
   return true;
 }
 
@@ -959,11 +968,11 @@ bool intel_display_gtt_read(uint64_t gpu, uint64_t *value)
   return !fenced && read_gtt(gpu, value);
 }
 
-uint64_t *intel_display_gtt_write_window(uint64_t gpu)
+uint64_t *intel_display_gtt_zero_write_window(uint64_t gpu)
 {
   KASSERT(CONFIG_INTEL_INHERITED_FLIP && !fenced && gpu < GGTT_ADDRESS_BYTES && !(gpu & (PAGE_SIZE - 1)));
-  uint64_t value;
-  if (!read_gtt(gpu, &value)) {
+  uint64_t *entry = gtt_entry(gpu);
+  if (!entry) {
     return NULL;
   }
   unsigned page = (gpu / PAGE_SIZE) * sizeof(uint64_t) / PAGE_SIZE;
@@ -975,5 +984,6 @@ uint64_t *intel_display_gtt_write_window(uint64_t gpu)
     }
     gtt_writable[page] = true;
   }
-  return (uint64_t *)(window + ((gpu / PAGE_SIZE) * sizeof(uint64_t) & (PAGE_SIZE - 1)));
+  /* Nothing fallible follows this last read before the caller's store. */
+  return *(const volatile uint64_t *)entry ? NULL : entry;
 }

@@ -36,7 +36,6 @@
 #define GMD_RELEASE_SHIFT 14
 #define GMD_STEP_MASK 0x3fu
 #define GMD_STEP_B0 4u
-#define GGTT_WRITE_BATCH 63u
 
 enum {
   FW_GT, FW_MEDIA_GT, FW_RENDER, FW_VDBOX0,
@@ -448,11 +447,14 @@ unsigned intel_gt_profile_pat_index(void)
 
 bool intel_gt_note_ggtt_write(void)
 {
-  if (!intel_gt_profile_ready()) {
+  if (!active || fenced) {
     return false;
   }
-  if (write_workaround && ++pending_writes == GGTT_WRITE_BATCH) {
-    return drain_writes();
+  if (cpu_interrupts_enabled()) {
+    return fail("bootstrap CPU ownership changed");
+  }
+  if (write_workaround && ++pending_writes == INTEL_GT_GGTT_WRITE_BATCH) {
+    return intel_gt_profile_ready() && drain_writes();
   }
   return true;
 }

@@ -18,6 +18,7 @@ bool intel_display_claim(void);
 bool intel_display_gtt_read(uint64_t gpu, uint64_t *value);
 /* One bounded read-only PTE chunk under exclusive bootstrap ownership. */
 bool intel_display_gtt_prepare_read(uint64_t gpu, size_t count);
-uint64_t *intel_display_gtt_write_window(uint64_t gpu);
+/* Returns a writable window only while its aligned target still reads zero. */
+uint64_t *intel_display_gtt_zero_write_window(uint64_t gpu);
 
 #endif
