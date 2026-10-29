@@ -263,5 +263,8 @@ void vm_wait_enroll(struct vm_space *space);
 void vm_wait_detach(struct vm_space *space);
 
 struct vm_stats vm_get_stats(const struct vm_space *space);
+/* Any CPU while SPACE exists, without its ownership: owned backing pages, a
+ * gauge that may lag a concurrent change. */
+size_t vm_space_backed_pages(const struct vm_space *space);
 
 #endif
