@@ -385,3 +385,101 @@ is not complete while an undocumented CPU0 requirement remains in its VM paths;
 remaining deliberately owned services must be named rather than hidden by an
 "any-CPU" wrapper. Completing the milestone does not itself grant executable
 memory or start the JIT implementation.
+
+
+## Task 5 scope — proposed (2026-10-29)
+
+Task 4 is ready in #1554, with its accepted SEND residual tracked by
+[debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588). Task 5 starts
+after that integration; this note proposes its remaining placement/lifetime
+choices, not new public operations or executable authority.
+
+### Inspected remaining consumers
+
+Source inspection uses task-4 runtime `badd1d1c5484` on main `1394079d5e94`;
+the task-4 acceptance head changes documentation only.
+
+| Consumer | Remaining task-5 work / retained boundary |
+| --- | --- |
+| `kernel/object/display.c`, `kernel/process_vm.c` | ACQUIRE/REPLACE/RELEASE still execute allocation, private mapping changes and display-state changes together on CPU0. `prepare_slots` reads live geometry; frame lists/refcounts, presenter, pointer and clipboard state are BSP-owned. Split the VM work from that state rather than move the whole executor. |
+| `vm_query`, `arch_page_query`, `vm_get_stats` | Already use short stable snapshot guards. Audit retained mapping/frame ownership at callers; queries must not acquire structural admission or gain unrelated BUSY failures. A snapshot remains distinct from a lease. |
+| `kernel/fs/npfs_store.c` | Allocation already waits for bounded shared-owner admission before IF=0 work; free transfers a retained intrinsic range. Keep the filesystem worker and its existing cleanup destination; no filesystem-worker migration. |
+| DMA, virtio-net storage, scanout and PCI/BAR/ECAM | Preserve boot-only allocation/unpublished rollback and fixed device/reset/cache-attribute proofs. Runtime DMA storage remains pinned as today. PCI overlap selection and claim retain one owner scope; no new snapshot-to-claim API. |
+| ACPI/GPIO, heap, image/architecture callers | Keep permanent prebuilt firmware windows and the heap's separate never-reused arena. Confirm private queries retain their preparation or mutation proof; remove only obsolete VM-routing assumptions, not hardware ownership. |
+| Internal range permissions | `vm_protect_begin/step` already exists and is reached by merged JIT. Qualify its existing drained-private, eager-range, stepped commit contract and both permission directions; no new public MEMORY permission operation. Reuse the recorded task-3/JIT evidence where inputs and proof match, rather than repeat a new mechanism. |
+
+### Decision 12 — DISPLAY control and VM split
+
+**Proposed default:** keep display ownership/slot/refcount/presenter/input state
+on its existing BSP actor. A fixed control phase retains the request, reserves
+the operation and copies a complete geometry/owner/mapping-identity snapshot.
+The requesting task's existing kernel-root continuation performs backing
+preparation and private mapping work on its caller CPU under the common drained
+process transaction. A fixed commit phase publishes the prepared slot set;
+SIZE/SUBMIT and hardware presentation keep their existing control path.
+
+Do not carry the structural VM owner across either actor handoff. Acquire it
+only for bounded shared-VM steps; no short lock, borrowed geometry pointer or
+scratch mapping crosses a wait. Keep whole-process quiescence for this task;
+shortening the closed interval or permitting live-root updates is separate work.
+
+Resolve geometry/ownership/stop changes before old mappings or display state
+are withdrawn: stale preparation returns the existing BUSY/denied outcome,
+leaves the old display intact and reclaims the new unpublished set. Once effects
+start, retain the admitted transaction through nonfallible commit or complete
+owned unwind; do not introduce a post-effect timeout, implicit retry or partial
+successful replacement. Preserve output revalidation, sibling holds and the
+mutator-only reply rule. A stop cannot drop a reserved operation or its cleanup.
+
+### Decision 13 — detached display RAM ownership
+
+**Proposed default:** record the preparation CPU for each new slot set. Keep
+published frame references and consumer leases with the BSP display owner;
+unpublished rollback stays on its preparation actor. When the final published
+reference is released, transfer the whole detached backing/cleanup record to
+that preparation CPU's existing fixed RAM reaper. Use a specific owned record,
+not a generic callback executor, a new worker, migration or a CPU0 fallback.
+
+Do not move a presenter/device callback to the RAM actor. Backing remains alive
+until all private mappings, drawing roots and presenter/scanout leases have
+ended. End shared-pointer access/refills and confirm remote translation
+retirement before reuse where required by the existing shared-range contract.
+Unconfirmed retirement retains backing and joined cleanup until reboot; there
+is no late-ACK reclamation. Preserve existing process/thread/group completion
+boundaries and final-holder accounting; queue acceptance is not reclamation.
+If a concrete consumer requires a new outcome after an irreversible switch,
+bring that decision separately before implementing it.
+
+Process exit is included in this split: fixed session/reference changes stay
+on their owner, while the process's recorded RAM actor unmaps its private slot
+aliases before the fixed phase drops those references. Retain the whole process
+and cleanup record between phases. Unleased display RAM must finish reclaiming
+before process completion; an independently retained presenter frame keeps its
+existing separate lease and joined group cleanup. Do not add a process WAIT
+promise that every deferred device callback has finished.
+
+### Delivery and measurement after decisions
+
+1. Capture a fresh task-4-integrated baseline before implementation, using the
+   existing launch/pages/IPC cohort and display resize/presentation tools.
+   Record actual AP execution and source/config/compiler identity; the accepted
+   task-4 residual is the new baseline, not a promised task-5 improvement.
+2. Deliver the DISPLAY caller/control split and owned rollback/retirement in a
+   focused kernel PR, updating SMP/memory/interface ownership documentation.
+3. Close the remaining caller inventory with concrete source proofs. Preserve
+   already integrated NPFS/queries and deliberate boot/device boundaries; raise
+   any newly reached runtime allocation/refusal or lifetime choice at that point.
+4. Qualify 1/4+ CPU QEMU: AP acquire/replace/release, independent spaces,
+   resize/geometry changes, ordinary stop/exit and failed preparation, mixed
+   display/TTY/input with stable queries and network/audio controls, and actual
+   process/group cleanup. Reuse existing private permission fixtures only within
+   their approved scope; no new fault injection or public test ABI.
+5. Repeat matched performance checks and prepare the hands-free native vela
+   A/B through the orchestrator. Attribute material regressions before delivery;
+   do not inherit an exception for a new task-5 regression from debt #1588.
+
+**You should know:** this proposal keeps the existing public DISPLAY ABI and
+whole-process quiescence. Geometry changes may still return BUSY; uncertain
+shared-range retirement still retains memory. It proposes an explicit RAM
+cleanup destination for display backing, while hardware and control ownership
+stay fixed. No implementation or native/PXE action has started for task 5.
