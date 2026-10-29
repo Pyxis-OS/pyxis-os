@@ -948,7 +948,7 @@ chronium reports the low-resolution run looks good. This is a visual
 observation, not an automated tear-free proof.
 
 
-### Bounded GGTT publication checks (0.0.11)
+### Bounded GGTT publication checks
 
 **Accepted (chronium, 2026-10-29):** retain the exclusive bootstrap owner and
 all display/GT power holds, and perform full ownership checks before and after
@@ -969,13 +969,13 @@ both UMA buffers took67.593ms, including13.602ms allocation plus zeroing.
 The publication loop repeated425,292 display/GT register reads plus PCI
 capability/BAR reads. This latency is accepted for0.0.10 and tracked by
 [debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617); this follow-up
-is for0.0.11. Native vela qualification passes (chronium, 2026-10-29):
+has native vela ownership-batching qualification (chronium, 2026-10-29):
 162 batches publish10,126 PTEs, all4,080 sampled flips confirm, and no timeout
 is reported. Publication falls from999.289ms to269.788ms; the flip-prepared
 step falls from1291.272ms to580.824ms. The unchanged OpenArena workloads give
 48.0fps low-resolution and15.8fps native, versus R9's49.4/15.7fps; these are
-single samples, not an established rendering-performance change. This follow-up
-lands after the0.0.10 tag. Remaining startup cost stays tracked by #1617.
+single samples, not an established rendering-performance change. Remaining
+startup cost stays tracked by #1617.
 
 **Accepted (chronium, 2026-10-29):** sample the existing five-second setup
 deadline before and after each publication batch, rather than per PTE. Expiry
