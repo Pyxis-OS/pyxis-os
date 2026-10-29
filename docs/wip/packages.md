@@ -812,7 +812,7 @@ The index lists one entry per build:
 ```
 
 `pkg list --available` shows unbound entries and the entries for the running
-system, then one line counting the builds for other systems it hid. Within each
+system; builds for other systems are omitted without a count. Within each
 repository, "install takes the last version" applies after this filter. Each
 entry costs more literal values, so the per-index limit in the
 [format reference](../interfaces/packages.md#literal-data) is recomputed.
