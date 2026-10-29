@@ -321,6 +321,9 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     kinfo("intel-flip: unavailable: exclusive GGTT/DMA admission failed\n");
     return false;
   }
+  if (!setup_in_time("GT cache admission")) {
+    return false;
+  }
   if (!intel_gt_profile_prepare(boot, bar)) {
     if (intel_gt_profile_fenced()) {
       return abandon_setup("GT setup ownership uncertain");
@@ -365,6 +368,9 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
   }
   if (!intel_gt_profile_finish() || !fixed_layout()) {
     return abandon_setup("GGTT finalization or inherited layout uncertain");
+  }
+  if (!setup_in_time("flip-event admission")) {
+    return abandon_setup("setup deadline before flip-event admission");
   }
   intel_display_flip_event_control(false);
   metrics = boot_options_get()->display_flip_metrics;
