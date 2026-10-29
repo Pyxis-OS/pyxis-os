@@ -52,6 +52,9 @@ struct task {
   struct bsp_request *bsp_request; /* Reserved through result consumption. */
   struct bsp_request *deferred_request; /* Published only after the safe handoff. */
   struct task_profile *profile;
+  /* On-CPU TSC cycles, split at syscall entry/leave. cpu_mark is this task's
+   * last accounting boundary on its current CPU; only that CPU updates them. */
+  uint64_t cpu_user_cycles, cpu_kernel_cycles, cpu_mark;
   enum task_kind kind;
   struct process *process; /* Borrowed submitted/prepared lifetime; NULL for workers. */
   uintptr_t kernel_stack;
@@ -100,6 +103,8 @@ struct scheduler {
   size_t queued;
   bool running;
   struct task_wait *expired_address_waits; /* Local CPU writes; queues_locked, not notified. */
+  /* Local scheduler loop only: the last TSC boundary and this CPU's totals. */
+  uint64_t cpu_mark, cpu_user_cycles, cpu_kernel_cycles, cpu_idle_cycles;
 };
 
 static struct scheduler *schedulers;
@@ -339,6 +344,24 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
   finish_user_task((struct process_result){.kind = PROCESS_TERMINATED});
 }
 
+/* Charges the current task's time since its last boundary on this CPU to user
+ * or kernel time. IF=0, on the CPU that runs or just ran TASK. */
+static uint64_t account_task(struct task *task, bool kernel)
+{
+  struct scheduler *scheduler = local_scheduler();
+  uint64_t now = arch_tsc_read();
+  uint64_t cycles = now > task->cpu_mark ? now - task->cpu_mark : 0;
+  task->cpu_mark = now;
+  if (kernel) {
+    task->cpu_kernel_cycles += cycles;
+    scheduler->cpu_kernel_cycles += cycles;
+  } else {
+    task->cpu_user_cycles += cycles;
+    scheduler->cpu_user_cycles += cycles;
+  }
+  return now;
+}
+
 void task_syscall_enter(void)
 {
   struct scheduler *scheduler = local_scheduler();
@@ -356,6 +379,7 @@ void task_syscall_enter(void)
      * scheduler stack ownership across a rejected-entry handoff. */
     scheduler = local_scheduler();
   }
+  account_task(task, false);
   task->in_syscall = true;
 }
 
@@ -375,6 +399,7 @@ void task_syscall_leave(void)
     panic("resumed an exited user task");
   }
   process_vm_syscall_leave(task->process, task);
+  account_task(task, true);
   task->in_syscall = false;
   if (task->relocate || atomic_load_explicit(&user_hold, memory_order_acquire) ||
       process_vm_execution_closed(task->process)) {
@@ -1524,6 +1549,8 @@ static void reap_completed(void)
     return;
   }
   if (task->kind == TASK_USER) {
+    task->process->cpu_user_cycles += task->cpu_user_cycles;
+    task->process->cpu_kernel_cycles += task->cpu_kernel_cycles;
     process_task_detach(task->process, &task->process_member);
     if (process_result_committed(task->process)) {
       process_request_stop(task->process);
@@ -1719,6 +1746,7 @@ void task_yield_masked(void)
 
   struct scheduler *scheduler = local_scheduler();
   arch_timer_deadline_start();
+  scheduler->cpu_mark = arch_tsc_read();
   for (;;) {
     task_timer_service();
     cancel_expired_address_waits(scheduler);
@@ -1734,6 +1762,9 @@ void task_yield_masked(void)
        * STI/HLT also handles a notification arriving after the empty check.
        * The timer still services deadlines and BSP-only request/cleanup queues. */
       cpu_wait_interrupt();
+      uint64_t now = arch_tsc_read();
+      scheduler->cpu_idle_cycles += now > scheduler->cpu_mark ? now - scheduler->cpu_mark : 0;
+      scheduler->cpu_mark = now;
       continue;
     }
 
@@ -1765,7 +1796,11 @@ void task_yield_masked(void)
       arch_user_set_kernel_stack(task->kernel_stack + TASK_STACK_SIZE);
       arch_user_restore(&task->cpu);
     }
+    /* One TSC read per dispatch: the return below closes this task's interval
+     * and opens the next, so loop work in between is charged to the next task. */
+    task->cpu_mark = scheduler->cpu_mark;
     arch_context_switch(&scheduler->stack, task->saved_stack);
+    scheduler->cpu_mark = account_task(task, task->kind != TASK_USER || task->in_syscall);
 
     /* We are back on this CPU's permanent stack. Drop the private root and
      * flush translations before publishing completion to the BSP reaper. */
