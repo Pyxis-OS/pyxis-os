@@ -70,3 +70,44 @@ The task retains the current scan profile. Native proof of the startup branch
 and the reason for the missing channel-6 network are pending; task 1 is not
 complete. Network identifiers belong only in private qualification input and
 evidence, not this record or public logs.
+
+## Software checkpoint
+
+Production candidate `6f1ae9cd94367a156037ec0ff042b6021f467921` pins userland
+`2dfa643f695f90ff32f953c931cec542c409c31b`. Published-builder kernel and selected
+C runtime/SDK, fresh Lua development prefix, CLI, selected bootstrap/control
+programs and private helper build successfully. No compiler rebuild was needed.
+The local SDK prefix is for these C programs; the normal parent CI checks the
+complete SDK/image integration.
+
+The exact candidate passes the same no-radio QEMU configuration, identity and
+marker checks, wired/log/status reads, invalid/absent requests and GDB inspection.
+The fixed iobench binary is reused for the control observations. All owned guest,
+debugger, Remote and monitor processes were retired. This cannot exercise a
+Realtek startup or settle channel attribution.
+
+The private helper now copies per-BSSID observations from its already-authorized
+immutable SCAN FILEs before erasing them. Local host tooling retains raw output
+outside the shared handoff tree, with private directory/file permissions and a
+separate expected-BSSID input; public records contain counts and comparison
+results only. This can identify accepted records, not candidates discarded
+before FILE publication.
+
+## Pending decision: private pre-filter capture
+
+The accepted production status contract adds no kernel log lines. A separate,
+unmerged diagnostic image could use bounded trace-level output to capture the
+missing evidence: beacon/probe BSSID and advertised DS/HT channel before
+rejection; raw IE01 channel and RXD BB/counter/rate/GI/BW; match/rejection outcome;
+and C2H ENTER channel/MAC index. Keep MAC index distinct from BB selector. Do not
+collect SSIDs or payload data, borrow DMA pointers, write channel tags, or add a
+new public diagnostic operation or grant.
+
+Proposed default: at most 512 copied metadata observations in fixed backing,
+retaining fitting records and reporting capture drops. Use only the private
+diagnostic branch; none of its trace code enters the production PR. Raw BSSIDs
+and traces stay in horse's private evidence, with redacted aggregate results in
+the handoff. No synthetic frames, forced hardware state or extra RF requests.
+This needs an explicit exception for diagnostic tracing before implementation;
+it is not enabled by the production status decision. The current local packet
+is not a sealed pre-filter capture packet and has not been staged or run.
