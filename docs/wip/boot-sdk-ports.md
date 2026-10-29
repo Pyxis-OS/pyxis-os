@@ -115,6 +115,10 @@ workers and native hardware qualification remain open; hosted Rust remains later
 exact held shell and standalone Lua 5.5/5.1, with shared source selection and
 shell-equivalent lifetime. Embeddings and captured jobs retain their profiles.
 
+[Space editor](space-editor.md): accepted and assigned to claude (chronium,
+2026-10-29). A Go/tview `spaces` program edits installed `boot.lua` spaces,
+applied at next boot; host and QEMU screenshots precede hardware testing.
+
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
 epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue
 kept, and the always-drain fix (#1008) is merged; the matched TX A/B waits for

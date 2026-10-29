@@ -203,8 +203,8 @@ archive cpio.
 
 ## 6. Space editor
 
-Status: **idea; no design yet.**
-Target: later. Covered by: none yet.
+Status: **accepted and assigned (chronium, 2026-10-29).**
+Target: later. Covered by: [space editor](space-editor.md).
 
 
 A small curses tool that edits spaces graphically: pick a space, toggle its
