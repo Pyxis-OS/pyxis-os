@@ -27,6 +27,7 @@ return {
     { id = "nvim" },
     { id = "ping" },
     { id = "printf" },
+    { id = "procs" },
     { id = "pyxis-dev" },
     { id = "remote-terminal" },
     { id = "screenshot" },
