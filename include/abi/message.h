@@ -77,6 +77,7 @@
 #define PROTOCOL_UEFI UINT64_C(72)
 #define PROTOCOL_JIT UINT64_C(73)
 #define PROTOCOL_PROCESS_VIEW UINT64_C(74)
+#define PROTOCOL_SHARED_MEMORY UINT64_C(75)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
