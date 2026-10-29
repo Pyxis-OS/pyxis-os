@@ -1142,8 +1142,10 @@ No fixed period guarantees reception of every AP or beacon interval. The matched
 
 ### Ordered delivery
 
-Task 1 is assigned (chronium, 2026-10-29). Later implementation tasks need their
-own assignment; native windows are separately scheduled by the orchestrator.
+Tasks 1 and 2 are qualified (chronium, 2026-10-29): channel attribution and
+the full admitted 1–13 passive sweep, with period 232 and unchanged 15-second
+deadline. Further tasks need their own go; native windows are scheduled by
+the orchestrator.
 
 1. [x] **Status facts and channel-6 bug investigation.** Capture the
    current baseline before changes, add the observational startup facts and
@@ -1158,7 +1160,7 @@ own assignment; native windows are separately scheduled by the orchestrator.
    filter fix was needed. See the [capture interpretation](../development/experiments/rtl8922ae-attribution.md#native-and-linux-controls-vela-2026-10-29).
    **After this task chronium can:** tell whether startup normalized an active
    MAC, and inspect evidence for a genuinely second-channel BSS.
-2. [ ] **Admitted 1–13 sweep.** Generalize common-image construction and the bounded
+2. [x] **Admitted 1–13 sweep.** Generalize common-image construction and the bounded
    BE list, implement the default-mask semantics and retain existing 512-candidate/
    128-result bounds, successful TRUNCATED handling and immutable publication
    after END/RX retirement. Follow Linux's receive-only tuning and passive/listen
@@ -1172,6 +1174,37 @@ own assignment; native windows are separately scheduled by the orchestrator.
    **After this task chronium can:** run `wifi scan` for the currently admitted
    channel 1–13 set without spelling a mask, including world-domain passive
    listening on 12–13.
+
+### Full-sweep implementation and qualification
+
+The candidate admits zero/default as the complete effective 1–13 set, returns
+that selected mask in the immutable FILE, and keeps explicit requests exact.
+The same-mask retained check uses the selected mask, so default followed by
+explicit full mask reuses the context. A different mask still refuses before
+effects. NO_IR-only cold requests refuse before firmware startup; no calibration
+channel is borrowed. Both contexts initialize on the lowest requested eligible
+channel under a common firmware/SAR/numeric-EIRP image covering the entire mask.
+
+The BE list has at most 13 entries (420 bytes), no probe IDs/null/random TX,
+period **232 TU**, and the reference DFS/listen-only bit plus dwell 20 for NO_IR
+entries (`fw.c:7487–7494,7814–7818`). The accepted value is unchanged; TU names
+the firmware's units, not a new duration choice. Successful END and captured RX
+retirement remain the publication boundary; no ENTER-notification gate is added.
+The 15-second end-to-end deadline and existing cleanup contract are unchanged.
+
+[Full-sweep record](../development/experiments/rtl8922ae-full-sweep.md).
+Native qualification passed on vela (2026-10-29): interleaved old/new 1+6
+controls plus two full scans, first default zero then explicit `0x1fff`, all
+completed. The full pair returned 9/9 records without truncation; ordered
+ENTER/LEAVE reports covered all 13 channels at period 232. Known channel-6
+attribution, held independent immutable FILEs, common-power checks, unchanged
+RFK, wired controls and byte-exact PXE restoration passed. Full-sweep profiled
+request-to-terminal time was 3339 ms with startup and 3107 ms retained, within
+the existing deadline. Matched 1+6 startup ranges overlap; retained samples
+were about 481 ms for both images. These include temporary observer overhead;
+they are not uninstrumented production timing or radiated-power measurements.
+No independently identified AP on 12–13, forced deadline/cancellation, physical
+rfkill, recovery or association is qualified by these visits.
 
 ### Route from discovery to association
 

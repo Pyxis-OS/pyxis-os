@@ -7,9 +7,11 @@
 #include <kernel/format.h>
 #include <kernel/memory.h>
 #include <kernel/string.h>
+#include "rtl8922ae.h"
 #include "rtl8922ae_io.h"
 #include "rtl8922ae_scan.h"
 #include "rtl8922ae_transport.h"
+#include "regdb.h"
 
 #define H2C_CATEGORY_MAC 1u
 #define H2C_CLASS_FRAME_EXCHANGE 5u
@@ -41,14 +43,17 @@
 #define SCAN_CHANNEL_INVALID 0xffu
 #define SCAN_START 1u
 #define SCAN_STOP 0u
-#define SCAN_CHANNEL_TIME_MS 232u
+#define SCAN_CHANNEL_PERIOD_TU 232u
+#define SCAN_PASSIVE_DWELL 20u
+#define SCAN_DWELL_SHIFT 8u
+#define SCAN_LISTEN_ONLY (UINT32_C(1) << 5)
 #define SCAN_PAUSE_DATA (UINT32_C(1) << 6)
 #define SCAN_NOTIFY_SHIFT 9u
 #define SCAN_NOTIFY_END (UINT32_C(1) << 6)
 #define SCAN_LEARN_CHANNEL (UINT32_C(1) << 7)
 #define SCAN_CONFIG_BYTES 40u
 #define SCAN_CHANNEL_BYTES 32u
-#define SCAN_LIST_MAX_CHANNELS 2u
+#define SCAN_LIST_MAX_CHANNELS RTL8922AE_CHANNELS_2G
 #define SCAN_LIST_HEADER_BYTES 4u
 #define SCAN_LIST_BYTES (SCAN_LIST_HEADER_BYTES + SCAN_LIST_MAX_CHANNELS * SCAN_CHANNEL_BYTES)
 #define SCAN_MACC_ROLE_WORDS 1u
@@ -408,7 +413,8 @@ static bool wait_end(uint64_t deadline, const char **detail)
   return fail(detail, "RTL8922AE scan END failed/timed out");
 }
 
-bool rtl8922ae_scan_run(uint32_t channels, uint64_t deadline, const char **detail)
+bool rtl8922ae_scan_run(uint32_t channels, const struct wifi_regdb_profile *rules,
+    uint64_t deadline, const char **detail)
 {
   if (!rtl8922ae_scan_reusable()) {
     return fail(detail, "RTL8922AE scan context unavailable");
@@ -418,18 +424,22 @@ bool rtl8922ae_scan_run(uint32_t channels, uint64_t deadline, const char **detai
     return fail(detail, "RTL8922AE scan context transport unavailable");
   }
   uint8_t list[SCAN_LIST_BYTES] = {0};
-  /* Reference BE channel list, CHAN_ACTIVE with zero SSIDs: no probe, null
-   * or random sequence. Period is w7, and each element owns its packet IDs. */
+  /* Reference BE list with zero SSIDs: no probe, null or random sequence.
+   * Linux uses the DFS form for NO_IR too, without authorizing calibration. */
   unsigned count = 0;
-  for (unsigned channel = 1; channel <= WIFI_CHANNEL_24_COUNT; ++channel) {
+  for (unsigned channel = 1; channel <= RTL8922AE_CHANNELS_2G; ++channel) {
     if (!(channels & (UINT32_C(1) << (channel - 1)))) continue;
     if (count == SCAN_LIST_MAX_CHANNELS) return fail(detail, "RTL scan channel list exceeds this slice");
     uint8_t *entry = list + SCAN_LIST_HEADER_BYTES + count * SCAN_CHANNEL_BYTES;
-    put32(entry, (uint32_t)channel << 16 | (uint32_t)channel << 24);
-    put32(entry + 4, SCAN_PAUSE_DATA | SCAN_NOTIFY_MASK << SCAN_NOTIFY_SHIFT);
+    bool listen_only = rules->channel[channel - 1].flags & WIFI_REGDB_NO_IR;
+    uint32_t dwell = listen_only ? SCAN_PASSIVE_DWELL : 0;
+    put32(entry, dwell << SCAN_DWELL_SHIFT | (uint32_t)channel << 16 |
+        (uint32_t)channel << 24);
+    put32(entry + 4, SCAN_PAUSE_DATA | SCAN_NOTIFY_MASK << SCAN_NOTIFY_SHIFT |
+        (listen_only ? SCAN_LISTEN_ONLY : 0));
     put32(entry + 12, ALL_WORD_BITS);
     put32(entry + 16, ALL_WORD_BITS);
-    put32(entry + 28, SCAN_CHANNEL_TIME_MS);
+    put32(entry + 28, SCAN_CHANNEL_PERIOD_TU);
     ++count;
   }
   if (!count) return fail(detail, "RTL scan requires explicit channels");

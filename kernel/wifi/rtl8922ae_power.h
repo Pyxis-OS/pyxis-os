@@ -32,9 +32,8 @@ struct rtl8922ae_power_image {
 
 /* CPU-only: admitted immutable asset/tables and normalized SAR. Supports cut2/RFE1
  * with explicit RFE0 power fallback, 20 MHz 2.4 GHz and exact regional records.
- * Native input qualification currently covers country 00 only. Image
- * construction and actual programming are not yet hardware-qualified; this
- * function grants no calibration authority.
+ * Hardware qualification is tracked separately in the milestone; this
+ * constructor itself grants no calibration authority.
  * RTAG absence removes optional DAG correction; it says nothing about physical
  * antenna gain. When country rules enable DAG, only qualified absent
  * RTAG is supported. Inapplicable RTAG does not block these reference modes.
@@ -51,11 +50,12 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
     const struct wifi_regdb_profile *rules, uint8_t channel,
     struct rtl8922ae_power_image *image);
 
-/* CPU-only common image for the explicit channel-1-plus-6 mask. Prepare each
- * channel with the same firmware/SAR/regdb caps, require compatible nonlimit
- * controls, and retain the lower signed active limits and physical-path SAR.
- * Channel remains 1, the initialization anchor; publication grants no per-hop
- * calibration or TX authority. Same storage and failure contract as prepare. */
+/* CPU-only common image for an explicit channel 1-13 subset. Prepare each
+ * channel with the same firmware/SAR/regdb caps, including numeric NO_IR limits,
+ * require compatible nonlimit controls, and retain the lower signed active
+ * limits and physical-path SAR. Channel is the lowest requested IR-capable
+ * initialization anchor; NO_IR-only masks are unsupported. This grants no
+ * per-hop calibration or TX authority. Same failure/storage contract as prepare. */
 enum rtl8922ae_power_result rtl8922ae_power_prepare_common(const void *asset,
     size_t bytes, const struct rtl8922ae_firmware_tables *tables,
     const struct rtl8922ae_sar_envelope *sar,

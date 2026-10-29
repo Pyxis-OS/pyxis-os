@@ -5,6 +5,7 @@
  * Native bounded immutable power images and checked BAR2 publication.
  */
 #include "rtl8922ae_power.h"
+#include "rtl8922ae.h"
 #include "rtl8922ae_io.h"
 #include <kernel/memory.h>
 
@@ -333,11 +334,11 @@ static enum rtl8922ae_power_result prepare_shape(const void *asset, size_t bytes
   return RTL8922AE_POWER_OK;
 }
 
-enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
+static enum rtl8922ae_power_result prepare_channel(const void *asset,
     size_t bytes, const struct rtl8922ae_firmware_tables *tables,
     const struct rtl8922ae_sar_envelope *sar,
     enum acpi_wifi_state antenna_state, const char country[2],
-    const struct wifi_regdb_profile *rules, uint8_t channel,
+    const struct wifi_regdb_profile *rules, uint8_t channel, bool allow_no_ir,
     struct rtl8922ae_power_image *image)
 {
   if (!image) {
@@ -345,7 +346,7 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
   }
   memset(image, 0, sizeof(*image));
   if (!asset || !tables || !sar || !country || !rules ||
-      !channel || channel > 13 || sar->state != ACPI_WIFI_VALID ||
+      !channel || channel > RTL8922AE_CHANNELS_2G || sar->state != ACPI_WIFI_VALID ||
       !sar->source_flags) {
     return RTL8922AE_POWER_INVALID;
   }
@@ -392,9 +393,10 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
   if (!(rules->channels & (1u << (channel - 1)))) {
     return RTL8922AE_POWER_UNSUPPORTED;
   }
-  /* This image enables all ordinary 2.4 GHz modulation types. NO_IR/DFS and
-   * specialized-use rules require a different calibration admission contract. */
+  /* NO_IR numeric limits can narrow a shared scan image. They do not authorize
+   * calibration on that channel; the caller chooses an eligible startup anchor. */
   uint32_t allowed_flags = WIFI_REGDB_AUTO_BW | WIFI_REGDB_NO_HT40;
+  if (allow_no_ir) allowed_flags |= WIFI_REGDB_NO_IR;
   if (rules->channel[channel - 1].flags & ~allowed_flags) {
     return RTL8922AE_POWER_UNSUPPORTED;
   }
@@ -438,37 +440,20 @@ fail:
   return result;
 }
 
-enum rtl8922ae_power_result rtl8922ae_power_prepare_common(const void *asset,
+enum rtl8922ae_power_result rtl8922ae_power_prepare(const void *asset,
     size_t bytes, const struct rtl8922ae_firmware_tables *tables,
     const struct rtl8922ae_sar_envelope *sar,
     enum acpi_wifi_state antenna_state, const char country[2],
-    const struct wifi_regdb_profile *rules, uint32_t channels,
+    const struct wifi_regdb_profile *rules, uint8_t channel,
     struct rtl8922ae_power_image *image)
 {
-  if (!image) {
-    return RTL8922AE_POWER_INVALID;
-  }
-  memset(image, 0, sizeof(*image));
-  if (channels != ((1u << 0) | (1u << 5))) {
-    return RTL8922AE_POWER_UNSUPPORTED;
-  }
-  enum rtl8922ae_power_result result = rtl8922ae_power_prepare(asset, bytes,
-      tables, sar, antenna_state, country, rules, 1, image);
-  if (result != RTL8922AE_POWER_OK) {
-    return result;
-  }
-  struct rtl8922ae_power_image other;
-  result = rtl8922ae_power_prepare(asset, bytes, tables, sar, antenna_state,
-      country, rules, 6, &other);
-  if (result != RTL8922AE_POWER_OK) {
-    goto fail;
-  }
-  if (memcmp(image->byrate, other.byrate, sizeof(image->byrate)) ||
-      image->rate_offsets != other.rate_offsets ||
-      image->region != other.region || image->shape != other.shape) {
-    result = RTL8922AE_POWER_UNSUPPORTED;
-    goto fail;
-  }
+  return prepare_channel(asset, bytes, tables, sar, antenna_state, country,
+      rules, channel, false, image);
+}
+
+static void lower_limits(struct rtl8922ae_power_image *image,
+    const struct rtl8922ae_power_image *other)
+{
   for (unsigned ntx = 0; ntx < 2; ++ntx) {
     for (unsigned slot = 0; slot < 4; ++slot) {
       unsigned section = slot < 2 ? 0 : slot - 1;
@@ -478,18 +463,59 @@ enum rtl8922ae_power_result rtl8922ae_power_prepare_common(const void *asset,
         }
         unsigned index = slot * 2 + bf;
         image->normal[ntx][index] = (uint8_t)smaller(
-            (int8_t)image->normal[ntx][index], (int8_t)other.normal[ntx][index]);
+            (int8_t)image->normal[ntx][index], (int8_t)other->normal[ntx][index]);
       }
     }
     for (unsigned ru = 0; ru < 5; ++ru) {
       unsigned index = ru * 16;
       image->ru[ntx][index] = (uint8_t)smaller(
-          (int8_t)image->ru[ntx][index], (int8_t)other.ru[ntx][index]);
+          (int8_t)image->ru[ntx][index], (int8_t)other->ru[ntx][index]);
     }
   }
   for (unsigned path = 0; path < 2; ++path) {
     image->sar_quarter_dbm[path] = smaller(image->sar_quarter_dbm[path],
-        other.sar_quarter_dbm[path]);
+        other->sar_quarter_dbm[path]);
+  }
+}
+
+enum rtl8922ae_power_result rtl8922ae_power_prepare_common(const void *asset,
+    size_t bytes, const struct rtl8922ae_firmware_tables *tables,
+    const struct rtl8922ae_sar_envelope *sar,
+    enum acpi_wifi_state antenna_state, const char country[2],
+    const struct wifi_regdb_profile *rules, uint32_t channels,
+    struct rtl8922ae_power_image *image)
+{
+  if (!image) return RTL8922AE_POWER_INVALID;
+  memset(image, 0, sizeof(*image));
+  if (!rules) return RTL8922AE_POWER_INVALID;
+  if (!channels || (channels & ~RTL8922AE_SCAN_CHANNELS)) {
+    return RTL8922AE_POWER_UNSUPPORTED;
+  }
+  unsigned anchor = 0;
+  for (unsigned i = 0; i < RTL8922AE_CHANNELS_2G; ++i) {
+    if ((channels & (UINT32_C(1) << i)) &&
+        !(rules->channel[i].flags & WIFI_REGDB_NO_IR)) {
+      anchor = i + 1;
+      break;
+    }
+  }
+  if (!anchor) return RTL8922AE_POWER_UNSUPPORTED;
+  enum rtl8922ae_power_result result = prepare_channel(asset, bytes, tables,
+      sar, antenna_state, country, rules, anchor, false, image);
+  if (result != RTL8922AE_POWER_OK) return result;
+  for (unsigned channel = 1; channel <= RTL8922AE_CHANNELS_2G; ++channel) {
+    if (channel == anchor || !(channels & (UINT32_C(1) << (channel - 1)))) continue;
+    struct rtl8922ae_power_image other;
+    result = prepare_channel(asset, bytes, tables, sar, antenna_state, country,
+        rules, channel, true, &other);
+    if (result != RTL8922AE_POWER_OK) goto fail;
+    if (memcmp(image->byrate, other.byrate, sizeof(image->byrate)) ||
+        image->rate_offsets != other.rate_offsets ||
+        image->region != other.region || image->shape != other.shape) {
+      result = RTL8922AE_POWER_UNSUPPORTED;
+      goto fail;
+    }
+    lower_limits(image, &other);
   }
   return RTL8922AE_POWER_OK;
 fail:

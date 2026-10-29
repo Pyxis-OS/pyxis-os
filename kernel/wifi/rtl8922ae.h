@@ -4,6 +4,9 @@
 #include <abi/wifi.h>
 #include <abi/syscall.h>
 
+#define RTL8922AE_CHANNELS_2G 13u
+#define RTL8922AE_SCAN_CHANNELS ((UINT32_C(1) << RTL8922AE_CHANNELS_2G) - 1)
+
 struct boot_info;
 struct wifi_scan_work;
 /* Opt-in boot reservation, followed by request-driven preparation and bounded
