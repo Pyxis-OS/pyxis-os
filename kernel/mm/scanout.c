@@ -1,6 +1,7 @@
 #include <kernel/mm/scanout.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/log.h>
 #include <arch/paging.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
@@ -142,6 +143,7 @@ bool scanout_pages_prepare(size_t payload, uint64_t deadline, struct scanout_pag
     return false;
   }
   size_t allocated = 0, mapped = 0;
+  uint64_t phase = arch_monotonic_ns(), transition_ns = 0, map_ns = 0;
   while (allocated < count && arch_monotonic_ns() < deadline) {
     size_t batch = frame_batch(count - allocated);
     size_t got = pmm_alloc_frames(frames + allocated, batch);
@@ -150,14 +152,18 @@ bool scanout_pages_prepare(size_t payload, uint64_t deadline, struct scanout_pag
       break;
     }
   }
+  uint64_t allocation_ns = arch_monotonic_ns() - phase;
   if (allocated == count) {
     while (mapped < count) {
       size_t batch = frame_batch(count - mapped);
-      if (arch_monotonic_ns() >= deadline ||
+      phase = arch_monotonic_ns();
+      if (phase >= deadline ||
           !arch_frames_prepare_scanout(frames + mapped, batch)) {
         break;
       }
+      transition_ns += arch_monotonic_ns() - phase;
       size_t end = mapped + batch;
+      phase = arch_monotonic_ns();
       while (mapped < end) {
         size_t done;
         enum mm_result status = vm_map_scanout_run(address + mapped * PAGE_SIZE,
@@ -167,6 +173,7 @@ bool scanout_pages_prepare(size_t payload, uint64_t deadline, struct scanout_pag
           goto cleanup;
         }
       }
+      map_ns += arch_monotonic_ns() - phase;
     }
   }
 cleanup:
@@ -183,8 +190,12 @@ cleanup:
     kfree(frames);
     return false;
   }
+  phase = arch_monotonic_ns();
   memset((void *)address, 0, bytes);
   cpu_store_fence();
+  kdebug("scanout-prepare: frames=%zu bytes=%zu allocation-us=%lu cache-us=%lu map-us=%lu zero-us=%lu\n",
+      count, bytes, allocation_ns / 1000, transition_ns / 1000, map_ns / 1000,
+      (arch_monotonic_ns() - phase) / 1000);
   *storage = (struct scanout_pages){address, frames, bytes};
   return true;
 }
