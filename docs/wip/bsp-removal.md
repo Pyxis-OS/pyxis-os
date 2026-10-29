@@ -323,7 +323,7 @@ is 110.11 ns versus A's 25.82 ns; after the explicit store-drain control it is
 19.60 versus 19.56 ns, with B's tails appearing in the fence window instead.
 This strongly supports preceding-store completion/ordering cost at the first
 atomic acquisition, not an observed busy-spin or added borrower-check cost.
-See the [release control](../development/experiments/bsp-preparation.md#native-release-store-control).
+See the [release control](../development/experiments/bsp-preparation.md#native-releasestore-control).
 
 The fence also drains marker stores, and cases observe different messages.
 Neither individual tails nor mean costs are conserved between cases. The exact
