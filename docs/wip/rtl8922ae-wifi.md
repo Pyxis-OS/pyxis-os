@@ -1120,6 +1120,9 @@ own assignment; native windows are separately scheduled by the orchestrator.
    network, fix any demonstrated decoder/receive bug, then qualify the existing
    1+6 path and independent FILEs across repetition. Report only redacted results;
    an unexplained missing known network remains a bug, not a qualification pass.
+   Native checkpoint (2026-10-29): the active-MAC startup cycle is observed;
+   the known channel-6 BSSID is missing before filtering, so attribution remains
+   unqualified. See the [capture interpretation](../development/experiments/rtl8922ae-attribution.md#native-private-capture-vela-2026-10-29).
    **After this task chronium can:** tell whether startup normalized an active
    MAC, and inspect evidence for a genuinely second-channel BSS.
 2. [ ] **Admitted 1–13 sweep.** Generalize common-image construction and the bounded

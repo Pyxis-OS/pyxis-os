@@ -66,9 +66,8 @@ released prefix and 600-byte full reply stay unchanged. The matching SDK reader
 validates flag implications, and `wifi status` distinguishes unobserved,
 non-active, incomplete and completed history without claiming RF silence.
 
-The task retains the current scan profile. Native proof of the startup branch
-and the reason for the missing channel-6 network are pending; task 1 is not
-complete. Network identifiers belong only in private qualification input and
+The task retains the current scan profile. The native capture below exercised the startup branch. The reason for the
+missing channel-6 network remains unresolved; task 1 is not complete. Network identifiers belong only in private qualification input and
 evidence, not this record or public logs.
 
 ## Software checkpoint
@@ -111,4 +110,40 @@ the handoff. No synthetic frames, forced hardware state or extra RF requests.
 Chronium explicitly allowed this temporary diagnostic exception. Record BSSID,
 PPDU channel, firmware-reported channel/band and scan step before filtering.
 The diagnostic code must never merge into the kernel/userland production PRs
-and is removed after the experiment. The approved packet has not yet run.
+and is removed after the experiment. The capture below used that private image.
+
+## Native private capture (vela, 2026-10-29)
+
+Packet `native-attribution-20261029`, private kernel
+`adc67efd503ceb72c5f06d996d189beef415a978`, based on production `55702378e9`.
+Two scans completed and preserved independent immutable FILEs (3/2 records).
+Both reported ENTER channel 1 then 6. The bounded pre-filter capture retained
+5/2 frames, no drops; every observed frame matched PPDU channel 1 and advertised
+channel 1. The known channel-6 BSSID was absent before filtering and from FILEs.
+The packet correctly refused channel-6 qualification, retained private evidence,
+and restored PXE byte-for-byte. Wired management and the retained context held.
+Startup status `0xfcf` recorded initial active MAC and completed power-off/fresh
+power-on; the warm-start branch is now observed.
+
+RX `step=1` is the latest host-processed ENTER **channel number**, not STEP
+index 1. Its value is copied at receipt; the later STEP event index for channel
+6 is a separate field. All seven frames were therefore consumed under the
+channel-1 observation. Across receive queues, host consumption order is not a
+physical reception timestamp. Historical PHY `channel=1` is the initial setup,
+not a live tuning measurement. This does not establish that RF remained on 1.
+
+Linux BE sends its complete channel list then START (`fw.c:8217–8236`). ENTER
+updates software channel/NHM (`mac.c:5069–5082`, `chan.c:174–189`); it does not
+issue host RF/channel commands. RTL8922A's scan-RFK callback is empty
+(`rtw8922a.c:2137–2141`). Native RF digital-table upload is already present
+(`rtl8922ae_phy.c:323–352`). No per-hop host tuning or calibration fix follows
+from this comparison. The retained Linux v6 capture used only 2412 MHz, not a
+multi-channel scan. Its exporter also hid extended scan reports through an
+exact-size filter; that is a capture-tool limitation, not a driver finding.
+
+Next control: one Linux passive 2412+2437 MHz scan with the same default 45-ms
+periods, private BSS details and complete list/START/ACK/ENTER/END/MMIO evidence.
+The packet-only decoder exports the known scan-report prefix as scalars and
+keeps unknown trailing bytes private. A finite empty channel is evidence to
+compare, not proof that the AP is absent or permission for an automatic retry.
+Pyxis receiver and radio behavior remain unchanged pending that control.
