@@ -398,15 +398,15 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     surfaces[n + 1] = surfaces[0];
     surfaces[n + 1].address = pages[n].address;
     for (size_t i = 0; i < count;) {
+      if (!setup_in_time("GGTT mapping publication")) {
+        return abandon_setup("GGTT setup deadline before new mapping batch");
+      }
       if (!intel_display_holds_valid() || !intel_gt_profile_ready()) {
         return abandon_setup("GGTT ownership changed before new mapping");
       }
       size_t end = i + (count - i < INTEL_GT_GGTT_WRITE_BATCH ?
           count - i : INTEL_GT_GGTT_WRITE_BATCH);
       for (; i < end; ++i) {
-        if (!setup_in_time("GGTT mapping publication")) {
-          return abandon_setup("GGTT setup deadline");
-        }
         uint64_t *entry = intel_display_gtt_zero_write_window(gpu_surfaces[n + 1] + i * PAGE_SIZE);
         if (!entry) {
           return abandon_setup("GGTT target changed or mapping access uncertain");
@@ -419,11 +419,14 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
       if (!intel_display_holds_valid() || !intel_gt_profile_ready()) {
         return abandon_setup("GGTT ownership changed after new mapping batch");
       }
+      if (!setup_in_time("GGTT mapping publication")) {
+        return abandon_setup("GGTT setup deadline after new mapping batch");
+      }
       ++publication_batches;
     }
     log_setup_phase(n ? "back1-GGTT-published" : "back0-GGTT-published");
   }
-  kinfo("intel-flip: GGTT publication batches=%zu max=%u pages=%zu; zero checked per PTE\n",
+  kinfo("intel-flip: GGTT publication batches=%zu max=%u pages=%zu; zero checked per PTE; deadline checked per batch\n",
       publication_batches, INTEL_GT_GGTT_WRITE_BATCH, count * 2);
   if (!intel_gt_profile_finish() || !fixed_layout()) {
     return abandon_setup("GGTT finalization or inherited layout uncertain");

@@ -976,3 +976,11 @@ step falls from1291.272ms to580.824ms. The unchanged OpenArena workloads give
 48.0fps low-resolution and15.8fps native, versus R9's49.4/15.7fps; these are
 single samples, not an established rendering-performance change. This follow-up
 lands after the0.0.10 tag. Remaining startup cost stays tracked by #1617.
+
+**Accepted (chronium, 2026-10-29):** sample the existing five-second setup
+deadline before and after each publication batch, rather than per PTE. Expiry
+may be observed after at most one63-store batch. This removes repeated early
+HPET queries without changing clock selection, the budget, hardware wait limits,
+ownership checks or failure retention. Immediate zero checks still precede every
+store. The native figures above qualify ownership batching with per-PTE deadline
+checks; this further deadline change needs its own native measurement.
