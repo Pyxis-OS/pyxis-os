@@ -18,6 +18,10 @@
 #include <kernel/log.h>
 #include <kernel/panic.h>
 
+#ifndef CONFIG_INTEL_INHERITED_FLIP
+#define CONFIG_INTEL_INHERITED_FLIP 0
+#endif
+
 #define STAR_KERNEL_CS_SHIFT 32
 #define STAR_SYSRET_BASE_SHIFT 48
 

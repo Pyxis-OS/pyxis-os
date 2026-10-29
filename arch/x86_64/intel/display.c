@@ -14,6 +14,10 @@
 #include <kernel/mm/vm.h>
 #include <kernel/pci/registers.h>
 
+#ifndef CONFIG_INTEL_INHERITED_FLIP
+#define CONFIG_INTEL_INHERITED_FLIP 0
+#endif
+
 #define INTEL_VENDOR 0x8086
 #define PANTHER_LAKE_DEVICE 0xb0a0
 #define DISPLAY_CLASS 3
