@@ -360,7 +360,9 @@ revoke ${mic.control}            # the recorder's next read is denied
 Owner accepted this shell spelling on 2026-10-15: `revocable` publishes the holder
 and private `mic.control` atomically. Copying or exporting `mic` does not delegate
 its controller; `revoke` requires the explicit CUT controller. Revoking a
-shared-memory mapping also unmaps it, which waits for the shared-memory rules.
+shared-memory mapping also unmaps it under the accepted
+[shared-memory milestone](shared-memory.md#2-strong-explicit-cut-and-owned-automatic-withdrawal);
+implementation is in progress.
 
 ## Variables and the environment
 
@@ -539,8 +541,8 @@ Partial bodies never satisfy another open.
    provider gone; whether a client may hold both a provider's and the kernel's
    handle for one protocol; and the cost of interposition, measured against
    direct kernel delivery before committing a protocol to it.
-2. **Shared memory:** the capability type, mapping and lifetime rules,
-   including unmapping on revocation.
+2. **Shared memory:** the [accepted native region and revocation contract](shared-memory.md)
+   is assigned; its implementation/qualification remains pending.
 3. **Provider policy:** caller isolation, credentials and cache reuse for any
    shared provider; asynchronous provider work and cancellation (see
    [HTTP responsiveness debt](https://git.internal/PyxisOS/pyxis-os/issues/1453)).
