@@ -380,6 +380,45 @@ aspect-fits the canvas into 2828×1768 with 26-pixel side margins. The older
 for cumulative compose/copy statistics; those include startup/session frames,
 not just game rendering. No new benchmark framework is needed.
 
+## Native presentation baseline and remaining tearing (2026-10-29)
+
+Orchestrator-run baseline A on vela, AC via USB-C charger without a dock:
+kernel `397a22bff`, userland `8cefca40`, ports `18b56bf`; 2880×1800 GOP and
+engine canvas, llvmpipe/default workers, HWP applied on 16 CPUs, existing copy
+backend, confirmed Intel startup cleanup. The fixed demo completed 1803 frames
+in 115.9 s (15.6 fps); engine frame times min/mean/max/stddev were
+41.0/64.3/535.0/11.7 ms. One native sample, not a statistical comparison.
+Evidence: `/shared/present/vela-tearing/flip-baseline-20261029/results-vela-A/`.
+
+The existing presenter counters at frame 1800 report composition 2.182 ms and
+final copy 4.036 ms per presented frame. Interior deltas over frames 120–1800
+are approximately 2.171 ms composition and 4.033 ms copy. These counters run in
+the presenter, while engine timing also includes simulation, rendering, OSMesa
+readback, SDL scaling/submission and waits; work can overlap across CPUs. Thus
+copy is numerically about 6.3% of the engine's 64.3 ms mean, but subtracting it
+does not measure pure rendering time. Flips still require a complete staged
+copy into the inactive back buffer; this work promises synchronization, not
+removal of all copy cost.
+
+Chronium saw no tearing in that low-cadence game run, but reports clear tearing
+while typing in the terminal. The exact 2026-10-27 attended image (`d99630dc`,
+ports `bf08f5da`) already contained OSMesa double buffering and explicit swaps:
+the audit folded the extension into another patch before that image, rather
+than removing it. The old/current engine source contents and SDL/Mesa swap
+implementations match; only SDL CPU-count configuration changed in the relevant
+port paths. Kernel presentation sources are unchanged through this baseline.
+Neither build synchronizes the final GOP copy. A copy into a live scanout can
+therefore tear when it intersects visible scanning; complete software frames
+alone do not prevent that. The visual difference between those unmatched runs
+has not been attributed to a specific cause.
+
+The next matched visibility check includes ordinary terminal character output
+and scrolling, plus a low-resolution OpenArena run. The 32-pixel bar leaves a
+2880×1768 content area; use 360×221 for an exact 8× SDL viewport without changing
+its scaling policy. A nominal 320×200 would not be integer-scaled in that content
+area. Retain the native-resolution run separately for the presentation-cost
+comparison. No physical keyboard input is fabricated by the output script.
+
 ## Pinned references
 
 Linux v6.19 `05f7e89ab9731565d8a62e3b5d1ec206485eeb0b` is the source reference,

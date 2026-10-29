@@ -23,6 +23,7 @@
 #define PIPE_A_IER 0x4440cu
 #define DISPLAY_TIMESTAMP 0x44070u
 #define TRANS_A_VRR 0x60420u
+#define TRANS_A_CONTEXT_LATENCY 0x6007cu
 #define PLANE1_DONE (1u << 3)
 #define PIPE_FAULTS ((1u << 31) | (1u << 18) | (1u << 7))
 #define GGTT_RESERVED_LOW UINT64_C(0x800000)
@@ -39,7 +40,7 @@ static struct scanout_pages pages[2];
 static uint32_t gpu_surfaces[3];
 static uint32_t inherited_control, inherited_color, inherited_stride, inherited_size;
 static uint32_t inherited_trans, inherited_ddi, inherited_misc, inherited_misc2;
-static uint32_t inherited_timing[6], inherited_source;
+static uint32_t inherited_timing[6], inherited_source, inherited_context_latency;
 static uint32_t front, back = 1, pending, sequence;
 static uint32_t submit_frame, submit_flip, submit_done_time;
 static uint64_t deadline;
@@ -65,6 +66,7 @@ static bool fixed_layout(void)
       intel_display_read(PIPE_SOURCE(0)) != inherited_source ||
       intel_display_read(PIPE_MISC(0)) != inherited_misc ||
       intel_display_read(PIPE_A_MISC2) != inherited_misc2 ||
+      intel_display_read(TRANS_A_CONTEXT_LATENCY) != inherited_context_latency ||
       (intel_display_read(PSR_CONTROL(0)) & TRANS_ENABLE) ||
       (intel_display_read(PSR2_CONTROL(0)) & TRANS_ENABLE) ||
       (intel_display_read(TRANS_DP2(0)) & (1u << 30)) ||
@@ -197,7 +199,11 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     inherited_timing[i] = intel_display_read(TRANS_BASE(0) + i * 4);
   }
   vtotal = (inherited_timing[3] >> 16) + 1;
-  vblank_start = (inherited_timing[4] & 0xffff) + 1;
+  inherited_context_latency = intel_display_read(TRANS_A_CONTEXT_LATENCY);
+  /* Display13+ ignores VBLANK_START. The update point follows active height
+   * plus the inherited set-context latency, as in Linux timing readout. */
+  vblank_start = (inherited_timing[3] & 0xffff) + 1 +
+      (inherited_context_latency & 0xffff);
   kinfo("intel-flip: admission conf=%x control=%x color=%x misc2=%x IIR=%x VRR=%x\n",
       inherited_trans, inherited_control, inherited_color, inherited_misc2,
       intel_display_read(PIPE_A_IIR), intel_display_read(TRANS_A_VRR));
@@ -205,7 +211,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
       PLANE_ROTATION_MASK | PLANE_FLIP_HORIZONTAL | PLANE_RGBX)) &&
       (inherited_control & PLANE_FORMAT_MASK) == PLANE_FORMAT_8888;
   if (!(inherited_trans & TRANS_ENABLE) || !(inherited_control & PLANE_ENABLE) ||
-      !linear || (inherited_color & 0x30) || (inherited_trans & (7u << 21)) || (inherited_misc2 & 7) ||
+      !linear || vblank_start >= vtotal || (inherited_color & 0x30) || (inherited_trans & (7u << 21)) || (inherited_misc2 & 7) ||
       (gpu_surfaces[0] & ~PLANE_SURFACE_MASK) ||
       gpu_surfaces[0] != intel_display_read(PLANE1 + PLANE_LIVE) ||
       (inherited_size & 0xffff) + 1 != fb->width ||
