@@ -319,7 +319,7 @@ development backend below; native flip qualification remains pending.
 
 1. **Auxiliary GT access for cache validation:** permit
    only the reference bootstrap access needed to verify graphics PAT indices 0–3,
-   not program it: GT forcewake kernel request (`0xa188`, write-mask bit 16
+   with only the conditional PAT3 programming exception below: GT forcewake kernel request (`0xa188`, write-mask bit 16
    and request bit 0; acknowledgement at `0xdfc`), the firmware-shared MCR
    semaphore (`0xfd0`, read-acquire/write-1 release), and selector (`0xfd4`,
    group 0/instance 0, multicast bit 31) around read-only PAT registers `0x4800` through `0x480c`.
@@ -330,7 +330,9 @@ development backend below; native flip qualification remains pending.
    firmware's table. Independently identify graphics/media stepping. If the
    media-A0 CPU GGTT-write workaround applies, allow only its documented dummy
    media-GMD write after each 63 PTE writes. No GT reset, firmware load, engine
-   submission, PAT programming or generic GT TLB invalidation. Existing display
+   submission or generic GT TLB invalidation. PAT0–2 remain read-only; the
+   conditional PAT3 write below supersedes only that part of the earlier
+   no-PAT-programming boundary. Existing display
    DC0/well holds do not substitute for this GT access protocol.
 2. **UMA DMA admission:** initially admit new UMA only
    when the relevant VT-d remapper is proven to have translation disabled;
@@ -713,10 +715,14 @@ GT initialization. Reachable entries0/1/2 are respectively`0x0c/0x0e/0x0f`
 therefore does not satisfy the cache policy Linux establishes for new display
 buffers.
 
-**Next decision remains PAT programming versus copying.** Recommendation: a
-separate Linux-derived PAT initialization contract if synchronized UMA scanout
-is to proceed; keep copies until its ownership/quiescence is qualified. Merely
-holding forcewake/MCR serializes register access, not other PAT consumers.
-Changing a PAT entry affects every existing GGTT/PPGTT consumer selecting it;
-checking free GGTT space alone does not prove safety. Do not silently program
-the whole xe table or just index3 under the current no-PAT-write contract.
+**Accepted (chronium, 2026-10-29), narrowed option 2:** program ONLY graphics
+PAT entry3 to Linux xe's display value`0x3c` (L3/L4UC, no-snoop, compression-off),
+leaving entries0–2 unchanged. This explicitly revisits the earlier no-PAT-write
+boundary. Before writing, prove that no existing present GGTT PTE, including
+GOP's complete span, and no other known consumer selects index3. Use the
+reference forcewake/MCR protocol and log before/after. A failed proof makes no
+PAT write and keeps ordinary copying; it must not refuse boot.
+
+The MM batching foundation is split into [#1587](https://git.internal/PyxisOS/pyxis-os/pulls/1587),
+based on main, with its own CI. #1563 is linearly based on that published head.
+Merge order: #1587, then #1563. The MM bodies have no remaining diff in #1563.
