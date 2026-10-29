@@ -273,8 +273,8 @@ enum net_result net_tcp_prepare(const struct ipv4_route *route,
   if (admission != NET_OK) {
     return admission;
   }
-  uint16_t candidate, stride;
-  if (!tcp_identity_ports(route->source, destination, port, &candidate, &stride)) {
+  uint16_t candidate;
+  if (!tcp_identity_ports(route->source, destination, port, &candidate)) {
     return NET_UNAVAILABLE;
   }
   struct tcp_pcb *pcb = tcp_new();
@@ -290,7 +290,6 @@ enum net_result net_tcp_prepare(const struct ipv4_route *route,
   connection->remote_port = port;
   connection->setup_deadline = deadline;
   connection->bind_candidate = candidate;
-  connection->bind_stride = stride;
   connection->binding = true;
   connection->owned = true;
   *output = connection;
@@ -302,8 +301,8 @@ bool tcp_connection_bind_step(struct tcp_connection *connection, enum net_result
   net_worker_assert_context();
   KASSERT(connection->binding && connection->pcb && connection->owned);
   ip_addr_t local = { .addr = lwip_htonl(connection->local) };
-  /* No reuse option: lwIP includes TIME_WAIT. The odd stride visits each
-   * ephemeral candidate once across bounded worker turns, before any SYN. */
+  /* No reuse option: lwIP includes TIME_WAIT. Each contiguous scan visits
+   * every candidate once across bounded worker turns, before any SYN. */
   for (size_t attempt = 0; attempt < TCP_WORK_BATCH; ++attempt) {
     if (task_deadline_expired(connection->setup_deadline)) {
       abort_connection(connection, ERR_TIMEOUT);
@@ -329,8 +328,11 @@ bool tcp_connection_bind_step(struct tcp_connection *connection, enum net_result
       *result = NET_QUEUE_FULL;
       return true;
     }
-    connection->bind_candidate = (connection->bind_candidate + connection->bind_stride) &
-        (TCP_EPHEMERAL_COUNT - 1);
+    if (!tcp_identity_port_advance(&connection->bind_candidate)) {
+      abort_connection(connection, ERR_IF);
+      *result = NET_UNAVAILABLE;
+      return true;
+    }
   }
   return false;
 }
