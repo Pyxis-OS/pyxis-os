@@ -232,8 +232,16 @@ static bool download(uint64_t deadline, const char **detail)
     preparation.tables.observed_mask |= RTL8922AE_ELEMENT_BIT(RTL8922AE_ELEMENT_AFE);
   }
   if (!rtl8922ae_phy_afe(preparation.asset.data, preparation.asset.size,
-          &preparation.tables, deadline, detail) ||
-      !rtl8922ae_hw_power_on(preparation.cut, deadline, detail)) return false;
+          &preparation.tables, deadline, detail)) return false;
+  struct rtl8922ae_startup_facts startup;
+  bool powered = rtl8922ae_hw_power_on(preparation.cut, deadline, &startup, detail);
+  flags = cpu_save_interrupts();
+  if (startup.observed) preparation.status.phy.state |= WIFI_PHY_STARTUP_OBSERVED;
+  if (startup.active) preparation.status.phy.state |= WIFI_PHY_STARTUP_ACTIVE;
+  if (startup.cycle_attempted) preparation.status.phy.state |= WIFI_PHY_STARTUP_CYCLE_ATTEMPTED;
+  if (startup.cycle_completed) preparation.status.phy.state |= WIFI_PHY_STARTUP_CYCLE_COMPLETED;
+  cpu_restore_interrupts(flags);
+  if (!powered) return false;
   rtl8922ae_hw_rfkill_prepare();
   preparation.rfkill_live = true;
   preparation.next_rfkill = 0;

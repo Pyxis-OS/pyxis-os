@@ -19,13 +19,20 @@ struct rtl8922ae_board {
   bool thermal_trim_present, pa_bias_present, rfkill;
 };
 
+struct rtl8922ae_startup_facts {
+  bool observed, active, cycle_attempted, cycle_completed;
+};
+
 /* Sole BSP worker, IF=1, after standard PCI reset and BAR mapping. No
  * allocation, ring publication, calibration or network operation occurs here.
- * Output is cleared on failure; detail receives a static refusal string.
+ * Detail receives a static refusal string on failure.
  * All waits are capped by the caller's absolute operation deadline. Failure
  * leaves hardware state for the caller's terminal standard PCI reset. */
 uint8_t rtl8922ae_hw_cut(void);
-bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail);
+/* Startup observations survive failure; completion requires both halves of
+ * an inherited-active power cycle, not later terminal cleanup. */
+bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline,
+    struct rtl8922ae_startup_facts *facts, const char **detail);
 bool rtl8922ae_hw_xtal_read(uint8_t address, uint8_t *value, uint64_t deadline);
 bool rtl8922ae_hw_xtal_write(uint8_t address, uint8_t value, uint8_t mask,
     uint64_t deadline);

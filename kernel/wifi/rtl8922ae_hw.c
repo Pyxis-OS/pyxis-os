@@ -164,12 +164,17 @@ uint8_t rtl8922ae_hw_cut(void)
   return extract(B_AX_CHIP_VER_MASK, rtl8922ae_read32(R_AX_SYS_CFG1));
 }
 
-bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
+bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline,
+    struct rtl8922ae_startup_facts *facts, const char **detail)
 {
+  *facts = (struct rtl8922ae_startup_facts){0};
   /* rtw89_mac_pwr_on powers off after the inner active-state refusal, then
    * tries power-on once more. Keep both steps within the request deadline. */
   uint32_t power = rtl8922ae_read32(R_BE_IC_PWR_STATE);
-  if (extract(B_BE_WLMAC_PWR_STE_MASK, power) == MAC_POWER_ACTIVE) {
+  facts->observed = true;
+  facts->active = extract(B_BE_WLMAC_PWR_STE_MASK, power) == MAC_POWER_ACTIVE;
+  if (facts->active) {
+    facts->cycle_attempted = true;
     if (!rtl8922ae_hw_power_off(deadline, detail)) return false;
     power = rtl8922ae_read32(R_BE_IC_PWR_STATE);
     if (extract(B_BE_WLMAC_PWR_STE_MASK, power) == MAC_POWER_ACTIVE) {
@@ -309,6 +314,7 @@ bool rtl8922ae_hw_power_on(uint8_t cut, uint64_t deadline, const char **detail)
   set32(R_BE_FEN_RST_ENABLE, B_BE_FEN_BB_IP_RSTN |
       B_BE_FEN_BBPLAT_RSTB);
 
+  facts->cycle_completed = facts->cycle_attempted;
   return true;
 
 failed:
