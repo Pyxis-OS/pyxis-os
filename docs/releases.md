@@ -154,8 +154,7 @@ Release notes:
   operations, the `READ_STATUS` and `WRITE_STATUS` wait interests, bulk FILE
   reads, and the Wi-Fi PHY and full status replies.
 - **Kilo is gone.** Use `vi` or Neovim.
-- **Not in this release:** Rust (the `hexyl` package builds from a separate Rust
-  prefix and is not packed), Ship of Harkinian's game, Wi-Fi association and
+- **Not in this release:** Rust and the `hexyl` package (planned for 0.0.11), Ship of Harkinian's game, Wi-Fi association and
   native hardware qualification of `pkg upgrade` on an installed system
   ([debt #1509](https://git.internal/PyxisOS/pyxis-os/issues/1509)).
 
