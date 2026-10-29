@@ -93,21 +93,22 @@ separate expected-BSSID input; public records contain counts and comparison
 results only. This can identify accepted records, not candidates discarded
 before FILE publication.
 
-## Pending decision: private pre-filter capture
+## Approved private pre-filter capture (chronium, 2026-10-29)
 
 The accepted production status contract adds no kernel log lines. A separate,
-unmerged diagnostic image could use bounded trace-level output to capture the
+unmerged packet-only diagnostic image may use bounded trace-level output to capture the
 missing evidence: beacon/probe BSSID and advertised DS/HT channel before
 rejection; raw IE01 channel and RXD BB/counter/rate/GI/BW; match/rejection outcome;
 and C2H ENTER channel/MAC index. Keep MAC index distinct from BB selector. Do not
 collect SSIDs or payload data, borrow DMA pointers, write channel tags, or add a
 new public diagnostic operation or grant.
 
-Proposed default: at most 512 copied metadata observations in fixed backing,
+At most 512 copied per-frame observations in fixed backing across the approved scan pair,
 retaining fitting records and reporting capture drops. Use only the private
 diagnostic branch; none of its trace code enters the production PR. Raw BSSIDs
 and traces stay in horse's private evidence, with redacted aggregate results in
 the handoff. No synthetic frames, forced hardware state or extra RF requests.
-This needs an explicit exception for diagnostic tracing before implementation;
-it is not enabled by the production status decision. The current local packet
-is not a sealed pre-filter capture packet and has not been staged or run.
+Chronium explicitly allowed this temporary diagnostic exception. Record BSSID,
+PPDU channel, firmware-reported channel/band and scan step before filtering.
+The diagnostic code must never merge into the kernel/userland production PRs
+and is removed after the experiment. The approved packet has not yet run.
