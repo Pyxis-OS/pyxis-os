@@ -196,8 +196,9 @@ is owned low-resolution copies and bounded inherited-mode admission.
   Admission failures before effects keep the current single-plane backend.
   A normal return must stop/retire pending updates, restore the GOP on plane1,
   disable plane2/detach the scaler with Linux's ordered allocation transition,
-  and confirm restoration before releasing referenced storage. Restore only owned
-  changes. A post-write uncertain outcome fences further register writes and
+  and confirm restoration before retiring old frame leases. Boot-owned backing
+  stays reserved for reuse until reboot; this adds no GGTT reclamation. Restore
+  only owned changes. A post-write uncertain outcome fences register writes and
   retains possible references until reboot; blind GOP-copy fallback is unsafe.
   Panic must retain an independently safe route rather than depend on a game.
 
