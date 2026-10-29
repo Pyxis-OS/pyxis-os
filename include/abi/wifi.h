@@ -285,7 +285,11 @@ struct wifi_radio_inputs {
 #define WIFI_PHY_STOP_UNCERTAIN (UINT32_C(1) << 5)
 #define WIFI_PHY_RFK_REPORT_VALID (UINT32_C(1) << 6)
 #define WIFI_PHY_RFKILL_VALID (UINT32_C(1) << 7)
-#define WIFI_PHY_STATE_MASK UINT32_C(0xff)
+#define WIFI_PHY_STARTUP_OBSERVED (UINT32_C(1) << 8)
+#define WIFI_PHY_STARTUP_ACTIVE (UINT32_C(1) << 9)
+#define WIFI_PHY_STARTUP_CYCLE_ATTEMPTED (UINT32_C(1) << 10)
+#define WIFI_PHY_STARTUP_CYCLE_COMPLETED (UINT32_C(1) << 11)
+#define WIFI_PHY_STATE_MASK UINT32_C(0xfff)
 #define WIFI_PHY_IDLE UINT32_C(0)
 #define WIFI_PHY_FIRMWARE UINT32_C(1)
 #define WIFI_PHY_TABLES UINT32_C(2)
@@ -308,6 +312,10 @@ struct wifi_radio_inputs {
  * readbacks matched the owned image before calibration. Path values use RF
  * quarter-dBm units, unlike the SAR input's eighth-dBm. COMPLETE makes
  * last_status meaningful; region and SAR values require POWER_VERIFIED.
+ * STARTUP_OBSERVED records the initial WLMAC state read. ACTIVE means its
+ * active value was seen; absence of ACTIVE is not a physical RF-off claim.
+ * CYCLE_COMPLETED requires successful startup power-off and fresh power-on;
+ * neither firmware readiness nor terminal cleanup supplies that observation.
  * The preparation-only cut returns UNAVAILABLE with
  * no scan FILE even after successful calibration and confirmed stop. */
 struct wifi_phy_facts {

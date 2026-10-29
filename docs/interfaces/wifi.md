@@ -77,6 +77,15 @@ partial extensions cannot be treated as a complete PHY observation. Libpyxis
 validates the complete snapshot. READ authority is unchanged. Detailed facts
 replace duplicate boot log lines.
 
+The PHY state also retains validity-qualified startup history: initial WLMAC
+state observed, active value seen, power-cycle attempted and power-cycle
+completed. Completion means the startup power-off and ensuing fresh power-on
+both succeeded, not merely that a second state read was non-active. Firmware
+readiness and terminal cleanup do not set it. An unobserved initial state is
+distinct from a sampled non-active state; neither is a physical RF-off proof.
+The reply sizes stay 544/600 bytes. Matching SDK readers validate the additional
+flags and their implications; no new command, authority or log producer is added.
+
 MAC refusal details retain the first failed substep, BAR offset/access width,
 observed value, expected value and comparison mask before cleanup. `wr` is an
 exact write readback; `rd` is an inaccessible pre-read (the target fields were
