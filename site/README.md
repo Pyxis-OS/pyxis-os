@@ -85,6 +85,13 @@ wrangler deploy --dry-run --config site/wrangler.toml
 wrangler deploy --config site/wrangler.toml
 ```
 
+`--published-image` additionally links the ready-to-run QEMU image from the
+homepage, the releases page and `/verify/`. Pass it only once
+`pyxis-VERSION.qcow2` is uploaded and listed in the signed `SHA256SUMS` (a failed
+image build leaves it off). It requires `--published-iso`, and the build refuses
+unless the served manual is the `isoVersion` release's and has the "Run the
+ready-made image" section, since the links point there.
+
 Without `--published-iso`, the preview keeps the explicit unpublished label.
 With it, the homepage names the configured install ISO without claiming that a
 Git tag alone proves an upload. `build-source.json` records that input as well
