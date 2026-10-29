@@ -42,3 +42,6 @@ images retain precedence, and complete name scans still reject duplicate matches
 This avoids repeated full-page copies for records on the same page; it adds no
 retained name index, allocation or ABI. Linear name comparisons and wide-tree
 removal scaling remain tracked by [#1495](https://git.internal/PyxisOS/pyxis-os/issues/1495).
+
+The [matched QEMU measurements](../development/experiments/npfs-directory-walks.md)
+record page-walk results and their native qualification limits.
