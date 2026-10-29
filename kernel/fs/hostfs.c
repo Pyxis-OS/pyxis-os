@@ -618,9 +618,7 @@ static enum call_status capture_file(struct hostfs_request *request)
     return status;
   }
   struct image_capture captured = {0};
-  uint64_t flags = cpu_save_interrupts();
-  status = image_capture_allocate(attributes.size, &captured);
-  cpu_restore_interrupts(flags);
+  status = image_capture_allocate_wait(attributes.size, &captured);
   if (status != CALL_OK) {
     return status;
   }
@@ -658,7 +656,7 @@ static enum call_status capture_file(struct hostfs_request *request)
   return CALL_OK;
 
 fail:
-  flags = cpu_save_interrupts();
+  uint64_t flags = cpu_save_interrupts();
   image_capture_release(&captured);
   cpu_restore_interrupts(flags);
   return status;

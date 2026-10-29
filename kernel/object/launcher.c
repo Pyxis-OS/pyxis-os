@@ -6,6 +6,7 @@
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/kernel_owner.h>
 #include <kernel/memory.h>
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
@@ -152,6 +153,27 @@ void launcher_request_execute(struct launcher_request *request)
   KASSERT(request->request.state == BSP_REQUEST_SERVICING);
   struct execution_group *previous = object_cleanup_enter(request->execution_group ?
       request->execution_group : request->request.cleanup_group);
+  struct vm_kernel_owner owner = {0};
+  if (request->action == LAUNCH_CAPTURE_RAM || request->action == LAUNCH_START ||
+      request->action == LAUNCH_CREATE_SPACE || request->action == LAUNCH_BATCH_PREPARE) {
+    /* Reclamation yields while retaining the structural owner. Wait with
+     * interrupts enabled instead of reporting ordinary contention as a failed
+     * launch. The servicing request retains all inputs across this wait. */
+    cpu_enable_interrupts();
+    bool admitted = vm_kernel_owner_acquire(&owner);
+    cpu_disable_interrupts();
+    if (!admitted) {
+      request->result = CALL_BUSY;
+      if (request->action == LAUNCH_CAPTURE_RAM ||
+          (request->capture->image && request->capture->image->backing == FILE_INITRD)) {
+        file_end_operation(request->capture->image);
+      }
+      if (request->action != LAUNCH_CAPTURE_RAM) {
+        discard_capture(request->capture);
+      }
+      goto complete;
+    }
+  }
   switch (request->action) {
   case LAUNCH_CREATE_EXECUTION_GROUP:
     create_execution_group(request);
@@ -229,6 +251,10 @@ void launcher_request_execute(struct launcher_request *request)
     break;
   default:
     KASSERT(false);
+  }
+complete:
+  if (owner.root) {
+    vm_kernel_owner_release(&owner);
   }
   capability_reservation_release(&request->reservation, request->slots);
   object_cleanup_leave(previous);

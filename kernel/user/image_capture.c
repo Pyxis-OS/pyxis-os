@@ -33,6 +33,20 @@ enum call_status image_capture_allocate(uint64_t size, struct image_capture *cap
   return CALL_OK;
 }
 
+enum call_status image_capture_allocate_wait(uint64_t size, struct image_capture *capture)
+{
+  KASSERT(arch_cpu_index() == 0 && cpu_interrupts_enabled());
+  struct vm_kernel_owner owner = {0};
+  if (!vm_kernel_owner_acquire(&owner)) {
+    return CALL_BUSY;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  enum call_status status = image_capture_allocate(size, capture);
+  vm_kernel_owner_release(&owner);
+  cpu_restore_interrupts(flags);
+  return status;
+}
+
 void image_capture_release(struct image_capture *capture)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
