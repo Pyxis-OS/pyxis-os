@@ -4,7 +4,9 @@
 
   <p class="muted">In development since September 2026. {{ if hugo.Data.project.isoPublished }}Install ISO:
   <a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.iso">{{ hugo.Data.project.isoVersion }}</a>.
-  {{ else }}Latest tagged release:
+  {{ if hugo.Data.project.imagePublished }}QEMU image:
+  <a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.qcow2">{{ hugo.Data.project.isoVersion }}</a>.
+  {{ end }}{{ else }}Latest tagged release:
   <a href="{{ .Site.Params.sourceURL }}/tree/{{ hugo.Data.source.latestRelease }}">{{ hugo.Data.source.latestRelease }}</a>.
   The {{ hugo.Data.project.isoVersion }} ISO is not published yet.{{ end }}</p>
 
@@ -27,5 +29,7 @@
 
   <p id="download"><a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.iso">Pyxis {{ hugo.Data.project.isoVersion }} ISO</a>{{ if not hugo.Data.project.isoPublished }}
   <span class="muted">— placeholder; not published</span>{{ end }}.
-  <a href="/verify/">Verify the ISO before booting</a>.</p>
+  {{ if hugo.Data.project.imagePublished }}<a href="https://packages.pyxis.nexus/images/pyxis-{{ hugo.Data.project.isoVersion }}.qcow2">Ready-to-run QEMU image</a>
+  (<a href="/manual/{{ hugo.Data.project.isoVersion }}/install/#run-the-ready-made-image">how to run it</a>).
+  <a href="/verify/">Verify the ISO or image before booting</a>.{{ else }}<a href="/verify/">Verify the ISO before booting</a>.{{ end }}</p>
 {{ end }}

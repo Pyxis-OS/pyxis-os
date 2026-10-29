@@ -43,7 +43,7 @@ def page(destination, text, **parameters):
     destination.write_text(frontmatter + "+++\n\n" + text)
 
 
-def releases_page(commit, iso_version):
+def releases_page(commit, iso_version, image_published=False):
     """docs/releases.md at commit, with a stable anchor per version and the
     latest entry's install links. The text is never maintained a second time."""
     lines = read(commit, "docs/releases.md").decode().split("\n")
@@ -59,6 +59,12 @@ def releases_page(commit, iso_version):
                 out.append("Install ISO: [pyxis-" + latest + ".iso]"
                            "(https://packages.pyxis.nexus/images/pyxis-" + latest + ".iso), "
                            "and [how to verify it](/verify/).")
+                if image_published:
+                    out.append("")
+                    out.append("QEMU image: [pyxis-" + latest + ".qcow2]"
+                               "(https://packages.pyxis.nexus/images/pyxis-" + latest + ".qcow2), "
+                               "[how to run it](/manual/" + latest + "/install/#run-the-ready-made-image) "
+                               "and [how to verify it](/verify/).")
         else:
             out.append(line)
     if latest != iso_version:
@@ -67,7 +73,7 @@ def releases_page(commit, iso_version):
     return "\n".join(out)
 
 
-def iso_verification(commit, version):
+def iso_verification(commit, version, image_published=False):
     reference = read(commit, "packages/signing/README.md").decode()
     section = reference.split("## Checking an install ISO\n", 1)[1]
     fingerprint = re.search(r"\| `pyxis-signing-ca\.pem` \|[^\n]+\| `([^`]+)` \|", reference)[1]
@@ -75,16 +81,27 @@ def iso_verification(commit, version):
     commands = re.search(r"```sh\n(.*?)```", section, re.DOTALL)[1]
     first, remaining = commands.split("\n", 1)
     iso = "pyxis-" + version + ".iso"
-    downloads = "\n".join("- [" + name + "](https://packages.pyxis.nexus/images/" + name + ")"
-                          for name in [iso, "SHA256SUMS", "SHA256SUMS.sig", signer, "pyxis-signing-ca.pem"])
-    return f"""# Verify the install ISO
+    image = "pyxis-" + version + ".qcow2"
+    names = [iso, "SHA256SUMS", "SHA256SUMS.sig", signer, "pyxis-signing-ca.pem"]
+    if image_published:
+        names.insert(1, image)
+    downloads = "\n".join("- [" + name + "](https://packages.pyxis.nexus/images/" + name + ")" for name in names)
+    count = "six" if image_published else "five"
+    image_check = ""
+    image_note = ""
+    if image_published:
+        image_check = (f" Verify the ready-to-run QEMU image the same way: the checksum check must also name "
+                       f"**`{image}: OK`**, and a disk image that fails it must not be booted.")
+        image_note = (f" The QEMU image `{image}` is listed in the same manifest; "
+                      f"[run it with the launcher in the manual](/manual/{version}/install/#run-the-ready-made-image).")
+    return f"""# Verify the install ISO{" and QEMU image" if image_published else ""}
 
 Use OpenSSL 3.2 or later with the `codesign` purpose and GNU `sha256sum`.
 Run the steps in order. Stop if a command fails or a value does not match.
 
 ## 1. Download the files
 
-Save these five files in the same directory, then open a terminal there:
+Save these {count} files in the same directory, then open a terminal there:
 
 {downloads}
 
@@ -115,12 +132,12 @@ After the fingerprint matches, run each command below. Stop at any error:
 ```
 
 The certificate check must print `{signer}: OK`; the signature check must print
-`Verified OK`; and the checksum check must name **`{iso}: OK`**. Extracting the
+`Verified OK`; and the checksum check must name **`{iso}: OK`**.{image_check} Extracting the
 public key normally prints nothing.
 
 The manifest is cumulative, so `--ignore-missing` skips other releases you did
 not download. An OK for another ISO is not enough: require the exact filename
-above. Do not write or boot an image that fails verification.
+above. Do not write or boot an image that fails verification.{image_note}
 """
 
 
@@ -137,6 +154,8 @@ def main():
                         help="revision supplying docs/releases.md for /releases/, default origin/main")
     parser.add_argument("--published-iso", action="store_true",
                         help="prepare post-publication copy; deploy only after the signed ISO is published")
+    parser.add_argument("--published-image", action="store_true",
+                        help="also link the QEMU image; only once pyxis-VERSION.qcow2 is live and listed in SHA256SUMS")
     args = parser.parse_args()
 
     version = subprocess.check_output([args.hugo, "version"], text=True)
@@ -145,6 +164,8 @@ def main():
 
     project = tomllib.loads((SITE / "data/project.toml").read_text())
     project["isoPublished"] = args.published_iso
+    if args.published_image and not args.published_iso:
+        parser.error("--published-image needs --published-iso: the image is listed beside the ISO")
     manuals = []
     seen = set()
     for specification in args.manual or [project["defaultManual"] + "=origin/main"]:
@@ -186,7 +207,8 @@ def main():
         shutil.copytree(SITE / "themes", work / "themes")
         shutil.copytree(SITE / "data", work / "data")
         (work / "data/project.toml").write_text((SITE / "data/project.toml").read_text() +
-                                               "isoPublished = " + str(args.published_iso).lower() + "\n")
+                                               "isoPublished = " + str(args.published_iso).lower() + "\n" +
+                                               "imagePublished = " + str(args.published_image).lower() + "\n")
         content = work / "content"
         routes = {}
 
@@ -239,18 +261,24 @@ def main():
             routes[":" + gallery_revision + ":" + name] = "/gallery/" + relative.as_posix()
 
         latest_manual = next(manual for manual in manuals if manual["version"] == latest)
+        if args.published_image:
+            install = read(latest_manual["revision"], "docs/manual/install.md").decode()
+            if latest != project["isoVersion"] or "\n## Run the ready-made image\n" not in install:
+                parser.error("--published-image links the " + project["isoVersion"] + " manual's image section, "
+                             "but the served manual " + latest + " has none; pass --manual " +
+                             project["isoVersion"] + "=REF and --latest-manual")
         for name in files(latest_manual["revision"], "docs/manual"):
             route = routes.get(latest + ":" + latest_manual["revision"] + ":" + name)
             if route:
                 routes[":" + releases_revision + ":" + name] = route
-        page(content / "releases/_index.md", releases_page(releases_revision, project["isoVersion"]),
+        page(content / "releases/_index.md", releases_page(releases_revision, project["isoVersion"], args.published_image),
              source_path="docs/releases.md", source_revision=releases_revision,
              source_userland_revision=userland)
         routes[":" + releases_revision + ":docs/releases.md"] = "/releases/"
         page(content / "manual/_index.md",
              "# User manual\n\nContinue to the [" + latest + " manual](/manual/" + latest + "/).\n",
              redirect="/manual/" + latest + "/")
-        page(content / "verify.md", iso_verification(signing_revision, project["isoVersion"]),
+        page(content / "verify.md", iso_verification(signing_revision, project["isoVersion"], args.published_image),
              source_path="packages/signing/README.md", source_revision=signing_revision,
              source_userland_revision=userland)
         (content / "_index.md").write_text('+++\ntitle = "Pyxis OS"\n+++\n')

@@ -201,4 +201,12 @@ homelab root; the keys stay with him
 `SHA256SUMS` and the repository indexes are uploaded only after his OK for that
 step; `tools/sign-images.sh` runs last, after the image step, because the image
 needs the uploaded repositories. The site is deployed only after the files it
-links are live.
+links are live, by the orchestrator with wrangler after chronium's OK.
+
+The site build takes `--published-iso` once the ISO is live. Add
+`--published-image` only when `pyxis-VERSION.qcow2` is also uploaded and listed
+in the signed `SHA256SUMS`; then the homepage, the releases page and `/verify/`
+link the image. Without the flag, a release whose image failed leaves the site as
+it was for the ISO alone. The build also needs `--manual VERSION=REF` for the
+release, because the image's instructions are in that release's manual
+([site build](../../site/README.md#publication)).

@@ -18,6 +18,10 @@ Accepted:
   failure never blocks the release: the ISO and repositories publish as usual and
   the failure is reported.
 - **A copy-paste launcher in the manual**, not a downloaded script (2026-10-29).
+- **Site links** (2026-10-29): the homepage download line, the releases page and
+  `/verify/` link the image, behind a separate `--published-image` build flag set
+  only once the qcow2 is live. The orchestrator deploys the site with wrangler
+  after chronium's OK, as with the Worker.
 - **Worker changes** are deployed by the orchestrator after chronium approves each
   one (2026-10-29).
 
@@ -119,7 +123,9 @@ the installed core archive.
 - 32 GiB is virtual. `qemu-img convert -O raw` or a non-sparse copy makes a full
   32 GiB file.
 - Without KVM the build may take much longer (unmeasured).
-- The site's download list and `/verify/` page do not link the image yet.
+- The site links the image only after it is live, so a failed image build leaves
+  the site unchanged. Nothing detects that the file is actually uploaded; the
+  `--published-image` flag is the release agent's statement of it.
 
 ## Tasks
 
@@ -131,3 +137,8 @@ the installed core archive.
 - [x] 2. Release tooling: `SUMS_LINE`, `sign-images.sh`, the Worker allow-list
   diff for the orchestrator to approve and deploy, and the release-process step
   with its failure rule.
+- [x] 3. Site links: `--published-image` in `site/build.py` (it needs
+  `--published-iso`, and refuses unless the served manual is the release's and
+  has the image section), the homepage download line, the releases page and
+  `/verify/`, and the release-process step. Checked with a Hugo build of the
+  published and unpublished states.
