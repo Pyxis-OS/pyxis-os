@@ -23,6 +23,7 @@ struct shared_region {
   struct kernel_object object;
   struct shared_origin *origin;
   size_t size, page_count, creation_cpu;
+  bool quarantined; /* Origin guard; the first owned reference stays permanent. */
   phys_addr_t frames[];
 };
 
@@ -244,6 +245,27 @@ phys_addr_t shared_region_frame(const struct shared_region *region, size_t index
 struct shared_origin *shared_region_origin(const struct shared_region *region)
 {
   return region->origin;
+}
+
+void shared_region_quarantine_owned(struct shared_region **owned)
+{
+  KASSERT(!cpu_interrupts_enabled() && owned && *owned);
+  struct shared_region *region = *owned;
+  *owned = NULL;
+  struct shared_origin *origin = region->origin;
+  spin_lock(&origin->guard);
+  bool first = !region->quarantined;
+  if (first) {
+    KASSERT(region->size <= origin->allocated_bytes - origin->quarantined_bytes);
+    region->quarantined = true;
+    origin->quarantined_bytes += region->size;
+    atomic_fetch_add_explicit(&origin->space->shared_quarantined_bytes, region->size,
+        memory_order_relaxed);
+  }
+  spin_unlock(&origin->guard);
+  if (!first) {
+    object_release(&region->object);
+  }
 }
 
 void shared_memory_init(void)

@@ -175,3 +175,20 @@ records these results and changes documentation only; the tested B kernel is
 identified above. Packet, hashes, per-pass samples and comparison:
 `/shared/present/shared-memory/task2/native-controls/` (`comparison-native.json`,
 `results/A1-20261029T172044/`, `results/B1-20261029T172217/`).
+
+
+## Task 3 starting point — 2026-10-29
+
+The before-code baseline is native B above (`204f12e7a320`); task 3 branches
+from `7085662e7ac6`, whose only additional changes are the task 2 result record
+and checklist. No source/flag/archive change intervenes before task 3 begins.
+#1616 is held until after the 0.0.10 tag; this work does not request its merge.
+Task 3 internal integration builds with the same existing compiler. Its initial
+1/4-CPU QEMU existing-path checks pass exact launch/pages/CALL/SEND counts and
+FINAL drains, using the preserved control archives. They do not exercise the
+new view constructor or qualify CUT, quarantine, target-exit or self-target
+behavior: public creation/mapping dispatch remains unwired. Two untimed helper
+setup attempts reached Remote but could not start the missing client executable;
+those receipts are retained separately. No timing regression verdict is claimed
+for this incomplete checkpoint. Local receipts and source/artifact state:
+`/home/chronium/build/shared-memory/task3-checkpoint/`.

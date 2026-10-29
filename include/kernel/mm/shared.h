@@ -39,6 +39,12 @@ size_t shared_region_size(const struct shared_region *region);
 size_t shared_region_page_count(const struct shared_region *region);
 phys_addr_t shared_region_frame(const struct shared_region *region, size_t index);
 struct shared_origin *shared_region_origin(const struct shared_region *region);
+/* IF=0. Consume and clear one owned ordinary region reference reserved before
+ * alias exposure. The first call keeps that reference until reboot and charges
+ * quarantined backing once, without changing allocated bytes. Later calls drop
+ * their extra reference outside the origin guard. No process/group completion
+ * token is retained, and a late ACK never permits backing reuse. */
+void shared_region_quarantine_owned(struct shared_region **owned);
 /* IF=0; caller retains ORIGIN. Copies a short guarded observation, no lease. */
 void shared_origin_snapshot(struct shared_origin *origin,
     struct shared_origin_snapshot *snapshot);

@@ -28,7 +28,7 @@ struct private_allocation {
 /* Globally unique even for concurrent private-space owners; zero is exhausted. */
 static atomic_uint_fast64_t next_identity = 1;
 
-static uint64_t reserve_identity(void)
+uint64_t private_memory_identity(void)
 {
   uint64_t value = atomic_load_explicit(&next_identity, memory_order_relaxed);
   while (value && !atomic_compare_exchange_weak_explicit(&next_identity, &value,
@@ -122,7 +122,7 @@ enum call_status private_memory_allocate_guarded(struct process *process, size_t
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(size && !(size & (PAGE_SIZE - 1)) && size <= SIZE_MAX - PAGE_SIZE);
   *reservation = (struct memory_reservation){0};
-  uint64_t identity = reserve_identity();
+  uint64_t identity = private_memory_identity();
   if (!identity) {
     return CALL_NO_MEMORY;
   }
@@ -163,7 +163,7 @@ enum call_status private_memory_reserve(struct process *process, size_t size,
   process_vm_require_mutation(process);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   *reservation = (struct memory_reservation){0};
-  uint64_t identity = reserve_identity();
+  uint64_t identity = private_memory_identity();
   if (!identity) {
     return CALL_NO_MEMORY;
   }
@@ -358,7 +358,7 @@ enum call_status private_jit_allocate(struct process *process, size_t size,
   if (process->jit_regions == JIT_REGION_LIMIT || size > JIT_BACKING_LIMIT - process->jit_bytes) {
     return CALL_LIMIT;
   }
-  uint64_t identity = reserve_identity();
+  uint64_t identity = private_memory_identity();
   if (!identity) {
     return CALL_NO_MEMORY;
   }

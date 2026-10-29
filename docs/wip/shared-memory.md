@@ -172,7 +172,13 @@ without its connected withdrawal implementation.
   storage must be reserved before those tasks expose views.
   After this task chronium can inspect real backing/ownership and allocation
   failure handling without an unrevocable public mapping escape.
-- [ ] **3. Mapping and external withdrawal.** Process-owned view identities and
+- [ ] **3. Mapping and external withdrawal.** In progress on
+  `kernel/shared-memory-withdrawal`, stacked above #1616; neither branch is
+  requested for merge before the 0.0.10 tag. Internal external-VM admission,
+  persistent lineage enrollment, view cleanup and CUT joins are implemented
+  for integration. Public CREATE/MAP dispatch, reservation-release wiring and
+  new-region runtime qualification are still pending; no public grant widened.
+  Process-owned view identities and
   RELEASE_RESERVATION/exit removal, persistent lineage enrollment, external VM
   admission, explicit CUT joins, auto-close withdrawal and uncertain-process
   termination with backing quarantine. Implement the safe target/root/cleanup

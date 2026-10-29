@@ -1,4 +1,7 @@
 #include <kernel/object/wifi.h>
+#include <kernel/mm/shared_view.h>
+#include <kernel/process_vm.h>
+#include <kernel/wait.h>
 #include <kernel/object/wifi_auth.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -15,6 +18,7 @@
 #include <kernel/user_memory.h>
 #include <kernel/user/wait.h>
 #include <kernel/user/readiness_set.h>
+#include <kernel/wait.h>
 #include <kernel/net/interface.h>
 #include <kernel/bluetooth.h>
 
@@ -31,9 +35,11 @@ struct forwarder {
   struct kernel_object *detached_storage;
   struct forwarder *ancestors[FORWARDER_LINEAGE_MAX];
   size_t ancestor_count, holders, controllers;
+  size_t mapping_pending;
+  struct task_wait_link *mapping_waiters;
   enum object_type type;
   uint64_t protocol, rights, transport, kind;
-  bool cut, target_owned, reserved, cleaning;
+  bool cut, target_owned, reserved, cleaning, mapping_unknown;
 };
 
 struct forwarder_controller {
@@ -42,12 +48,58 @@ struct forwarder_controller {
 };
 
 /* IF=0. May nest atomic storage retains and scheduler wakeup, or the readiness
- * queue guard for a bounded callback. Readiness workers wake after unlocking.
+ * and shared-view queue guards for bounded callbacks. No VM/lifetime work is
+ * permitted in shared-view callbacks. Readiness workers wake after unlocking.
  * Never table/source guards, allocation, user copies or logical grant callbacks.
- * The readiness queue guard must never nest this guard. */
+ * Neither callback queue guard may nest this guard. */
 static struct spinlock forwarders_lock;
 static struct forwarder *forwarders;
 static struct forwarder_operation *operations;
+static struct forwarder_mapping *mappings;
+
+static void mapping_notify(struct forwarder *node)
+{
+  while (node->mapping_waiters) {
+    struct task_wait_link *link = node->mapping_waiters;
+    node->mapping_waiters = link->next;
+    struct task_wait *wait = link->wait;
+    link->next = NULL;
+    link->wait = NULL;
+    task_wait_wake(wait);
+  }
+}
+
+static bool mapping_contains(const struct forwarder_mapping *mapping,
+    const struct forwarder *node)
+{
+  for (size_t i = 0; i < mapping->count; ++i) {
+    if (mapping->nodes[i] == node) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool mapping_cut(const struct forwarder_mapping *mapping)
+{
+  for (size_t i = 0; i < mapping->count; ++i) {
+    if (mapping->nodes[i]->cut) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void mapping_mark_unknown(struct forwarder_mapping *mapping)
+{
+  for (size_t i = 0; i < mapping->count; ++i) {
+    struct forwarder *node = mapping->nodes[i];
+    if (!node->mapping_unknown) {
+      node->mapping_unknown = true;
+      mapping_notify(node);
+    }
+  }
+}
 
 /* Forwarder guard held. Substitution checks a proposed edge without publishing
  * it; every reachable chain stays bounded, including existing incoming slots. */
@@ -160,7 +212,8 @@ static void destroy_forwarder(struct kernel_object *object)
 {
   struct forwarder *forwarder = (struct forwarder *)object;
   KASSERT(!forwarder->reserved && !forwarder->cleaning && !forwarder->holders &&
-      !forwarder->controllers && !forwarder->previous);
+      !forwarder->controllers && !forwarder->previous &&
+      !forwarder->mapping_pending && !forwarder->mapping_waiters);
   if (forwarder->target.object) {
     if (forwarder->target_owned) {
       object_grant_release(forwarder->target.object, forwarder->target.rights);
@@ -221,6 +274,13 @@ static void cut_forwarder(struct forwarder *root)
     if (operation->notification_owner && object_retain(operation->notification_owner)) {
       operation->notification_next = notifications;
       notifications = operation;
+    }
+  }
+  for (struct forwarder_mapping *mapping = mappings; mapping; mapping = mapping->next) {
+    if (!atomic_load_explicit(&mapping->revoked, memory_order_relaxed) &&
+        mapping_cut(mapping)) {
+      atomic_store_explicit(&mapping->revoked, true, memory_order_release);
+      shared_view_request_withdrawal(mapping->owner, false);
     }
   }
   spin_unlock(&forwarders_lock);
@@ -636,6 +696,197 @@ void forwarder_operation_readiness(struct forwarder_operation *operation, bool e
   operation->readiness_observer = enabled;
   if (notify) {
     readiness_registration_revoked(operation);
+  }
+  spin_unlock(&forwarders_lock);
+}
+
+enum call_status forwarder_mapping_prepare(struct forwarder_mapping *mapping,
+    const struct forwarder_operation *source, struct shared_view *owner)
+{
+  KASSERT(!cpu_interrupts_enabled() && mapping && owner);
+  *mapping = (struct forwarder_mapping){.owner = owner};
+  atomic_init(&mapping->revoked, false);
+  if (!source || !source->count) {
+    return CALL_OK;
+  }
+  spin_lock(&forwarders_lock);
+  bool denied = source->state == FORWARDER_DENIED || operation_cut(source);
+  spin_unlock(&forwarders_lock);
+  if (denied) {
+    return CALL_DENIED;
+  }
+  /* The retained operation keeps each source node live across logical grant
+   * callbacks. Match derived grants' zero-right ancestor holder semantics. */
+  for (size_t i = 0; i < source->count; ++i) {
+    struct forwarder *node = source->nodes[i];
+    if (!object_grant_retain(&node->object, 0)) {
+      forwarder_mapping_complete(mapping, false);
+      return CALL_LIMIT;
+    }
+    mapping->nodes[mapping->count++] = node;
+  }
+  return CALL_OK;
+}
+
+enum call_status forwarder_mapping_enroll(struct forwarder_mapping *mapping)
+{
+  KASSERT(!cpu_interrupts_enabled() && mapping && mapping->owner);
+  spin_lock(&forwarders_lock);
+  KASSERT(!mapping->enrolled && !mapping->previous);
+  enum call_status status = mapping_cut(mapping) ? CALL_DENIED : CALL_OK;
+  for (size_t i = 0; status == CALL_OK && i < mapping->count; ++i) {
+    if (mapping->nodes[i]->mapping_pending == SIZE_MAX) {
+      status = CALL_LIMIT;
+    }
+  }
+  if (status == CALL_OK) {
+    mapping->enrolled = true;
+    if (mapping->count) {
+      mapping->next = mappings;
+      mapping->previous = &mappings;
+      if (mappings) {
+        mappings->previous = &mapping->next;
+      }
+      mappings = mapping;
+      for (size_t i = 0; i < mapping->count; ++i) {
+        ++mapping->nodes[i]->mapping_pending;
+        mapping_notify(mapping->nodes[i]);
+      }
+    }
+  }
+  spin_unlock(&forwarders_lock);
+  return status;
+}
+
+bool forwarder_mapping_complete(struct forwarder_mapping *mapping, bool uncertain)
+{
+  KASSERT(!cpu_interrupts_enabled() && mapping);
+  spin_lock(&forwarders_lock);
+  if (mapping->enrolled) {
+    uncertain |= shared_view_withdrawal_uncertain(mapping->owner);
+    if (mapping->previous) {
+      *mapping->previous = mapping->next;
+      if (mapping->next) {
+        mapping->next->previous = mapping->previous;
+      }
+    }
+    if (uncertain) {
+      mapping_mark_unknown(mapping);
+    }
+    for (size_t i = 0; i < mapping->count; ++i) {
+      struct forwarder *node = mapping->nodes[i];
+      KASSERT(node->mapping_pending);
+      --node->mapping_pending;
+      mapping_notify(node);
+    }
+  }
+  mapping->enrolled = false;
+  mapping->previous = NULL;
+  mapping->next = NULL;
+  size_t count = mapping->count;
+  mapping->count = 0;
+  mapping->owner = NULL;
+  spin_unlock(&forwarders_lock);
+  for (size_t i = 0; i < count; ++i) {
+    struct forwarder *node = mapping->nodes[i];
+    mapping->nodes[i] = NULL;
+    object_grant_release(&node->object, 0);
+  }
+  return uncertain;
+}
+
+bool forwarder_mapping_revoked(const struct forwarder_mapping *mapping)
+{
+  return atomic_load_explicit(&mapping->revoked, memory_order_acquire);
+}
+
+static struct forwarder *mapping_controller(struct kernel_object *controller)
+{
+  KASSERT(!cpu_interrupts_enabled() && controller &&
+      controller->type == OBJECT_FORWARDER_CONTROLLER);
+  return ((struct forwarder_controller *)controller)->forwarder;
+}
+
+static enum call_status mapping_status(const struct forwarder *node)
+{
+  return node->mapping_unknown ? CALL_OUTCOME_UNKNOWN :
+      node->mapping_pending ? CALL_BUSY : CALL_OK;
+}
+
+enum call_status forwarder_mapping_status(struct kernel_object *controller)
+{
+  struct forwarder *node = mapping_controller(controller);
+  spin_lock(&forwarders_lock);
+  enum call_status status = mapping_status(node);
+  spin_unlock(&forwarders_lock);
+  return status;
+}
+
+bool forwarder_mapping_target_pending(struct kernel_object *controller,
+    struct process *process)
+{
+  struct forwarder *node = mapping_controller(controller);
+  spin_lock(&forwarders_lock);
+  bool pending = false;
+  for (struct forwarder_mapping *mapping = mappings; mapping; mapping = mapping->next) {
+    if (mapping_contains(mapping, node) && shared_view_targets(mapping->owner, process)) {
+      pending = true;
+      break;
+    }
+  }
+  spin_unlock(&forwarders_lock);
+  return pending;
+}
+
+void forwarder_mapping_timeout(struct kernel_object *controller)
+{
+  struct forwarder *node = mapping_controller(controller);
+  spin_lock(&forwarders_lock);
+  for (struct forwarder_mapping *mapping = mappings; mapping; mapping = mapping->next) {
+    if (mapping_contains(mapping, node) && !mapping->uncertain) {
+      mapping->uncertain = true;
+      atomic_store_explicit(&mapping->revoked, true, memory_order_release);
+      mapping_mark_unknown(mapping);
+      shared_view_request_withdrawal(mapping->owner, true);
+    }
+  }
+  spin_unlock(&forwarders_lock);
+}
+
+enum call_status forwarder_mapping_wait(struct kernel_object *controller,
+    struct task_wait_link *link)
+{
+  struct forwarder *node = mapping_controller(controller);
+  KASSERT(link && link->wait && !link->next);
+  spin_lock(&forwarders_lock);
+  enum call_status status = mapping_status(node);
+  if (status == CALL_BUSY) {
+    link->next = node->mapping_waiters;
+    node->mapping_waiters = link;
+  } else {
+    struct task_wait *wait = link->wait;
+    link->wait = NULL;
+    task_wait_wake(wait);
+  }
+  spin_unlock(&forwarders_lock);
+  return status;
+}
+
+void forwarder_mapping_unwait(struct kernel_object *controller,
+    struct task_wait_link *link)
+{
+  struct forwarder *node = mapping_controller(controller);
+  KASSERT(link);
+  spin_lock(&forwarders_lock);
+  if (link->wait) {
+    struct task_wait_link **cursor = &node->mapping_waiters;
+    while (*cursor && *cursor != link) {
+      cursor = &(*cursor)->next;
+    }
+    KASSERT(*cursor == link);
+    *cursor = link->next;
+    link->next = NULL;
+    link->wait = NULL;
   }
   spin_unlock(&forwarders_lock);
 }
@@ -1110,8 +1361,42 @@ struct syscall_result forwarder_controller_call(struct kernel_object *object,
     if (!task_operation_start()) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
+    uint64_t deadline = task_deadline_after_ms(1000);
     cut_forwarder(forwarder);
-    return (struct syscall_result){CALL_OK, 0};
+    enum call_status status = forwarder_mapping_status(object);
+    if (status == CALL_OK) {
+      return (struct syscall_result){CALL_OK, 0};
+    }
+    /* A self-targeting revoker must leave its root before withdrawal can drain.
+     * No user reply loan is granted while its selected aliases remain live. */
+    task_vm_kernel_enter();
+    while (status == CALL_BUSY && !task_stop_requested()) {
+      if (task_deadline_expired(deadline)) {
+        break;
+      }
+      struct task_wait_link *link = task_wait_link_prepare();
+      struct task_wait *wait = link->wait;
+      status = forwarder_mapping_wait(object, link);
+      if (status == CALL_BUSY) {
+        task_wait_sleep_until_interruptible(wait, deadline);
+      }
+      forwarder_mapping_unwait(object, link);
+      status = forwarder_mapping_status(object);
+    }
+    if (status == CALL_BUSY) {
+      forwarder_mapping_timeout(object);
+      status = CALL_OUTCOME_UNKNOWN;
+    }
+    if (status == CALL_OUTCOME_UNKNOWN &&
+        forwarder_mapping_target_pending(object, process_current())) {
+      process_request_stop(process_current());
+    }
+    if (!task_stop_requested()) {
+      task_vm_kernel_leave();
+    }
+    /* A stopped self-revoker returns through kernel-only grant cleanup to
+     * task_syscall_leave(), which terminates it without reactivating its root. */
+    return (struct syscall_result){status, 0};
   }
   if (operation != FORWARDER_RETARGET && operation != FORWARDER_MATCH) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};

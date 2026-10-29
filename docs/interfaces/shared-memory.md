@@ -51,6 +51,29 @@ kernel alias in this foundation: later mappings must prove their own retirement
 before dropping the final reference. Snapshot/account references alone are not
 mapping or device leases.
 
-Quarantine and private-view withdrawal are not implemented by the storage slice.
-Their accepted termination/completion rules remain in the milestone; ordinary
-successful control boots are not qualification of those future paths.
+## Mapping integration status
+
+Kernel-internal shared-view work adds a persistent source-lineage registration,
+not an ordinary started-operation record: CUT must include it even after MAP's
+operation starts. Enrollment rechecks lineage under the same guard as CUT.
+Records own logical holders and backing, never controller authority. The private
+mutation owner reserves/maps the full view before any root exposes it.
+
+A per-process aggregate queues withdrawal on an existing fixed RAM actor. Its
+separate external VM token waits behind private mutation/reply and actual root
+and borrower departure; the actor does not park while waiting. Persistent
+views retain process storage until the last-task departure hook queues removal;
+that hook runs before ordinary process cleanup waits on these retained records.
+No task stack, user pointer or borrowed operation record is retained.
+
+Uncertain backing consumes a reference reserved before mapping exposure. One
+independent region reference and the origin charge remain until reboot; repeated
+quarantine does not charge twice or enroll another process/group cleanup join.
+Normal final reference releases inherit the affected process's cleanup context.
+A stopped self-revoker may finish kernel-only syscall cleanup and terminate
+without reactivating its private root.
+
+This internal integration is incomplete and unqualified for use: public
+CREATE/MAP dispatch and reservation-release wiring are still pending. Existing
+control boots do not qualify constructor, shared-view or withdrawal behavior.
+The accepted termination/completion boundaries remain in the milestone.
