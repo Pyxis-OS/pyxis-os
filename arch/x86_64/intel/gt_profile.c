@@ -624,10 +624,10 @@ static bool check_consumers(void)
   return qualified;
 }
 
-bool intel_gt_profile_admit_pat(bool ggtt_pat3_unused)
+bool intel_gt_profile_admit_pat(bool live_gop_pat3_unused)
 {
-  if (!intel_gt_profile_ready() || pat_admitted || !ggtt_pat3_unused || !check_consumers()) {
-    kinfo("intel-gt: PAT admission refused: GGTT/submitter proof incomplete; keeping GOP copy\n");
+  if (!intel_gt_profile_ready() || pat_admitted || !check_consumers()) {
+    kinfo("intel-gt: PAT admission refused: submitter proof incomplete; keeping GOP copy\n");
     return false;
   }
   uint32_t pat[GGTT_PAT_ENTRIES];
@@ -636,8 +636,12 @@ bool intel_gt_profile_admit_pat(bool ggtt_pat3_unused)
   }
   pat_index = select_pat(pat);
   if (pat_index == GGTT_PAT_ENTRIES) {
-    /* Only this page becomes writable, only after the independent full GGTT
-     * scan and consumer proof. The whitelist admits exactly PAT3=0x3c. */
+    if (!live_gop_pat3_unused) {
+      kinfo("intel-gt: PAT3 has a live GOP consumer; keeping its policy and GOP copy\n");
+      return false;
+    }
+    /* Only this page becomes writable, after the live GOP and submitter
+     * proof. The whitelist admits exactly PAT3=0x3c. */
     if (vm_protect(vm_kernel_space(), mappings[1].window, PAGE_WRITE) != MM_OK ||
         !check_consumers() || !acquire_semaphore()) {
       return false;
@@ -650,7 +654,7 @@ bool intel_gt_profile_admit_pat(bool ggtt_pat3_unused)
     write_reg(PAT_INDEX0 + PAT_DISPLAY_INDEX * sizeof(uint32_t), PAT_UC_NONCOHERENT);
     pat_write_armed = false;
     uint32_t after = read_reg(PAT_INDEX0 + PAT_DISPLAY_INDEX * sizeof(uint32_t));
-    kinfo("intel-gt: PAT3 programmed before=%x after=%x; PAT0-2 untouched, submitter/GGTT proof confirmed\n",
+    kinfo("intel-gt: PAT3 programmed before=%x after=%x; PAT0-2 untouched, submitter/live-GOP proof confirmed\n",
         before, after);
     if (!release_semaphore() || !holds_valid()) {
       return false;

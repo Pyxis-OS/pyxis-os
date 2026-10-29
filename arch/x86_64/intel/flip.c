@@ -7,9 +7,7 @@
 #include <kernel/display.h>
 #include <kernel/boot/options.h>
 #include <kernel/mm/scanout.h>
-#include <kernel/mm/heap.h>
 #include <kernel/log.h>
-#include <kernel/memory.h>
 #include <kernel/panic.h>
 #include "display_internal.h"
 #include "display_regs.h"
@@ -214,56 +212,73 @@ static bool qualify_timing(void)
   return false;
 }
 
-static bool choose_ggtt(size_t count, bool *pat3_unused)
+static bool choose_ggtt(size_t count)
 {
-  /* Import every nonzero inherited entry, then allocate only within our
-   * exclusive ledger above maximum WOPCM and below the reference GuC ceiling. */
-  kinfo("intel-flip: setup importing GGTT ownership\n");
-  if (!intel_display_prepare_gtt(setup_deadline)) {
+  if (!count || count > (GGTT_ALLOC_END - GGTT_RESERVED_LOW) / PAGE_SIZE / 2) {
     return false;
   }
-  log_setup_phase("GGTT-cpu-span-ready");
-  size_t entries = GGTT_ADDRESS_BYTES / PAGE_SIZE;
-  size_t pat3_references = 0;
-  *pat3_unused = false;
-  uint8_t *occupied = kmalloc(entries / 8);
-  if (!occupied) {
-    return false;
-  }
-  memset(occupied, 0, entries / 8);
-  for (size_t i = 0; i < entries; ++i) {
+  size_t run = 0, scanned = 0, retained_pat3 = 0;
+  uint64_t first_pat3 = 0, end_pat3 = 0;
+  const size_t chunk = PAGE_SIZE / sizeof(uint64_t);
+  for (uint64_t gpu = GGTT_RESERVED_LOW; gpu < GGTT_ALLOC_END; gpu += PAGE_SIZE) {
+    if (!(scanned % chunk)) {
+      size_t available = (GGTT_ALLOC_END - gpu) / PAGE_SIZE;
+      size_t next = available < chunk ? available : chunk;
+      if (!setup_in_time("GGTT zero-span search") ||
+          !intel_display_gtt_prepare_read(gpu, next)) {
+        return false;
+      }
+    }
     uint64_t value;
-    if (!(i % (PAGE_SIZE / sizeof(uint64_t))) && !setup_in_time("GGTT import")) {
-      kfree(occupied);
+    if (!intel_display_gtt_read(gpu, &value)) {
       return false;
     }
-    if (!intel_display_gtt_read(i * PAGE_SIZE, &value)) {
-      kfree(occupied);
-      return false;
-    }
+    ++scanned;
     if ((value & GGTT_PTE_PRESENT) && (value & GGTT_PTE_PAT_MASK) == GGTT_PTE_PAT(3)) {
-      ++pat3_references;
+      if (!retained_pat3) {
+        first_pat3 = gpu;
+      }
+      end_pat3 = gpu + PAGE_SIZE;
+      ++retained_pat3;
     }
-    if (value || i * PAGE_SIZE < GGTT_RESERVED_LOW || i * PAGE_SIZE >= GGTT_ALLOC_END) {
-      occupied[i / 8] |= 1u << (i % 8);
-    }
-  }
-  log_setup_phase("GGTT-read-imported");
-  *pat3_unused = !pat3_references;
-  kinfo("intel-flip: full GGTT imported entries=%zu present-PAT3-references=%zu\n",
-      entries, pat3_references);
-  size_t run = 0;
-  for (size_t i = GGTT_RESERVED_LOW / PAGE_SIZE; i < GGTT_ALLOC_END / PAGE_SIZE; ++i) {
-    run = occupied[i / 8] & (1u << (i % 8)) ? 0 : run + 1;
+    bool gop = gpu >= gpu_surfaces[0] && (gpu - gpu_surfaces[0]) / PAGE_SIZE < count;
+    run = value || gop ? 0 : run + 1;
     if (run == 2 * count) {
-      gpu_surfaces[1] = (i + 1 - run) * PAGE_SIZE;
+      gpu_surfaces[1] = gpu + PAGE_SIZE - run * PAGE_SIZE;
       gpu_surfaces[2] = gpu_surfaces[1] + count * PAGE_SIZE;
-      kfree(occupied);
+      kinfo("intel-flip: GGTT zero span start=%x split=%x end=%lx pages=%zu scanned=%zu retained-PAT3=%zu retained-first=%lx retained-end=%lx\n",
+          gpu_surfaces[1], gpu_surfaces[2], gpu + PAGE_SIZE, run, scanned,
+          retained_pat3, first_pat3, end_pat3);
+      log_setup_phase("GGTT-zero-span-ready");
       return true;
     }
   }
-  kfree(occupied);
+  kinfo("intel-flip: no verified-zero GGTT span; inherited entries preserved, keeping GOP copy\n");
   return false;
+}
+
+static bool verify_gop(const struct boot_framebuffer *fb, uint64_t aperture,
+    bool *pat3_unused)
+{
+  if (!fixed_layout() || intel_display_read(PLANE1 + PLANE_SURFACE) != gpu_surfaces[0] ||
+      intel_display_read(PLANE1 + PLANE_LIVE) != gpu_surfaces[0]) {
+    return false;
+  }
+  size_t count = (fb->size + PAGE_SIZE - 1) / PAGE_SIZE;
+  size_t pat_counts[4] = {0};
+  for (size_t i = 0; i < count; ++i) {
+    uint64_t value, expected = fb->physical - aperture + i * PAGE_SIZE;
+    if (!intel_display_gtt_read(gpu_surfaces[0] + i * PAGE_SIZE, &value) ||
+        (value & ~GGTT_PTE_PAT_MASK) != (expected | GGTT_PTE_PRESENT | GGTT_PTE_DM)) {
+      kinfo("intel-flip: unavailable: complete GOP alias changed\n");
+      return false;
+    }
+    ++pat_counts[(value & GGTT_PTE_PAT_MASK) >> 52];
+  }
+  *pat3_unused = !pat_counts[3];
+  kinfo("intel-flip: live GOP start=%x pages=%zu PAT0=%zu PAT1=%zu PAT2=%zu PAT3=%zu; alias confirmed\n",
+      gpu_surfaces[0], count, pat_counts[0], pat_counts[1], pat_counts[2], pat_counts[3]);
+  return true;
 }
 
 static bool abandon_setup(const char *reason)
@@ -327,13 +342,9 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     return false;
   }
   size_t count = (fb->size + PAGE_SIZE - 1) / PAGE_SIZE;
-  for (size_t i = 0; i < count; ++i) {
-    uint64_t value, expected = fb->physical - aperture + i * PAGE_SIZE;
-    if (!intel_display_gtt_read(gpu_surfaces[0] + i * PAGE_SIZE, &value) ||
-        (value & ~GGTT_PTE_PAT_MASK) != (expected | GGTT_PTE_PRESENT | GGTT_PTE_DM)) {
-      kinfo("intel-flip: unavailable: complete GOP alias changed\n");
-      return false;
-    }
+  bool live_pat3_unused;
+  if (!verify_gop(fb, aperture, &live_pat3_unused)) {
+    return false;
   }
   kinfo("intel-flip: setup consumer proof; total budget=%lu ms\n", SETUP_TIMEOUT_NS / 1000000);
   if (!setup_in_time("GT consumer access") || !intel_display_claim()) {
@@ -356,13 +367,13 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     return false;
   }
   log_setup_phase("DMA-qualified");
-  bool pat3_unused;
-  if (!choose_ggtt(count, &pat3_unused) || !setup_in_time("PAT admission") ||
-      !intel_gt_profile_admit_pat(pat3_unused)) {
+  if (!choose_ggtt(count) || !setup_in_time("PAT admission") ||
+      !verify_gop(fb, aperture, &live_pat3_unused) ||
+      !setup_in_time("live GOP proof") || !intel_gt_profile_admit_pat(live_pat3_unused)) {
     if (!intel_gt_profile_finish()) {
-      return abandon_setup("GT cleanup after GGTT import refusal uncertain");
+      return abandon_setup("GT cleanup after GGTT/PAT admission refusal uncertain");
     }
-    kinfo("intel-flip: unavailable: GGTT import refused; keeping GOP copy\n");
+    kinfo("intel-flip: unavailable: GGTT/PAT admission refused; keeping GOP copy\n");
     return false;
   }
   log_setup_phase("PAT-admitted");

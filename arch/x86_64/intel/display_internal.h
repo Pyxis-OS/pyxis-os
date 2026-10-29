@@ -16,7 +16,8 @@ void intel_display_flip_event_control(bool record);
 void intel_display_clear_flip_event(void);
 bool intel_display_claim(void);
 bool intel_display_gtt_read(uint64_t gpu, uint64_t *value);
-bool intel_display_prepare_gtt(uint64_t deadline);
+/* One bounded read-only PTE chunk under exclusive bootstrap ownership. */
+bool intel_display_gtt_prepare_read(uint64_t gpu, size_t count);
 uint64_t *intel_display_gtt_write_window(uint64_t gpu);
 
 #endif
