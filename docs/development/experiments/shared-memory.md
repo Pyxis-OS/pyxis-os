@@ -93,7 +93,7 @@ No boot-variance, regression or native claim. Small refreshed evidence:
 `/shared/present/shared-memory/baseline-8d4f/`; frozen local images/source and
 full raw records: `/home/chronium/build/shared-memory/baseline-8d4f/`.
 
-## Task 2 storage foundation — controls, qualification pending
+## Task 2 storage foundation — nested controls
 
 Candidate `33a0f66f726016ffbc7eeb6db5ab7af5e089a21e`, kernel SHA-256
 `97b954938b0e897ea0852194a5588473ca846f3c374f79a4935f572893caff5c`,
@@ -123,7 +123,9 @@ changes: CALL4096 rises 36%, SEND64 93%, while SEND4096 falls 18%. It does not
 establish a stable 4 KiB-only effect or a cause. Do not label the differences
 noise or claim performance parity. No further timing repeats or speculative
 padding/fence/copy changes are justified by these results. Source/disassembly
-attribution and a coordinated native control pair are pending before readiness.
+attribution found no added per-message checks in the inspected IPC hot paths;
+the native control pair below resolves the native regression concern without
+establishing the cause of these nested differences.
 
 Backing metadata is 88 bytes per originating account and 72 bytes per region
 plus its 8-byte physical-frame entry per page, excluding allocator overhead.
@@ -134,4 +136,42 @@ operation is added to existing IPC paths.
 
 All owned guests stopped. Exact methods, per-pass records/ranges and host
 context: `/home/chronium/build/shared-memory/task2/{after,focused-1cpu}/`;
-small evidence `/shared/present/shared-memory/task2/`. No native result yet.
+small evidence `/shared/present/shared-memory/task2/`.
+
+
+## Task 2 native controls — 2026-10-29
+
+The orchestrator ran one fresh A1/B1 pair on vela: A main
+`4716f61e14703d21d2a7f58f6ef097d5db974bad`, B task 2
+`204f12e7a3205ef13698ac8e900aaa36ca55613d`. Both pass every workload count and
+Remote FINAL/drain. Same compiler, effective kernel config, frozen control apps
+and RAM archive; no instrumentation. Both report 16 online CPUs, full HWP,
+XSAVE `0x7`/832 bytes and TSC `cpuid15`/`rdtscp` at 3686.4 MHz. Development/
+network allow CPU0 and Remote/children CPU1; this does not prove actual placement.
+The commands are the unchanged launch/pages/CALL/SEND workloads above. Fresh
+boot sequence is reported by the orchestrator; qualification captures exact
+kernel identity before and after each cohort.
+
+| Guest interval, ms | A | B |
+| --- | --- | --- |
+| 1,024 launches | 866.979 | 863.484 |
+| Private pages | 25.061 | 25.076 |
+| CALL64 completion | 1.2295 [1.143, 1.370] | 1.2295 [1.143, 1.359] |
+| CALL4096 completion | 1.4300 [1.336, 1.522] | 1.4260 [1.338, 1.561] |
+| SEND64 completion | 0.6445 [0.587, 0.808] | 0.6385 [0.592, 0.812] |
+| SEND4096 completion | 0.7460 [0.645, 0.901] | 0.7450 [0.673, 0.918] |
+
+IPC entries are median [min,max] across 100 passes in each boot. Launch/pages
+have one sample per variant; there is no independent boot-to-boot range.
+The measured native controls are at parity: the material nested IPC changes
+did not reproduce. Their cause remains unattributed, and the nested samples
+are retained. No speculative hot-path change was made.
+
+This qualifies the storage foundation's existing-path controls for review,
+not shared-region constructor, mapping or revocation behavior: CREATE/MAP and
+creation delegation remain absent. New-region runtime qualification follows
+with the connected mapping/withdrawal and consumer tasks. The follow-up commit
+records these results and changes documentation only; the tested B kernel is
+identified above. Packet, hashes, per-pass samples and comparison:
+`/shared/present/shared-memory/task2/native-controls/` (`comparison-native.json`,
+`results/A1-20261029T172044/`, `results/B1-20261029T172217/`).
