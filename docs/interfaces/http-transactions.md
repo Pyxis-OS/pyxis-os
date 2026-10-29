@@ -144,6 +144,13 @@ Per-request TLS failures publish bounded human detail from verification flags,
 Mbed TLS errors and the last received fatal alert. Certificate expiry, future
 validity, name mismatch, trust/signature and reported revocation failures remain
 separate reasons; transport reset/timeouts are identified as transport failures.
+Native network failures name refused/reset connections, missing routes,
+timeouts, unavailable endpoints and resource/admission failures, with their native
+status number; unmapped statuses retain a generic label and that number. The
+generic resource outcome remains IO_ERROR, so pkg may report, for example,
+`Connection refused (native status 22) (fetch status 19)`. If pkg's GET call itself
+times out before a provider description arrives, its detail is `HTTP GET timed
+out` with native fetch status 17. These diagnostics add no retries or fallbacks.
 Unknown library errors retain their numeric code. A generic peer handshake alert
 does not establish which cipher, signature or group was incompatible. No peer
 certificate text or request credentials enter these diagnostics. Native statuses
