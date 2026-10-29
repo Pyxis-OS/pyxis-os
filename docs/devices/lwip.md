@@ -152,10 +152,18 @@ Caelum owns sequence-number and source-port policy. The pinned CC0 SipHash-2-4
 reference is in `third_party/siphash`, with its revision and freestanding changes
 in `UPSTREAM.md`; it is not part of the lwIP protocol-engine fork. ISNs combine a
 secret hash of the address/port tuple with the monotonic four-microsecond clock,
-modulo 32 bits, following RFC 9293. A different key hashes the destination, local
-address and a never-wrapping attempt counter to choose an ephemeral-port start
-and odd stride. The stride visits the entire 49152–65535 range without repeats.
-Keys are never logged; debugger inspection should not disclose them either.
+modulo 32 bits, following RFC 9293. A different key hashes the destination and
+local address into a fixed offset. Following RFC 6056 algorithm 3, an advancing
+global counter is added to that offset within 49152–65535, replacing independently
+random starts that can immediately reuse a passive-closed tuple at its peer.
+Each pending bind keeps its own contiguous cursor across worker turns, so
+interleaved binds cannot make its scan repeat candidates. Occupied candidates
+advance both that cursor and the global counter, preserving sequential progress
+past collisions. Other endpoints and pending scans share counter progress;
+this is not a timed reuse quarantine. The counter never wraps.
+The secret offset separates endpoint sequences, but ports to an observed endpoint
+advance predictably. Keys are never logged; debugger inspection should not
+disclose them either. See [RFC 6056 section 3.3.3](https://www.rfc-editor.org/rfc/rfc6056.html#section-3.3.3).
 
 `net_tcp_prepare` is worker-only and creates an owned pre-SYN record/PCB with
 route and deadline. Binding resumes over at most sixteen unique candidates per

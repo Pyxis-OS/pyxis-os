@@ -98,23 +98,31 @@ u32_t caelum_lwip_isn(const ip4_addr_t *local, u16_t local_port,
 }
 
 bool tcp_identity_ports(uint32_t local, uint32_t remote, uint16_t remote_port,
-    uint16_t *first, uint16_t *stride)
+    uint16_t *first)
 {
   net_worker_assert_context();
   if (!tcp_identity_ready() || port_counter == UINT64_MAX) {
     return false;
   }
-  uint8_t input[18];
-  net_write_u32(input, local);
-  net_write_u32(input + 4, remote);
-  net_write_u16(input + 8, remote_port);
-  uint64_t counter = ++port_counter;
-  for (size_t i = 0; i < sizeof(counter); ++i) {
-    input[10 + i] = counter >> (i * 8);
+  uint8_t tuple[10];
+  net_write_u32(tuple, local);
+  net_write_u32(tuple + 4, remote);
+  net_write_u16(tuple + 8, remote_port);
+  /* RFC 6056 algorithm 3's secret per-destination offset and advancing
+   * counter avoid independently random starts reusing a passive-closed tuple.
+   * Each pending bind keeps its own contiguous scan across worker turns. */
+  uint64_t offset = keyed_hash(tuple, sizeof(tuple), port_key);
+  *first = (offset + port_counter++) & (TCP_EPHEMERAL_COUNT - 1);
+  return true;
+}
+
+bool tcp_identity_port_advance(uint16_t *candidate)
+{
+  net_worker_assert_context();
+  if (port_counter == UINT64_MAX) {
+    return false;
   }
-  uint64_t hash = keyed_hash(input, sizeof(input), port_key);
-  *first = hash & (TCP_EPHEMERAL_COUNT - 1);
-  /* An odd stride visits every offset in this power-of-two range once. */
-  *stride = ((hash >> 32) & (TCP_EPHEMERAL_COUNT - 1)) | 1;
+  ++port_counter;
+  *candidate = (*candidate + 1) & (TCP_EPHEMERAL_COUNT - 1);
   return true;
 }

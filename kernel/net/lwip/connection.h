@@ -18,7 +18,7 @@ struct tcp_connection {
   uint64_t address_epoch;
   uint32_t local, remote;
   uint16_t local_port, remote_port;
-  uint16_t bind_candidate, bind_stride;
+  uint16_t bind_candidate;
   size_t bind_attempts;
   bool binding;
   uint64_t setup_deadline, progress_deadline, orphan_deadline;
