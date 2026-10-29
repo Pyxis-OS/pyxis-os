@@ -316,8 +316,17 @@ the set record. Only after these names are synchronized does it write and sync
 `current.new`, rename it over `current`, and sync the volume directory. See
 [persistent mutation durability](filesystem-mutations.md#native-persistent-backing).
 A switch or final sync failure reports activation as uncertain and retains the
-writer lock and old/new evidence for recovery. An unpublished `current.new` or
-set record is never automatically activated.
+writer lock and old/new evidence for recovery. On a boot-marked installation,
+the confirmed switch first synchronizes `.upgrade-pending` with the old and new
+set numbers and the unchanged boot identity. It then switches `current`,
+publishes `.boot-selection` for the new set, and removes the pending record,
+synchronizing each publication. That pending record is durable authorization
+for boot-init to finish the confirmed change after interruption, including an
+interruption before `current` switches. A new set or `current.new` without this
+pending authorization is never automatically activated. Malformed proof, an
+existing pending transition, or proof naming a different current set refuses
+mutation. An unmarked installer or legacy volume remains unmarked; ordinary
+package changes never invent boot evidence or publish ESP files.
 
 ### Command projection and bootstrap
 

@@ -26,6 +26,16 @@ that choice. Proposed removals also need individual approval, including when
 confirmed ordinary package change, new lookups see the new set; existing held
 package handles keep their own lifetime.
 
+On a boot-marked installation, a confirmed change records a durable transition
+before switching the set, carries the same boot identity forward to the new
+set's proof, and then clears the transition. If interrupted, the next verified
+boot finishes that confirmed change before starting package consumers. An
+uncertain result retains the writer lock and recovery evidence; reboot to
+complete a pending transition, then clear an abandoned lock with `pkg unlock`
+after the old client has stopped. A pending release transition still refuses
+ordinary package mutations. Missing or conflicting proof is not repaired by
+guessing: use rescue or installer Update.
+
 ## Upgrading the release
 
 On an installed system with the configured upgrade authority, `pkg upgrade
