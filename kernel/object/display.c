@@ -432,9 +432,6 @@ static enum call_status begin_commit(struct display_request *request)
     return CALL_BUSY;
   }
   KASSERT(display->mapping_identity == request->mapping_identity);
-  if (!task_operation_start()) {
-    return CALL_DENIED;
-  }
   ++committing_transactions;
   request->committing = true;
   return CALL_OK;

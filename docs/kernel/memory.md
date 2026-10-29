@@ -122,8 +122,8 @@ worker, per-call request allocation or BSP queue publication is involved.
 Dispatch distinguishes this mode from an admitted syscall that still uses its
 private root, and preserves FP/TLS state on every switch in either mode.
 
-The common process VM transaction still serializes MEMORY with BSP DISPLAY and
-thread-context changes. New root admission closes, previously admitted syscall
+The common caller-CPU process VM transaction serializes MEMORY, JIT, DISPLAY
+mapping work and thread-context changes. New root admission closes, previously admitted syscall
 continuations may finish bounded copies, and roots/borrowers must drain before
 effects. A blocked staged I/O call holds no mapping lease. The mutator parks on
 its own joined waiter while drainage is pending; departures notify it directly.
@@ -132,8 +132,9 @@ this slice adds no live-root mutation or targeted TLB shootdown.
 
 Large eager backing and sparse commit/decommit/release yield between bounded
 page/extent steps while retaining exclusive ownership. They execute on the
-caller CPU, not the BSP VM worker. That worker remains for DISPLAY; native
-thread-context preparation uses the same retained caller-CPU transaction. RESERVE
+caller CPU. There is no BSP VM-mutation worker. DISPLAY keeps fixed-owner
+control/publication phases around its caller-CPU VM work; native thread-context
+preparation uses the same retained caller-CPU transaction. RESERVE
 stays independent of the unused virtual span.
 The current one-second quiescence budget is an implementation choice, not an ABI
 operation deadline. Failure returns BUSY before effects and preserves mappings

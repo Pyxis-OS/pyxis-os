@@ -256,14 +256,24 @@ keep their acquired layout until they explicitly adapt.
 
 ## Mapping and teardown invariants
 
-All display state and backing allocation are BSP-owned, with interrupts disabled
-while mutating them. All five operations, including SUBMIT and SIZE, use typed
-requests on the common BSP FIFO. The service catalog requires the scheduler to park the
-requesting task outside its private root and stack, with entry/current-task state
-cleared, before publication. The BSP executor performs the operation and clears
-its process/display loans before completion and wakeup; resumption reloads CR3.
-The display capability keeps the object alive during the request. Failed
-acquisition unwinds partial mappings and backing without claiming the display.
+Display control, frame references, input routing and publication remain BSP-owned.
+ACQUIRE/REPLACE/RELEASE perform VM work in the requesting task's retained
+kernel-root continuation on its caller CPU, under the common drained process
+transaction. A fixed control phase reserves the operation and copies a complete
+layout/owner/generation snapshot. Preparation maps new zeroed slots privately;
+a fixed pre-effect check rejects stale geometry with BUSY, preserving the old
+slots. Only after that check may old aliases be withdrawn and the new set
+published. SIZE/SUBMIT keep their ordinary fixed-owner handoff.
+
+Both the local VM header and each fixed control phase live in provisioned shared
+task-lifetime storage; no remote stack pointer is lent. No structural VM owner
+or short lock crosses the handoff. Shared allocation has bounded admission;
+private mapping work retains the process token across bounded yields. The
+mutation rechecks reply storage and admits only its caller for final copying.
+Stop cannot discard admitted preparation or an in-progress commit/unwind.
+Geometry publication reopens reservation before waking resized consumers, so a
+client can adapt to the announced generation while old screen buffers retire.
+The display capability retains the object throughout the operation.
 
 VM owns the kernel allocations; user mappings borrow their physical frames. The
 session holds one reference per slot and one for the frame on screen.
@@ -276,10 +286,20 @@ selected graphics. REPLACE applies the same retirement rule to the old slots,
 and the frame on screen survives it until a submitted frame replaces it. Deferred backing reclamation is
 attributed to the owner's execution group, so group completion includes it.
 
-Normal exit and fatal user-fault cleanup both release an owned session before
-VM destruction, including if the process closed every display handle. Child
-completion is published after process cleanup; a final preempted presentation
-may temporarily retain only pixel backing. No application mapping survives exit.
+Normal exit and fatal user-fault cleanup end an owned session even if the
+process closed every display handle: fixed control retains the session, its
+recorded RAM actor unmaps private aliases, then fixed control drops references.
+Detached final frames return to their preparation CPU's existing RAM reaper.
+The reaper confirms shared translation retirement before bounded reclamation.
+Unconfirmed retirement retains the whole backing/group/join until reboot.
+A pending process cleanup record transfers to the join rather than parking the
+RAM actor; unrelated cleanup can continue. There is no new public status or
+late-acknowledgement retry.
+
+Unleased display backing finishes before child completion. An independently
+retained presenter frame keeps its separate lease and joined group cleanup;
+process WAIT does not newly promise that every device callback has finished.
+No application mapping survives exit.
 
 ## Current boundaries
 

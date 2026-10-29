@@ -13,9 +13,9 @@ follows merged task 3 (#1500), before tasks 4–5 resume. This does not complete
 BSP removal; JIT uses the conservative caller-CPU quiesced path.
 Tasks 4–5 are assigned to Codex beta (chronium, 2026-10-28). Task 4 starts
 with the accepted cleanup-placement/lifetime decisions below; task 5 raises its own
-remaining-consumer decisions when reached. Task 4 implementation and qualification
-are complete in #1554, awaiting merge; its native launch benefit and IPC cost are
-recorded in the experiment below.
+remaining-consumer decisions when reached. Task 4 is merged in #1554; its accepted native SEND residual is tracked by
+[debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588). Task 5's accepted
+split is implemented and undergoing qualification; native comparison is pending.
 
 ## Goal and boundary
 
@@ -439,12 +439,12 @@ remaining deliberately owned services must be named rather than hidden by an
 memory or start the JIT implementation.
 
 
-## Task 5 scope — proposed (2026-10-29)
+## Task 5 scope — accepted (chronium, 2026-10-29)
 
-Task 4 is ready in #1554, with its accepted SEND residual tracked by
+Task 4 is merged in #1554, with its accepted SEND residual tracked by
 [debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588). Task 5 starts
-after that integration; this note proposes its remaining placement/lifetime
-choices, not new public operations or executable authority.
+after that integration. Decisions 12–13 are accepted (chronium, 2026-10-29);
+implementation preserves the existing public operations and authority.
 
 ### Inspected remaining consumers
 
@@ -462,7 +462,7 @@ the task-4 acceptance head changes documentation only.
 
 ### Decision 12 — DISPLAY control and VM split
 
-**Proposed default:** keep display ownership/slot/refcount/presenter/input state
+**Accepted (chronium, 2026-10-29):** keep display ownership/slot/refcount/presenter/input state
 on its existing BSP actor. A fixed control phase retains the request, reserves
 the operation and copies a complete geometry/owner/mapping-identity snapshot.
 The requesting task's existing kernel-root continuation performs backing
@@ -485,7 +485,7 @@ mutator-only reply rule. A stop cannot drop a reserved operation or its cleanup.
 
 ### Decision 13 — detached display RAM ownership
 
-**Proposed default:** record the preparation CPU for each new slot set. Keep
+**Accepted (chronium, 2026-10-29):** record the preparation CPU for each new slot set. Keep
 published frame references and consumer leases with the BSP display owner;
 unpublished rollback stays on its preparation actor. When the final published
 reference is released, transfer the whole detached backing/cleanup record to
@@ -510,7 +510,7 @@ before process completion; an independently retained presenter frame keeps its
 existing separate lease and joined group cleanup. Do not add a process WAIT
 promise that every deferred device callback has finished.
 
-### Delivery and measurement after decisions
+### Task 5 delivery and measurement
 
 1. Capture a fresh task-4-integrated baseline before implementation, using the
    existing launch/pages/IPC cohort and display resize/presentation tools.
@@ -530,8 +530,8 @@ promise that every deferred device callback has finished.
    A/B through the orchestrator. Attribute material regressions before delivery;
    do not inherit an exception for a new task-5 regression from debt #1588.
 
-**You should know:** this proposal keeps the existing public DISPLAY ABI and
+**You should know:** this task keeps the existing public DISPLAY ABI and
 whole-process quiescence. Geometry changes may still return BUSY; uncertain
-shared-range retirement still retains memory. It proposes an explicit RAM
-cleanup destination for display backing, while hardware and control ownership
-stay fixed. No implementation or native/PXE action has started for task 5.
+shared-range retirement still retains memory. Display backing has an explicit RAM cleanup destination, while hardware and
+control ownership stay fixed. The [task-5 record](../development/experiments/bsp-display.md)
+separates baseline, QEMU and native qualification.
