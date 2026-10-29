@@ -320,13 +320,15 @@ browser ([reference](../userland/links.md)); it is not a new curses port.
 | Candidate | Licence | Broad dependencies / Pyxis prerequisites; qualitative weight |
 | --- | --- | --- |
 | [Angband](https://angband.readthedocs.io/en/stable/hacking/compiling.html) | GPL-2.0 or Angband licence | C, curses GCU frontend, game data/saves; termios/suspend adaptation, raw/curses; medium plus data. |
-| [vitetris](https://github.com/vicgeralds/vitetris/blob/master/config.mk) | BSD-2-Clause | C, optional curses backend, timers/input; optional network/joystick/Xlib kept separate; small. |
-| [cmatrix](https://github.com/abishekvashok/cmatrix) | GPL-3.0-or-later | C, curses, timers/resize/signals; Linux font-loading command is separate from terminal animation; small. |
-| [nudoku](https://github.com/jubalh/nudoku) | GPL-3.0-or-later | C, ncurses, gettext build infrastructure, optional Cairo export; raw/curses, RNG/save access; small. |
+| [vitetris](../../ports/vitetris/README.md) | BSD-2-Clause | Packaged curses frontend; native libc timers, upstream HOME configuration, native high-score path. No netplay, joystick or Xlib. |
+| [cmatrix](../../ports/cmatrix/README.md) | GPL-3.0-or-later | Packaged ncurses animation with cooperative SIGWINCH and native stdin winsize; Linux font loading omitted. |
+| [nudoku](../../ports/nudoku/README.md) | GPL-3.0-or-later | Packaged unchanged C over ncurses; English/no-Cairo profile, ASCII ACS, upstream HOME/XDG state save and resume. |
+| [dfrotz](../../ports/dfrotz/README.md) | GPL-2.0-or-later | Packaged unchanged dumb Z-machine frontend, plain stdio and Blorb; user-supplied stories, no sound or bundled story data. |
 | [moon-buggy](https://github.com/seehuhn/moon-buggy) | GPL-3.0 (current COPYING) | C, curses, select/signals, high-score/config files; native input/timers/storage; small. |
 
-These licence labels are a quick look, not the eventual pinned package's full
-notice audit. No candidate was cross-compiled or timed for this proposal.
+Unported candidates retain survey-only licence and dependency estimates; their
+full notice audit, cross-build and timing checks remain outstanding. Packaged
+programs link to their pinned profiles and notices.
 
 ## Decisions (accepted, chronium, 2026-10-23)
 
