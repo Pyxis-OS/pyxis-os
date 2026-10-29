@@ -35,11 +35,10 @@ static bool overlaps(uint64_t first, uint64_t bytes, uint64_t other, uint64_t si
       (first < other + size && other < first + bytes));
 }
 
-static bool range_available(const struct boot_info *boot, phys_addr_t physical, size_t bytes)
+static bool physical_available(const struct boot_info *boot, phys_addr_t physical, size_t bytes)
 {
   if (!bytes || bytes > UINT64_MAX - physical ||
       !arch_pci_mmio_available(physical, bytes) ||
-      vm_kernel_physical_overlap(physical, bytes) ||
       overlaps(physical, bytes, boot->framebuffer.physical, boot->framebuffer.size)) {
     return false;
   }
@@ -50,6 +49,11 @@ static bool range_available(const struct boot_info *boot, phys_addr_t physical, 
     }
   }
   return true;
+}
+
+static bool range_available(const struct boot_info *boot, phys_addr_t physical, size_t bytes)
+{
+  return physical_available(boot, physical, bytes) && !vm_kernel_physical_overlap(physical, bytes);
 }
 
 static bool read_bar(struct pci_address address, unsigned slot, uint64_t *base)
@@ -127,11 +131,24 @@ static uint64_t register_bar, aperture_bar;
 static uint32_t inherited_bios, inherited_driver, owned_requests;
 static uint32_t saved_target, gmd_identity;
 static bool fenced, dc_confirmed, gtt_mapping_failed;
+static uint64_t started_ns, phase_ns;
 
-static bool map_page(uint32_t offset, bool writable, uintptr_t *window)
+static void log_phase(const char *name)
 {
+  if (!CONFIG_INTEL_INHERITED_FLIP || !boot_options_get()->display_flip) {
+    return;
+  }
+  uint64_t now = arch_monotonic_ns();
+  kinfo("intel-display: phase=%s t-us=%lu elapsed-us=%lu step-us=%lu\n",
+      name, now / 1000, (now - started_ns) / 1000, (now - phase_ns) / 1000);
+  phase_ns = now;
+}
+
+static bool map_page(uint32_t offset, bool writable, uintptr_t *window, bool checked)
+{
+  KASSERT(!checked || (!cpu_interrupts_enabled() && !arch_cpu_count()));
   phys_addr_t physical = register_bar + offset;
-  if (!range_available(boot_info, physical, PAGE_SIZE) ||
+  if ((!checked && !range_available(boot_info, physical, PAGE_SIZE)) ||
       vm_reserve(vm_kernel_space(), PAGE_SIZE, PAGE_SIZE, window) != MM_OK) {
     return false;
   }
@@ -413,11 +430,42 @@ static bool read_gtt(uint64_t gpu, uint64_t *value)
   }
   unsigned index = offset / PAGE_SIZE;
   if (!gtt_windows[index] &&
-      !map_page(GGTT_BASE + index * PAGE_SIZE, false, &gtt_windows[index])) {
+      !map_page(GGTT_BASE + index * PAGE_SIZE, false, &gtt_windows[index], false)) {
     gtt_mapping_failed = true;
     return false;
   }
   *value = *(const volatile uint64_t *)(gtt_windows[index] + (offset & (PAGE_SIZE - 1)));
+  return true;
+}
+
+static bool prepare_gtt_read(uint64_t gpu, size_t count)
+{
+  if (gtt_span_ready) {
+    return true;
+  }
+  unsigned first = (gpu / PAGE_SIZE) * sizeof(uint64_t) / PAGE_SIZE;
+  unsigned end = ((gpu / PAGE_SIZE + count - 1) * sizeof(uint64_t)) / PAGE_SIZE + 1;
+  for (unsigned i = first; i < end;) {
+    if (gtt_windows[i]) {
+      ++i;
+      continue;
+    }
+    unsigned next = i + 1;
+    while (next < end && !gtt_windows[next]) {
+      ++next;
+    }
+    if (!range_available(boot_info, register_bar + GGTT_BASE + i * PAGE_SIZE,
+          (next - i) * PAGE_SIZE)) {
+      return false;
+    }
+    /* No APs/interleaved actor; these reserved device pages cannot become
+     * allocator backing while this already-validated run is mapped. */
+    for (; i < next; ++i) {
+      if (!map_page(GGTT_BASE + i * PAGE_SIZE, false, &gtt_windows[i], true)) {
+        return false;
+      }
+    }
+  }
   return true;
 }
 
@@ -433,6 +481,10 @@ static bool inspect_plane_gtt(unsigned pipe, unsigned plane, uint64_t gpu, uint6
   if (!ptes) {
     kinfo("intel-display: PIPE%c plane%u GGTT unavailable: snapshot allocation failed\n",
         'A' + pipe, plane + 1);
+    return false;
+  }
+  if (!prepare_gtt_read(base, count)) {
+    kfree(ptes);
     return false;
   }
   /* PTL's DM PTE addresses are GSMBASE offsets, CPU-visible through BAR2. */
@@ -733,6 +785,8 @@ void intel_display_prepare(const struct boot_info *boot)
     return;
   }
   boot_info = boot;
+  started_ns = phase_ns = arch_monotonic_ns();
+  log_phase("begin");
   uint16_t power;
   if (!device_ready(display_device, &power) || !read_bar(display_device->address, 0, &register_bar) ||
       !read_bar(display_device->address, 2, &aperture_bar) ||
@@ -744,7 +798,7 @@ void intel_display_prepare(const struct boot_info *boot)
   while (register_pages[gmd_page] != (GMD_ID_DISPLAY & ~(uint32_t)(PAGE_SIZE - 1))) {
     ++gmd_page;
   }
-  if (!map_page(register_pages[gmd_page], false, &windows[gmd_page])) {
+  if (!map_page(register_pages[gmd_page], false, &windows[gmd_page], false)) {
     unmap_windows();
     kinfo("intel-display: unavailable: GMD mapping\n");
     return;
@@ -764,14 +818,31 @@ void intel_display_prepare(const struct boot_info *boot)
     return;
   }
   gmd_identity = gmd;
+  struct vm_physical_range ranges[sizeof(register_pages) / sizeof(register_pages[0])];
+  size_t range_count = 0;
+  for (size_t i = 0; i < sizeof(register_pages) / sizeof(register_pages[0]); ++i) {
+    if (!windows[i]) {
+      ranges[range_count] = (struct vm_physical_range){register_bar + register_pages[i], PAGE_SIZE};
+      if (!physical_available(boot_info, ranges[range_count].physical, PAGE_SIZE)) {
+        unmap_windows();
+        return;
+      }
+      ++range_count;
+    }
+  }
+  if (vm_kernel_physical_overlap_any(ranges, range_count)) {
+    unmap_windows();
+    return;
+  }
   for (size_t i = 0; i < sizeof(register_pages) / sizeof(register_pages[0]); ++i) {
     if (!windows[i] && !map_page(register_pages[i], register_pages[i] == 0x45000 ||
-            (CONFIG_INTEL_INHERITED_FLIP && (register_pages[i] == 0x44000 || register_pages[i] == 0x70000)), &windows[i])) {
+            (CONFIG_INTEL_INHERITED_FLIP && (register_pages[i] == 0x44000 || register_pages[i] == 0x70000)), &windows[i], true)) {
       kinfo("intel-display: unavailable: register mapping at %x\n", register_pages[i]);
       unmap_windows();
       return;
     }
   }
+  log_phase("register-windows-ready");
   if (!identity_stable()) {
     kinfo("intel-display: unavailable: identity changed before power admission\n");
     unmap_windows();
@@ -827,15 +898,19 @@ void intel_display_prepare(const struct boot_info *boot)
     kinfo("intel-display: PG0 fuse unavailable; dependent inventory skipped\n");
   }
   bool stable = false;
+  log_phase("power-admitted");
   if (!fenced && snapshot(&first_state)) {
     if (!fenced && holds_stable()) {
-      observe_timing();
+      if (!CONFIG_INTEL_INHERITED_FLIP || !boot_options_get()->display_flip) {
+        observe_timing();
+      }
     } else if (!fenced) {
       fence_access("inherited state changed before timing");
     }
     if (!fenced && snapshot(&second_state)) {
       stable = !memcmp(&first_state, &second_state, sizeof(first_state));
       report_state(&second_state, stable);
+      log_phase("inherited-alias-inspected");
       if (!fenced) {
         stable &= snapshot(&first_state) &&
             !memcmp(&first_state, &second_state, sizeof(first_state));
@@ -845,6 +920,7 @@ void intel_display_prepare(const struct boot_info *boot)
   if (!fenced && stable && second_state.pipes[0].valid && second_state.pipes[0].transcoder_valid &&
       CONFIG_INTEL_INHERITED_FLIP && boot_options_get()->display_flip && intel_flip_prepare_inherited(boot, display_device, register_bar, aperture_bar)) {
     kinfo("intel-display: flip owner retained; qualified power domains and DC0 held\n");
+    log_phase("flip-prepared");
     return;
   }
   if (!fenced && release_holds()) {
@@ -858,6 +934,7 @@ void intel_display_prepare(const struct boot_info *boot)
     }
     kinfo("intel-display: startup readout complete stable=%u qualified-pipes=%x; scanout ownership/latch/retirement unproven\n",
         stable, qualified_pipes);
+    log_phase("copy-backend-ready");
   }
 }
 

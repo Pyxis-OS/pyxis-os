@@ -317,8 +317,8 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
   }
   kinfo("intel-flip: setup DMA admission; total budget=%lu ms\n", SETUP_TIMEOUT_NS / 1000000);
   if (!setup_in_time("DMA admission") || !intel_display_claim() ||
-      !intel_dma_identity(boot, device->address) || !choose_ggtt(count)) {
-    kinfo("intel-flip: unavailable: exclusive GGTT/DMA admission failed\n");
+      !intel_dma_identity(boot, device->address)) {
+    kinfo("intel-flip: unavailable: exclusive device/DMA admission failed\n");
     return false;
   }
   if (!setup_in_time("GT cache admission")) {
@@ -328,6 +328,14 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     if (intel_gt_profile_fenced()) {
       return abandon_setup("GT setup ownership uncertain");
     }
+    return false;
+  }
+  /* Cache policy is a prerequisite: reject it before scanning all GGTT PTEs. */
+  if (!choose_ggtt(count)) {
+    if (!intel_gt_profile_finish()) {
+      return abandon_setup("GT cleanup after GGTT import refusal uncertain");
+    }
+    kinfo("intel-flip: unavailable: GGTT import refused; keeping GOP copy\n");
     return false;
   }
   kinfo("intel-flip: setup preparing two UMA back buffers\n");

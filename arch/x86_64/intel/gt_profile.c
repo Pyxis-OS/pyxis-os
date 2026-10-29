@@ -43,6 +43,15 @@ static struct {
 static uint32_t graphics_gmd, media_gmd;
 static unsigned pending_writes;
 static bool attempted, active, fenced, semaphore_owned, write_workaround;
+static uint64_t started_ns, phase_ns;
+
+static void log_phase(const char *name)
+{
+  uint64_t now = arch_monotonic_ns();
+  kinfo("intel-gt: phase=%s t-us=%lu elapsed-us=%lu step-us=%lu\n",
+      name, now / 1000, (now - started_ns) / 1000, (now - phase_ns) / 1000);
+  phase_ns = now;
+}
 
 static bool fail(const char *reason)
 {
@@ -58,12 +67,9 @@ static bool overlaps(uint64_t a, uint64_t bytes, uint64_t b, uint64_t size)
       (a < b + size && b < a + bytes));
 }
 
-static bool map_page(const struct boot_info *boot, uint64_t bar, unsigned i,
-    bool writable)
+static bool physical_available(const struct boot_info *boot, uint64_t physical)
 {
-  phys_addr_t physical = bar + mappings[i].page;
   if (!arch_pci_mmio_available(physical, PAGE_SIZE) ||
-      vm_kernel_physical_overlap(physical, PAGE_SIZE) ||
       overlaps(physical, PAGE_SIZE, boot->framebuffer.physical, boot->framebuffer.size)) {
     return false;
   }
@@ -73,6 +79,12 @@ static bool map_page(const struct boot_info *boot, uint64_t bar, unsigned i,
       return false;
     }
   }
+  return true;
+}
+
+static bool map_page(uint64_t bar, unsigned i, bool writable)
+{
+  phys_addr_t physical = bar + mappings[i].page;
   uintptr_t *window = &mappings[i].window;
   if (vm_reserve(vm_kernel_space(), PAGE_SIZE, PAGE_SIZE, window) != MM_OK) {
     return false;
@@ -90,6 +102,33 @@ static bool map_page(const struct boot_info *boot, uint64_t bar, unsigned i,
       *window = 0;
     }
     return false;
+  }
+  return true;
+}
+
+static bool map_pages(const struct boot_info *boot, uint64_t bar, unsigned mask,
+    unsigned writable)
+{
+  struct vm_physical_range ranges[sizeof(mappings) / sizeof(mappings[0])];
+  size_t count = 0;
+  for (unsigned i = 0; i < sizeof(mappings) / sizeof(mappings[0]); ++i) {
+    if (mask & (1u << i)) {
+      ranges[count] = (struct vm_physical_range){bar + mappings[i].page, PAGE_SIZE};
+      if (!physical_available(boot, ranges[count].physical)) {
+        return false;
+      }
+      ++count;
+    }
+  }
+  if (vm_kernel_physical_overlap_any(ranges, count)) {
+    return false;
+  }
+  /* Bootstrap has no AP/interleaved mapper; checked reserved device pages
+   * cannot become page-table/allocator backing while filling these windows. */
+  for (unsigned i = 0; i < sizeof(mappings) / sizeof(mappings[0]); ++i) {
+    if ((mask & (1u << i)) && !map_page(bar, i, writable & (1u << i))) {
+      return false;
+    }
   }
   return true;
 }
@@ -301,6 +340,7 @@ bool intel_gt_profile_finish(void)
   if (!unmap_pages()) {
     return false;
   }
+  log_phase("released");
   kinfo("intel-gt: bootstrap complete; owned forcewake released, inherited requests preserved\n");
   return true;
 }
@@ -311,16 +351,19 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
     return false;
   }
   attempted = true;
+  started_ns = phase_ns = arch_monotonic_ns();
+  log_phase("begin");
   if (!boot || !bar || (bar & (PAGE_SIZE - 1)) || bar > UINT64_MAX - MEDIA_BASE - 0xb000) {
     return false;
   }
   /* GMD has an early, forcewake-free read path in xe_pci.c. */
-  if (!map_page(boot, bar, 0, true) || !map_page(boot, bar, 4, true)) {
+  if (!map_pages(boot, bar, (1u << 0) | (1u << 4), (1u << 0) | (1u << 4))) {
     if (!fenced) {
       unmap_pages();
     }
     return false;
   }
+  log_phase("identity-windows-ready");
   graphics_gmd = read_reg(GMD_ID);
   media_gmd = read_reg(MEDIA_BASE + GMD_ID);
   unsigned release = (graphics_gmd >> GMD_RELEASE_SHIFT) & 0xff;
@@ -335,25 +378,24 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
     return false;
   }
   write_workaround = (media_gmd & GMD_STEP_MASK) < GMD_STEP_B0;
-  for (unsigned i = 1; i < sizeof(mappings) / sizeof(mappings[0]); ++i) {
-    if (i == 4 || (i == 5 && !write_workaround)) {
-      continue;
+  unsigned mask = (1u << 1) | (1u << 2) | (1u << 3) | (write_workaround ? 1u << 5 : 0);
+  if (!map_pages(boot, bar, mask, (1u << 2) | (1u << 5))) {
+    if (!fenced) {
+      unmap_pages();
     }
-    if (!map_page(boot, bar, i, i == 2 || i == 5)) {
-      if (!fenced) {
-        unmap_pages();
-      }
-      return false;
-    }
+    return false;
   }
+  log_phase("cache-windows-ready");
   if (!hold_forcewake(0) || (write_workaround && !hold_forcewake(1))) {
     return false;
   }
+  log_phase("forcewake-acknowledged");
   uint32_t pat;
   if (!read_pat(&pat)) {
     return false;
   }
   active = true;
+  log_phase("PAT-read");
   kinfo("intel-gt: inherited PAT3=%x expected=%x media-A0-write-WA=%u\n",
       pat, PAT_UC_NONCOHERENT, write_workaround);
   if (pat != PAT_UC_NONCOHERENT) {

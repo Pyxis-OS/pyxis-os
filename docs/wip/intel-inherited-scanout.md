@@ -551,3 +551,71 @@ and Remote do not depend on a flip-done interrupt. Native qualification remains
 open. The collector now persists its initial result, reports no beacon/Remote
 readiness within its configurable 60-second default, and saves interruption
 results even before a connection exists.
+
+### R3 native prerequisite result and cache-policy decision
+
+R3 boots and cleans up normally. Captured VMIN=VMAX=FLIPLINE=`0xeff`
+confirms fixed refresh. The measured period 16663 us is approximately60.01Hz:
+firmware uses htotal3080/vtotal3840, while Fedora's captured120Hz mode uses
+htotal3080/vtotal1920 at essentially the same709.6MHz pixel clock. No refresh
+change is authorized here; the inherited mode is preserved.
+
+DMA admission is measured with GPU DRHD `0xfc800000`, GSTS `0x40000000` twice:
+translation-enable bit31 clear. GraphicsGMD `0x07804000` is30.1A0; mediaGMD
+`0x07800004` is30.0B0, so the media-A0 workaround is inapplicable. The next
+refusal is exactly inherited graphicsPAT3=`0`, expected`0x3c`. Forcewake is
+released and display cleanup confirmed; no scanout backing or plane write
+is reached. Native flips remain unqualified.
+
+Pinned xe `xe_pat_init_early()` chooses its Xe2/Xe3 table for graphics30;
+`xe_pat_init()` programs that table during GT initialization under forcewake,
+using multicast graphics writes. The display pin path selects `XE_CACHE_NONE`
+(index3 in xe's table). Its value`0x3c` means L3UC/L4UC/no-snoop/compression-off;
+zero means L3WB/L4WB/no-snoop/compression-off, not uncached. CPU PAT5/WC and
+SFENCE do not establish a GPU cache invalidation protocol. Accepting zero
+could therefore produce stale scanout on reuse; this is an unqualified cache
+contract, not evidence of an invalid address or a guaranteed crash. On this
+profile Linux classifies PAT as INSTANCE0, so the selected(0,0) read is not a
+guessed fused-off target.
+
+**Decision needed — recommended first step:** retain no PAT writes; inventory
+GGTT-reachable entries0..3 and reuse an existing UC/noncoherent/compression-off
+entry if present, encoding its index in only the new UMA PTEs. Leave all entries
+and the inherited GOP PTEs unchanged. Refuse if none qualifies. Only PAT3 was
+captured, so another usable entry must not be assumed.
+
+Alternatives:
+
+- Permit PAT programming as a revision of the accepted no-write boundary.
+  Prefer a single proven-unused reachable slot over xe's entire32-entry GT
+  initialization. Before any write, establish its consumers, required GT/cache
+  quiescence and scope; unused GGTT entries alone do not prove no PPGTT user.
+  Do not rewrite the index selected by the inherited GOP. This requires a
+  separate write/ownership decision after the evidence, not a silent table
+  replacement under the display-only owner.
+- Keep copying and defer the missing PAT initialization to fuller GPU ownership.
+  Safe with today's data, but this hardware remains without synchronized flips.
+
+Changing CPU WC to UC, or simply accepting cacheable PAT0, is not a substitute
+for a device-cache contract. A more aggressive cacheable/flush path requires
+reference-proven device cache maintenance and is outside this slice.
+
+### Startup latency follow-up
+
+R3 still showed the early console for multiple seconds. Its packet autostarts
+terminal output and both OpenArena demos; the collector only observes them.
+The orchestrator's Remote reboot explains the reported reset. The retained
+capture contains only Intel lines, not a fault log, so it cannot establish a
+separate application fault. Future collectors retain a masked full kernel log
+and available application/phase logs before returning an admission refusal.
+
+The remaining source-visible work repeats physical-alias scans for display
+and GT register windows and imports the entire GGTT before checking PAT.
+The implementation now batches the exact existing MMIO spans into one kernel
+mapping walk per group, validates contiguous inventory PTE windows once,
+checks PAT before the full import, and removes the duplicate40ms timing
+observation when flip timing qualification follows. No exclusion or ownership
+rule changes. Development phase logs include target t-us/elapsed-us/step-us,
+plus the presentation handoff timestamp. Native phase attribution remains to
+be measured; no guess about forcewake/DC0 consuming their timeout is recorded
+as a measurement.
