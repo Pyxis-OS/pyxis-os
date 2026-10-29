@@ -161,7 +161,11 @@ without its connected withdrawal implementation.
   routine native layout follows the contract below without compatibility readers.
   After this task chronium can review the before-code costs and the exact
   public authority/mapping contract.
-- [ ] **2. Region ownership and backing.** Native region/storage, zeroed fixed
+- [ ] **2. Region ownership and backing.** Storage foundation is implemented
+  on `kernel/shared-region-backing`, with ordinary build/source review and
+  passing control counts. [Nested timing differences](../development/experiments/shared-memory.md#task-2-storage-foundation--controls-qualification-pending)
+  still need attribution; no public CREATE/MAP is exposed or claimed qualified.
+  Native region/storage, zeroed fixed
   allocation, READ/WRITE attenuation/DESCRIBE, origin accounting and last-reference
   reclamation. Reserve required mapping/cleanup storage before exposure. Focused
   kernel changes first; keep new creation authority undelegated until usable
