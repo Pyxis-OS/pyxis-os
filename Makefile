@@ -513,7 +513,9 @@ build/os-release: boot/os-release.lua scripts/os-release.sh scripts/os-release.l
 	@cmp -s $@.tmp $@ || mv $@.tmp $@
 	@rm -f $@.tmp
 
-build/%.o: %.c build/kernel-log-config.h | check-toolchain
+# A newly added config include is absent from the old .d file after a branch
+# switch. Generate the selected configuration before any C compiler can read it.
+build/%.o: %.c build/kernel-log-config.h | build/kernel-config.h check-toolchain
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
