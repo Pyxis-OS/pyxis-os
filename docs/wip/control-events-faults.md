@@ -69,7 +69,8 @@ ignores the resource still works, and Continuum always knows whom it can ask.
 
 ## Accepted first libc slice
 
-Accepted and assigned 2026-10-28: cooperative SIGWINCH and opted-in SIGINT,
+Accepted 2026-10-28, implemented and QEMU-qualified 2026-10-29:
+cooperative SIGWINCH and opted-in SIGINT,
 initial-thread ownership, real masks/dispositions/pending state, safe-point
 unwinding and limited restart. Handler installation selects terminal stdout,
 then stderr, then stdin unless an optional native override selects another

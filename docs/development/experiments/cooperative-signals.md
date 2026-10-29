@@ -1,65 +1,66 @@
-# Cooperative libc signals: initial qualification
+# Cooperative libc signals qualification
 
-2026-10-28, nested Q35/KVM with host CPU, four vCPUs, 4 GiB, VirtIO GPU/net,
-HDA with null audio and a writable virtio-fs export. Full RAM-live archive;
+2026-10-28–29, nested Q35/KVM, host CPU, four vCPUs/4 GiB, VirtIO GPU/net,
+HDA/null audio and writable virtio-fs. RAM-live archive with
 `init=boot://boot-init.pxe nvme.write=0 display.timing=off log.udp=1`.
-Existing LLVM 23.1.3 compiler image `8bdf136`; no compiler rebuild, new tests,
-probe programs or boot/output automation.
+Existing LLVM 23.1.3 image `8bdf136`; no compiler rebuild or new shipped command.
 
-## Revisions and build
+## Revisions and commands
 
-Before implementation, the full image at parent `79ccea04`, userland `2101e916`
-and ports `18b56bf0` built and booted. Final code qualification here used parent
-`67921e28`, userland `d78cb0ff` and ports `32efdeec`; later restacks and their
-matching checks are recorded in the PR. Initial composition failures identified
-newly exposed Links job-control/child branches, its duplicate raise fallback,
-and Fastfetch descriptor helpers hidden by a Pyxis header guard. Original port
-patches/config select actual supported behavior; no fake kill/wait was added.
-The corrected full image build passed.
+Clean-main baseline: parent `79ccea04`, userland `2101e916`, ports `18b56bf0`.
+Consumer image: parent `61763796`, userland `22295c9e`, ports `64f3f914`;
+ordinary full build and matching QEMU passed. Parent `f7e26daa` rebases those
+inputs onto main `6f67ace2` through documentation changes only; CI run 4819
+passed build, ABI, filesystem, pins and changes.
 
-## Observed behavior
+The owner-requested remaining runtime checks used a local qualification client
+linked to userland `22295c9e` with SDK parent `f7e26daa`, running on the sealed
+consumer image's unchanged native ABI. Its temporary bundle declares memory,
+clock and threads; it is not a recognized interpreter and receives the normal
+direct-stage Ctrl+C policy. No supervisor/interpreter policy was changed.
 
-- Fastfetch's unchanged upstream interactive generator rendered, accepted a
-  selection/save and produced a readable JSON config. Idle mux split/zoom
-  changed real terminal geometry and the UI redrew. Its native helper now
-  shares the existing complete-write loop: a single upstream frame write had
-  previously lost the tail after the native console accepted its 256-byte
-  prefix. Positive partial transfers remain valid libc behavior.
-- BusyBox less rendered a held file, redrew on idle mux resize, and reached
-  line 120/END with `cat FILE | less`, then quit normally. Its upstream poll
-  loop received cooperative WINCH; the mask-aware helper also builds unchanged. Forced mux-pane
-  close also restored a usable remaining shell.
-- Links rendered the local held HTML page and quit.
-- Official Lua blocked in `io.read("*a")`; one Ctrl+C force-stopped it, including
-  when launched by its explicit image path. The shell matches interpreter image
-  identity and force-stops interpreter/helper scopes. This confirms that policy
-  remains in effect; it does not qualify libc INT delivery.
+Run `host://signals-check.pxb CASE`, with CASE from the table below. Each live
+case receives one manual Ctrl+C; `read` then receives `x`. Exact client source,
+binary/SDK/image hashes, logs and screenshots stay in the handoff packet/PR.
 
-Four one-second idle-less host CPU samples, after discarding the cumulative
-first sample, were 4/4/3/4% before and 3/4/3/3% after (one host CPU). No local
-build ran during sampling. These short nested-VM observations overlap and show
-no idle hot loop; they are not a latency bound or a native performance claim.
-Main's unrelated Intel inventory changes also landed between the images.
+## Observed results
 
-## Failures and remaining qualification
+All twelve cases passed: 134 logged assertions plus the observed exit status.
 
-Resizing BusyBox less during an unfinished search prompt failed: the prompt
-filled with backslashes and stopped consuming input. Source inspection shows
-upstream getch_nowait returning backslash while winch_counter is nonzero, while
-less_gets never returns to the outer loop that clears it. No platform rewrite
-was added; the short upstream draft and screenshots are in the handoff packet.
+| Cases | Result |
+| --- | --- |
+| `local` | Coalesced local raise/pending; persistent signal(); action mask/errno restoration; automatic self-blocking; nested NODEFER and explicit self-mask precedence; RESETHAND visible before callback; all four accepted flags together; SI_USER/zero fields/NULL context; pending ppoll/pselect/sigsuspend; rejected inputs and unchanged prior action; transactional native receiver conflict/release; worker refusals and unchanged pending state. |
+| `ppoll`, `pselect` | Native INT woke an enrolled temporary-mask wait: EINTR even with RESTART, input result sentinels preserved and original blocked mask restored. SI_KERNEL, zero other fields and initial-thread delivery. |
+| `read-eintr`, `read` | Without RESTART: EINTR. With RESTART: callback returned, read stayed blocked, then returned the supplied byte. |
+| `stdio`, `sleep`, `suspend` | Stdio ferror/EINTR without false EOF; sleep EINTR with actual remainder despite RESTART; suspend EINTR with its old blocked mask restored. |
+| `pending`, `restore` | Masked native INT latched without a callback and ran on unmasking. A temporarily blocked event ran only after restoring the original mask, preserving the completed timeout result 0. |
+| `raw`, `reset-int` | Raw Ctrl+C was byte 3 with no INT callback. After RESETHAND, the next local INT produced ordinary exit 130, observed by the shell. |
 
-Fastfetch requests autowrap-disable (`CSI ? 7`), outside the current terminal
-repertoire. Long help rows wrap in narrow mux panes; full-width rendering and
-module reflow work. This is a terminal compatibility follow-up, not signal loss.
+Fastfetch's upstream generator rendered, accepted selection/save, produced a
+readable config and redrew after idle mux split/zoom. BusyBox less rendered a
+held file, redrew on idle resize, and reached line 120/END in `cat FILE | less`
+then quit. vi and Links rendered their held files and quit.
 
-INT receiver/callback behavior, local raise/pending, sigsuspend, pselect and
-RESETHAND/NODEFER/SIGINFO combinations have source review but no direct runtime
-qualification from these consumers. The accepted no-new-test-program rule
-remains in effect; a suitable real non-interpreter consumer is still needed.
-Worker and nonlocal handler exits retain the documented unsupported profile.
-See the [contract and rebuild needs](../../userland/cooperative-signals.md).
+Four one-second idle-less host CPU samples were 4/4/3/4% before and 3/4/3/3%
+after, discarding cumulative first samples and running no local build. Three
+masked-pending samples were 3/4/3%. These short nested observations overlap and
+show no idle hot loop; they are not a latency or native performance bound.
+Unrelated Intel inventory changes also landed between the initial images.
 
-You should know: the draft stack is reviewable, but the milestone checkbox stays
-open. An upstream UI defect and source-only API coverage are not reported as
-passed runtime checks.
+## Limits
+
+BusyBox less loops on backslashes if resized during an unfinished search prompt:
+upstream getch_nowait sees winch_counter, but less_gets never reaches the outer
+loop that clears it. Its upstream draft remains unfiled with chronium. Fastfetch
+requests autowrap-disable (`CSI ? 7`), outside the terminal repertoire; long help
+rows wrap in narrow panes. Neither was rewritten in the port.
+
+Official Lua remains force-stopped by image-identity interpreter policy, even
+when launched explicitly; its Ctrl+C run is not an INT handler qualification.
+Worker checks establish rejection/local-pending preservation, not a separate
+native-notification consumption experiment. Manual read-restart evidence is
+not an instrumented wait-entry trace or an exhaustive interleaving proof.
+
+You should know: native asynchronous signals, later TERM/HUP/CHLD/ALRM sources
+and arbitrary-thread libuv delivery remain outside this slice. See the
+[contract and rebuild needs](../../userland/cooperative-signals.md).
