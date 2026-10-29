@@ -2,7 +2,9 @@
 
 This page runs the Pyxis installer in QEMU and installs onto a virtual disk.
 The installer downloads the programs it installs, so the host needs an
-Internet connection. Running on real hardware is not supported yet; see
+Internet connection. From 0.0.10 each release also publishes a
+[ready-made image](#run-the-ready-made-image) with Pyxis already installed, which
+skips the installer. Running on real hardware is not supported yet; see
 [real hardware](#real-hardware) at the end.
 
 You need a Linux host with QEMU and UEFI firmware (OVMF) installed.
@@ -11,7 +13,10 @@ You need a Linux host with QEMU and UEFI firmware (OVMF) installed.
 
 Releases publish the install ISO with a signed checksum list. The examples use
 version `0.0.8`; replace it with the release you download. The files are
-published with the release, under `https://packages.pyxis.nexus/images/`.
+published with the release, under `https://packages.pyxis.nexus/images/`. The
+same steps verify the [ready-made image](#run-the-ready-made-image),
+`pyxis-VERSION.qcow2`: download it in step 1 and expect `pyxis-VERSION.qcow2: OK`
+in step 5.
 
 1. Download the ISO, the checksum list, its signature, the signer certificate
    and the signing CA certificate:
@@ -326,6 +331,101 @@ The boot menu starts **Pyxis OS (Caelum)** after three seconds, and the
 
 To start over with an empty disk instead, delete `pyxis-disk.img` and
 `pyxis-vars.fd` and repeat the steps from creating the disk.
+
+## Run the ready-made image
+
+From 0.0.10 each release publishes `pyxis-VERSION.qcow2` beside the ISO: a disk
+with that release installed the way the installer does it, so `pkg upgrade` works
+on it. It starts from the boot menu to a shell without installing. It holds the
+base programs only; add others with `pkg install`. Every download is the same
+disk. The disk is 32 GiB, but the file is only tens of MiB and grows only as the
+virtual machine writes to it.
+
+1. Download and verify `pyxis-VERSION.qcow2` as described in
+   [Download and verify the ISO](#download-and-verify-the-iso). Check it before
+   the first boot: running it changes the file, so it no longer matches its
+   checksum afterwards.
+2. Install QEMU and the UEFI firmware as in [Set up QEMU](#set-up-qemu), steps 1
+   and 2. Add yourself to the `kvm` group as in step 4, and run QEMU as your
+   normal user; the launcher below still works without KVM, only much slower.
+3. Save this launcher as `pyxis-image.sh`. It starts a four-CPU q35 machine with
+   4 GiB of RAM, UEFI firmware, the image as a virtual disk and a network card
+   that reaches the Internet through QEMU's user-mode networking. It uses the
+   first firmware pair it finds in the locations below; set `OVMF_CODE` and
+   `OVMF_VARS` to override them. Firmware paths: Fedora
+   `/usr/share/edk2/ovmf/OVMF_CODE.fd` and `OVMF_VARS.fd`; Debian and Ubuntu
+   `/usr/share/OVMF/OVMF_CODE_4M.fd` and `OVMF_VARS_4M.fd`; Arch
+   `/usr/share/edk2/x64/OVMF_CODE.4m.fd` and `OVMF_VARS.4m.fd`.
+
+   ```sh
+   #!/bin/sh
+   # Usage: ./pyxis-image.sh pyxis-VERSION.qcow2 [more QEMU options]
+   image=${1:?usage: ./pyxis-image.sh pyxis-VERSION.qcow2 [more QEMU options]}
+   shift
+
+   # Use the first firmware pair that exists, or set OVMF_CODE and OVMF_VARS.
+   if [ -z "$OVMF_CODE" ] || [ -z "$OVMF_VARS" ]; then
+     for pair in \
+       /usr/share/edk2/ovmf/OVMF_CODE.fd:/usr/share/edk2/ovmf/OVMF_VARS.fd \
+       /usr/share/OVMF/OVMF_CODE_4M.fd:/usr/share/OVMF/OVMF_VARS_4M.fd \
+       /usr/share/edk2/x64/OVMF_CODE.4m.fd:/usr/share/edk2/x64/OVMF_VARS.4m.fd
+     do
+       if [ -r "${pair%%:*}" ] && [ -r "${pair#*:}" ]; then
+         OVMF_CODE=${pair%%:*}
+         OVMF_VARS=${pair#*:}
+         break
+       fi
+     done
+   fi
+   if [ -z "$OVMF_CODE" ] || [ -z "$OVMF_VARS" ]; then
+     echo 'No OVMF firmware found: find it with  find /usr/share -name "OVMF_*.fd"  and set OVMF_CODE and OVMF_VARS.' >&2
+     exit 1
+   fi
+
+   # KVM needs access to /dev/kvm; without it QEMU emulates the CPU, which is slow.
+   if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+     accel=kvm
+   else
+     accel=tcg
+     echo 'No access to /dev/kvm: running without KVM, which is much slower.' >&2
+   fi
+
+   vars=${image%.qcow2}-vars.fd
+   [ -f "$vars" ] || cp "$OVMF_VARS" "$vars"
+
+   exec qemu-system-x86_64 \
+     -machine q35 -accel "$accel" -cpu max -smp 4 -m 4G -rtc base=utc \
+     -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
+     -drive if=pflash,format=raw,unit=1,file="$vars" \
+     -drive if=none,id=disk,format=qcow2,file="$image" \
+     -device virtio-blk-pci,drive=disk,disable-legacy=on \
+     -netdev user,id=net0 \
+     -device virtio-net-pci,netdev=net0,disable-legacy=on \
+     -object rng-random,id=rng0,filename=/dev/urandom \
+     -device virtio-rng-pci,rng=rng0,disable-legacy=on \
+     -display gtk \
+     "$@"
+   ```
+
+   ```sh
+   chmod +x pyxis-image.sh
+   ```
+
+4. Start the image:
+
+   ```sh
+   ./pyxis-image.sh pyxis-0.0.10.qcow2
+   ```
+
+   The boot menu starts **Pyxis OS (Caelum)** after three seconds and the
+   **Pyxis** tab opens with a shell prompt. Continue with
+   [first boot and spaces](first-boot.md). The keyboard and mouse notes under
+   [Set up QEMU](#set-up-qemu) apply here too.
+
+The image keeps your files in `home://` between runs. To try it without changing
+the file, add `-snapshot`: `./pyxis-image.sh pyxis-0.0.10.qcow2 -snapshot`; the
+changes are discarded when QEMU exits. Converting the image to a raw file, or
+copying it with a tool that does not keep holes, makes a full 32 GiB file.
 
 ## Real hardware
 
