@@ -726,3 +726,36 @@ PAT write and keeps ordinary copying; it must not refuse boot.
 The MM batching foundation is split into [#1587](https://git.internal/PyxisOS/pyxis-os/pulls/1587),
 based on main, with its own CI. #1563 is linearly based on that published head.
 Merge order: #1587, then #1563. The MM bodies have no remaining diff in #1563.
+
+### Remaining prerequisite: non-GGTT PAT consumers
+
+The accepted conditional PAT3 write is not yet implemented: the available
+readout does not prove absence of inherited PPGTT consumers. Pinned xe stores
+PPGTT roots in logical context state (`xe_lrc.c:1005–1010`) and selects PPGTT
+through context-descriptor privilege (`1513–1521`); the GGTT scan alone does not
+cover those mappings. `GUC_STATUS.GS_MIA_IN_RESET` is a GuC-reset indication,
+not an all-consumer certificate. GSC can survive GT reset and D3hot, and its
+loaded-status read itself needs GSC forcewake beyond the current GT-only holds.
+
+A tempting legacy shortcut is invalid: the Gen12 PRM, Vol2c Part1, printed
+page1036, limits `GFX_MODE` bit9 to ring scheduling; execlist mode selects through
+context descriptors. The bit also does not take effect until the page-directory
+registers are programmed. A zero read therefore cannot certify GGTT-only access.
+No graphics30 replacement certificate was found in the pinned xe code. These
+are source limits, not a measurement that vela actually has an active PPGTT user.
+
+**Proposed next qualification scope — default:** retain copying and extend a
+bounded read-only inventory to the fused engine/context and GuC/GSC consumers,
+with the additional Linux-qualified forcewake holds explicitly listed before
+implementation. No reset, stop-ring, firmware command or submission. Keep the
+PAT3 write conditional; unestablished consumer ownership still means no write.
+This is a new power/access scope beyond the accepted GT-forcewake fields, not
+an automatic consequence of permission to program PAT3. A complete inherited
+consumer proof may require a later GT takeover rather than status sampling.
+
+References at Linux `05f7e89ab9731565d8a62e3b5d1ec206485eeb0b`:
+[context roots and descriptors](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_lrc.c),
+[GSC lifetime](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gsc.c),
+and [Gen12 PRM, Vol2c Part1](https://cdrdv2-public.intel.com/703046/intel-gfx-prm-osrc-tgl-vol-02-c-command-reference-registers-part-1.pdf).
+No write-capable r5 is claimed until this prerequisite is established; do not
+spend a native run on a packet that is known to retain the same copy fallback.
