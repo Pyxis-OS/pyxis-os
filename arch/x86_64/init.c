@@ -12,6 +12,7 @@
 #include <arch/syscall.h>
 #include <arch/user.h>
 #include <arch/amd/renoir_inventory.h>
+#include <arch/intel/dma.h>
 #include <kernel/boot/options.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
@@ -71,6 +72,7 @@ void arch_init(struct boot_info *boot)
   if (options->display_inventory || options->display_flip) {
     renoir_inventory_boot(boot);
   }
+  intel_dma_capture_boot(boot);
   paging_init(boot);
   arch_clock_init();
   apic_init();
