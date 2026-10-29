@@ -75,32 +75,56 @@ vela's TSC is 3.6864 GHz.
 
 ## The implementation on vela
 
-The implemented accounting reads the TSC once per dispatch return and once per
-idle wake, and splits user and kernel time with two more reads per syscall. A
-`nosplit` build left out the syscall reads. Five boots per image, compared only
-within the packet (base was main `c65430c6`):
+The implementation reads the TSC once per dispatch return and once per idle
+wake, and twice more per syscall to split user and kernel time. A `nosplit`
+build of each revision left out the syscall reads. Each round had five boots
+per image in rotating order, compared only within its own packet.
 
-| Workload | nosplit | with split | split alone |
-| --- | --- | --- | --- |
-| ipcbench call, median | +2.6% | +3.9% | +1.3% (+62 ns) |
-| ipcbench call, p10 | +2.6% | +4.2% | +1.6% (+70 ns) |
-| ipcbench send, p10 | 0 | +3.7% | +3.7% (+82 ns) |
-| launch | +1.1% | +3.1% | +1.9% (+22 µs) |
+**First implementation (`e692411b`, base `c65430c6`):**
+
+| Workload | nosplit | with split |
+| --- | --- | --- |
+| ipcbench call, median | +2.6% | +3.9% |
+| ipcbench send, p10 | 0 | +3.7% |
+| launch | +1.1% | +3.1% |
 
 - **Single read:** one read per dispatch saved nothing over B. In QEMU (4
   CPUs, a counting build), 2.0 of the 2.1 dispatches per call round trip
   follow an idle wake, and the wake's read sits where B's pre-switch read was.
   One read between wake and dispatch is the minimum for exact timing.
-- **Split:** two reads per syscall; a call round trip has about 2.5 syscalls
-  and a sent message about 3.1.
-- **Per-CPU totals:** this build kept them in the packed, 16-byte-aligned
-  `schedulers` array, on cache lines shared with other CPUs' queue fields. The
-  merged design moves them to one line per CPU and keeps the syscall path to the
-  task (chronium, 2026-10-29).
+- **Shared lines:** per-CPU user, kernel and idle totals sat in the packed,
+  16-byte-aligned `schedulers` array, on cache lines other CPUs write when
+  they queue work. Every syscall entry and leave updated them.
+- **The fix (chronium, 2026-10-29):**
+  - syscall entry and leave write only the task;
+  - per-CPU mark, busy and idle totals take one cache line per CPU;
+  - per-CPU user/kernel totals are dropped.
 
-**Split rule (chronium, 2026-10-29):** the user/kernel split stays if the
-re-measure of that design shows it at or under about +1.5% on ipcbench call;
-otherwise it is dropped and user/kernel time is recorded as technical debt.
+**After the fix (`9eea5040`, base `32b600d8`).** Each figure is the median of
+the per-boot figures, with the range:
+
+| Workload | base | fixed | nosplit |
+| --- | --- | --- | --- |
+| ipcbench call, µs/round trip | 4.967 (4.916–5.000) | 5.002 (4.813–5.301), +0.7% | 4.937 (4.902–5.137), −0.6% |
+| ipcbench call p10, µs | 4.559 | 4.625, +1.5% | 4.535, −0.5% |
+| ipcbench send, µs/message | 2.666 (2.586–2.693) | 2.756 (2.654–2.814), +3.4% | 2.617 (2.611–2.672), −1.8% |
+| ipcbench send p10, µs | 2.496 | 2.570, +3.0% | 2.461, −1.4% |
+| launch, ms each | 0.943 (0.931–0.951) | 0.950 (0.940–0.957), +0.7% | 0.941 (0.931–0.958), −0.2% |
+| allocbench pages, µs/op | 15.837 | 15.867, +0.2% | 15.756, −0.5% |
+| cpuclock, mean GHz | 2.204 | 2.204 | 2.207 |
+
+- **Dispatch and idle-wake accounting (nosplit):** no measurable cost.
+- **The user/kernel split** is fixed − nosplit:
+  - call: +1.3% median (+65 ns), +2.0% p10 (+90 ns);
+  - send: +5.3% (+139 ns) per message;
+  - launch: +1.0% (+9 µs).
+- **Decisions:**
+  - **Merge gate** (fixed against base at or below about +1.8% on the call
+    median): met, at +0.7%.
+  - **Split rule (chronium, 2026-10-29):** keep the split if it costs at most
+    about +1.5% on the call median. At +1.3% the split stays.
+  - **Accepted cost:** about 5% per sent message, which is the split's two
+    TSC reads per syscall.
 
 ## Limits
 
