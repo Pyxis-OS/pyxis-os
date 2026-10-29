@@ -621,8 +621,8 @@ void display_process_exit_prepare(struct process *process)
 {
   KASSERT(arch_cpu_index() == 0 && !cpu_interrupts_enabled());
   struct display_object *display = process->space->display;
-  display_retirement_init(&process->display_exit.retirement);
   if (display->owner == process) {
+    display_retirement_init(&process->display_exit.retirement);
     KASSERT(!display->transaction && !display->retiring_process);
     display->retiring_process = process;
     process->display_exit.display = display;

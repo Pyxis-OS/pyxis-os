@@ -519,7 +519,8 @@ static void reclaim_ram(struct process *process)
     process->cleanup_phase = PROCESS_CLEANUP_DISPLAY_FINISH;
     queue_fixed_cleanup(process);
   } else if (process->cleanup_phase == PROCESS_CLEANUP_VM) {
-    if (!display_retirement_join_process(&process->display_exit.retirement, process)) {
+    if (process->display_exit.bytes &&
+        !display_retirement_join_process(&process->display_exit.retirement, process)) {
       object_cleanup_leave(previous);
       cpu_restore_interrupts(flags);
       return;
