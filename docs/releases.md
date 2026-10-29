@@ -2,10 +2,166 @@
 
 Pyxis versions have three numbers and are annotated tags on `main`. Each entry
 below describes what changed for a user and what an owner must do when updating.
-Releases from 0.0.8 on arrive on an installed system with `pkg upgrade`. The tag
+Releases from 0.0.8 on arrive on an installed system with `pkg upgrade`, except
+0.0.10, which a 0.0.9 system takes through the installer's Update. The tag
 message is the authoritative record of a release; add an entry here whenever a
 version is tagged. How a release is prepared and checked is in the
 [release process](development/release-process.md).
+
+## 0.0.10 (2026-10-29)
+
+The tag is on the merge commit of the PR that adds this entry, which also sets
+`boot/os-release.lua` to `abi = { "0.0.10" }`. 0.0.10 changes how a system
+updates, adds a new kernel ABI and carries most of a month's work: the process
+list and system log, the space editor, signals for Neovim, JIT memory, more
+ports and a number of speedups. **A 0.0.9 system does not update with `pkg
+upgrade`: boot the 0.0.10 installer and choose Update** (see the release notes).
+
+- **Updates:** `pkg upgrade` stages the next release together with a complete,
+  compatible package set; the old set stays active until the first verified boot
+  of the new release. `pkg update` reviews newer builds of every installed
+  package and records where each package came from. There is no previous-version
+  boot entry and no `pkg rollback`; a release that fails to boot is recovered with
+  rescue or the installer's Update ([package upgrades](userland/package-upgrades.md)).
+  A Coexist install now publishes its own Limine loader and registers one `Pyxis
+  OS` UEFI boot option; Install asks whether to move it first in the boot order
+  ([system updates](userland/system-updates.md)). The image carries a reviewed
+  floor for the signed `public` and `releases` indexes, so first contact cannot
+  accept an older index than the release was built against.
+- **Install media:** the ISO and USB image carry the kernel and boot archive
+  gzip-compressed (kernel 8.7 to 4.1 MB, archive 28.0 to 12.3 MB). Installed disks
+  keep the plain files ([boot archive](development/boot-archive.md)).
+- **System log:** spaces and services write to the Caelum pane. A service's
+  stdout and stderr go to the log, each line stamped with its space, and
+  `log -s NAME` shows one space's lines. Programs write with the new `LOG_WRITE`
+  and `LOG_STREAM` operations, at most 1000 lines per second per space
+  ([kernel log](interfaces/kernel-log.md)).
+- **Process list:** the `procs` command, now in base, lists processes and
+  execution groups as a tree, sorted, for every space or live. The kernel counts
+  each task's CPU time exactly with the TSC, so `procs` shows real CPU use
+  ([procs](userland/procs.md), [CPU accounting](development/experiments/cpu-accounting.md)).
+- **Space editor:** the optional `spaces` package edits the spaces in
+  `system://config/boot.lua` from a terminal UI. Changes apply at the next boot
+  ([spaces](userland/spaces.md)).
+- **Signals and Neovim:** the first cooperative signal slice gives programs a
+  real `SIGWINCH` and `SIGINT`, `pthread_sigmask`, and signal-aware waits at
+  audited I/O points. Neovim and libuv use their upstream signal code, and the
+  Kilo editor is retired: it is no longer in `base`, and Update asks you to approve
+  removing it ([signals](userland/cooperative-signals.md)).
+- **Shell:**
+  - a script can name a bundle as its interpreter, as in `#!bin://shell.pxb`; the
+    script receives exactly the grants the bundle's manifest declares
+    ([script launch](userland/script-launch.md#bundle-interpreters));
+  - completion of explicit paths in command position, interactive argument
+    aliases, `>>` through native append, and a configurable program search path;
+  - Lua launcher scripts get the same held sources and lifetime as shell scripts.
+- **JIT memory:** a program whose bundle declares `jit`, in a space that enables
+  it, can allocate executable memory with write-or-execute protection. Ordinary
+  `memory` never grants it, and it is off by default ([JIT](interfaces/jit.md)).
+  The compiler container supplies LLVM's MCJIT and ORC, and Mesa can use
+  llvmpipe where a program asks for it. On the Intel IdeaPad (vela) OpenArena ran
+  above 60 frames per second and Ship of Harkinian at 45-60 at 1080p with it,
+  attended and not timed; a matched 320x240 OpenArena demo ran at 81.2 frames per
+  second on Pyxis against 110.4 on Fedora ([record](development/experiments/llvmpipe.md)).
+- **Programs get their CPU count:** the usable logical CPUs in a space reach
+  startup, libc `sysconf`, SDL2, libuv and Mesa, so they size worker pools to
+  what they may use.
+- **C and C++ libraries:** native `FILE` append, C++ `<filesystem>`, `getopt`,
+  `getopt_long`, `mblen`, `mempcpy`, `fnmatch`, `gettimeofday`, a microsecond
+  `usleep`, raw `termios`, descriptor readiness, `NAME_MAX` and `sys/param.h`.
+  `chmod` and `symlink` fail honestly with `ENOTSUP` because native files have no
+  permission bits and directories no link creation.
+- **Controllers:** native wired DualSense Edge input for programs that declare
+  `gamepad/input`, an SDL gamepad backend and the `gamepadtest` viewer
+  ([gamepad](interfaces/gamepad.md)).
+- **Games and ports:**
+  - the `raylib-games` package, twelve unchanged raylib classics;
+  - new `cmatrix`, `nudoku`, `vitetris` and `dfrotz` packages (no story files
+    shipped);
+  - SDL2_mixer (`sdl2-mixer-dev`), and Chocolate Doom now plays digital effects
+    and its own OPL music;
+  - blurgtext is updated to upstream 0.2.1;
+  - many ports now follow their upstream behavior, with Pyxis changes kept to the
+    platform layer.
+- **Speed:**
+  - `rm -r` of a directory of 4,096 files went from 30.2 and 15.7 s to 4.7 and
+    4.5 s (two runs each, nested KVM); a retained Clang tree showed no clear
+    gain ([record](development/experiments/npfs-directory-walks.md));
+  - a fresh `pkg://` lookup of a 1 MB command projection fell from 772 to 138
+    microseconds and a command capture from 614 to 27, because the validated
+    projection is reused ([record](development/experiments/package-projection-cache.md));
+  - Intel display start-up queries mapped kernel pages by leaf table; a matched
+    nested-KVM check of one alias span fell from 175 ms to 0.6 ms, and every
+    caller of the query benefits;
+  - a bundle-interpreter shebang costs no more than launching the bundle by
+    hand: 2.85 ms against 2.95 ms per launch ([record](development/experiments/bundle-shebang.md)).
+- **Network:** `pkg` and the HTTP tools report why a transfer failed (for
+  example `Connection refused` with its native status, or `HTTP GET timed out`).
+  Bulk `pkg install` no longer fails after hundreds of short HTTP
+  transfers. Ephemeral ports advance per destination instead of being drawn at
+  random, so a new connection no longer reuses a tuple the peer still holds.
+- **Kernel:** process, thread and image preparation, private memory changes and
+  display mapping run on the calling CPU instead of CPU0, with fixed per-CPU
+  reclamation. Programs see no new grant or call. Native launches on vela were
+  15 to 18 percent faster when the preparation moved; the later display step
+  measured the same within noise. One accepted residual: the mean 4 KiB IPC send
+  is 8 to 10 percent slower from rare stalls, with the median unchanged
+  ([VM ownership](kernel/vm-ownership.md),
+  [#1588](https://git.internal/PyxisOS/pyxis-os/issues/1588)).
+- **CPU state:** the kernel preserves AVX and XSAVE state across tasks
+  ([XSAVE](kernel/xsave-avx.md)).
+- **Wi-Fi:** the Realtek RTL8922AE on the IdeaPad scans passively on channels
+  1 to 13 by default (`wifi scan`, or an explicit channel set), and reports a
+  truncated result as truncated. There is no association on this adapter yet ([Wi-Fi](interfaces/wifi.md)).
+- **Intel display:** on matched Intel GPUs the display driver reads the scanout
+  the firmware set up and presents frames with a synchronized flip at vblank. On
+  the IdeaPad (vela) chronium saw no tearing in OpenArena at low and native
+  resolution; at the native resolution the frame rate went from 15.6 to 15.9
+  (single runs, 1803 frames). Preparing the flip delayed boot by about 1.3 s; batching its
+  ownership and deadline checks cut that step to 0.39 s on vela, and the rest is
+  tracked in [debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617). Full Intel
+  modesetting is later work.
+- **ABI:** this is a new, deliberate ABI break. `include/abi/` no longer keeps
+  every line of 0.0.9's, and 0.0.10 provides only the `"0.0.10"` ABI name; it does
+  not provide `"0.0.8"` or `"0.0.9"`. What breaks, and what only grew, is listed in
+  the release notes ([ABI](interfaces/abi.md)).
+
+Release notes:
+
+- **Updating from 0.0.9:** boot the 0.0.10 installer, choose Install Pyxis, then
+  **Update**. The 0.0.9 `pkg` cannot stage this release and no bridge is supplied.
+  Update keeps your `home://` and `system://` data, including a
+  `system://config/boot.lua` override. Systems already on 0.0.10 use `pkg
+  upgrade`. A pending upgrade blocks other package changes until you reboot.
+- **No previous boot entry:** 0.0.9's `Pyxis OS (previous)` entry does not exist
+  on 0.0.10, and `pkg rollback` is gone. If a new release fails to boot, use
+  rescue or the installer's Update.
+- **ABI break:** `include/abi/` changed lines of 0.0.9's. Main had already dropped
+  the 0.0.8 and 0.0.9 names from `boot/os-release.lua` in `9a086191` (2026-10-27),
+  and chronium decided on 2026-10-29 to ship 0.0.10 as a new ABI with no 0.0.9
+  compatibility. Programs and packages built for 0.0.9 must be rebuilt, and every
+  bound package needs a 0.0.10 build (0.0.9 builds stay in the repository for 0.0.9
+  systems). What breaks:
+  - `struct profile_snapshot` grew from 136 to 368 bytes, and `PROFILE_SNAPSHOT`
+    and `PROFILE_END` require a reply buffer of the full size. A 0.0.9 program that
+    passes 136 bytes gets `BAD_REQUEST`. Memory profiling is now per native thread,
+    not per process;
+  - `struct wifi_scan_file_header` grew from 16 to 24 bytes (`flags`,
+    `dropped_records`), so records follow at a different offset;
+  - `struct log_record`'s `reserved` byte is now `source`, nonzero for lines
+    written by a space (ring lines cost six bytes, not five);
+  - `SPACE_CREATE_FLAGS` gained `SPACE_CREATE_JIT`;
+  - `struct startup_info` grew from 72 to 80 bytes (`usable_cpu_count`).
+
+  Everything else in `include/abi/` is additions: the `gamepad`, `jit`,
+  `process_view` and `uefi` headers, `SYSCALL_SPACE_PROCESSES`, the log write
+  operations, the `READ_STATUS` and `WRITE_STATUS` wait interests, bulk FILE
+  reads, and the Wi-Fi PHY and full status replies.
+- **Kilo is gone.** Update lists `remove kilo` and asks `[y/N]`; answer `y`. Use `vi`
+  or Neovim.
+- **Not in this release:** Rust and the `hexyl` package (planned for 0.0.11), Ship of Harkinian's game, Wi-Fi association and
+  native hardware qualification of `pkg upgrade` on an installed system
+  ([debt #1509](https://git.internal/PyxisOS/pyxis-os/issues/1509)).
 
 ## 0.0.9 (2026-10-25)
 

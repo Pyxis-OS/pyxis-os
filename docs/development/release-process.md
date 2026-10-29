@@ -12,9 +12,12 @@ runbook, and never sign or tag.
   adds the version's entry to `docs/releases.md` and its name to
   `boot/os-release.lua`.
 - **The ABI is fixed at the tag, not before** (chronium, 2026-10-23). Until the
-  tag, `include/abi/` changes in place; at the tag it becomes the release's
-  contract, and later releases only add to it unless a break is deliberate and
-  listed in their notes ([ABI](../interfaces/abi.md)).
+  tag, `include/abi/` changes in place; at the tag it is that release's ABI
+  ([ABI](../interfaces/abi.md)).
+- **Backwards compatibility is not a concern in 0.0.x releases:** each release may
+  break the ABI, listing the breaks in its notes, and nobody keeps the previous
+  release's binaries working. Compatibility may start mattering at 0.x or x.0
+  (chronium, 2026-10-29).
 - **A tagged fix release** is used only for a blocker in a major release feature
   (chronium, 2026-10-20). A letter release such as 0.0.8a keeps its base
   release's ABI name.
@@ -41,7 +44,9 @@ runbook, and never sign or tag.
 
 Each release candidate is checked in QEMU first: install the previous release,
 keep data in `home://` and a `system://config/boot.lua` override, update, and
-boot the result. Launch `nvim` there and quit with `:q`; it exercises child
+boot the result. Update with `pkg upgrade` when the previous release's `pkg` can
+stage the transition; when it cannot (0.0.9 to 0.0.10), boot the candidate
+installer and choose Update ([system updates](../userland/system-updates.md)). Launch `nvim` there and quit with `:q`; it exercises child
 spawn with extra resources, which the 0.0.6 check missed. A fresh install of the
 candidate ISO is checked as well, from the ISO exactly as the
 [manual](../manual/install.md) describes.
