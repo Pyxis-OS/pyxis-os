@@ -969,5 +969,10 @@ both UMA buffers took67.593ms, including13.602ms allocation plus zeroing.
 The publication loop repeated425,292 display/GT register reads plus PCI
 capability/BAR reads. This latency is accepted for0.0.10 and tracked by
 [debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617); this follow-up
-is for0.0.11. QEMU cannot emulate the Intel display, so native boot-phase and
-flip-completion qualification is still required before claiming the speedup.
+is for0.0.11. Native vela qualification passes (chronium, 2026-10-29):
+162 batches publish10,126 PTEs, all4,080 sampled flips confirm, and no timeout
+is reported. Publication falls from999.289ms to269.788ms; the flip-prepared
+step falls from1291.272ms to580.824ms. The unchanged OpenArena workloads give
+48.0fps low-resolution and15.8fps native, versus R9's49.4/15.7fps; these are
+single samples, not an established rendering-performance change. This follow-up
+lands after the0.0.10 tag. Remaining startup cost stays tracked by #1617.
