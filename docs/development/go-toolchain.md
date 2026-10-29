@@ -115,6 +115,15 @@ metadata replaces the 31-registration table; kernel metadata across all sets of
 a process is bounded by 16 MiB, with explicit resource refusal. Ready replies
 contain at most 64 records, independently of the number registered. Close wakes
 Go waiters and joins native unregister before closing/reusing the handle.
+A read deadline on console stdin wakes a parked `Read`. Terminal programs use
+`syscall.TerminalMakeRaw`, `TerminalRestore`, `TerminalSize` and
+`TerminalIsTerminal`. `(*os.File).WaitTerminalResized(generation)` parks until
+the terminal's geometry generation differs from the one `TerminalSize` returned;
+resizes coalesce, so the caller queries the size again and waits with the new
+generation. It does not hold the read lock, so it runs beside a blocked `Read`,
+and only Close cancels it.
+An opened directory keeps the rights of the handle it came from, so `Sync` on
+it works where that directory grants CREATE or REMOVE.
 Recoverable console input-loss or keyboard-unavailability events wake a native
 read recheck without permanently poisoning the Go descriptor. Acknowledging loss
 and restoring input works on the same stdin handle. INPUT_LOST and UNAVAILABLE
