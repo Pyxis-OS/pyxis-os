@@ -8,6 +8,7 @@
 bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_device *device,
     uint64_t bar, uint64_t aperture);
 bool intel_display_holds_valid(void);
+bool intel_display_single_pipe_a(void);
 void intel_display_fence(const char *reason);
 uint32_t intel_display_read(uint32_t offset);
 void intel_display_write_surface(uint32_t surface);

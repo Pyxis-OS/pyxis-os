@@ -58,7 +58,7 @@ static enum intel_flip_state fail(const char *reason)
 
 static bool fixed_layout(void)
 {
-  if (!intel_display_holds_valid() || display_is_panicking()) {
+  if (!intel_display_holds_valid() || !intel_display_single_pipe_a() || display_is_panicking()) {
     return false;
   }
   if (intel_display_read(TRANS_CONF(0)) != inherited_trans ||
@@ -208,7 +208,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
       inherited_trans, inherited_control, inherited_color, inherited_misc2,
       intel_display_read(PIPE_A_IIR), intel_display_read(TRANS_A_VRR));
   bool linear = !(inherited_control & (PLANE_TILING_MASK | PLANE_COMPRESSION_MASK |
-      PLANE_ROTATION_MASK | PLANE_FLIP_HORIZONTAL | PLANE_RGBX)) &&
+      PLANE_ROTATION_MASK | PLANE_FLIP_HORIZONTAL | PLANE_RGBX | PLANE_ASYNC_FLIP)) &&
       (inherited_control & PLANE_FORMAT_MASK) == PLANE_FORMAT_8888;
   if (!(inherited_trans & TRANS_ENABLE) || !(inherited_control & PLANE_ENABLE) ||
       !linear || vblank_start >= vtotal || (inherited_color & 0x30) || (inherited_trans & (7u << 21)) || (inherited_misc2 & 7) ||

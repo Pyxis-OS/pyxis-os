@@ -52,6 +52,7 @@ enum plane_register {
 #define PLANE_TILING_MASK 0x1c00u
 #define PLANE_COMPRESSION_MASK ((1u << 15) | (1u << 4))
 #define PLANE_RGBX (1u << 20)
+#define PLANE_ASYNC_FLIP (1u << 9)
 #define PLANE_ROTATION_MASK 3u
 #define PLANE_FLIP_HORIZONTAL (1u << 8)
 #define CURSOR_BASE(p) (0x70080u + PIPE_STEP * (p))

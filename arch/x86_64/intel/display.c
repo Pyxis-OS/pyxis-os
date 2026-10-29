@@ -793,6 +793,28 @@ bool intel_display_holds_valid(void)
   return !fenced && holds_stable();
 }
 
+bool intel_display_single_pipe_a(void)
+{
+  if (!intel_display_holds_valid()) {
+    return false;
+  }
+  for (unsigned p = 1; p < PIPE_COUNT; ++p) {
+    if (!(pipe_mask & (1u << p))) {
+      continue;
+    }
+    unsigned root = p >= 2 ? 1 : 0;
+    if (wells[root].state == WELL_HELD) {
+      if (read_register(TRANS_CONF(p)) & TRANS_ENABLE) {
+        return false;
+      }
+    } else if (read_register(POWER_DRIVER) & WELL_STATE(wells[root].index)) {
+      /* An inaccessible but powered transcoder cannot be proved inactive. */
+      return false;
+    }
+  }
+  return true;
+}
+
 void intel_display_fence(const char *reason)
 {
   fence_access(reason);
