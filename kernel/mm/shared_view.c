@@ -165,19 +165,23 @@ static void clear_queued(struct shared_process *state)
   spin_unlock(&queue->guard);
 }
 
-static struct shared_process *prepare_process(struct process *process)
+static struct shared_process *prepare_process(struct process *process,
+    enum call_status *status)
 {
+  *status = CALL_OK;
   if (process->shared_views) {
     return process->shared_views;
   }
   struct shared_process *state = kmalloc(sizeof(*state));
   if (!state) {
+    *status = CALL_NO_MEMORY;
     return NULL;
   }
   *state = (struct shared_process){.process = process, .cpu = arch_cpu_index(),
     .deadline = UINT64_MAX};
   if (!process_cleanup_pin(process)) {
     kfree(state);
+    *status = CALL_LIMIT;
     return NULL;
   }
   process->shared_views = state;
@@ -239,9 +243,10 @@ enum call_status shared_view_map(struct process *process,
       sizeof(struct shared_view) > SIZE_MAX - process->shared_view_metadata_bytes) {
     return CALL_LIMIT;
   }
-  struct shared_process *state = prepare_process(process);
+  enum call_status status;
+  struct shared_process *state = prepare_process(process, &status);
   if (!state) {
-    return CALL_NO_MEMORY;
+    return status;
   }
   struct shared_view *view = kmalloc(sizeof(*view));
   if (!view) {
@@ -258,7 +263,7 @@ enum call_status shared_view_map(struct process *process,
     return CALL_LIMIT;
   }
   view->quarantine = region;
-  enum call_status status = forwarder_mapping_prepare(&view->lineage,
+  status = forwarder_mapping_prepare(&view->lineage,
       task_forwarder_operation(), view);
   if (status != CALL_OK) {
     goto release;
