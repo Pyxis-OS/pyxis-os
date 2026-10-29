@@ -68,13 +68,13 @@ enum call_status execution_group_check(struct execution_group *group, struct spa
 bool execution_group_thread_begin(struct execution_group *group);
 void execution_group_thread_end(struct execution_group *group);
 
-/* BSP, IF=0. All prepared processes already own group storage references. Serialize final
- * admission and enrollment with sealing, then transfer every task together.
+/* IF=0, exclusive preparation actor. Prepared processes own group references.
+ * Serialize final admission/enrollment with sealing, then transfer every task.
  * Failure leaves all tasks unpublished and owned by the preparer. */
 enum call_status execution_group_publish(struct execution_group *group,
     struct task **tasks, size_t count);
-/* BSP, IF=0, after process, kernel stack and task storage have been reclaimed.
- * Removes one published member and consumes its storage reference. */
+/* IF=0, retained retirement owner, after process, kernel stack and task storage
+ * have been reclaimed. Removes one published member and consumes its storage reference. */
 void execution_group_member_complete(struct execution_group *group);
 
 /* Admitted preparation owns storage until all staging has been disposed. */

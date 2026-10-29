@@ -39,7 +39,7 @@ static size_t capacity_limit(void)
 
 enum capability_result capability_grow(struct capability_table *table)
 {
-  KASSERT(arch_cpu_index() == 0 && table);
+  KASSERT(!cpu_interrupts_enabled() && table);
   size_t limit = capacity_limit();
   for (;;) {
     spin_lock(&table->lock);
@@ -323,7 +323,7 @@ enum capability_result capability_install(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, uint64_t transport,
     handle_t *handle)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   for (;;) {
     enum capability_result result = capability_insert(table, object, rights,
         transport, handle);
@@ -603,7 +603,7 @@ enum capability_result capability_close(struct capability_table *table,
 
 void capability_table_destroy(struct capability_table *table)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   spin_lock(&table->lock);
   KASSERT(!table->reserved);
   struct capability_entry *entries = table->entries;
@@ -615,6 +615,9 @@ void capability_table_destroy(struct capability_table *table)
   for (size_t i = 0; i < capacity; ++i) {
     if (entries[i].object) {
       release_closed_grant(entries[i].object, entries[i].rights);
+    }
+    if ((i + 1) % 256 == 0 && task_current_actor()) {
+      task_yield_masked();
     }
   }
   kfree(entries);

@@ -69,7 +69,7 @@ void process_vm_borrow_release(struct process *process);
 /* Executor transfers a request without waiting for drainage. The preallocated
  * record owns process/task lifetime through its uninterruptible caller. */
 void process_vm_mutation_forward(struct bsp_request *request);
-/* Admitted private MEMORY/JIT caller, IF=0; retained record, no BSP publication.
+/* Admitted private MEMORY/JIT/thread caller, IF=0; retained record, no BSP publication.
  * Leaves its root, drains under the common gate, executes and rejoins for reply. */
 void process_vm_private_call(struct bsp_request *request);
 void process_vm_reply_finish(struct process *process);
@@ -81,7 +81,8 @@ bool process_vm_buffer_check(struct process *process, uintptr_t address,
 
 /* Stop targeting may remove a held task before scheduler-side termination. */
 void process_vm_unhold(struct process *process, struct task *task);
-/* BSP exclusive preparation or final reaping; closes admission permanently. */
+/* Exclusive unpublished preparation or drained final reaping, IF=0; closes
+ * admission permanently after all root/borrower/continuation activity ends. */
 void process_vm_retire(struct process *process);
 /* Zero-initialized unpublished process. False on root-incarnation exhaustion. */
 bool process_vm_activity_init(struct process *process);

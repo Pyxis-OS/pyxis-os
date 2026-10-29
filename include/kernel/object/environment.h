@@ -48,8 +48,8 @@ struct environment_request {
   enum call_status result;
 };
 
-/* BSP, IF=0. Tables are process-owned; admitted process activity keeps the
- * table live. Destroy after activity drains. All allocation/mutation is BSP.
+/* IF=0. Tables are process-owned; admitted activity or exclusive unpublished
+ * preparation keeps the table live. Destroy only after activity drains.
  * Seed helpers borrow names/text; seed_owned moves the logical grant only on
  * success. They are for exclusive child/bootstrap preparation. */
 struct environment_table *environment_table_create(void);

@@ -4,8 +4,10 @@
 `CPUS` is the total logical CPU count and defaults to one. `THREADS` defaults
 to one and must divide `CPUS`; `make run CPUS=8 THREADS=2` creates four cores
 with two threads each. Both settings also apply to debug and USB launches. With multiple CPUs,
-CPU 0 (the BSP) services launch/context preparation and final cleanup; private
-MEMORY operations execute on their calling CPUs. Boot init creates the configured
+Launch/image/startup and native thread-context preparation execute in retained
+kernel-root continuations on the calling CPU, as do private MEMORY operations.
+Each CPU has one fixed RAM reaper; device hooks and hardware workers retain
+their existing fixed owners. Boot init creates the configured
 [spaces](../userland/init.md) independently of the CPU count. User tasks run on
 any CPU their space allows, including the BSP, which also runs the kernel
 workers. A single-CPU boot runs everything on the BSP. Placement and balancing
@@ -121,15 +123,15 @@ After bringing CPUs online, the BSP initializes the console and calls
 Each CPU then runs its own ready queue round-robin with local timer preemption.
 Its permanent boot stack becomes its scheduler stack.
 
-The BSP loads a private image and user stack, wraps that address space in a
-process belonging to its space, then submits the process using:
+The preparation actor loads a private image and user stack, wraps that inactive
+address space in a process belonging to its space, then submits it using:
 
 ```c
 enum mm_result result = user_task_create(process, entry, stack_top);
 ```
 
-Submission may occur before or after scheduling starts, but only on the BSP
-with IF=0 and outside interrupt/fault entry. Success transfers the prepared
+Boot preparation uses the explicit BSP owner; runtime preparation uses the
+retained caller in the kernel root, with IF=0 outside interrupt/fault entry. Success transfers the prepared
 process lifetime and task storage to finalization; failure leaves the process
 with the caller. Do not inspect or mutate the process or its address space after
 transfer. Initially there is one task; native CREATE adds siblings in the same
@@ -143,7 +145,11 @@ retirement. See [threads](../interfaces/threads.md#lifecycle).
 Each CPU's load is its queued tasks plus one while a task occupies it, kept under
 the queue lock. A user task may run on any CPU in its space's effective set,
 the BSP included. Kernel workers queued on the BSP count toward its load. There
-are no priorities or other scoring.
+are no priorities. Initial process/thread placement discounts only its executing
+user preparation caller's one running contribution, including sibling-idleness
+scoring. This transient scoring view does not change actual running/queued
+accounting or idle stealing. Other actors and already-queued batch children count
+normally; boot and fixed-worker publication have no discounted caller.
 
 Each space keeps two CPU sets:
 
@@ -191,32 +197,55 @@ destination reloads its CR3, TSS stack, syscall stack, FP state and both GS
 bases. A task that blocks in a syscall, including a deferred BSP request, keeps
 its CPU and resumes there; it becomes movable again after its next user-mode
 preemption. Parked, executing and retired tasks are never moved, and kernel tasks
-stay on the BSP. `cpu_index` changes only under the queue lock, which also orders
+remain on their fixed CPUs. Device workers stay on the BSP; only the audited
+RAM actors have AP wait/yield support. `cpu_index` changes only under the queue lock, which also orders
 wake and stop notification.
 
-Batch launch splits submission into BSP-only `user_task_prepare()` and
-`user_task_publish_group()`. Preparation allocates and initializes each task,
-kernel stack, reusable request area and separate profiling storage without
-enqueueing it; its process remains inactive and owned by the preparer.
-`user_task_discard_prepared()` releases those task allocations, leaving process
-destruction to the preparer. After execution-group admission succeeds, publication enqueues the complete
-batch under the queue lock and transfers every process and task together.
-Members may target different CPUs' queues. Publication allocates nothing; after
-unlocking, the BSP retains only the distinct destination CPU indices and notifies
-each remote one once. All observer handles and result slots exist before this
-transfer. The blocked caller lends its capability table to BSP preparation;
-cross-CPU requests and results live in the shared request allocation, never remote
-stack pointers.
+Batch launch separates caller-owned `user_task_prepare()` from atomic
+`user_task_publish_group()`. Preparation owns each inactive process, task stack,
+request/profile storage and observer reservation until publication. The small
+shared stack reservation uses bounded structural-owner admission; private image
+backing/copying does not hold that global owner. Fixed space setup, device grants
+and final reporting remain BSP phases around caller-owned child preparation.
+Publication keeps the same group and queue guards, child placement and exact
+reserved slots. It transfers tasks/processes together, then uses only saved
+CPU indices to notify destinations. A refused unpublished batch transfers its
+complete owned rollback record, captures, reservations, parent cleanup pin and
+group attribution to the preparation CPU's RAM actor. No remote stack pointer
+is lent to a worker.
 
-Task metadata currently occupies 752 bytes; process metadata occupies 136 bytes.
-Each user task eagerly owns one 4,928-byte
-request allocation, sized for the explicit service catalog's largest typed
-record, HOST, with an 8-byte alignment requirement, and a separate zeroed
-720-byte profiling allocation. The task and its two allocations total 6,400 bytes,
-excluding process metadata, heap overhead and the unchanged 16 KiB kernel stack.
-Kernel workers use only the 752-byte task metadata
-and allocate neither user area. Preparation failure, prepared-task discard and
-retirement release each owned allocation exactly once on the BSP with IF=0.
+Private image/startup copies use existing CPU-local frame aliases. Every alias
+is removed before yielding. A selected external image has one owned read phase;
+its producer cannot refill it after handoff. AP-read captures, and unread captures
+whose cleanup moves away from the producer CPU, require confirmed shared-range
+retirement before VA/backing reuse. A failed acknowledgement retains the whole
+range and joined cleanup until reboot; a late acknowledgement cannot reclaim it.
+
+The current task metadata is 840 bytes; process metadata is 432 bytes. Each user
+task owns a 6,592-byte request area and 776-byte profiling area, plus its 16 KiB
+kernel stack, excluding heap overhead. These artifact-derived sizes are tuning
+and change with the service catalog. A fixed RAM actor adds one 16 KiB stack and
+840-byte task record per CPU, without user request/profile areas. Its RAM-process,
+prepared-launch, captured-range and task queue storage adds 88 bytes per CPU,
+excluding allocation headers and page tables. All actors are mandatory and
+prepared before runtime user admission; creation failure follows core-worker
+boot failure rather than enabling a partial mode.
+
+After permanent-stack/root departure, the scheduler records the departure CPU
+before publishing completion. The BSP detaches one stop target and transfers its
+whole task record to that CPU's RAM actor. Actual stack/request/profile/FP release
+and stack/TLS unpin precede thread completion. The last departing task records
+the process's immutable RAM-cleanup destination independently of later queue
+ordering; a delayed cleanup-pin release uses it too.
+
+Process cleanup keeps its existing order: BSP session hooks, assigned-CPU private
+VM release, BSP post-VM endpoint/device hooks, then assigned-CPU allocation records
+and capability/environment table walks. Bounded steps yield with no scratch alias
+or short guard held. Process completion follows actual storage/VM/record cleanup;
+execution-group completion additionally joins attributed deferred object/device
+work. Process WAIT does not newly promise all asynchronous device callbacks have
+finished. No work stealing, reaper migration, CPU0 fallback or retained frame
+cache is added.
 
 `process_create(owner, address_space, &process)` takes ownership of an inactive
 private address space only on success. `process_destroy(process)` releases an
@@ -247,8 +276,9 @@ interrupt shadow cover publication between the empty-queue check and halt.
 
 Display requests publish to the common BSP request FIFO only once their caller
 has left its private root and task stack, cleared entry/current state and become
-parked. Private-memory operations use the same FIFO and process VM mutation
-transaction ([memory](memory.md#execution)). Publication detaches an idle executor's waiter under the
+parked. Native thread and private-memory operations instead use retained caller
+kernel-root continuations under the same process VM mutation transaction
+([memory](memory.md#execution)). Publication detaches an idle executor's waiter under the
 request lock and wakes it after unlocking. The ordinary ready queue and existing
 rescheduling IPI make the worker runnable on the BSP. A BSP caller sends no
 self-IPI and uses the same deferred handoff. Scheduler/preemption code has no
@@ -281,8 +311,8 @@ yield/block/return or timer preemption reaches the scheduler. This change adds n
 migration or priorities; preemption remains active when idle. See
 [deadline timer ownership](timekeeping.md#scheduler-timing).
 
-Blocking userspace syscalls and BSP kernel tasks use a wait record embedded in
-task metadata. The resource publishes it under its own lock and removes it before
+Blocking userspace syscalls, BSP kernel tasks and fixed RAM actors use a wait
+record embedded in task metadata. The resource publishes it under its own lock and removes it before
 waking the task. File, process, console and pipe resources share a separate
 16-byte link in task metadata; they detach it before reuse, including after a
 timed wait. It never overlaps service request storage. The scheduler queue lock
@@ -346,8 +376,9 @@ carry management lifetime; admitted and caretaker storage references do not.
 Native BSP workers borrow the parked caller's operation context, while queued
 provider messages and asynchronous completions own a cloned context. Every
 before-effects election competes with CUT; already-started work retains its
-real outcome. Deriving returned grants allocates on BSP before publication;
-private VM mutations retain the existing quiescence transaction. See
+real outcome. Launch observer derivation can allocate on the retained preparation
+actor before publication; other fixed producers keep their existing owners.
+Private VM mutations retain the existing quiescence transaction. See
 [forwarders](../interfaces/forwarders.md).
 Shared-table delivery, VM admission and native sibling entry are implemented;
 ordinary thread-safe libc remains a [later thread gate](../interfaces/threads.md).
@@ -579,12 +610,15 @@ writing CPU under their existing contracts.
 
 Selected-image snapshots from npfs, FAT32 and host files acquire that owner in
 their sleep-safe worker context, with the existing one-second admission
-budget, and release it before storage reads. RAM snapshots and child/space/batch
-preparation likewise wait with interrupts enabled in the retained launch request
-before entering the interrupts-off mutation. Ordinary contention with the
-yielding reclaimer therefore waits rather than failing an immediate owner try;
-an exhausted admission budget still returns `BUSY`. The request retains its
-image operation and grants until admission or the normal failure cleanup.
+budget, and release it before storage reads. RAM capture allocation also waits
+before shared mutation. Caller-CPU child/batch preparation retains its private
+VM actor proof; only shared task-stack and fixed space/device mutations acquire
+the structural owner. That owner must be released before waiting for a different
+fixed actor. Ordinary contention with the yielding reclaimer therefore waits
+rather than failing an immediate owner try; an exhausted admission budget still
+returns `BUSY`. The producer retains its image operation and grants until
+admission or normal failure cleanup. Caller-owned captures are discarded by the
+caller, with confirmed AP retirement before reuse.
 
 Three lower layers are safe on any CPU with interrupts disabled,
 outside interrupt and fault entry:

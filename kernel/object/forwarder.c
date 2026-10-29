@@ -786,7 +786,7 @@ static enum call_status target_admission_status(struct forwarder *root,
 static enum call_status allocate_forwarder(struct capability_grant *target,
     uint64_t kind, const struct forwarder_operation *lineage, struct forwarder **out)
 {
-  KASSERT(arch_cpu_index() == 0 && target->object);
+  KASSERT(!cpu_interrupts_enabled() && target->object);
   if (!wifi_grant_delegatable(target->object, target->rights)) {
     return CALL_DENIED;
   }

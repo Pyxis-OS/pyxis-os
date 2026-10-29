@@ -30,6 +30,21 @@ void vm_kernel_retire(uintptr_t base, size_t bytes);
 bool vm_kernel_retire_pending(void);
 void vm_kernel_reap(void); /* Existing reaper, IF=1; retains owner across steps. */
 
+/* Boot CPU, IF=0, before runtime user admission. Allocates mandatory per-CPU
+ * queue heads; terminal enqueue needs no allocation. RAM actors are prepared
+ * separately by process_reaper_init under the core-worker boot-failure policy. */
+void vm_kernel_ram_reapers_init(void);
+/* IF=0, all readers/refills closed. Transfers a complete VM-owned RAM range and
+ * cleanup attribution to this preparation CPU's fixed RAM reaper. When remote
+ * reads occurred, old mappings/backing remain through confirmation. Timeout
+ * quarantines the whole range and its cleanup attribution until reboot. No
+ * late-ACK retry/reclamation and no borrowed frames, MMIO or executing stack. */
+void vm_kernel_retire_shared(uintptr_t base, size_t bytes, bool confirm_remote);
+/* Local fixed RAM actor: pending is IF=0; reap is IF=1 and consumes one whole
+ * retained item with bounded free steps, actor-bound ownership and safe waits. */
+bool vm_kernel_ram_retire_pending(void);
+void vm_kernel_reap_ram(void);
+
 /* IF=0 and structural owner held. Permanently retain a failed shared-retirement
  * reservation/mapping; generic destructive operations refuse afterward. The
  * caller also fences its concrete consumer and retains any non-VM backing. */
@@ -70,7 +85,8 @@ bool vm_free_step(struct vm_reclaim *reclaim, size_t budget);
  * fault handlers. Kernel mutation requires its CPU-neutral structural owner.
  * Published private changes require the process mutation token after
  * acknowledged root departure and borrower drainage, on its recorded owner CPU.
- * Unpublished loading and drained retirement remain BSP-owned in this slice;
+ * Unpublished loading has one retained preparation actor on its fixed CPU.
+ * Drained retirement transfers whole ownership to its fixed RAM actor;
  * resumption reloads CR3. No generic remote/live-root mutation is authorized. */
 enum mm_result vm_space_create(struct vm_space **result);
 /* Private activation requires a process root reservation. Always flushes that
@@ -81,8 +97,8 @@ enum mm_result vm_space_activate(struct vm_space *space);
  * Frees VM-owned backing, private page tables and metadata on success.
  * The active check is local: a remote task must return ownership first. */
 enum mm_result vm_space_destroy(struct vm_space *space);
-/* The same destruction in bounded steps, BSP, IF=0 per call. Retirement
- * performs the checks and frees nothing; on success the caller keeps exclusive
+/* The same destruction in bounded steps, exclusive fixed owner, IF=0 per call.
+ * Retirement performs the checks and frees nothing; on success the caller keeps exclusive
  * ownership and makes no other VM call on the space. Each release step frees
  * at most budget backed pages, range records or page-table entries read, and
  * returns true once the space itself is freed. Between steps the caller may

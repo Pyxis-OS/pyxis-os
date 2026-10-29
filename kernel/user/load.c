@@ -1,13 +1,16 @@
-#include <kernel/mm/kernel_owner.h>
+#include <arch/cpu.h>
+#include <arch/paging.h>
 #include <abi/launcher.h>
 #include <arch/smp.h>
 #include <kernel/image.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/task.h>
 #include <kernel/user/launch.h>
 
 #define INITIAL_STACK_TOP UINT64_C(0x7ffffffff000)
+#define LOAD_STEP_PAGES 64
 
 enum mm_result user_initial_stack_size(uint64_t requested, size_t *size)
 {
@@ -23,12 +26,14 @@ enum mm_result user_initial_stack_size(uint64_t requested, size_t *size)
   return MM_OK;
 }
 
-static enum mm_result user_process_load_owned(struct space *space,
+enum mm_result user_process_load(struct space *space,
     const void *bytes, size_t size,
     uint64_t initial_stack_bytes, struct process **process, uintptr_t *entry,
     uintptr_t *stack_top)
 {
-  KASSERT(arch_cpu_index() == 0 && process && entry && stack_top);
+  KASSERT(process && entry && stack_top);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(arch_space_active(arch_kernel_space()));
   *process = NULL;
   *entry = 0;
   *stack_top = 0;
@@ -51,33 +56,34 @@ static enum mm_result user_process_load_owned(struct space *space,
    * so later allocations cannot fill it; stack and image belong to this VM. */
   result = vm_reserve_at(address_space, guard_base, PAGE_SIZE);
   if (result == MM_OK) {
-    result = vm_alloc_at(address_space, stack_base,
-        stack_size, PAGE_USER | PAGE_WRITE);
+    result = vm_reserve_at(address_space, stack_base, stack_size);
+    if (result == MM_OK) {
+      struct vm_backing backing;
+      result = vm_back_begin(address_space, stack_base, stack_size,
+          PAGE_USER | PAGE_WRITE, &backing);
+      if (result == MM_OK) {
+        while (!vm_back_step(address_space, &backing, LOAD_STEP_PAGES)) {
+          if (task_current_actor()) {
+            task_yield_masked();
+          }
+        }
+        result = backing.status;
+      }
+    }
   }
   if (result == MM_OK) {
     result = process_create(space, address_space, process);
   }
   if (result != MM_OK) {
-    KASSERT(vm_space_destroy(address_space) == MM_OK);
+    KASSERT(vm_space_retire(address_space) == MM_OK);
+    while (!vm_space_release_step(address_space, LOAD_STEP_PAGES)) {
+      if (task_current_actor()) {
+        task_yield_masked();
+      }
+    }
     return result;
   }
   *entry = start;
   *stack_top = INITIAL_STACK_TOP;
   return MM_OK;
-}
-
-enum mm_result user_process_load(struct space *space, const void *bytes, size_t size,
-    uint64_t initial_stack_bytes, struct process **process, uintptr_t *entry,
-    uintptr_t *stack_top)
-{
-  struct vm_kernel_owner owner = {0};
-  if (!vm_kernel_owner_try(&owner)) {
-    *process = NULL;
-    *entry = *stack_top = 0;
-    return MM_BUSY;
-  }
-  enum mm_result result = user_process_load_owned(space, bytes, size,
-      initial_stack_bytes, process, entry, stack_top);
-  vm_kernel_owner_release(&owner);
-  return result;
 }

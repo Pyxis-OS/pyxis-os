@@ -1,11 +1,21 @@
-#include <kernel/mm/kernel_owner.h>
+#include <arch/cpu.h>
+#include <arch/paging.h>
 #include <kernel/image.h>
 #include <kernel/memory.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/task.h>
 #include <pxe/p1f.h>
 
 #define IMAGE_MAX_SPAN (UINT64_C(256) * 1024 * 1024)
+#define IMAGE_STEP_PAGES 64
+
+static void preparation_yield(void)
+{
+  if (task_current_actor()) {
+    task_yield_masked();
+  }
+}
 
 /* P1F is little-endian, as is the supported x86_64 kernel. Copying into local
  * structures also avoids unaligned access and trusting a typed input pointer. */
@@ -37,6 +47,9 @@ static bool validate_image(const uint8_t *bytes, size_t size,
   bool executable_entry = false;
 
   for (size_t i = 0; i < header->segment_count; ++i) {
+    if (i && !(i % IMAGE_STEP_PAGES)) {
+      preparation_yield();
+    }
     struct p1f_segment segment = read_segment(bytes, i);
     if ((segment.virtual_address & (P1F_PAGE_SIZE - 1)) ||
         segment.virtual_address < previous_end || segment.virtual_address >= P1F_USER_LIMIT ||
@@ -63,36 +76,43 @@ static bool validate_image(const uint8_t *bytes, size_t size,
   return !remaining && executable_entry;
 }
 
-static enum mm_result load_segment(struct vm_space *space, uintptr_t scratch,
+static enum mm_result load_segment(struct vm_space *space,
                                    const struct p1f_segment *segment,
                                    const uint8_t *payload)
 {
   /* VM owns and zeroes every destination frame, including the BSS and the last
    * partial page. No executable user mapping is writable during the copy. */
-  enum mm_result status = vm_alloc_at(space, segment->virtual_address,
-                                      segment->memory_size, PAGE_USER | PAGE_WRITE);
+  enum mm_result status = vm_reserve_at(space, segment->virtual_address,
+      segment->memory_size);
   if (status != MM_OK) {
     return status;
+  }
+  struct vm_backing backing;
+  status = vm_back_begin(space, segment->virtual_address, segment->memory_size,
+      PAGE_USER | PAGE_WRITE, &backing);
+  if (status != MM_OK) {
+    return status;
+  }
+  while (!vm_back_step(space, &backing, IMAGE_STEP_PAGES)) {
+    preparation_yield();
+  }
+  if (backing.status != MM_OK) {
+    return backing.status;
   }
 
   for (size_t offset = 0; offset < segment->file_size; offset += PAGE_SIZE) {
     struct page_translation translation;
     KASSERT(vm_query(space, segment->virtual_address + offset, &translation) == MM_OK);
-    status = vm_map(vm_kernel_space(), scratch, translation.physical, PAGE_WRITE);
-    if (status != MM_OK) {
-      return status;
-    }
-
     size_t count = segment->file_size - offset;
     if (count > PAGE_SIZE) {
       count = PAGE_SIZE;
     }
-    memcpy((void *)scratch, payload + offset, count);
-
-    /* This is a borrowed alias; unmapping it must never free the user frame. */
-    phys_addr_t physical;
-    KASSERT(vm_unmap(vm_kernel_space(), scratch, &physical) == MM_OK);
-    KASSERT(physical == translation.physical);
+    void *page = arch_frame_map(translation.physical);
+    memcpy(page, payload + offset, count);
+    arch_frame_unmap();
+    if (!((offset / PAGE_SIZE + 1) % IMAGE_STEP_PAGES)) {
+      preparation_yield();
+    }
   }
 
   unsigned permissions = PAGE_USER;
@@ -107,15 +127,20 @@ static enum mm_result load_segment(struct vm_space *space, uintptr_t scratch,
     if (status != MM_OK) {
       return status;
     }
+    if (!((offset / PAGE_SIZE + 1) % IMAGE_STEP_PAGES)) {
+      preparation_yield();
+    }
   }
   return MM_OK;
 }
 
-static enum image_result image_load_owned(const void *bytes, size_t size,
+enum image_result image_load(const void *bytes, size_t size,
     uintptr_t reserved_base, uintptr_t reserved_end,
     struct vm_space **space, uintptr_t *entry)
 {
   _Static_assert(P1F_PAGE_SIZE == PAGE_SIZE, "P1F page granularity");
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(arch_space_active(arch_kernel_space()));
 
   if (space) {
     *space = NULL;
@@ -142,22 +167,23 @@ static enum image_result image_load_owned(const void *bytes, size_t size,
         status == MM_NO_MEMORY ? IMAGE_NO_MEMORY : IMAGE_INVALID;
   }
 
-  uintptr_t scratch;
-  status = vm_reserve(vm_kernel_space(), PAGE_SIZE, PAGE_SIZE, &scratch);
-  if (status == MM_OK) {
-    for (size_t i = 0; i < header.segment_count; ++i) {
-      struct p1f_segment segment = read_segment(bytes, i);
-      status = load_segment(loaded, scratch, &segment, (const uint8_t *)bytes + payload);
-      if (status != MM_OK) {
-        break;
-      }
-      payload += segment.file_size;
+  for (size_t i = 0; i < header.segment_count; ++i) {
+    struct p1f_segment segment = read_segment(bytes, i);
+    status = load_segment(loaded, &segment, (const uint8_t *)bytes + payload);
+    if (status != MM_OK) {
+      break;
     }
-    KASSERT(vm_release(vm_kernel_space(), scratch, PAGE_SIZE) == MM_OK);
+    payload += segment.file_size;
+    if (!((i + 1) % IMAGE_STEP_PAGES)) {
+      preparation_yield();
+    }
   }
 
   if (status != MM_OK) {
-    KASSERT(vm_space_destroy(loaded) == MM_OK);
+    KASSERT(vm_space_retire(loaded) == MM_OK);
+    while (!vm_space_release_step(loaded, IMAGE_STEP_PAGES)) {
+      preparation_yield();
+    }
     return status == MM_BUSY ? IMAGE_BUSY :
         status == MM_NO_MEMORY ? IMAGE_NO_MEMORY : IMAGE_INVALID;
   }
@@ -165,24 +191,4 @@ static enum image_result image_load_owned(const void *bytes, size_t size,
   *space = loaded;
   *entry = header.entry;
   return IMAGE_OK;
-}
-
-enum image_result image_load(const void *bytes, size_t size,
-    uintptr_t reserved_base, uintptr_t reserved_end,
-    struct vm_space **space, uintptr_t *entry)
-{
-  struct vm_kernel_owner owner = {0};
-  if (!vm_kernel_owner_try(&owner)) {
-    if (space) {
-      *space = NULL;
-    }
-    if (entry) {
-      *entry = 0;
-    }
-    return IMAGE_BUSY;
-  }
-  enum image_result result = image_load_owned(bytes, size, reserved_base,
-      reserved_end, space, entry);
-  vm_kernel_owner_release(&owner);
-  return result;
 }

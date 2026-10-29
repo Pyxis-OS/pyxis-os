@@ -18,7 +18,7 @@ struct thread_control;
 struct address_wait_record;
 struct forwarder_operation;
 
-/* BSP, drained process mutation, creator parked. Preparation owns provisional
+/* Caller-CPU kernel-root continuation, drained mutation, creator state saved. Preparation owns provisional
  * task/control/context storage; failure leaves control with its caller. */
 enum call_status task_thread_prepare(struct task *creator, const struct thread_create *input,
     struct thread_control *control, struct task **result);
@@ -102,7 +102,7 @@ enum call_status task_space_set_affinity(struct space *space, const uint64_t *cp
  * while setup is open. No allocation or global inventory observation. */
 size_t task_space_usable_cpu_count(struct space *space);
 
-/* Current user task or BSP kernel task, in task context with IF=0. Prepare its
+/* Current user task, BSP kernel task or fixed RAM actor, with IF=0. Prepare its
  * wait record before publishing it under the resource lock, after checking the
  * condition under that lock. The record lives in task metadata, whose heap
  * mapping survives stack reuse. Sleep after releasing all locks; an earlier
@@ -177,6 +177,11 @@ void task_init(void);
  * and other services that require it; never sleep while holding a lock.
  * As elsewhere in the kernel, FP/SIMD use is forbidden. */
 enum mm_result kernel_task_create(void (*entry)(void *), void *argument);
+/* Boot-only fixed RAM cleanup actor. No migration or device-worker placement. */
+enum mm_result kernel_ram_reaper_create(size_t cpu, void (*entry)(void *), void *argument);
+void task_ram_reapers_init(void);
+bool task_ram_retire_pending(void); /* IF=0, local fixed RAM owner. */
+void task_reap_ram(void); /* IF=1, local fixed RAM owner. */
 
 /* Task context, IF=0. Tests the current task's entry and borrowed argument without lending task
  * metadata. Used to enforce services owned by one kernel worker. */
@@ -186,15 +191,15 @@ bool kernel_task_is_current(void (*entry)(void *), const void *argument);
  * deadline; a past deadline yields to the ready queue. Resumes with IF=1. */
 void kernel_task_sleep_until(uint64_t deadline);
 
-/* Current BSP kernel task, IF=1, no held locks. Yield to the normal ready queue
+/* Current BSP kernel task or fixed RAM actor, IF=1, no held locks. Yield to the normal ready queue
  * only when another task is runnable; otherwise return. Resumes with IF=1. */
 void kernel_task_yield_if_runnable(void);
-/* Current BSP kernel task between bounded steps of a service it runs with
+/* Current BSP kernel task or fixed RAM actor between bounded steps of a service it runs with
  * interrupts masked, holding no lock or scratch slot. Enables interrupts,
  * yields only when another task is runnable, and masks them again. */
 void kernel_task_yield_masked(void);
 
-/* Current task in a syscall, or BSP kernel task; IF=0 and no held lock,
+/* Current task in a syscall, BSP kernel task or fixed RAM actor; IF=0 and no held lock,
  * mapping lease or scratch slot. Services interrupts and yields to runnable
  * work between bounded copy steps. Resumes on the same CPU with IF=0. */
 void task_yield_masked(void);

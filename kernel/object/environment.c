@@ -147,7 +147,7 @@ static void destroy_cell(struct kernel_object *object)
 static struct environment_cell *cell_create(const char *name, uint64_t kind,
     uint64_t flags, size_t length)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   if (!name_valid(name) || (flags & ~ENVIRONMENT_EXPORTED) ||
       (kind != ENVIRONMENT_CAP && kind != ENVIRONMENT_TEXT) ||
       length > ENVIRONMENT_BYTES_LIMIT || (kind == ENVIRONMENT_CAP && length)) {
@@ -170,7 +170,7 @@ static struct environment_cell *cell_create(const char *name, uint64_t kind,
 
 struct environment_table *environment_table_create(void)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   struct environment_table *table = kmalloc(sizeof(*table));
   if (table) {
     memset(table, 0, sizeof(*table));
@@ -183,13 +183,16 @@ struct environment_table *environment_table_create(void)
 
 void environment_table_destroy(struct environment_table *table)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   if (!table) {
     return;
   }
   for (size_t i = 0; i < ENVIRONMENT_ENTRIES_LIMIT; ++i) {
     if (table->cells[i]) {
       cell_release(table->cells[i]);
+    }
+    if ((i + 1) % 256 == 0 && task_current_actor()) {
+      task_yield_masked();
     }
   }
   kfree(table);
@@ -202,7 +205,7 @@ static void destroy_environment(struct kernel_object *object)
 
 struct kernel_object *environment_create(void)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   struct kernel_object *object = kmalloc(sizeof(*object));
   if (object) {
     object_init(object, OBJECT_ENVIRONMENT, destroy_environment);
@@ -224,12 +227,12 @@ static void staging_destroy(struct environment_staging *staging)
   kfree(staging);
 }
 
-/* Mutation is BSP-only. Every candidate cell already owns its logical grant.
+/* The actor retains the table. Every candidate cell already owns its logical grant.
  * Preflight the entire batch under the guard, then publish without failure. */
 static enum call_status commit_set(struct environment_table *table,
     struct environment_staging *staging)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   size_t indices[ENVIRONMENT_MUTATIONS_LIMIT];
   struct environment_cell *old[ENVIRONMENT_MUTATIONS_LIMIT] = {0};
   size_t count = table->count, bytes = table->bytes, changes = 0;

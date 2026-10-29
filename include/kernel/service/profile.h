@@ -10,7 +10,7 @@ struct task_profile {
   struct profile_host_snapshot host;
 };
 
-/* BSP, IF=0. Task creation provisions zeroed persistent caller aggregates;
+/* IF=0, exclusive task preparation/retirement. Task creation provisions zeroed persistent caller aggregates;
  * retirement releases them after the caller can no longer use them. */
 struct task_profile *profile_storage_create(void);
 void profile_storage_destroy(struct task_profile *profile);

@@ -6,6 +6,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/mm/kernel_owner.h>
+#include <kernel/memory.h>
 #include <kernel/object/object.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/process.h>
@@ -44,6 +45,7 @@ struct vm_range {
   struct vm_extent *extents;
   bool sparse_withdrawn; /* Retired-space destruction only. */
   bool quarantined; /* An unconfirmed shared retirement: never clear/reuse. */
+  bool retirement_confirm_remote;
   struct execution_group *retirement_group;
   struct vm_range *retirement_next;
   enum range_state state;
@@ -69,6 +71,11 @@ static atomic_uint_fast64_t next_wait_token = 1;
  * under this guard; structural exclusion belongs to the logical owner. */
 static struct spinlock registry_guard;
 static struct vm_range *retired_first, *retired_last;
+struct ram_retirement_queue {
+  struct vm_range *first, *last;
+};
+static struct ram_retirement_queue *ram_retirement_queues;
+static size_t ram_retirement_cpu_count;
 
 static void require_kernel_owner(const struct vm_space *space)
 {
@@ -750,6 +757,116 @@ void vm_kernel_reap(void)
     }
     kernel_task_yield_if_runnable();
   }
+}
+
+void vm_kernel_ram_reapers_init(void)
+{
+  KASSERT(!cpu_interrupts_enabled() && arch_cpu_index() == 0 && !ram_retirement_queues);
+  size_t count = arch_cpu_count();
+  KASSERT(count && count <= SIZE_MAX / sizeof(*ram_retirement_queues));
+  ram_retirement_queues = kmalloc(count * sizeof(*ram_retirement_queues));
+  if (!ram_retirement_queues) {
+    panic("cannot allocate CPU RAM retirement queues");
+  }
+  memset(ram_retirement_queues, 0, count * sizeof(*ram_retirement_queues));
+  ram_retirement_cpu_count = count;
+}
+
+void vm_kernel_retire_shared(uintptr_t base, size_t bytes, bool confirm_remote)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  if (!vm_kernel_runtime()) {
+    KASSERT(!confirm_remote);
+    vm_kernel_retire(base, bytes);
+    return;
+  }
+  size_t cpu = arch_cpu_index();
+  KASSERT(ram_retirement_queues && cpu < ram_retirement_cpu_count);
+  KASSERT(arch_space_active(arch_kernel_space()));
+  uintptr_t current_stack = (uintptr_t)&base;
+  KASSERT(current_stack < base || current_stack - base >= bytes);
+  struct execution_group *group = object_cleanup_defer();
+  registry_lock(&kernel_space);
+  struct vm_range *range = find_range(&kernel_space, base, bytes);
+  KASSERT(range && range->state == RANGE_BACKED && !range->quarantined &&
+      !range->retirement_group && !range->retirement_next);
+  range->state = RANGE_RETIRED;
+  range->retirement_group = group;
+  range->retirement_confirm_remote = confirm_remote;
+  struct ram_retirement_queue *queue = &ram_retirement_queues[cpu];
+  if (queue->last) {
+    queue->last->retirement_next = range;
+  } else {
+    queue->first = range;
+  }
+  queue->last = range;
+  registry_unlock(&kernel_space);
+  process_ram_cleanup_notify(cpu);
+}
+
+bool vm_kernel_ram_retire_pending(void)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  size_t cpu = arch_cpu_index();
+  KASSERT(ram_retirement_queues && cpu < ram_retirement_cpu_count);
+  registry_lock(&kernel_space);
+  bool pending = ram_retirement_queues[cpu].first != NULL;
+  registry_unlock(&kernel_space);
+  return pending;
+}
+
+void vm_kernel_reap_ram(void)
+{
+  KASSERT(cpu_interrupts_enabled());
+  uint64_t flags = cpu_save_interrupts();
+  bool pending = vm_kernel_ram_retire_pending();
+  cpu_restore_interrupts(flags);
+  if (!pending) {
+    return;
+  }
+  struct vm_kernel_owner owner = {0};
+  vm_kernel_owner_cleanup(&owner);
+  flags = cpu_save_interrupts();
+  registry_lock(&kernel_space);
+  struct ram_retirement_queue *queue = &ram_retirement_queues[arch_cpu_index()];
+  struct vm_range *range = queue->first;
+  KASSERT(range);
+  queue->first = range->retirement_next;
+  if (!queue->first) {
+    queue->last = NULL;
+  }
+  range->retirement_next = NULL;
+  registry_unlock(&kernel_space);
+  KASSERT(range->state == RANGE_RETIRED && !range->quarantined);
+  cpu_restore_interrupts(flags);
+
+  if (range->retirement_confirm_remote && !vm_kernel_flush_remote()) {
+    flags = cpu_save_interrupts();
+    registry_lock(&kernel_space);
+    /* The intrinsic record and cleanup pin remain owned until reboot. It is
+     * deliberately absent from all work queues: a late ACK cannot reclaim it. */
+    range->quarantined = true;
+    registry_unlock(&kernel_space);
+    vm_kernel_owner_release(&owner);
+    cpu_restore_interrupts(flags);
+    return;
+  }
+
+  flags = cpu_save_interrupts();
+  struct execution_group *group = range->retirement_group;
+  range->retirement_group = NULL;
+  range->retirement_confirm_remote = false;
+  struct vm_reclaim reclaim = {.range = range, .space = &kernel_space};
+  while (!vm_free_step(&reclaim, BACKING_RUN_PAGES)) {
+    cpu_restore_interrupts(flags);
+    kernel_task_yield_if_runnable();
+    flags = cpu_save_interrupts();
+  }
+  if (group) {
+    execution_group_cleanup_end(group);
+  }
+  vm_kernel_owner_release(&owner);
+  cpu_restore_interrupts(flags);
 }
 
 void vm_kernel_quarantine(uintptr_t base, size_t bytes)

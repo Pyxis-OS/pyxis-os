@@ -106,8 +106,9 @@ ownership rules, all in place:
   already-owned grants atomically. COPY, launch sources and endpoint attachments
   recheck the exact source generation under the guard. A successful REPLY moves
   owned grants into reserved slots and cannot fail for capacity.
-- **VM activity.** MEMORY and DISPLAY mapping mutations run on the BSP in one
-  process transaction. Dispatch reserves root activity before the CR3 switch and
+- **VM activity.** MEMORY, JIT, DISPLAY and thread-context changes share one
+  drained process transaction. MEMORY/JIT and thread preparation run in retained
+  caller-CPU kernel-root continuations; DISPLAY retains its fixed worker. Dispatch reserves root activity before the CR3 switch and
   acknowledges departure after the kernel-root reload. Mutation drains active
   roots and actual mapping borrowers, and admission stays closed through the
   mutator's final reply copy. A one-second precommit budget is tunable policy;

@@ -13,7 +13,9 @@ follows merged task 3 (#1500), before tasks 4–5 resume. This does not complete
 BSP removal; JIT uses the conservative caller-CPU quiesced path.
 Tasks 4–5 are assigned to Codex beta (chronium, 2026-10-28). Task 4 starts
 with the accepted cleanup-placement/lifetime decisions below; task 5 raises its own
-remaining-consumer decisions when reached. No task 4 code is implemented here.
+remaining-consumer decisions when reached. Task 4 implementation and qualification
+are complete in #1554, awaiting merge; its native launch benefit and IPC cost are
+recorded in the experiment below.
 
 ## Goal and boundary
 
@@ -171,44 +173,20 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 | 1. Private MEMORY on its caller CPU | Per-space owner proof, stable queries, counters/identities and pin synchronization; kernel-root continuations; all existing ordinary/guarded/sparse MEMORY operations. Preserve the BSP clients' use of the same gate. Check real AP execution, unrelated processes mutating concurrently, same-process competition, parked I/O and stop/unwind. | Run memory-heavy processes on APs without CPU0 servicing their MEMORY bodies; sibling quiescence still applies. |
 | 2. Frame allocation on each CPU | First measure PMM lock/search/zero/map costs with the routing bottleneck gone and bring chronium the decision whether to move frame allocation out. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
 | 3. Invalidation and shared kernel VM (merged, #1500) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
-| 4. Preparation and reclamation | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
+| [x] 4. Preparation and reclamation (#1554; residual accepted, #1588) | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
 | 5. Remaining VM consumers | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Complete the remaining VM-client audit and migration; the earlier JIT task already uses the common caller-CPU transaction. |
 
 ## Task 4 scope and decisions — accepted (chronium, 2026-10-28)
 
-Inspected main `af35537d6`, alpha's handoff and the task-3 caller audit. There is
-no in-progress task-4/5 implementation to adopt. Existing identity/pin atomics,
-private root drainage, shared ownership and acknowledgement outcomes remain
-settled; these decisions do not replace them.
-
-### Current boundaries
-
-- `launcher_request_execute` still performs image/process/task preparation and
-  batch rollback on CPU0. Image/startup copies also hold the shared kernel owner
-  over private preparation because they use a general kernel scratch range.
-- `reap_completed` leaves task storage and context pins owned until the scheduler
-  has left the task stack/private root. It then frees storage, unpins stack/TLS,
-  completes the thread observer and decrements `task_storage_count`, on CPU0.
-  `cleanup_pins` independently retain a process for prepared-batch rollback.
-- `reclaim_process` performs device-session closure, bounded private VM release,
-  record/table destruction and final result publication on the BSP reaper.
-  The capability/environment table walks are RAM work: their ordinary logical
-  close paths already run on caller CPUs. Actual device/object destructors and
-  the endpoint process weak-list hook have separate fixed-owner contracts.
-- A selected `image_capture` currently permits **only BSP buffer readers**.
-  Its existing retained-range reaper does not add a remote flush. Starting to
-  read that virtual address on an AP invalidates its present reuse proof.
-- The bounded parking correction is present as `1c572bc4e` (display/thread VM
-  admission, discussed on #1529). Preserve the drained private gate and retained
-  request while parking for the existing one-second shared-owner budget; do not
-  regress to try-only BUSY, add broad retries or collapse BUSY into NO_MEMORY.
-
-Source boundaries: [launch](../../kernel/object/launcher.c),
-[image preparation](../../kernel/image.c), [startup](../../kernel/user/startup.c),
-[task retirement](../../kernel/task.c), [process retirement](../../kernel/process.c),
-[context pins](../../kernel/mm/private.c),
-[capture contract](../../include/kernel/user/image_capture.h) and
-[admission qualification](../development/experiments/bsp-vm-admission.md).
+Runtime implementation uses caller-CPU preparation, fixed RAM reapers and
+confirmed shared capture retirement. See [SMP ownership](../kernel/smp.md),
+[memory](../kernel/memory.md) and the
+[baseline/qualification record](../development/experiments/bsp-preparation.md).
+Device hooks and actual object destructors retain their fixed owners. Six native
+vela A/B boots pass functionally. Chronium accepted the remaining 4 KiB SEND
+cost for merge (2026-10-29), superseding the earlier parity requirement; track
+its consequence, ruled-out causes and revisit point in
+[debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588).
 
 ### Decision 10 — fixed RAM cleanup owners
 
@@ -273,44 +251,118 @@ recursive walker, live-root mutation or shared-table reclamation optimization.
 Fixed device/file workers keep their I/O owners. Ordinary shared-owner admission
 may still serialize the small kernel-range preparation/retirement portions.
 
-### Delivery gates after these decisions
+### Task 4 delivery and qualification
 
-1. **Before code:** capture a fresh current-main baseline, retaining exact kernel,
-   initrd, config, compiler and workload hashes. Reuse existing launch/thread/Go
-   and allocbench/ipcbench workloads, not the old task-1/2 images as today's A.
-   One warmup and three samples in fresh matched 1/4+ CPU boots; independent
-   processes on distinct allowed CPUs. Record CPU/HWP/XSAVE/clock, actual actor
-   CPUs, backing and host load. Existing 16-child warmup + 1024 `pyxis.run` echo
-   launches measures through real child completion; IPC and private MEMORY are
-   controls. Include existing large-process/managed-thread lifecycle workloads
-   to cover image copy and heavy exit. Attribute preparation/retirement only
-   where existing profiling or read-only GDB can establish it; total time alone
-   does not identify a phase. Record any change needed to old command spellings.
-2. Move preparation, inactive-root ownership, pin/unpin and unpublished rollback
-   together. Preserve the publication transaction, creator FP save, zero-before-
-   publication, exact BUSY/NO_MEMORY and stable queries. Qualify AP execution and
-   independent preparations rather than asserting CPU neutrality from wrappers.
-3. Integrate the chosen RAM retirement actors and fixed-owner handoffs. Qualify
-   ordinary stop/fault/exit, stack/TLS pins, real exhaustion/unwind, prepared-batch
-   refusal, captures/reservations, process/group completion and mixed device
-   output. Retained/uncertain cleanup must remain owned. New deliberate fault
-   scenarios require their own scope; task 3's delayed-ACK permission is not a
-   blanket authorization. Repeat the matched baseline workloads after code.
-4. Prepare a hands-free **vela** native A/B packet after QEMU qualification;
-   same archive/config/flags, HWP/AC checks, repeated interleaved samples, hashes,
-   explicit Remote commands and automatic collection. The orchestrator stages
-   and schedules it; no attended steps or native/PXE action is part of this note.
-   Packets follow `/shared/present/RUNSHEETS.md`; builds/caches stay VM-local.
-5. Then task 5 audits remaining VM consumers, including DISPLAY's VM segment,
-   stable queries, NPFS, DMA/PCI/scanout and direct architecture callers. Keep
-   device callbacks/IRQs, firmware windows and the heap's separate owner; raise
-   any new placement/lifetime/refusal choice when that caller is reached.
+- [x] Fresh pre-code baseline at main `af35537d6`: exact builder/config/flags and
+  archive/workload hashes, one/four-CPU warmups and three fresh samples each.
+- [x] Caller-CPU preparation and whole-record rollback; existing local frame
+  aliases, bounded image/startup backing and root teardown, native thread/context
+  preparation under the common drained gate. Preserve creator FP state,
+  zero-before-publication, pre-effect BUSY/NO_MEMORY and publication/stop guards.
+- [x] Mandatory fixed RAM actors with explicit AP wait/yield and no terminal-queue
+  allocation; real last-departure CPU independent of BSP queue order; unchanged
+  fixed device/endpoint phases. Ordinary shared capture ACK/reclaim, transferred
+  batch rollback, exhaustion/reuse and thread stop/close pass in QEMU/GDB.
+- [x] Matched nested after cohorts and interleaved A/B, with host-load limits and
+  reproduced IPC cost recorded. Untimed GDB proves distinct AP preparation and
+  records a placement mechanism without claiming full phase attribution.
+- [x] Hands-free vela native A/B: same frozen workload archive/config/flags,
+  actual AC/HWP/XSAVE/TSC checks, three interleaved fresh boots each, outcome and
+  final-drain checks. The [sealed packet](../development/experiments/bsp-preparation.md#native-handoff)
+  passes both final-pair QEMU collectors; the orchestrator completed all six
+  native boots with identical 2880×1800 PXE resolution and restored the default.
+  New deliberate fault/uncertain-ACK scenarios still need separate scope; ordinary
+  successful ACK checks do not qualify the timeout/quarantine path.
 
-**You should know:** these accepted decisions are assigned for task 4, not
-yet implemented. They add fixed cleanup actors and their boot storage. Cleanup
-contention can still delay real completion; uncertain shared capture retirement
-retains memory and keeps its joined cleanup pending. No public authority,
-status vocabulary, worker migration or new source of executable memory is added.
+In the original candidate the placement code was unchanged, but its inputs changed: caller
+preparation counts as running load on its AP, unlike an old caller parked for
+BSP preparation. It consequently selects a different child CPU, so task 4 has
+not preserved decision 11's placement behavior. That candidate's native launch improves 11.8%
+and pages are flat, but CALL64/4096 completion rises 32.6%/45.4%; SEND completion
+rises too. That trade-off is not accepted.
+
+- [x] Resolve the placement regression and repeat matched QEMU and native IPC
+  controls before qualifying task 4. The configuration-only isolation in the
+  [experiment](../development/experiments/bsp-preparation.md#ipc-regression-attribution)
+  removes the large IPC penalty with all kernel checks unchanged; it is not a
+  delivered configuration workaround.
+
+### Initial placement after caller preparation — accepted
+
+**Accepted (chronium, 2026-10-28):** for initial child placement only, exclude the actual
+executing preparation actor from the load and sibling-idleness scoring view.
+Keep the real scheduler running state truthful; keep affinity, preferred CPU,
+idle stealing and wakeup rules. Boot/fixed-worker publication gets no exclusion.
+Count every queued batch member normally. Apply
+the same rule to native-thread creation, which also moved from a parked creator
+to its caller CPU. This is a narrowly scoped scoring rule;
+it adds no per-message check, placement reservation or retained load snapshot.
+It favors the existing parent-CPU tie-break when other allowed CPUs are equally
+idle; it does not reproduce every historical destination under arbitrary CPU0
+or SMT load. An independently runnable child can still be stolen by an idle CPU.
+The implementation and both full QEMU packet collectors pass at `4c4b6625e`;
+three normal-affinity A/B pairs no longer reproduce the old threefold CALL
+penalty, with substantial A-side variation. The new sealed native six-boot
+pair is `/shared/present/bsp-removal/task4/native-placement-fix/`.
+Corrected native launch improves 15.4% and CALL is at parity in chronium's
+assessment; SEND retains a nonoverlapping 9–11% completion cost. The residual
+does not reproduce in the subsequent QEMU controls, and no cleanup/check
+change is justified by the current observations. See the
+[residual investigation](../development/experiments/bsp-preparation.md#residual-investigation--2026-10-29).
+**Accepted (chronium, 2026-10-29):** retain the 15–18% native launch gain and
+accept the remaining roughly 8–10% 4 KiB SEND cost. Its underlying source remains
+unproved; this decision permits task 4 to merge without a speculative fix.
+[Debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588) carries the
+consequence, ruled-out list and revisit point. Do not run the CPU0-only control.
+
+Keep the VM, endpoint and task-lifetime guards protecting live operations.
+
+### Native SEND result — temporary instrumentation removed
+
+Chronium authorized both bounded native controls on 2026-10-29. The first
+localizes the sampled increase to copy/release tails; the second separates
+store completion from release acquisition. In the second pair all 385 sampled
+acquisitions per variant succeed on their first exchange. B's plain acquisition
+is 110.11 ns versus A's 25.82 ns; after the explicit store-drain control it is
+19.60 versus 19.56 ns, with B's tails appearing in the fence window instead.
+This strongly supports preceding-store completion/ordering cost at the first
+atomic acquisition, not an observed busy-spin or added borrower-check cost.
+See the [release control](../development/experiments/bsp-preparation.md#native-releasestore-control).
+
+The fence also drains marker stores, and cases observe different messages.
+Neither individual tails nor mean costs are conserved between cases. The exact
+task-4 allocation/cache/preparation change causing the underlying delay remains
+unproved; no safe specific fix within task 4 is established. A production fence,
+guard removal or speculative padding/copy rewrite as a fix is not justified. The design
+does not require new per-message release work, but that is not proof of a fix.
+Native SEND completion rises 8.1% in this instrumented pair. The residual is
+accepted for task 4 under the 2026-10-29 decision and debt #1588 above.
+
+Both temporary timing probes, their local branches/worktrees and their images
+are removed; only methods/results remain. The ordinary main-plus-process-size
+control is now negative: native SEND4096 0.677 → 0.675 ms, admission unchanged
+at 0.095 ms. This excludes the 40-byte growth alone, not other boot allocations
+or preparation/reclamation chronology. Its source/worktrees/images are removed.
+Source-level attribution remains open; no validated fix is established. The
+proposed CPU0-only control is cancelled by chronium's acceptance. See the
+[control and #1584 integration record](../development/experiments/bsp-preparation.md#native-process-size-control).
+
+The rebased integration keeps #1584's bounded producer waits and task 4's
+narrow shared-stack/device admission, caller-owned rollback and AP capture
+retirement. Installed/RAM/pipeline checks pass at 1/4 QEMU CPUs; the broader
+16-command cohort passes at four. Native parity on the rebased head is not
+claimed; chronium accepts the recorded residual and task 4 is ready for merge.
+
+**You should know:** fixed cleanup actors add boot storage. Shared stack/capture
+admission can return BUSY after the existing bounded wait; cleanup contention can
+delay real completion. Unconfirmed shared capture retirement retains memory and
+joined cleanup until reboot. No public authority/status, worker migration or new
+source of executable memory is added.
+
+Task 5 next audits DISPLAY's VM segment, stable queries, NPFS, DMA/PCI/scanout
+and direct architecture callers. Keep device callbacks/IRQs, firmware windows and
+the heap's separate owner; raise each new placement/lifetime/refusal choice when
+its caller is reached. Task 4 does not implement those migrations.
 
 ## Proof obligations, not shortcuts
 

@@ -108,8 +108,7 @@ void process_vm_root_depart(struct process *process, struct process_vm_root_epoc
   process->vm.resident_cpus[cpu / 64] &= ~(UINT64_C(1) << (cpu % 64));
   --process->vm.roots;
   bool pending = process->vm.pending &&
-    (process->vm.pending->service == BSP_SERVICE_DISPLAY ||
-     process->vm.pending->service == BSP_SERVICE_THREAD);
+      process->vm.pending->service == BSP_SERVICE_DISPLAY;
   if (process->vm.local_wait) {
     struct task_wait *wait = process->vm.local_wait;
     process->vm.local_wait = NULL;
@@ -240,7 +239,7 @@ static void refuse_mutation(struct bsp_request *request, enum call_status status
 void process_vm_mutation_forward(struct bsp_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && request->state == BSP_REQUEST_SERVICING);
-  KASSERT(request->service == BSP_SERVICE_DISPLAY || request->service == BSP_SERVICE_THREAD);
+  KASSERT(request->service == BSP_SERVICE_DISPLAY);
   struct process *process = request->vm_process;
   struct task *mutator = request->vm_mutator;
   KASSERT(process && mutator);
@@ -340,7 +339,7 @@ void process_vm_reply_finish(struct process *process)
 
 void process_vm_retire(struct process *process)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   spin_lock(&process->vm.lock);
   KASSERT((process->vm.phase == PROCESS_VM_OPEN ||
       process->vm.phase == PROCESS_VM_DRAINING) && !process->vm.roots &&
@@ -450,7 +449,8 @@ void process_vm_private_call(struct bsp_request *request)
 {
   struct process *process = request->vm_process;
   struct task *mutator = request->vm_mutator;
-  KASSERT((request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_JIT) &&
+  KASSERT((request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_JIT ||
+      request->service == BSP_SERVICE_THREAD) &&
       request->state == BSP_REQUEST_PREPARED && mutator == task_current_user());
   task_vm_kernel_enter();
   spin_lock(&process->vm.lock);

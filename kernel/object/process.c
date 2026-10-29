@@ -61,7 +61,7 @@ static void destroy_control(struct kernel_object *object)
 
 struct process_control *process_control_create(void)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   struct process_control *control = kmalloc(sizeof(*control));
   if (!control) {
     return NULL;
@@ -74,7 +74,8 @@ struct process_control *process_control_create(void)
 
 void process_control_attach_process(struct process_control *control, struct process *process)
 {
-  KASSERT(arch_cpu_index() == 0 && process);
+  KASSERT(!cpu_interrupts_enabled() && process);
+  process_prepare_require(process);
   lock_control(control);
   KASSERT(!control->process && !control->complete);
   control->process = process;
@@ -83,7 +84,7 @@ void process_control_attach_process(struct process_control *control, struct proc
 
 void process_control_detach_process(struct process_control *control)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   lock_control(control);
   KASSERT(control->process && !control->complete);
   /* No owner task remains at retirement; its readiness sets are already
@@ -97,7 +98,7 @@ void process_control_detach_process(struct process_control *control)
 
 void process_control_complete(struct process_control *control, struct process_result result)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!cpu_interrupts_enabled());
   KASSERT(result.kind == PROCESS_EXITED || result.kind == PROCESS_FAULTED ||
       result.kind == PROCESS_TERMINATED || result.kind == PROCESS_START_FAILED);
   lock_control(control);

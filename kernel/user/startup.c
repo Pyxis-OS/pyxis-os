@@ -1,4 +1,4 @@
-#include <kernel/mm/kernel_owner.h>
+#include <arch/paging.h>
 #include <kernel/object/wifi.h>
 #include <abi/startup.h>
 #include <arch/smp.h>
@@ -13,6 +13,8 @@
 #include <kernel/string.h>
 #include <kernel/task.h>
 #include <kernel/user/startup.h>
+
+#define STARTUP_STEP_PAGES 64
 
 struct startup_sizes {
   size_t metadata;
@@ -205,34 +207,23 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
 static enum mm_result copy_startup_pages(struct vm_space *space, uintptr_t address,
                                           const uint8_t *buffer, size_t size)
 {
-  uintptr_t scratch;
-  enum mm_result result = vm_reserve(vm_kernel_space(), PAGE_SIZE, PAGE_SIZE, &scratch);
-  if (result != MM_OK) {
-    return result;
-  }
-
   for (size_t offset = 0; offset < size; offset += PAGE_SIZE) {
     struct page_translation translation;
     KASSERT(vm_query(space, address + offset, &translation) == MM_OK);
-    result = vm_map(vm_kernel_space(), scratch, translation.physical, PAGE_WRITE);
-    if (result != MM_OK) {
-      break;
+    void *page = arch_frame_map(translation.physical);
+    memcpy(page, buffer + offset, PAGE_SIZE);
+    arch_frame_unmap();
+    if (!((offset / PAGE_SIZE + 1) % STARTUP_STEP_PAGES) && task_current_actor()) {
+      task_yield_masked();
     }
-    memcpy((void *)scratch, buffer + offset, PAGE_SIZE);
-
-    /* Only the borrowed kernel alias is removed; VM owns the user frame. */
-    phys_addr_t physical;
-    KASSERT(vm_unmap(vm_kernel_space(), scratch, &physical) == MM_OK);
-    KASSERT(physical == translation.physical);
   }
-  KASSERT(vm_release(vm_kernel_space(), scratch, PAGE_SIZE) == MM_OK);
-  return result;
+  return MM_OK;
 }
 
-static enum mm_result process_prepare_startup_owned(struct process *process,
+enum mm_result process_prepare_startup(struct process *process,
     const struct process_startup *source)
 {
-  KASSERT(arch_cpu_index() == 0);
+  process_prepare_require(process);
   struct startup_sizes sizes;
   if (!process || process->startup_address || !measure_startup(process, source, &sizes)) {
     return MM_INVALID;
@@ -275,7 +266,22 @@ static enum mm_result process_prepare_startup_owned(struct process *process,
     return MM_NO_MEMORY;
   }
   uintptr_t address;
-  result = vm_alloc(process->address_space, total, PAGE_SIZE, PAGE_USER, &address);
+  result = vm_reserve(process->address_space, total, PAGE_SIZE, &address);
+  if (result == MM_OK) {
+    struct vm_backing backing;
+    result = vm_back_begin(process->address_space, address, total, PAGE_USER, &backing);
+    if (result == MM_OK) {
+      while (!vm_back_step(process->address_space, &backing, STARTUP_STEP_PAGES)) {
+        if (task_current_actor()) {
+          task_yield_masked();
+        }
+      }
+      result = backing.status;
+    }
+    if (result != MM_OK) {
+      KASSERT(vm_release(process->address_space, address, total) == MM_OK);
+    }
+  }
   if (result == MM_OK) {
     fill_startup(buffer, address, source, &sizes, environment_handle, thread_fs,
         usable_cpu_count);
@@ -286,10 +292,19 @@ static enum mm_result process_prepare_startup_owned(struct process *process,
         if (result != MM_OK) {
           break;
         }
+        if (!((offset / PAGE_SIZE + 1) % STARTUP_STEP_PAGES) && task_current_actor()) {
+          task_yield_masked();
+        }
       }
     }
     if (result != MM_OK) {
-      KASSERT(vm_free(process->address_space, address, total) == MM_OK);
+      struct vm_reclaim reclaim;
+      KASSERT(vm_free_begin(process->address_space, address, total, &reclaim) == MM_OK);
+      while (!vm_free_step(&reclaim, STARTUP_STEP_PAGES)) {
+        if (task_current_actor()) {
+          task_yield_masked();
+        }
+      }
     }
   }
   kfree(buffer);
@@ -319,16 +334,4 @@ static enum mm_result process_prepare_startup_owned(struct process *process,
   }
   process->startup_address = address;
   return MM_OK;
-}
-
-enum mm_result process_prepare_startup(struct process *process,
-    const struct process_startup *source)
-{
-  struct vm_kernel_owner owner = {0};
-  if (!vm_kernel_owner_try(&owner)) {
-    return MM_BUSY;
-  }
-  enum mm_result result = process_prepare_startup_owned(process, source);
-  vm_kernel_owner_release(&owner);
-  return result;
 }

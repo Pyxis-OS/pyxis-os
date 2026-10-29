@@ -33,7 +33,8 @@ struct thread_request {
   enum call_status status;
 };
 
-/* BSP allocation. Observer storage owns no process/task/VM pointer. */
+/* IF=0, unpublished allocation; observer storage owns no process/task/VM pointer.
+ * Completion retains the control and uses its guard after actual task reclamation. */
 struct kernel_object *thread_service_create(void);
 struct thread_control *thread_control_create(void);
 void thread_control_complete(struct thread_control *control, struct thread_result result);

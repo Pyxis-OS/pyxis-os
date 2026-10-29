@@ -26,8 +26,8 @@ enum capability_result {
 };
 
 /* Zero initialization creates an empty table. Admitted activity keeps it alive;
- * teardown follows activity and reservation drain. Growth allocation stays BSP
- * owned. No entry pointer survives the short structural guard. */
+ * teardown follows activity and reservation drain. Growth retains table ownership
+ * across allocation. No entry pointer survives the short structural guard. */
 struct capability_table {
   /* IF=0; may nest only the bounded forwarder target-snapshot guard for
    * atomic storage admission. No callbacks, scheduler or allocator lock. */
@@ -135,7 +135,7 @@ void capability_install_reserved(struct capability_reservation *reservation,
     const struct capability_reserved_slot *slots, struct capability_grant *grants,
     size_t count, handle_t *handles);
 
-/* BSP, IF=0; caller keeps the table alive.
+/* IF=0; caller keeps the table alive.
  * Adds a reference; the caller retains
  * its original one. Resource rights and transport authority are an explicit
  * kernel grant, not derived from another handle, and must fit the object.
@@ -162,7 +162,7 @@ enum capability_result capability_insert_batch(struct capability_table *table,
     struct kernel_object *const *objects, const uint64_t *rights,
     const uint64_t *transport, size_t count, handle_t *handles);
 
-/* BSP, IF=0; caller keeps the table alive.
+/* IF=0; caller keeps the table alive.
  * Preserves entries, generations and references; failure leaves them intact. */
 enum capability_result capability_grow(struct capability_table *table);
 
@@ -195,7 +195,7 @@ enum capability_result capability_reference_resolve_for(struct capability_refere
 enum capability_result capability_close(struct capability_table *table,
                                          handle_t handle);
 
-/* BSP, IF=0, after admitted activity/reservations drain. Releases table storage.
+/* IF=0, after admitted activity/reservations drain. Releases table storage.
  * Backing destruction is deferred to object_reap(); receipt ownership ends
  * synchronously, as with individual handle closure. */
 void capability_table_destroy(struct capability_table *table);
