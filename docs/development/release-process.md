@@ -41,7 +41,9 @@ runbook, and never sign or tag.
 
 Each release candidate is checked in QEMU first: install the previous release,
 keep data in `home://` and a `system://config/boot.lua` override, update, and
-boot the result. Launch `nvim` there and quit with `:q`; it exercises child
+boot the result. Update with `pkg upgrade` when the previous release's `pkg` can
+stage the transition; when it cannot (0.0.9 to 0.0.10), boot the candidate
+installer and choose Update ([system updates](../userland/system-updates.md)). Launch `nvim` there and quit with `:q`; it exercises child
 spawn with extra resources, which the 0.0.6 check missed. A fresh install of the
 candidate ISO is checked as well, from the ISO exactly as the
 [manual](../manual/install.md) describes.
