@@ -62,15 +62,18 @@ over `syscall.Terminal*`, a `pyxis` terminfo entry) as an ordered vendor patch.
   Close. Confirm, or implement, that a read deadline on console stdin wakes a
   parked Read. Pyxis pins the new Go commit; the Go prefix is rebuilt, not the
   compiler container.
-- [ ] **2. Model and host build (userland).** Literal reader/writer, schema,
-  unknown-key carry-through, validation, save procedure, tcell patch and build
-  script; read-only list and detail views; Linux build and first screenshots.
-- [ ] **3. Editing UI (userland).** All views and modals, review diff, save,
-  backup and Load previous. Full host screenshot set for chronium's review.
-- [ ] **4. Pyxis build and package.** Bundle, package recipe, QEMU installed-disk
-  check, full QEMU screenshot set including a reboot that shows a saved change
-  applied and a restore. User reference and release-ideas entry 6 updated. Then
-  chronium tests on hardware.
+- [ ] **2. Editor and host screenshots (userland).** Literal reader/writer,
+  schema, unknown-key carry-through, validation, save procedure, all views and
+  modals, the `pyxis` terminal profile for tcell and a build following userland
+  `git/`. Full host screenshot set for chronium's review.
+- [ ] **3. Pyxis build and package.** tcell's Pyxis terminal backend (needs
+  task 1), the `spaces` program package and `make spaces-package`, QEMU
+  installed-disk check, full QEMU screenshot set including a reboot that shows a
+  saved change applied and a restore. User reference and release-ideas entry 6
+  updated. Then chronium tests on hardware.
+
+Tasks 2 and 3 of the proposal (model, then editing UI) were delivered as one
+task: the views and the model they edit are one change.
 
 ## Screenshots
 
