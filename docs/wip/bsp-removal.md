@@ -313,6 +313,29 @@ green CI do not satisfy that gate.
 
 Keep the VM, endpoint and task-lifetime guards protecting live operations.
 
+### Native SEND phase profiling — proposed, not implemented
+
+The single-CPU native controls retain a 7–8% SEND4096 completion cost, mostly in
+admission, while SEND64 is about 2% higher. Cross-CPU placement therefore is not
+its main explanation. Exact A/B instructions, sampled copy layouts and page
+attributes match; four/16-vCPU controls do not reproduce the native penalty.
+The existing profiler has no IPC events and the frozen native debugger cannot
+break into a running SEND. Attribution is still open; no copy/guard change is
+justified by these exclusions.
+
+**Proposed default, requiring chronium's scope approval:** permit a temporary,
+build-only native profiling control for SEND64/4096 admission. Sample ordered
+ticks separately around payload validation/lease, the actual copy and the rest
+of admission; use bounded per-CPU storage and existing log collection outside
+timed work. Record only timing/counts, offsets and mapping attributes, never
+payloads or full virtual/physical addresses. Add no public ABI, grant, runtime
+control or permanent profiler. Preserve every operation and lifetime guard.
+Compare layout-matched disabled, counters-only and sampled controls before
+attributing a cost; observer-disturbed results do not qualify merge performance.
+Use the results to select a task-4 fix or return the unresolved trade-off to
+chronium. This extends the present existing-tools constraint and is not yet
+authorized; keep the production code unchanged until decided.
+
 **You should know:** fixed cleanup actors add boot storage. Shared stack/capture
 admission can return BUSY after the existing bounded wait; cleanup contention can
 delay real completion. Unconfirmed shared capture retirement retains memory and

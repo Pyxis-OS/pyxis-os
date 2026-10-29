@@ -375,6 +375,55 @@ Small source, observer and timing evidence is under
 diagnostic compares the same kernels under normal, CPU1-only and CPU3-only
 allowances to distinguish CPU/placement effects; it changes no product policy.
 
+### Native CPU controls and copy-path exclusions
+
+The orchestrator completed the six diagnostic boots in
+`/shared/present/bsp-removal/task4/native-send-cpu-control/`, all PASS. Each
+profile has one A/B pair; these are descriptive controls, not three independent
+repeats of one configuration. Both kernels and all non-configuration workload
+bytes remain unchanged. Native completion/admission medians, ms per pass:
+
+| Profile | SEND64 A → B | SEND4096 A → B | SEND4096 admission A → B |
+| --- | --- | --- | --- |
+| `{1,3}` | 0.6475 → 0.6775 | 0.6990 → 0.7655 | 0.1005 → 0.1275 |
+| `{1}` | 0.6120 → 0.6215 | 0.6815 → 0.7270 | 0.0980 → 0.1320 |
+| `{3}` | 0.6040 → 0.6180 | 0.6730 → 0.7250 | 0.0960 → 0.1310 |
+
+The fixed-CPU 4 KiB admission increase is 34–35 microseconds per 256 messages,
+about 133–137 ns/message, accounting for most of the completion increase.
+Cross-CPU placement is not the principal explanation. Launch remains about
+18% faster in all three pairs, pages flat and CALL near parity.
+
+Exact frozen A/B disassembly of syscall entry/dispatch, endpoint admission,
+copy/lease helpers and page walks matches after relocation normalization. Both
+CALL and SEND directly copy user payload to the delivery record, with no extra
+SEND temporary or pin. Record stride 9,336 bytes and request offset 1,144 are
+unchanged. In separate ordinary four- and 16-vCPU GDB controls, sampled source
+offset is 64; destination slot offsets are 1392/2536/3680/728/1872/3016/64/1208
+in both variants. The receive destination offset is 3016 in both. Equal-offset
+copy cases therefore occur in both, not uniquely B. All sampled 16-CPU pages
+select PAT0/PCD0/PWT0 (write-back), with no physical source/destination overlap.
+The first B physical frame bases are displaced by 256 KiB; this is a layout
+observation, not evidence of a cache penalty. Native live addresses remain
+unobserved. Stops establish neither copy latency nor cache-miss rates.
+
+A further existing-tool control keeps Remote on CPU1 and varies online vCPUs
+4 versus 16, matching the native reaper count at 16. One discarded warmup per
+kernel/count and three interleaved pairs each all pass, with no own debugger or
+build during timing. Host has 12 CPUs; 16-vCPU scheduling is oversubscribed, and
+early samples vary. SEND4096 summed 100-pass completion medians A/B are
+72.184/69.409 ms at four CPUs and 73.967/73.444 ms at 16; admission medians are
+12.162/11.399 and 13.525/12.538 ms. No native-like B penalty appears. These
+controls exclude no native cache effect and do not establish a speedup.
+
+Small exact reports and raw evidence:
+`/shared/present/bsp-removal/task4/send-copy-20261029/`. No justified kernel fix
+has emerged. Existing native debugging rejects running break-in/breakpoints,
+and the current profiler has no IPC phase events. The
+[temporary native phase proposal](../../wip/bsp-removal.md#native-send-phase-profiling--proposed-not-implemented)
+requires a scope extension before implementation. The native residual remains
+unexplained and unaccepted; no guard is removed or speculative copy rewrite made.
+
 ## Storage and remaining limits
 
 Artifact type inspection: task 840 bytes, process 432 bytes (baseline 392),
