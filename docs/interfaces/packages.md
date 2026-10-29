@@ -852,7 +852,7 @@ publish; `tools/sign-repository.sh releases DIR` does.
 lines of earlier releases ([decision 75](../wip/pkg-upgrade.md#decided)). A
 name already listed with other bytes is refused. `tools/sign-images.sh DIR`
 then signs `SHA256SUMS`
-([signing](../../packages/signing/README.md#signing-the-install-isos)).
+([signing](../../packages/signing/README.md#signing-the-install-isos-and-images)).
 
 Both targets refuse an untagged build. They also refuse a build whose
 `packages.lua` lists an unsigned repository, so a release image is built with

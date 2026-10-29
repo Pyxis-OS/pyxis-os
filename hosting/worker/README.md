@@ -2,7 +2,7 @@
 
 A Cloudflare Worker serves the signed `public` and `releases` package
 repositories ([signed indexes](../../docs/interfaces/packages.md#signed-indexes))
-and the install ISOs
+and the install ISOs and QEMU images
 ([checking an ISO](../../packages/signing/README.md#checking-an-install-iso))
 from the B2 bucket `PyxisPackageRepo` (eu-central-003), whose object keys equal
 the URL paths:
@@ -12,7 +12,8 @@ public/current         public/index/N.lua(.sig)   public/signer-2026.pem
 public/packages/ID/VERSION.tar
 releases/current       releases/index/N.lua(.sig) releases/signer-2026.pem
 releases/packages/pyxis/VERSION.tar
-images/pyxis-VERSION.iso  images/SHA256SUMS(.sig)
+images/pyxis-VERSION.iso  images/pyxis-VERSION.qcow2
+images/SHA256SUMS(.sig)
 images/signer-2026.pem    images/pyxis-signing-ca.pem
 ```
 
@@ -33,7 +34,7 @@ download-by-name path as a space, so the Worker sends a path's `+` (as in
 | --- | --- |
 | `REPO/current`, `images/SHA256SUMS`, `images/SHA256SUMS.sig` | 30 s |
 | `REPO/signer*.pem`, `images/signer*.pem`, `images/pyxis-signing-ca.pem` | 1 hour |
-| `REPO/index/N.lua`, `REPO/index/N.lua.sig`, `REPO/packages/ID/VERSION.tar`, `images/pyxis-VERSION.iso` | 1 year, `immutable` |
+| `REPO/index/N.lua`, `REPO/index/N.lua.sig`, `REPO/packages/ID/VERSION.tar`, `images/pyxis-VERSION.iso`, `images/pyxis-VERSION.qcow2` | 1 year, `immutable` |
 | any other path | 404, not fetched |
 | 404 from B2 | 30 s, so a missed upload does not stick |
 | 5xx from B2 | not cached |
@@ -84,16 +85,18 @@ Before the first deploy, recheck against Cloudflare's and Backblaze's own pages:
 A client that reads `current` before the last step still sees the previous,
 complete index.
 
-## Publishing an install ISO
+## Publishing an install ISO and QEMU image
 
 1. From the same tagged build as the release package, run
    `make release-image IMAGES=DIR`, where DIR keeps the `SHA256SUMS` published
    so far.
+   A release's QEMU image is built and listed between these two steps
+   ([release process](../../docs/development/release-process.md#the-qemu-image)).
 2. chronium runs `tools/sign-images.sh DIR`
-   ([signing](../../packages/signing/README.md#signing-the-install-isos)).
+   ([signing](../../packages/signing/README.md#signing-the-install-isos-and-images)).
 3. After chronium's OK for that publish, upload to `images/` in the order the
    script prints:
-   1. the new ISO;
+   1. the new ISO, and the QEMU image if there is one;
    2. the certificates if new;
    3. `SHA256SUMS`;
    4. `SHA256SUMS.sig` last.

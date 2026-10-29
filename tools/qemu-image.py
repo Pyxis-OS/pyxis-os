@@ -264,8 +264,12 @@ def build(arguments):
             os.replace(temporary, output)
         finally:
             temporary.unlink(missing_ok=True)
-    verify_image(output, accel, Path(arguments.screens) if arguments.screens else None,
-                 arguments.timeout)
+    try:
+        verify_image(output, accel, Path(arguments.screens) if arguments.screens else None,
+                     arguments.timeout)
+    except (ImageError, subprocess.CalledProcessError):
+        output.unlink()
+        raise
     log(f"built {output}: sha256 {sha256_file(output)}, {output.stat().st_size} bytes")
 
 

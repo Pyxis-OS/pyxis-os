@@ -119,6 +119,7 @@ the installed core archive.
 - 32 GiB is virtual. `qemu-img convert -O raw` or a non-sparse copy makes a full
   32 GiB file.
 - Without KVM the build may take much longer (unmeasured).
+- The site's download list and `/verify/` page do not link the image yet.
 
 ## Tasks
 
@@ -127,6 +128,6 @@ the installed core archive.
   both boots to the shell with KVM and with `-accel tcg`, the launcher with and
   without KVM). The first run on the 0.0.10 ISO belongs to the release flow, since
   the live `public` repository must offer that revision's `base`.
-- [ ] 2. Release tooling: `SUMS_LINE`, `sign-images.sh`, the Worker allow-list
+- [x] 2. Release tooling: `SUMS_LINE`, `sign-images.sh`, the Worker allow-list
   diff for the orchestrator to approve and deploy, and the release-process step
   with its failure rule.

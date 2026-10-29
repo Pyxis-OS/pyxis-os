@@ -26,7 +26,7 @@ chain at the signing time, CA:FALSE, the signature and the tree before
 printing the upload order. On any failure it removes the new index and
 restores `current`. It uploads nothing.
 
-## Signing the install ISOs
+## Signing the install ISOs and images
 
 `tools/sign-images.sh DIR` signs `DIR/SHA256SUMS` as `DIR/SHA256SUMS.sig`
 ([decision 75](../../docs/wip/pkg-upgrade.md#decided)). The signature format is
@@ -34,8 +34,9 @@ the same as an index's: DER ECDSA P-256 over the SHA-256 of the file. Only
 chronium runs the script, as for a repository. Before signing, it checks:
 - `DIR/SHA256SUMS` keeps every line that
   `https://packages.pyxis.nexus/images/SHA256SUMS` serves, because every ISO
-  stays published;
-- every ISO in DIR is listed, and `sha256sum --check` passes.
+  and QEMU image stays published;
+- every `pyxis-*.iso` and `pyxis-*.qcow2` in DIR is listed, and `sha256sum
+  --check` passes.
 
 After signing, it checks the chain, CA:FALSE and the signature, copies both
 certificates into DIR, and prints the upload order. It uploads nothing.
@@ -44,6 +45,9 @@ Each release's publish signs `SHA256SUMS` again with the current leaf, so a
 new leaf takes over at the next release.
 
 ## Checking an install ISO
+
+A ready-to-run QEMU image, `pyxis-VERSION.qcow2`, is listed in the same
+`SHA256SUMS` and checked the same way; the last command then names it.
 
 From `https://packages.pyxis.nexus/images/`, download:
 - `pyxis-VERSION.iso`;

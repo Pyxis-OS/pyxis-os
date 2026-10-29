@@ -53,7 +53,8 @@ VARIANT_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.-]{0,63}")
 # library's ABI name, so the field does not assume a revision.
 ABI_PATTERN = re.compile(r"[0-9a-z][0-9a-z.-]{0,63}")
 REVISION_PATTERN = re.compile(r"[0-9a-f]{12}")
-SUMS_LINE = re.compile(r"([0-9a-f]{64})  (pyxis-[0-9a-z][0-9a-z.-]{0,63}\.iso)")
+# Each published install ISO and QEMU image (docs/wip/qemu-image.md) has a line.
+SUMS_LINE = re.compile(r"([0-9a-f]{64})  (pyxis-[0-9a-z][0-9a-z.-]{0,63}\.(?:iso|qcow2))")
 # Kinds built for one system, which must record the ABI they were built for: native
 # programs, and dev packages, whose libraries and headers form sdk://.
 BOUND_KINDS = ("program", "toolchain", "dev")

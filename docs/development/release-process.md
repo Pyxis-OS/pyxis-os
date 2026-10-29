@@ -145,8 +145,10 @@ the one added entry and `--abi` does not apply (a `release` entry has no `abi`).
 ## The QEMU image
 
 `tools/qemu-image.py` builds the release's ready-to-run image
-([plan](../wip/qemu-image.md)) from the release ISO, after the signed
-repositories are live, because the installer fetches `base` from `public`:
+([plan](../wip/qemu-image.md)) from the release ISO. It runs in the release flow,
+after `make release-image` has staged the ISO and its `SHA256SUMS` line, after
+the signed `public` and `releases` trees are uploaded, because the installer
+fetches `base` from the live `public`, and before `tools/sign-images.sh`:
 
 ```sh
 tools/qemu-image.py build "$OUT/images/pyxis-0.0.10.iso" "$OUT/images/pyxis-0.0.10.qcow2" \
@@ -170,13 +172,33 @@ screenshot; read both. Expect the release and revision of the tag, and `pkg:
 VERSION is already running` (the command exits with status 1 when nothing is
 newer). `--accel tcg` runs the same checks without KVM; raise `--timeout`.
 
-A build that does not reach the end of the install, or a screenshot that shows
-anything else, means the image is not published. The script does not retry.
+A build that does not reach the end of the install, a failed `verify`, or a
+screenshot that shows anything else means the image is not published. The script
+does not retry, and it removes an output that fails `verify`.
+
+**The image never blocks the release.** After a build that verified, list it,
+then sign:
+
+```sh
+(cd "$OUT/images" && sha256sum pyxis-0.0.10.qcow2 >> SHA256SUMS)
+tools/sign-images.sh "$OUT/images"
+```
+
+and upload the ISO, the image, the certificates if new, `SHA256SUMS` and its
+signature last, as `sign-images.sh` prints. If the image failed, do not list it:
+sign and publish the ISO alone, exactly as before, and report the failure with the
+script's output in the release thread. The `docs/releases.md` entry mentions the
+image only when it was published. A failed image can be built later against the
+same ISO and published with a second `sign-images.sh` run, which keeps every
+published line; each build is a new identity, and an image is never rebuilt under
+a published name.
 
 ## Signing and publication
 
 The release is signed with the intermediate CA that chronium issued from his
 homelab root; the keys stay with him
-([signing](../../packages/signing/README.md)). The signed ISO, `SHA256SUMS` and
-the repository indexes are uploaded only after his OK for that step; the site is
-deployed only after the files it links are live.
+([signing](../../packages/signing/README.md)). The signed ISO, the QEMU image,
+`SHA256SUMS` and the repository indexes are uploaded only after his OK for that
+step; `tools/sign-images.sh` runs last, after the image step, because the image
+needs the uploaded repositories. The site is deployed only after the files it
+links are live.
