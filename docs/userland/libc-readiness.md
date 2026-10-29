@@ -80,12 +80,14 @@ deadline survives native 30-second slices; expiry returns 0. Timeout objects are
 not modified. Empty fd sets wait on a real empty native set. There is no
 periodic scan/sleep emulation or guarantee against lock/scheduler latency.
 
-Both NULL and non-NULL ppoll/pselect sigmask pointers are accepted and ignored:
-Pyxis currently delivers no signals. Masks are not inspected and do not change
-Ctrl+C, resize or process-stop behavior. There is no synthetic EINTR or restart
-policy. The [parked signal design](../wip/control-events-faults.md#parked-libc-compatibility-proposal)
-requires these waits to gain real atomic mask/sleep/restoration semantics in the
-same milestone that enables delivery.
+`ppoll`/`pselect` use the real temporary-mask semantics of
+[cooperative libc signals](cooperative-signals.md), including atomic pending
+check/enrollment and restoration on every return path. NULL keeps the current
+mask; worker non-NULL masks fail ENOTSUP. Caught events interrupt waits with
+EINTR regardless of SA_RESTART, preserving staged revents/fd_sets. Signals made
+eligible only by restoring the caller's old mask preserve an already selected
+I/O/timeout result. Priority/band and populated exceptfds remain unsupported;
+native foreground interruption and raw Ctrl+C ownership are unchanged.
 
 ## Native ABI and rebuilding
 

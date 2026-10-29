@@ -20,18 +20,23 @@ native raw/cbreak or foreground-interruption contracts below.
 - [x] Descriptor readiness (chronium, 2026-10-28): `poll`/`ppoll`,
   `select`/`pselect`, shared `O_NONBLOCK`, directional native status-only
   observation and the eligible port-adapter reductions. See the
-  [descriptor contract](../userland/libc-readiness.md). Signal-mask pointers
-  are accepted as no-ops only while no signals are delivered.
+  [descriptor contract](../userland/libc-readiness.md). Temporary signal masks
+  have real meaning in the cooperative follow-up below.
 
-**Proposed and parked, not accepted:** cooperative libc `signal`/`sigaction`
-compatibility at audited blocking-call safe points, including resize/SIGWINCH
-and optional foreground SIGINT. Consider it only when a real port needs it;
-handler routing, masks, restart rules and receiver ownership remain undecided.
-Later mappings of control-channel stop/reload, child completion and clock
-expiry are also proposals for their first real consumers. Broken pipes already
-return EPIPE. No asynchronous compute-loop interruption, fault handlers or
-arbitrary-process `kill` is assigned. Native applications retain the
-[control/events/faults direction](control-events-faults.md).
+- [x] Cooperative libc signals (chronium, 2026-10-28): initial-thread WINCH
+  and opted-in INT; automatic rendering-terminal selection; real
+  sigaction/masks/pending/suspend and ppoll/pselect masks; audited delivery and
+  read restart; SA_RESTART/RESETHAND/NODEFER/SIGINFO. First consumers are
+  Fastfetch's generator and BusyBox less. See the
+  [implemented contract](../userland/cooperative-signals.md) and
+  [QEMU qualification](../development/experiments/cooperative-signals.md), including
+  actual Ctrl+C, masks and action flags. BusyBox less's upstream prompt-resize
+  defect remains documented and its report draft stays with chronium.
+
+Later control-channel TERM/HUP, owned-child CHLD and clock ALRM require their
+own source/consumer gates. The initial slice adds no asynchronous compute-loop
+interruption, fault handlers, arbitrary-process kill or job control. Native
+applications retain the [control/events/faults direction](control-events-faults.md).
 
 Ncurses already observes native resize and generates KEY_RESIZE inside the
 library; Hexcurse consumes that key. Preserve this existing path rather than
