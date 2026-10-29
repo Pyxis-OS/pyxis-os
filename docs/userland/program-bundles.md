@@ -148,6 +148,7 @@ interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 | `clock` | `read`, `sleep` |
 | `launcher` | `launch` |
 | `random`, `system_info` | `read` |
+| `process_view` | `list` (every space's processes) |
 | `echo` | `send` |
 | `tcp` | `connect`, `listen` |
 | `pipe` | `create` |
@@ -172,6 +173,14 @@ its declared grants, including optional JIT. Ordinary native children do not
 inherit JIT through environment aliases. Explicit native grants/transfers remain
 possible and apply to the receiving process. See [JIT memory](../interfaces/jit.md) for ownership,
 permission transitions, quotas and caller code-lifetime obligations.
+
+`procs --all` and other system-wide process listings declare
+`process_view/list` (chronium, 2026-10-29). Boot init passes a private view to
+every space's trusted startup, session, multiplexer and Remote handoffs, so under
+the temporary delivery policy below every bundle that declares it receives it.
+Like JIT, it never reaches ordinary children through environment aliases, and
+exact held-shell scripts offer a held copy to declaring children. Listing a
+program's own space needs no grant ([process listing](../interfaces/process-listing.md)).
 
 Unknown classes/rights, system-only setup, space-factory and raw-device requests
 reject even when optional. Selected external native grants use the bounded
