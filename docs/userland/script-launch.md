@@ -51,6 +51,33 @@ accepts LF or CRLF (or EOF without a newline), and permits spaces/tabs between
 arguments, quoting, trailing whitespace or recursive script interpreters.
 An invalid interpreter image is rejected by the native loader.
 
+### Bundle interpreters
+
+A shebang may name a bundle, for example `#!bin://shell.pxb`, or a command-view
+name that resolves to one. A bundle interpreter is launched exactly as that bundle
+would be launched explicitly, with the script handed over as `script`: the
+interpreter's manifest alone selects the grants, `app://`, resource directories
+and stack, from the sources the launcher holds. The script contributes no
+declarations. A shebang selects the default entry only; it has no command
+selector or arguments.
+
+`program_image_select_interpreter_bundle` takes the resolved command selection
+for the bundle. The preparation owns it until close and exposes the bundle with
+`program_image_interpreter_bundle`, and the launcher prepares the request from
+that policy (the shell runs its usual bundle preparation) before
+`program_launch_prepared` adds the `script` resource. The held entry FILE is the
+code, as for a native selection, and nothing is looked up again by name. A
+manifest grant, resource directory or entry named `script` refuses at selection
+with `CALL_ALREADY_EXISTS`; a bundle whose entry is a script is rejected by bundle
+open. Without a selection a bundle URI still fails, because interpreter lookup
+opens only FILEs. Only the shell selects bundle interpreters today; session
+handoff and boot init use native `boot://` interpreters. Lua and libuv launches
+are tracked in [#1591](https://git.internal/PyxisOS/pyxis-os/issues/1591).
+
+An interpreter bundle that is the exact held shell also takes the held-shell
+source and lifetime rules of [script authority](script-authority.md), as in an
+explicit launch of `shell.pxb`.
+
 The helper borrows the request, closes temporary interpreter/directory handles,
 and preserves all source grants on success or failure. Successful launch returns
 an owned process observer; failure returns no child. Prefixes and temporary

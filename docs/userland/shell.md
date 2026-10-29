@@ -935,7 +935,8 @@ typed there. This applies to foreground, pipeline, background and `$(...)`
 execution. A script cannot create missing sources or enable a space switch.
 An explicit `shell.pxb` launch, including `shell home://post.pxs`, remains bounded
 by its manifest and the caller's supplied grants; nested scripts retain that
-resulting shell context. Bundle-interpreter shebangs remain later work.
+resulting shell context. A shebang may name a `.pxb` bundle interpreter; it runs
+as that bundle, with its manifest grants ([script launch](script-launch.md#bundle-interpreters)).
 
 The script gets an owned subgroup; foreground commands and staging workers remain
 inside its subtree, and Ctrl+C stops the subtree and waits for retirement. Each
