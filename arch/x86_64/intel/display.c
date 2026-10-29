@@ -1,5 +1,8 @@
 /* Portions adapted from Linux: Copyright © 2022 Intel Corporation. See NOTICE. */
 #include <arch/intel/display.h>
+#include "display_internal.h"
+#include <kernel/boot/options.h>
+#include <kernel-config.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/mm/heap.h>
@@ -61,10 +64,12 @@ static bool read_bar(struct pci_address address, unsigned slot, uint64_t *base)
   return *base && !(*base & (PAGE_SIZE - 1));
 }
 
+static struct pci_claim display_claim;
+
 static bool device_ready(const struct pci_device *device, uint16_t *power)
 {
   struct pci_address address = device->address;
-  if (device->owner || device->base_class != DISPLAY_CLASS ||
+  if ((device->owner && device->owner != &display_claim) || device->base_class != DISPLAY_CLASS ||
       device->header_type != PCI_HEADER_ENDPOINT ||
       pci_read16(address, PCI_VENDOR_ID) != INTEL_VENDOR ||
       pci_read16(address, PCI_DEVICE_ID) != PANTHER_LAKE_DEVICE ||
@@ -100,12 +105,13 @@ static bool device_ready(const struct pci_device *device, uint16_t *power)
 
 
 static const uint32_t register_pages[] = {
-  0x41000, 0x42000, 0x45000, 0x51000,
+  0x41000, 0x42000, 0x44000, 0x45000, 0x51000,
   0x60000, 0x61000, 0x62000, 0x63000, 0x68000, 0x69000,
   0x70000, 0x71000, 0x72000, 0x73000, 0x78000,
 };
 static uintptr_t windows[sizeof(register_pages) / sizeof(register_pages[0])];
 static uintptr_t gtt_windows[GGTT_PAGES];
+static bool gtt_writable[GGTT_PAGES];
 static const struct boot_info *boot_info;
 static struct pci_device *display_device;
 static uint64_t register_bar, aperture_bar;
@@ -686,7 +692,8 @@ void intel_display_prepare(const struct boot_info *boot)
   }
   gmd_identity = gmd;
   for (size_t i = 0; i < sizeof(register_pages) / sizeof(register_pages[0]); ++i) {
-    if (!windows[i] && !map_page(register_pages[i], register_pages[i] == 0x45000, &windows[i])) {
+    if (!windows[i] && !map_page(register_pages[i], register_pages[i] == 0x45000 ||
+            (CONFIG_INTEL_INHERITED_FLIP && (register_pages[i] == 0x44000 || register_pages[i] == 0x70000)), &windows[i])) {
       kinfo("intel-display: unavailable: register mapping at %x\n", register_pages[i]);
       unmap_windows();
       return;
@@ -762,6 +769,11 @@ void intel_display_prepare(const struct boot_info *boot)
       }
     }
   }
+  if (!fenced && stable && second_state.pipes[0].valid && second_state.pipes[0].transcoder_valid &&
+      CONFIG_INTEL_INHERITED_FLIP && boot_options_get()->display_flip && intel_flip_prepare_inherited(boot, display_device, register_bar, aperture_bar)) {
+    kinfo("intel-display: flip owner retained; qualified power domains and DC0 held\n");
+    return;
+  }
   if (!fenced && release_holds()) {
     unmap_windows();
     if (fenced) {
@@ -774,4 +786,80 @@ void intel_display_prepare(const struct boot_info *boot)
     kinfo("intel-display: startup readout complete stable=%u qualified-pipes=%x; scanout ownership/latch/retirement unproven\n",
         stable, qualified_pipes);
   }
+}
+
+bool intel_display_holds_valid(void)
+{
+  return !fenced && holds_stable();
+}
+
+void intel_display_fence(const char *reason)
+{
+  fence_access(reason);
+}
+
+uint32_t intel_display_read(uint32_t offset)
+{
+  KASSERT(!fenced);
+  return read_register(offset);
+}
+
+bool intel_display_claim(void)
+{
+  return !fenced && pci_reserve_device(display_device, &display_claim);
+}
+
+static void flip_register_write(uint32_t offset, uint32_t value)
+{
+  KASSERT(CONFIG_INTEL_INHERITED_FLIP && !fenced);
+  for (size_t i = 0; i < sizeof(register_pages) / sizeof(register_pages[0]); ++i) {
+    if ((offset & ~(uint32_t)(PAGE_SIZE - 1)) == register_pages[i]) {
+      *(volatile uint32_t *)(windows[i] + (offset & (PAGE_SIZE - 1))) = value;
+      return;
+    }
+  }
+  KASSERT(false);
+}
+
+void intel_display_write_surface(uint32_t surface)
+{
+  KASSERT(!(surface & ~PLANE_SURFACE_MASK));
+  flip_register_write(PLANE_BASE(0, 0) + PLANE_SURFACE, surface);
+}
+
+void intel_display_flip_event_control(bool record)
+{
+  const uint32_t done = 1u << 3;
+  uint32_t ier = read_register(0x4440c);
+  flip_register_write(0x4440c, ier & ~done);
+  uint32_t imr = read_register(0x44404);
+  flip_register_write(0x44404, record ? imr & ~done : imr | done);
+}
+
+void intel_display_clear_flip_event(void)
+{
+  flip_register_write(0x44408, 1u << 3);
+}
+
+bool intel_display_gtt_read(uint64_t gpu, uint64_t *value)
+{
+  return !fenced && read_gtt(gpu, value);
+}
+
+uint64_t *intel_display_gtt_write_window(uint64_t gpu)
+{
+  KASSERT(CONFIG_INTEL_INHERITED_FLIP && !fenced && gpu < GGTT_ADDRESS_BYTES && !(gpu & (PAGE_SIZE - 1)));
+  uint64_t value;
+  if (!read_gtt(gpu, &value)) {
+    return NULL;
+  }
+  unsigned page = (gpu / PAGE_SIZE) * sizeof(uint64_t) / PAGE_SIZE;
+  if (!gtt_writable[page]) {
+    if (vm_protect(vm_kernel_space(), gtt_windows[page], PAGE_WRITE) != MM_OK) {
+      fence_access("GGTT write-window admission uncertain");
+      return NULL;
+    }
+    gtt_writable[page] = true;
+  }
+  return (uint64_t *)(gtt_windows[page] + ((gpu / PAGE_SIZE) * sizeof(uint64_t) & (PAGE_SIZE - 1)));
 }

@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/clock.h>
 #include <arch/amd/renoir_flip.h>
+#include <arch/intel/display.h>
 #include <kernel/boot/options.h>
 #include <kernel/display.h>
 #include <kernel/display_capture.h>
@@ -44,6 +45,7 @@ static uintptr_t staging;
 static bool frame_blank;
 /* Scanout source while blanked. All-zero bytes are black in every channel layout. */
 static uint8_t black_chunk[DISPLAY_COPY_BYTES];
+static bool intel_flipping;
 static bool flip_enabled, flip_pending, flip_completed, presentation_metrics, cursor_probe_enabled;
 static uint64_t frame_started, frame_compose, frame_copy;
 static uint64_t compose_total, copy_total, metric_frames;
@@ -51,7 +53,81 @@ static uint64_t compose_max, copy_max;
 static atomic_bool flip_failed;
 /* Prepared before AP startup and retained until reboot. Panic never queries
  * the GPU, including while normal completion polling is interrupted. */
-static const struct framebuffer *panic_surfaces[2];
+static const struct framebuffer *panic_surfaces[3];
+
+enum display_flip_state {
+  DISPLAY_FLIP_OFF, DISPLAY_FLIP_READY, DISPLAY_FLIP_PENDING,
+  DISPLAY_FLIP_FALLBACK, DISPLAY_FLIP_FAILED,
+};
+
+static enum display_flip_state renoir_state(enum renoir_flip_state state)
+{
+  switch (state) {
+    case RENOIR_FLIP_OFF: return DISPLAY_FLIP_OFF;
+    case RENOIR_FLIP_READY: return DISPLAY_FLIP_READY;
+    case RENOIR_FLIP_PENDING: return DISPLAY_FLIP_PENDING;
+    case RENOIR_FLIP_FALLBACK: return DISPLAY_FLIP_FALLBACK;
+    case RENOIR_FLIP_FAILED: return DISPLAY_FLIP_FAILED;
+  }
+  KASSERT(false);
+  return DISPLAY_FLIP_FAILED;
+}
+
+static enum display_flip_state intel_state(enum intel_flip_state state)
+{
+  switch (state) {
+    case INTEL_FLIP_OFF: return DISPLAY_FLIP_OFF;
+    case INTEL_FLIP_READY: return DISPLAY_FLIP_READY;
+    case INTEL_FLIP_DEFERRED:
+    case INTEL_FLIP_PENDING: return DISPLAY_FLIP_PENDING;
+    case INTEL_FLIP_FAILED: return DISPLAY_FLIP_FAILED;
+  }
+  KASSERT(false);
+  return DISPLAY_FLIP_FAILED;
+}
+
+static enum display_flip_state flip_state(void)
+{
+  return intel_flipping ? intel_state(intel_flip_state()) : renoir_state(renoir_flip_state());
+}
+
+static enum display_flip_state flip_poll(void)
+{
+  if (!intel_flipping) {
+    return renoir_state(renoir_flip_poll());
+  }
+  enum intel_flip_state state = intel_flip_poll();
+  if (state == INTEL_FLIP_DEFERRED && !display_is_panicking()) {
+    /* The staged frame/back remains leased while the keepout defers its arm.
+     * Hardware completion polling itself never writes registers. */
+    atomic_store(&writer, cpu_initial_apic_id());
+    if (!display_is_panicking()) {
+      state = intel_flip_retry();
+    }
+    cpu_store_fence();
+    atomic_store(&writer, DISPLAY_NO_WRITER);
+  }
+  return intel_state(state);
+}
+
+static const struct framebuffer *flip_back(void)
+{
+  return intel_flipping ? intel_flip_back() : renoir_flip_back();
+}
+
+static enum display_flip_state flip_submit(void)
+{
+  return intel_flipping ? intel_state(intel_flip_submit()) : renoir_state(renoir_flip_submit());
+}
+
+static void flip_cancel(void)
+{
+  if (intel_flipping) {
+    intel_flip_cancel_prepare();
+  } else {
+    renoir_flip_cancel_prepare();
+  }
+}
 
 /* Runtime availability is BSP-owned. Publish failure after backend waits and
  * outside rendering locks, then wake observers before restoring interrupts. */
@@ -116,9 +192,18 @@ void display_init(const struct boot_info *boot, const char *size, const char *ti
   presentation_metrics = options->display_flip_metrics || options->display_cursor_probe;
   cursor_probe_enabled = options->display_cursor_probe;
   if (driver == DISPLAY_BOOT && options->display_flip) {
-    flip_enabled = renoir_flip_prepare(boot, target, options->display_flip_metrics);
-    if (flip_enabled) {
-      panic_surfaces[1] = renoir_flip_surface(1);
+    if (intel_flip_state() == INTEL_FLIP_READY) {
+      intel_flipping = flip_enabled = true;
+      panic_surfaces[1] = intel_flip_surface(1);
+      panic_surfaces[2] = intel_flip_surface(2);
+    } else if (intel_flip_state() == INTEL_FLIP_FAILED) {
+      failed = true;
+      atomic_store(&flip_failed, true);
+    } else {
+      flip_enabled = renoir_flip_prepare(boot, target, options->display_flip_metrics);
+      if (flip_enabled) {
+        panic_surfaces[1] = renoir_flip_surface(1);
+      }
     }
   } else if (options->display_flip) {
     kdebug("renoir-flip: unavailable: not a firmware framebuffer backend\n");
@@ -153,10 +238,10 @@ static bool start_display(void)
       if (flip_enabled && !staging) {
         /* Qualification alone grants no submission without a complete staged
          * image. Cancel before the first GPU write; keep backing pinned. */
-        renoir_flip_cancel_prepare();
+        flip_cancel();
         flip_enabled = false;
       }
-      ready = true;
+      ready = !failed;
       break;
     case DISPLAY_VIRTIO_GPU:
       ready = virtio_gpu_start();
@@ -253,8 +338,8 @@ bool display_skip_frame(void)
   if (flip_enabled) {
     /* Changed frames prove ownership before their copy/submit. Idle ticks
      * retain the same full READY/FALLBACK check without writing either front. */
-    enum renoir_flip_state state = renoir_flip_poll();
-    if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
+    enum display_flip_state state = flip_poll();
+    if (state == DISPLAY_FLIP_FAILED || state == DISPLAY_FLIP_OFF) {
       atomic_store(&flip_failed, true);
       set_availability(false);
     }
@@ -456,9 +541,9 @@ static void copy_flip_surface(const struct framebuffer *surface)
 
 /* Read-only validation/polling runs without the writer. A timeout retains
  * both possible fronts and copies the same immutable composite into each. */
-static bool finish_flip(enum renoir_flip_state state)
+static bool finish_flip(enum display_flip_state state)
 {
-  if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
+  if (state == DISPLAY_FLIP_FAILED || state == DISPLAY_FLIP_OFF) {
     atomic_store(&flip_failed, true);
     set_availability(false);
     return false;
@@ -466,13 +551,13 @@ static bool finish_flip(enum renoir_flip_state state)
   if (display_is_panicking()) {
     return false;
   }
-  if (state == RENOIR_FLIP_READY) {
+  if (state == DISPLAY_FLIP_READY) {
     if (presentation_metrics) {
       record_frame_cost(frame_compose, frame_copy);
     }
     return true;
   }
-  if (state == RENOIR_FLIP_FALLBACK) {
+  if (state == DISPLAY_FLIP_FALLBACK) {
     uint64_t started = presentation_metrics ? arch_monotonic_ns() : 0;
     atomic_store(&writer, cpu_initial_apic_id());
     if (!display_is_panicking()) {
@@ -506,54 +591,54 @@ bool display_frame_poll(void)
     flip_pending = false;
     return false;
   }
-  enum renoir_flip_state state = renoir_flip_poll();
-  flip_completed = state == RENOIR_FLIP_READY;
-  flip_pending = state == RENOIR_FLIP_PENDING && !display_is_panicking();
+  enum display_flip_state state = flip_poll();
+  flip_completed = state == DISPLAY_FLIP_READY;
+  flip_pending = state == DISPLAY_FLIP_PENDING && !display_is_panicking();
   return finish_flip(state);
 }
 
 static bool end_flip_frame(const struct pointer_frame *frame)
 {
-  enum renoir_flip_state state = renoir_flip_state();
+  enum display_flip_state state = flip_state();
   if (presentation_metrics) {
     frame_compose = arch_monotonic_ns() - frame_started;
   }
-  if (frame && available && !display_is_panicking() && state == RENOIR_FLIP_READY) {
+  if (frame && available && !display_is_panicking() && state == DISPLAY_FLIP_READY) {
     /* Prove that the back remains free before its first store, then reclaim
      * the direct writer. Submission also revalidates after the fenced copy. */
     cpu_store_fence();
     atomic_store(&writer, DISPLAY_NO_WRITER);
-    state = renoir_flip_poll();
+    state = flip_poll();
     atomic_store(&writer, cpu_initial_apic_id());
-    if (state == RENOIR_FLIP_READY && !display_is_panicking()) {
-      const struct framebuffer *back = renoir_flip_back();
+    if (state == DISPLAY_FLIP_READY && !display_is_panicking()) {
+      const struct framebuffer *back = flip_back();
       KASSERT(back);
       uint64_t started = presentation_metrics ? arch_monotonic_ns() : 0;
       copy_flip_surface(back);
       cpu_store_fence();
       frame_copy = presentation_metrics ? arch_monotonic_ns() - started : 0;
       if (!display_is_panicking()) {
-        state = renoir_flip_submit();
+        state = flip_submit();
       }
     }
   }
-  if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
+  if (state == DISPLAY_FLIP_FAILED || state == DISPLAY_FLIP_OFF) {
     atomic_store(&flip_failed, true);
   }
   cpu_store_fence();
   atomic_store(&writer, DISPLAY_NO_WRITER);
-  if (state == RENOIR_FLIP_FAILED || state == RENOIR_FLIP_OFF) {
+  if (state == DISPLAY_FLIP_FAILED || state == DISPLAY_FLIP_OFF) {
     return finish_flip(state);
   }
   if (!frame || !available || display_is_panicking()) {
     return false;
   }
-  if (state == RENOIR_FLIP_FALLBACK) {
-    state = renoir_flip_poll();
+  if (state == DISPLAY_FLIP_FALLBACK) {
+    state = flip_poll();
   }
-  flip_pending = state == RENOIR_FLIP_PENDING;
+  flip_pending = state == DISPLAY_FLIP_PENDING;
   /* Submission alone cannot confirm that the staged image became visible. */
-  if (state == RENOIR_FLIP_READY) {
+  if (state == DISPLAY_FLIP_READY) {
     return false;
   }
   return finish_flip(state);
@@ -625,5 +710,5 @@ const struct framebuffer *display_panic_target(void)
 
 const struct framebuffer *display_panic_surface(unsigned index)
 {
-  return index < 2 ? panic_surfaces[index] : NULL;
+  return index < 3 ? panic_surfaces[index] : NULL;
 }
