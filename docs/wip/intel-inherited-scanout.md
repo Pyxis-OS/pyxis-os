@@ -234,9 +234,10 @@ slots with DM clear. The inherited stolen range remains reserved, including
 after the first flip; do not overwrite its PTEs or allocate adjacent stolen
 storage. A failed alias check leaves the existing copy backend running.
 
-The GGTT address allocator must import inherited mappings and reference-defined
-firmware reservations under exclusive device ownership; zero PTEs alone are
-not allocation authority. The inherited span crosses Linux's GuC-specific
+Under exclusive device ownership and the accepted live-consumer proof, the
+GGTT allocator preserves inherited nonzero mappings, excludes the live GOP and
+reference-defined firmware reservations, and claims only a verified-zero span.
+Zero PTEs without that ownership/consumer proof are not allocation authority. The inherited span crosses Linux's GuC-specific
 `0xfee00000` allocator ceiling, which is not permission to truncate it. New
 UMA mappings require a proven DMA/IOMMU address contract, CPU WC/cache-alias
 handling and the inherited PAT interpretation. No guessed identity DMA or
@@ -718,8 +719,8 @@ buffers.
 **Accepted (chronium, 2026-10-29), narrowed option 2:** program ONLY graphics
 PAT entry3 to Linux xe's display value`0x3c` (L3/L4UC, no-snoop, compression-off),
 leaving entries0–2 unchanged. This explicitly revisits the earlier no-PAT-write
-boundary. Before writing, prove that no existing present GGTT PTE, including
-GOP's complete span, and no other known consumer selects index3. Use the
+boundary. Before writing, apply the accepted live-consumer proof below; the later
+2026-10-29 decision replaces the global absence-of-PAT3-PTE condition. Use the
 reference forcewake/MCR protocol and log before/after. A failed proof makes no
 PAT write and keeps ordinary copying; it must not refuse boot.
 
@@ -742,8 +743,9 @@ bootstrap owner, recheck all of the following:
   execution queue invalid with no valid, pending or active entry. Do not
   interpret historical switch reasons or the undefined reset context ID as
   pending work. Retain two raw status snapshots in the log.
-- A complete import of every inherited GGTT entry, including the complete GOP
-  alias, finds no present PTE selecting PAT3. Any unknown/read failure refuses.
+- Before changing PAT3, every PTE in the complete live GOP span uses another
+  PAT index. Unknown/read failure refuses. Dormant entries outside the proven
+  live consumers do not prevent the write.
 
 The engine queue predicate uses the modern execution-queue layout (Gen12 PRM,
 Vol2c Part1, printed pages893–895); pinned xe reads the same status registers
@@ -753,7 +755,8 @@ References at Linux`05f7e89ab9731565d8a62e3b5d1ec206485eeb0b`:
 [GuC reset](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_guc.c),
 [GSC initialization](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gsc.c).
 
-Keep all relevant holds through the GGTT import and final recheck. With the
+Keep all relevant holds through the bounded zero-span search and final live
+GOP/submitter recheck. With the
 proof confirmed, the existing MCR multicast protocol may program only PAT3
 with`0x3c`, logging before/after; PAT0–2 and all inherited PTEs remain untouched.
 An already-qualified inherited uncached entry needs no PAT write. Only the two
@@ -904,3 +907,37 @@ was2967ms total, with2947ms after alias inspection. The existing timestamps
 bracket approximately1570ms for DMA/GGTT mapping/import plus a consumer recheck,
 and1273ms after PAT admission for buffer setup, PTE publication and cleanup.
 They do not yet isolate the individual operations inside either interval.
+
+### Live-consumer PAT admission and bounded search (R9)
+
+**Accepted (chronium, 2026-10-29):** replace the global “no PAT3 PTE anywhere”
+condition with live-consumer admission. Retain the stable GuC-reset,
+GSC-not-loaded, idle-engine/no-current-or-pending-context, no-host-submission
+proof and the single stable GOP-only display profile. Before changing PAT3,
+check the actual PAT bits of every live GOP PTE. A live GOP reference to3
+prevents that write; an already-qualified inherited UC entry needs no table
+change. Dormant descriptors outside proven live consumers are not users.
+
+**Accepted (chronium, 2026-10-29):** preserve every inherited nonzero PTE and
+all reference reserved ranges. Search for a sufficient verified-zero span,
+stop when found, then recheck zero before publishing each new PTE. Do not run
+an unconditional million-entry import, clear old entries or recover old
+physical pages. Exhausted space or the existing setup budget keeps ordinary
+copying. Reclamation needs its own later ownership/remap/completion rule.
+Remaining mappings can accumulate across warm reboots; this is a GGTT virtual
+address limit, not permission to reserve or read their former physical backing.
+
+R8 at641f6ef3 correctly reached GT setup and saw10,126 PAT3 descriptors with
+PAT0–3 reset to0. R6 allocated exactly two5,063-page buffers at
+`[0x00800000,0x01bc7000)` and`[0x01bc7000,0x02f8e000)`, disjoint from GOP
+`[0xfec00000,0xfffc7000)`. This supports warm persistence, but the aggregate R8
+capture does not prove those locations or old physical-frame provenance.
+R9 logs complete GOP PAT counts, chosen zero span, and encountered retained
+PAT3 count/address bounds; its acceptance never depends on matching R6.
+
+R8 measured57.173ms GGTT CPU-span setup and1486.009ms scalar import, out of
+1655.526ms total display preparation. It refused before new UMA preparation,
+so did not measure the native MM batching saving. R9 removes the mandatory
+full import, retains narrow aligned64-bit accesses and maps only needed
+read-only GGTT CPU windows. No wider-read/WC shortcut, reset, new invalidation
+or context-memory access is added. Native qualification remains pending.
