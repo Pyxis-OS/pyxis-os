@@ -1028,11 +1028,11 @@ Open qualification items (chronium, 2026-10-28):
 [Qualification record](../development/experiments/rtl8922ae-hopping.md).
 These checkboxes do not complete full admitted-mask discovery or cancellation.
 
-## Next discovery slice — proposal (2026-10-29)
+## Next discovery slice — accepted (chronium, 2026-10-29)
 
-**Proposal only; decisions pending.** Recommend closing the two observation
-gaps, then broadening the same firmware-offload path to the admitted channel
-1–11 set. This is a useful world-domain sweep, not complete 2.4 GHz support.
+Close the two observation gaps, then broaden the same firmware-offload path to
+the admitted channel 1–13 set. Follow Linux's regulatory distinction: world
+channels 12–13 are passive/listen-only under NO_IR, not omitted from discovery.
 Keep the existing opt-in backend, READ/SCAN grants, world/configured-country
 rules, platform/SAR restrictions and request-driven activation. Release target
 remains 0.0.10 if ready before release, otherwise 0.0.11.
@@ -1048,7 +1048,7 @@ Inspected main `397a22bffdd8b8be79829754e381abfdb6eb5e2e`, userland
   prepared mask. A zero/default request is currently refused.
 - [`rtl8922ae_scan.c:51–53,411–440`](../../kernel/wifi/rtl8922ae_scan.c#L411)
   has an authored two-element list bound; BE entries are 32 bytes with a
-  four-byte list header. Eleven entries fit the existing 2,000-byte H2C payload
+  four-byte list header. Thirteen entries fit the existing 2,000-byte H2C payload
   bound and Linux's BE list limit (`fw.h:338–344`). Follow pinned Linux
   `fw.c:5644–5750,7774–7877` for this list; no host channel walker or new
   transport is needed.
@@ -1058,19 +1058,20 @@ Inspected main `397a22bffdd8b8be79829754e381abfdb6eb5e2e`, userland
 - Existing extended PHY status has historical observations but no fact showing
   that the startup active-MAC branch ran. Successful scanning cannot supply it.
 
-### Decisions for this delivery
+### Accepted decisions (chronium, 2026-10-29)
 
-1. **Channel profile and default request. Proposed default:** support any
-   nonempty explicit subset of channels 1–11 admitted by the effective host,
-   regdb and existing calibration profile. An omitted/zero mask selects that
-   complete admitted set; publish the actual selected mask in the result.
+1. **Channel profile and default request.** Default scans cover the admitted
+   channel 1–13 set under the effective host/regdb rules; world channels 12–13
+   use the reference passive/listen-only mode. An omitted/zero mask selects
+   that complete admitted set; publish the actual selected mask in the result.
    An explicit request is exact: refuse unsupported/restricted bits before
    effects rather than silently dropping them. An empty admitted set remains
-   unavailable. Keep channels 12–13, NO_IR-only startup and channel 14 outside
-   this delivery, even if a configured country permits more. No probes or
-   automatic scan is added. This avoids calling a 1–11 scan a complete
-   world-domain or full-band scan.
-2. **Power and retained context. Proposed default:** generalize the accepted
+   unavailable. NO_IR is permission to listen, not to calibrate or transmit
+   there; retain the existing prohibition on borrowing a calibration channel
+   outside the requested mask. Resolve the reference's NO_IR-only startup
+   behavior when that task is reached. Channel 14, probes and automatic scans
+   remain outside this slice.
+2. **Power and retained context.** Generalize the accepted
    conservative image to every requested channel: lower corresponding signed
    firmware/SAR/numeric-regdb limits, with compatible by-rate/shape/other
    controls, before any TX-capable RFK. Initialize both existing DBCC contexts
@@ -1082,7 +1083,7 @@ Inspected main `397a22bffdd8b8be79829754e381abfdb6eb5e2e`, userland
    default full-set request can repeat without changing that mask. Starting
    with a narrow explicit request still requires a fresh boot before a broader
    default request; this is a slice limit, not the eventual connection contract.
-3. **Observable proof. Proposed default:** retain validity-qualified historical
+3. **Observable proof.** Retain validity-qualified historical
    startup facts in the existing extended PHY STATUS state word: initial MAC
    state observed, active state seen, normalization attempted and normalization
    completed. Completed means the power-off handshakes and ensuing power-on
@@ -1092,46 +1093,63 @@ Inspected main `397a22bffdd8b8be79829754e381abfdb6eb5e2e`, userland
    orchestrator-provided AP whose channel is independently known, with its
    identities kept private. Use natural warm handoffs to observe the startup
    branch; do not force hardware state or fabricate frames. A non-active initial
-   MAC or absent channel-6 BSS leaves that observation open, not a driver
-   failure or permission for an unplanned retry.
+   MAC leaves that branch observation open, not permission for an unplanned retry.
+
+**Channel-6 bug evidence (chronium, 2026-10-29):** his main 2.4 GHz network is
+already on channel 6 near vela. Yesterday's two 1+6 scans returned all 4/5
+records on channel 1. Task 1 must explain whether the expected BSSID was not
+received or its PPDU/channel attribution was wrong; do not dismiss it as a
+missing test AP. Compare the exact BE IE layout/field Linux uses and the BSSIDs
+actually observed. Network identifiers stay in private qualification inputs and
+evidence, never repository text or public logs.
+
+**Further direction (chronium, 2026-10-29):** re-prepare the retained context in
+place so a broader mask does not need a reboot, as Linux permits. The exact-mask
+limit above is temporary. Design its ownership, retirement and failure handling
+at that task; do not implement an unreviewed reset/retry mechanism in task 1.
 
 ### Ordered delivery
 
-Each implementation task needs its own assignment; native windows are separately
-scheduled by the orchestrator. The first two tasks implement the proposed slice.
+Task 1 is assigned (chronium, 2026-10-29). Later implementation tasks need their
+own assignment; native windows are separately scheduled by the orchestrator.
 
-1. **Small first task: status facts and targeted attribution.** Capture the
+1. [ ] **Small first task: status facts and channel-6 bug investigation.** Capture the
    current baseline before changes, add the observational startup facts and
-   matching SDK flag validation/status reader, then qualify the existing 1+6 path against the known
-   channel-6 AP. Check a genuine PPDU-attributed record for that AP, independent
-   FILEs across repetition and the startup facts. Report only redacted results;
-   preserve unresolved observations without claiming coverage.
+   matching SDK flag validation/status reader, and audit channel decoding against
+   pinned Linux. Compare observed BSSIDs privately with the known channel-6
+   network, fix any demonstrated decoder/receive bug, then qualify the existing
+   1+6 path and independent FILEs across repetition. Report only redacted results;
+   an unexplained missing known network remains a bug, not a qualification pass.
    **After this task chronium can:** tell whether startup normalized an active
    MAC, and inspect evidence for a genuinely second-channel BSS.
-2. **Admitted 1–11 sweep.** Generalize common-image construction and the bounded
+2. [ ] **Admitted 1–13 sweep.** Generalize common-image construction and the bounded
    BE list, implement the default-mask semantics and retain existing 512-candidate/
    128-result bounds, successful TRUNCATED handling and immutable publication
-   after END/RX retirement. Qualify explicit subsets and the default full set,
+   after END/RX retirement. Follow Linux's receive-only tuning and passive/listen
+   flags on NO_IR channels, without calibration TX there. Qualify explicit
+   subsets and the default full set,
    both known channels, repeated retained scans/held FILEs, unchanged RFK,
    endpoint power checks, deadlines and wired management. Use shared 1+6 scans
    and wired controls for matched interleaved current/new measurements; report
    the new wider sweep's cost separately. Distinguish first startup from retained
    scans; QEMU cannot qualify this radio.
    **After this task chronium can:** run `wifi scan` for the currently admitted
-   channel 1–11 set without spelling a mask.
+   channel 1–13 set without spelling a mask, including world-domain passive
+   listening on 12–13.
 
 ### Route from discovery to association
 
-The following are later tasks, not decisions or implementation authorizations
-in this proposal. Raise their shaping choices when each task is assigned.
+The following are later tasks, not implementation authorizations from these
+decisions. Raise their shaping choices when each task is assigned.
 
-3. **Remaining passive profile and lifecycle.** Separately qualify receive-only
-   retuning/listening on NO_IR channels 12–13, cancellation/withdrawal, physical
-   rfkill where available and safe re-admission. Keep the accepted recovery
-   requirement; a reboot-only bring-up limit is not the everyday contract.
-   NO_IR support need not block an explicit OPEN target on a qualified channel.
-   **After this task chronium can:** distinguish broader passive discovery and
-   qualified cancellation/recovery from the initial 1–11 profile.
+3. **In-place context re-preparation and lifecycle.** Replace the exact-mask
+   reboot limit with checked in-place retirement/re-preparation while held scan
+   FILEs remain immutable. Qualify cancellation/withdrawal, physical rfkill where
+   available and safe re-admission. Keep the accepted recovery requirement;
+   a reboot-only bring-up limit is not the everyday contract. This need not
+   block an explicit OPEN target on an already qualified channel.
+   **After this task chronium can:** broaden a scan mask without rebooting and
+   use the qualified cancellation/recovery path.
 4. **Legacy station transport and OPEN target.** Establish real management/data
    TX, release/completion, RX metadata and retirement before auth/association.
    Replace the scan-only NOLINK role with a reference-aligned station transition;
