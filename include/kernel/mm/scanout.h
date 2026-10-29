@@ -14,4 +14,15 @@ bool scanout_prepare(const struct boot_info *boot, phys_addr_t pool, size_t pool
     size_t gop_end, size_t payload, struct scanout_storage *storage);
 /* Private, never published to GPU or panic. Bootstrap failure unwind only. */
 void scanout_discard(struct scanout_storage *storage);
+
+struct scanout_pages {
+  uintptr_t address;
+  phys_addr_t *frames;
+  size_t bytes;
+};
+/* BSP/IF=0 before AP startup. Allocate caller-owned PMM pages with one RW/NX/WC
+ * mapping and no WB aliases; backing is pinned once published to the GPU.
+ * Only discard an unpublished result, before any device reference exists. */
+bool scanout_pages_prepare(size_t bytes, uint64_t deadline, struct scanout_pages *storage);
+void scanout_pages_discard(struct scanout_pages *storage);
 #endif

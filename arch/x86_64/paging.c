@@ -853,6 +853,35 @@ void arch_frame_unmap(void)
   unmap_scratch(SCRATCH_DATA);
 }
 
+bool arch_frames_prepare_scanout(const phys_addr_t *physical, size_t count)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !arch_cpu_count());
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  uint32_t eax, ebx, ecx, edx;
+  cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
+  unsigned line_bytes = ((ebx >> CPUID_CLFLUSH_SIZE_SHIFT) & CPUID_CLFLUSH_SIZE_MASK) * 8;
+  if (!(edx & CPUID_FEATURE_CLFLUSH) || !line_bytes) {
+    return false;
+  }
+  if (!physical || !count || count > PMM_FRAME_BATCH_MAX) {
+    return false;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    uint8_t *mapped = arch_frame_map(physical[i]);
+    for (size_t offset = 0; offset < PAGE_SIZE; offset += line_bytes) {
+      __asm__ volatile("clflush (%0)" : : "r"(mapped + offset) : "memory");
+    }
+    __asm__ volatile("mfence" : : : "memory");
+    arch_frame_unmap();
+  }
+  return true;
+}
+
+bool arch_frame_prepare_scanout(phys_addr_t physical)
+{
+  return arch_frames_prepare_scanout(&physical, 1);
+}
+
 #define CPUID_FEATURE_MTRR (1u << 12)
 #define IA32_MTRRCAP 0xfe
 #define IA32_MTRR_PHYSBASE0 0x200
@@ -1630,9 +1659,9 @@ enum mm_result arch_page_map(struct arch_address_space *space,
   return map_page(space, virtual, physical, permissions, 0, true);
 }
 
-enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t virtual,
-                                 size_t count, const phys_addr_t *physical,
-                                 unsigned permissions, size_t *mapped)
+static enum mm_result map_run(struct arch_address_space *space, uintptr_t virtual,
+    size_t count, const phys_addr_t *physical, unsigned permissions,
+    uint64_t cache_flags, size_t *mapped)
 {
   require_kernel_mutator(space, virtual);
   *mapped = 0;
@@ -1672,7 +1701,7 @@ enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t vir
   }
   if (vacant) {
     for (size_t i = 0; i < count; ++i) {
-      entries[first + i] = physical[i] | leaf_flags(permissions);
+      entries[first + i] = physical[i] | leaf_flags(permissions) | cache_flags;
     }
   }
   unmap_scratch(SCRATCH_TABLE);
@@ -1687,6 +1716,12 @@ enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t vir
   }
   *mapped = count;
   return MM_OK;
+}
+
+enum mm_result arch_page_map_run(struct arch_address_space *space, uintptr_t virtual,
+    size_t count, const phys_addr_t *physical, unsigned permissions, size_t *mapped)
+{
+  return map_run(space, virtual, count, physical, permissions, 0, mapped);
 }
 
 enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical)
@@ -1753,6 +1788,26 @@ enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical)
   }
   return map_page(&kernel_space, virtual, physical, PAGE_WRITE,
       PTE_PAT_4K | PTE_WRITE_THROUGH, true);
+}
+
+enum mm_result arch_page_map_scanout_run(uintptr_t virtual, const phys_addr_t *physical,
+    size_t count, size_t *mapped)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(active && !arch_cpu_count());
+  *mapped = 0;
+  uint64_t pat = read_msr(IA32_PAT);
+  if (!physical || !count || count > PMM_FRAME_BATCH_MAX ||
+      ((pat >> (PAT_FRAMEBUFFER_INDEX * PAT_ENTRY_BITS)) & PAT_TYPE_MASK) != PAT_WRITE_COMBINING) {
+    return MM_INVALID;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    if (paging_display_aperture_overlaps(physical[i], PAGE_SIZE)) {
+      return MM_INVALID;
+    }
+  }
+  return map_run(&kernel_space, virtual, count, physical, PAGE_WRITE,
+      PTE_PAT_4K | PTE_WRITE_THROUGH, mapped);
 }
 
 bool paging_display_aperture_overlaps(phys_addr_t physical, size_t bytes)

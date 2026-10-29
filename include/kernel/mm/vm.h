@@ -185,6 +185,10 @@ enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physic
 enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical);
 /* Boot-only driver-owned scanout page, RW/NX/WC; caller excludes aliases. */
 enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical);
+/* Bootstrap-only WC scanout, one reservation, at most PMM_FRAME_BATCH_MAX
+ * frames per call. A successful run may stop at a leaf-table boundary. */
+enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped);
 /* Structural owner, IF=0, before publication: scan kernel ranges for aliases. */
 bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes);
 struct vm_physical_range {

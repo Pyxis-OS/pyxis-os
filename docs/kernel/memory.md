@@ -224,3 +224,21 @@ Internal VM statistics separate reserved/backed pages, extent records and retain
 record/token bytes; they exclude heap headers, temporary operation bookkeeping
 and page tables. Existing eager-memory profile totals exclude sparse
 RESERVE/COMMIT/DECOMMIT; identity release retains its existing zero-byte accounting.
+
+### Bootstrap-owned UMA scanout
+
+An unpublished scanout allocation owns its PMM frames and its sole RW/NX/WC
+CPU mapping. Before AP startup, BSP/IF=0 preparation works in at most64-frame
+runs. Query CLFLUSH geometry once per run; retain every cache-line flush and
+per-frame MFENCE, and withdraw each WB scratch alias before publishing WC
+leaves. Validate PAT5/WC, reservation/quarantine coverage, every physical frame,
+ancestor permissions and vacancy before a leaf run is installed. Runs never
+cross a leaf table and report exact progress. Ordinary WB mapping keeps its
+existing cache policy. No per-CPU frame cache or retained WB alias is added.
+
+Failure unmaps the entire published CPU prefix before returning all frames.
+Success zeroes the rounded extent, including slack, then executes SFENCE before
+returning ownership. Discard is legal only before any GPU reference; device
+publication pins the backing under its driver retirement rule. The supplied
+preparation deadline is checked before each bounded run; it is a cooperative
+admission budget, not a hard completion deadline including the last run/zeroing.
