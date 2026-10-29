@@ -141,8 +141,9 @@ without its connected withdrawal implementation.
 
 - [ ] **1. Baseline and concrete interface closure.** The
   [before-code 1/4-CPU controls](../development/experiments/shared-memory.md) pass
-  at clean main `20c99b3fa`; no implementation yet. This row remains open for
-  the task-boundary completion answers below. Freeze current main and
+  at clean main `20c99b3fa`; no implementation yet. Completion boundaries below
+  are now accepted; the baseline is refreshed for the intervening process-listing
+  main changes before kernel edits. Freeze current main and
   compiler/configuration; run existing launch/private-pages/CALL/SEND64/4096
   controls before implementation, one run/config for threshold questions. Record
   source/ABI, CPU/clock/HWP/XSAVE, backing and variation. Finalize routine native
@@ -194,35 +195,23 @@ uncertainty terminates affected processes, including a self-targeting revoker,
 while uncertain backing/frames remain quarantined until reboot. There is no new
 general hard RAM quota or implicit notification, shared mutex or GPU authority.
 
-## Task-boundary decisions before kernel ownership changes
+## Accepted completion boundaries (chronium, 2026-10-29)
 
-These refine the accepted termination change; they do not reopen strong CUT or
-quarantine. **Proposed, not accepted.** Both affect cleanup/pin ownership and
-must be settled before implementing those paths.
+These refine the termination change without weakening strong CUT or quarantine.
 
-1. **Termination when departure itself is unproved.** `process_request_stop`
-   elects a terminal result and stops peers; safe task/process reclamation still
-   needs real permanent-stack/kernel-root departure. A CPU stuck in kernel IF=0
-   can withhold that proof. **Recommended:** request termination immediately,
-   preserve the existing first terminal-result election, and keep only still-live
-   execution/VM records until actual departure. WAIT cannot complete falsely.
-   If departure never becomes provable, it stays pending until reboot; no new
-   NMI, CPU-offline or machine-reset policy. Once departure is proved, detach
-   uncertain shared backing so it alone can remain quarantined. This is a safety
-   exception to the literal "only frames retained" wording, not a running user
-   process intentionally held as the recovery policy. Alternative: a separately
-   approved machine-level recovery on missing departure proof.
-2. **Completion after safely detached quarantine.** Existing process/group
-   cleanup tokens normally wait for actual backing reclamation. Holding those
-   tokens on reboot-lifetime quarantine would leave a dead process's observers
-   or group waiting until reboot. **Recommended:** once ordinary task/root
-   departure and safe detachment are proved, release the process/group cleanup
-   joins and keep only an independent quarantine record, frames and origin
-   charge. WAIT may report termination even though that explicitly quarantined
-   shared RAM remains charged; it must not report the RAM freed. CUT still
-   reports uncertainty rather than successful reclamation. This is a specific
-   exception to the usual cleanup-completion boundary, not early success on
-   normally pending cleanup. Alternative: preserve reboot-lifetime group joins.
+1. **Departure proof still governs reclamation.** Request termination immediately
+   and preserve the existing first terminal-result election. Keep still-live
+   task/root/stack/VM records and WAIT pending until actual permanent-stack and
+   kernel-root departure is proved. If it never becomes provable, WAIT remains
+   pending until reboot; no NMI, CPU-offline or machine-reset policy is added.
+   Once departure is proved, detach uncertain shared backing independently.
+2. **Safely detached quarantine does not hold process/group completion.** After
+   ordinary departure and safe detachment, release process/group cleanup joins.
+   Only the independent quarantine record, uncertain frames and their origin
+   charge remain until reboot. WAIT may report termination while those frames
+   remain charged; it must not report RAM freed. CUT reports uncertainty rather
+   than successful reclamation. Normally pending cleanup still joins actual
+   reclamation; this exception is specific to safely detached quarantine.
 
 Source boundary: [process stop and cleanup pins](../../kernel/process.c),
 [permanent-stack departure](../../kernel/task.c) and
