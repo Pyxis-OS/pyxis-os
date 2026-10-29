@@ -313,28 +313,28 @@ green CI do not satisfy that gate.
 
 Keep the VM, endpoint and task-lifetime guards protecting live operations.
 
-### Native SEND phase profiling — proposed, not implemented
+### Native SEND phase result — instrumentation removed
 
-The single-CPU native controls retain a 7–8% SEND4096 completion cost, mostly in
-admission, while SEND64 is about 2% higher. Cross-CPU placement therefore is not
-its main explanation. Exact A/B instructions, sampled copy layouts and page
-attributes match; four/16-vCPU controls do not reproduce the native penalty.
-The existing profiler has no IPC events and the frozen native debugger cannot
-break into a running SEND. Attribution is still open; no copy/guard change is
-justified by these exclusions.
+Chronium authorized local-only, bounded 4 KiB SEND timing on 2026-10-29. All
+four native observer-control A/B pairs pass; the uninstrumented residual remains
+9.5%. The sampled increase is concentrated in payload copy and the following
+lease release, with unchanged validation/acquisition/page-check costs. Rare
+release tails dominate its mean; its median and hot instructions are unchanged.
+See the [phase result](../development/experiments/bsp-preparation.md#native-send-phase-result).
+This localizes the delay, but does not distinguish pending-store completion,
+cache-line ownership or actual lock contention. None is a proved root cause.
+No new per-message guard, pin or acknowledgement is implicated or removed.
+The temporary code, branches and images are removed; no diagnostic is delivered.
 
-**Proposed default, requiring chronium's scope approval:** permit a temporary,
-build-only native profiling control for SEND64/4096 admission. Sample ordered
-ticks separately around payload validation/lease, the actual copy and the rest
-of admission; use bounded per-CPU storage and existing log collection outside
-timed work. Record only timing/counts, offsets and mapping attributes, never
-payloads or full virtual/physical addresses. Add no public ABI, grant, runtime
-control or permanent profiler. Preserve every operation and lifetime guard.
-Compare layout-matched disabled, counters-only and sampled controls before
-attributing a cost; observer-disturbed results do not qualify merge performance.
-Use the results to select a task-4 fix or return the unresolved trade-off to
-chronium. This extends the present existing-tools constraint and is not yet
-authorized; keep the production code unchanged until decided.
+Task 4's accepted design does not require additional per-message copy/release
+work. A justified corrective change within task 4 is still not established;
+there is no evidence that this is an unavoidable design cost. Keep the task
+unchecked and PR draft. A further diagnostic needs its own bounded scope:
+**proposed default:** one matched native A/B pair separating the existing
+release lock's acquisition from its guarded body, with an explicit store-drain
+control, to distinguish lock wait from completion of preceding payload stores.
+Keep every guard; no product change or diagnostic implementation is authorized
+by this proposal.
 
 **You should know:** fixed cleanup actors add boot storage. Shared stack/capture
 admission can return BUSY after the existing bounded wait; cleanup contention can

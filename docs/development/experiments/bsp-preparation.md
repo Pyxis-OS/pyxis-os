@@ -419,10 +419,78 @@ controls exclude no native cache effect and do not establish a speedup.
 Small exact reports and raw evidence:
 `/shared/present/bsp-removal/task4/send-copy-20261029/`. No justified kernel fix
 has emerged. Existing native debugging rejects running break-in/breakpoints,
-and the current profiler has no IPC phase events. The
-[temporary native phase proposal](../../wip/bsp-removal.md#native-send-phase-profiling--proposed-not-implemented)
-requires a scope extension before implementation. The native residual remains
-unexplained and unaccepted; no guard is removed or speculative copy rewrite made.
+and the current profiler has no IPC phase events. Chronium subsequently
+allowed the temporary native phase measurement below. No guard was removed or
+speculative copy rewrite made.
+
+### Native SEND phase result
+
+Chronium approved bounded local-only timing (2026-10-29), never pushed or
+merged. A is main `c65430c61e`; B is task 4 cleanly restacked onto it
+(`fc0a97e67b`, runtime equivalent to the task-4 patch in `4c4b6625e`). Common
+builder `8bdf136`, INFO, config `106bf0ae`, CPU1-only RAM archive `6b2123b4`,
+2880×1800 PXE, AC/HWP/XSAVE/RDTSCP-TSC matched. UDP log is off in all cells;
+existing LOG snapshots collect ktrace outside timed work. The orchestrator
+completed eight fresh vela boots and restored the plain default. All pass
+payload/cardinality/FINAL-drain checks. Each row is one independent A/B pair,
+not four repetitions; medians of the existing 100 passes, ms per 256 messages:
+
+| Observer mode | SEND4096 completion A → B | Admission A → B |
+| --- | --- | --- |
+| Uninstrumented | 0.6675 → 0.7310 (+9.5%) | 0.094 → 0.132 |
+| Probe disabled | 0.6825 → 0.7215 (+5.7%) | 0.097 → 0.128 |
+| Counters only | 0.6695 → 0.7280 (+8.7%) | 0.096 → 0.133 |
+| Sampled | 0.6715 → 0.7230 (+7.7%) | 0.098 → 0.132 |
+
+The sampled pair uses identical code/layout to the two probe controls within
+each variant, changing only its mode data. Ordered ticks sample every 67th raw
+SEND: 385 complete samples out of 25,856 verified 4 KiB sends per variant,
+including warmup. All eight delivery slots, exact phase telescoping, histogram
+bins/overflow and zero failures are checked. TSC 3686.4 MHz; means in ns include
+marker overhead. The immediate bracket (12.39 → 12.32 ns) is not subtracted:
+
+| Adjacent phase | A | B | B − A |
+| --- | --- | --- | --- |
+| Descriptor validation | 70.96 | 70.36 | −0.60 |
+| Reservation/pre-copy | 45.81 | 39.40 | −6.40 |
+| Lease acquire | 30.68 | 30.84 | +0.16 |
+| Page check | 24.41 | 23.81 | −0.60 |
+| Payload copy | 109.17 | 142.48 | +33.31 |
+| Lease release | 34.54 | 108.99 | +74.45 |
+| Remaining admission | 42.10 | 54.83 | +12.73 |
+| Total instrumented admission | 357.66 | 470.70 | +113.05 |
+
+Copy plus release accounts for about 95% of the net sampled phase increase.
+The release median is in the same 64–127-tick bin in A/B; B has 10 of 385
+samples above 4096 ticks, versus zero in A. Histogram bounds show those ten
+contribute 67.68–84.33 ns to B's per-sample mean: the mean increase is mainly
+rare tails, not a uniformly slower check. Copy has five such overflow samples
+in B, none in A; total admission has 12, none in A, with the same median bin
+(1216–1279 ticks). Aggregates cannot correlate individual phase outliers.
+
+Native source offset 64 and every slot's destination low12 match A/B and stay
+stable. Exact release instructions, including the existing byte XCHG on the
+VM guard, borrower decrement and unlock, match. No extra guard/pin/fence or
+ACK is introduced. The locked acquisition after the copy can also pay pending
+store completion ([Intel SDM, volume 3A, §9.2.5](https://cdrdv2-public.intel.com/812386/253668-sdm-vol-3a.pdf));
+its placement in the release interval does not identify which instruction stalled. The result establishes a tail-heavy data-movement/
+release cost, not a proved contention/cache/SMI cause. Uninstrumented admission
+medians add 148 ns/message; sampled phase means add 113 ns, but systematic
+samples plus warmup and phase-boundary differences are not an exact accounting
+of median whole-pass time. Receiver/drain work is not instrumented.
+
+Task 4 does not inherently require this extra per-message work. No particular
+corrective change is established by the data, so no guard removal, copy rewrite
+or performance waiver follows; merge remains blocked. A focused distinction
+between release-lock acquisition/body and explicit store completion is proposed
+in the [remaining plan](../../wip/bsp-removal.md#native-send-phase-result--instrumentation-removed),
+not implemented. Local timing code/branches and experiment images are removed;
+only small evidence/methods remain. Source/product runtime is unchanged.
+
+Evidence: `/shared/present/bsp-removal/task4/native-send-phase/` contains
+`comparison.json`, raw results and stage/reboot records. Ordinary final QEMU
+controls and host snapshot analysis pass; their variable timings do not explain
+this native residual. The directory is retired as a deployable packet.
 
 ## Storage and remaining limits
 
