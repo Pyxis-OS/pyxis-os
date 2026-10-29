@@ -121,7 +121,6 @@ upgrade`: boot the 0.0.10 installer and choose Update** (see the release notes).
   accepted limit fixed in 0.0.11
   ([debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617)). Full Intel
   modesetting is later work.
-<!-- PENDING wifi-connect (chronium, 2026-10-29): default out. Add a connecting bullet here only if the RTL8922AE association PR (#1597 and userland #433) is merged with a native pass before the release is otherwise ready. -->
 - **ABI:** this is a new, deliberate ABI break. `include/abi/` no longer keeps
   every line of 0.0.9's, and 0.0.10 provides only the `"0.0.10"` ABI name; it does
   not provide `"0.0.8"` or `"0.0.9"`. What breaks, and what only grew, is listed in
