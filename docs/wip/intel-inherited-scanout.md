@@ -520,3 +520,34 @@ the copy path because the fixed-cadence proof does not cover them. No timing,
 VRR, push or mode register is written. Evidence remains under
 `/shared/present/vela-tearing/flips-native-20261029/results-vela-A/` and
 `results-vela-B/`; the refused B is not a completed flip qualification.
+
+### Bounded setup after the r2 boot stall
+
+The orchestrator's r2 boot left the early console frozen and never became
+Remote-ready; no target log was captured, so the precise stalled instruction
+is unobserved. Source review found no pre-AP flip-done wait: SURF submission
+happens later in the presenter. The concrete pre-AP cost was the full GGTT
+import: 2048 lazy page mappings each called the kernel physical-alias scan,
+walking roughly 139000 initrd pages again (about 285 million page queries,
+each walking scratch-mapped page tables). This runs before AP/network startup.
+It is finite but plausibly explains the prolonged early-console silence.
+
+The import now retires its small read-only inventory windows, validates the
+whole 8 MiB physical span once, and reserves/maps it as one read-only CPU range.
+The same physical-exclusion proof remains; only selected owned PTE pages later
+become writable. Setup has a five-second software deadline, including bounded
+mapping, import and scanout-allocation loops, with phase/refusal messages.
+Existing timing qualification (200 ms), forcewake ACK (50 ms), MCR semaphore
+(10 us), power settling and runtime flip completion remain bounded. These
+software bounds assume individual MMIO instructions and the qualified clock
+continue to make progress; no bus-hang watchdog is introduced.
+
+A refusal before SURF keeps ordinary copying. After partial auxiliary/GGTT
+setup, it may retain resources/holds and fence register writes while preserving
+CPU copies only if the unchanged active GOP front is re-proven. After an
+ambiguous SURF completion, the accepted fence/retention rule still applies:
+an ordinary copy into an uncertain front is not a safe fallback. The scheduler
+and Remote do not depend on a flip-done interrupt. Native qualification remains
+open. The collector now persists its initial result, reports no beacon/Remote
+readiness within its configurable 60-second default, and saves interruption
+results even before a connection exists.

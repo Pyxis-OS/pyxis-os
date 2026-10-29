@@ -5,6 +5,7 @@
 #include <kernel-config.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
+#include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
@@ -34,16 +35,17 @@ static bool overlaps(uint64_t first, uint64_t bytes, uint64_t other, uint64_t si
       (first < other + size && other < first + bytes));
 }
 
-static bool page_available(const struct boot_info *boot, phys_addr_t physical)
+static bool range_available(const struct boot_info *boot, phys_addr_t physical, size_t bytes)
 {
-  if (!arch_pci_mmio_available(physical, PAGE_SIZE) ||
-      vm_kernel_physical_overlap(physical, PAGE_SIZE) ||
-      overlaps(physical, PAGE_SIZE, boot->framebuffer.physical, boot->framebuffer.size)) {
+  if (!bytes || bytes > UINT64_MAX - physical ||
+      !arch_pci_mmio_available(physical, bytes) ||
+      vm_kernel_physical_overlap(physical, bytes) ||
+      overlaps(physical, bytes, boot->framebuffer.physical, boot->framebuffer.size)) {
     return false;
   }
   for (size_t i = 0; i < boot->region_count; ++i) {
     const struct boot_region *r = &boot->regions[i];
-    if (r->type != BOOT_RESERVED && overlaps(physical, PAGE_SIZE, r->base, r->length)) {
+    if (r->type != BOOT_RESERVED && overlaps(physical, bytes, r->base, r->length)) {
       return false;
     }
   }
@@ -115,6 +117,9 @@ static const uint32_t register_pages[] = {
 };
 static uintptr_t windows[sizeof(register_pages) / sizeof(register_pages[0])];
 static uintptr_t gtt_windows[GGTT_PAGES];
+static uintptr_t gtt_span;
+static size_t gtt_mapped;
+static bool gtt_span_ready;
 static bool gtt_writable[GGTT_PAGES];
 static const struct boot_info *boot_info;
 static struct pci_device *display_device;
@@ -126,7 +131,7 @@ static bool fenced, dc_confirmed, gtt_mapping_failed;
 static bool map_page(uint32_t offset, bool writable, uintptr_t *window)
 {
   phys_addr_t physical = register_bar + offset;
-  if (!page_available(boot_info, physical) ||
+  if (!range_available(boot_info, physical, PAGE_SIZE) ||
       vm_reserve(vm_kernel_space(), PAGE_SIZE, PAGE_SIZE, window) != MM_OK) {
     return false;
   }
@@ -399,6 +404,13 @@ static bool read_gtt(uint64_t gpu, uint64_t *value)
     return false;
   }
   uint32_t offset = (uint32_t)((gpu / PAGE_SIZE) * sizeof(uint64_t));
+  if (gtt_span) {
+    if (!gtt_span_ready) {
+      return false;
+    }
+    *value = *(const volatile uint64_t *)(gtt_span + offset);
+    return true;
+  }
   unsigned index = offset / PAGE_SIZE;
   if (!gtt_windows[index] &&
       !map_page(GGTT_BASE + index * PAGE_SIZE, false, &gtt_windows[index])) {
@@ -656,6 +668,63 @@ static void unmap_windows(void)
   for (size_t i = 0; i < GGTT_PAGES; ++i) {
     unmap_window(&gtt_windows[i]);
   }
+  if (gtt_span) {
+    while (gtt_mapped) {
+      phys_addr_t physical;
+      if (vm_unmap(vm_kernel_space(), gtt_span + (gtt_mapped - 1) * PAGE_SIZE, &physical) != MM_OK) {
+        fence_access("GGTT CPU mapping cleanup uncertain");
+        return;
+      }
+      --gtt_mapped;
+    }
+    if (vm_release(vm_kernel_space(), gtt_span, GGTT_TABLE_BYTES) != MM_OK) {
+      fence_access("GGTT CPU reservation cleanup uncertain");
+      return;
+    }
+    gtt_span = 0;
+    gtt_span_ready = false;
+  }
+}
+
+bool intel_display_prepare_gtt(uint64_t deadline)
+{
+  KASSERT(!cpu_interrupts_enabled() && !arch_cpu_count());
+  if (fenced || display_device->owner != &display_claim || gtt_span) {
+    return false;
+  }
+  /* Retire the inventory's small read-only windows, then prove the entire
+   * range once. Per-page alias scans repeatedly walked the full initrd. */
+  for (size_t i = 0; i < GGTT_PAGES; ++i) {
+    unmap_window(&gtt_windows[i]);
+    if (fenced) {
+      return false;
+    }
+  }
+  kinfo("intel-flip: setup validating one %u-byte GGTT CPU span\n", GGTT_TABLE_BYTES);
+  if (arch_monotonic_ns() >= deadline ||
+      !range_available(boot_info, register_bar + GGTT_BASE, GGTT_TABLE_BYTES) ||
+      arch_monotonic_ns() >= deadline ||
+      vm_reserve(vm_kernel_space(), GGTT_TABLE_BYTES, PAGE_SIZE, &gtt_span) != MM_OK) {
+    kinfo("intel-flip: GGTT span admission failed or setup deadline expired; keeping GOP copy\n");
+    return false;
+  }
+  for (size_t i = 0; i < GGTT_PAGES; ++i) {
+    if (arch_monotonic_ns() >= deadline) {
+      kinfo("intel-flip: GGTT CPU mapping deadline after %zu pages; keeping GOP copy\n", gtt_mapped);
+      return false;
+    }
+    uintptr_t address = gtt_span + i * PAGE_SIZE;
+    if (vm_map_mmio(address, register_bar + GGTT_BASE + i * PAGE_SIZE) != MM_OK) {
+      return false;
+    }
+    ++gtt_mapped;
+    if (vm_protect(vm_kernel_space(), address, 0) != MM_OK) {
+      return false;
+    }
+  }
+  gtt_span_ready = true;
+  kinfo("intel-flip: setup GGTT CPU span mapped read-only, %zu pages\n", gtt_mapped);
+  return true;
 }
 
 void intel_display_prepare(const struct boot_info *boot)
@@ -880,12 +949,13 @@ uint64_t *intel_display_gtt_write_window(uint64_t gpu)
     return NULL;
   }
   unsigned page = (gpu / PAGE_SIZE) * sizeof(uint64_t) / PAGE_SIZE;
+  uintptr_t window = gtt_span ? gtt_span + page * PAGE_SIZE : gtt_windows[page];
   if (!gtt_writable[page]) {
-    if (vm_protect(vm_kernel_space(), gtt_windows[page], PAGE_WRITE) != MM_OK) {
+    if (vm_protect(vm_kernel_space(), window, PAGE_WRITE) != MM_OK) {
       fence_access("GGTT write-window admission uncertain");
       return NULL;
     }
     gtt_writable[page] = true;
   }
-  return (uint64_t *)(gtt_windows[page] + ((gpu / PAGE_SIZE) * sizeof(uint64_t) & (PAGE_SIZE - 1)));
+  return (uint64_t *)(window + ((gpu / PAGE_SIZE) * sizeof(uint64_t) & (PAGE_SIZE - 1)));
 }

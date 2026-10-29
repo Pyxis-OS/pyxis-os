@@ -37,6 +37,7 @@
 #define GGTT_RESERVED_LOW UINT64_C(0x800000)
 #define GGTT_ALLOC_END UINT64_C(0xfee00000)
 #define TIMING_TIMEOUT_NS UINT64_C(200000000)
+#define SETUP_TIMEOUT_NS UINT64_C(5000000000)
 #define FLIP_TIMEOUT_NS UINT64_C(100000000)
 #define KEEPOUT_US 100u
 #define SCANLINE_MASK 0x1fffu
@@ -53,6 +54,7 @@ static uint32_t inherited_vrr, inherited_vmin, inherited_vmax, inherited_fliplin
 static uint32_t front, back = 1, pending, sequence;
 static uint32_t submit_frame, submit_flip, submit_done_time, submit_clock;
 static uint64_t deadline;
+static uint64_t setup_deadline;
 static unsigned vtotal, vblank_start, keepout_lines;
 static uint64_t submitted, confirmed, deferred, timeouts;
 static bool metrics, attempted;
@@ -63,6 +65,15 @@ static enum intel_flip_state fail(const char *reason)
   intel_display_fence(reason);
   kerror("intel-flip: %s; surfaces/mappings retained until reboot, no further writes\n", reason);
   return state;
+}
+
+static bool setup_in_time(const char *phase)
+{
+  if (arch_monotonic_ns() < setup_deadline) {
+    return true;
+  }
+  kinfo("intel-flip: setup deadline during %s; ordinary GOP copying requested\n", phase);
+  return false;
 }
 
 static bool fixed_layout(void)
@@ -198,6 +209,10 @@ static bool choose_ggtt(size_t count)
 {
   /* Import every nonzero inherited entry, then allocate only within our
    * exclusive ledger above maximum WOPCM and below the reference GuC ceiling. */
+  kinfo("intel-flip: setup importing GGTT ownership\n");
+  if (!intel_display_prepare_gtt(setup_deadline)) {
+    return false;
+  }
   size_t entries = GGTT_ADDRESS_BYTES / PAGE_SIZE;
   uint8_t *occupied = kmalloc(entries / 8);
   if (!occupied) {
@@ -206,6 +221,10 @@ static bool choose_ggtt(size_t count)
   memset(occupied, 0, entries / 8);
   for (size_t i = 0; i < entries; ++i) {
     uint64_t value;
+    if (!(i % (PAGE_SIZE / sizeof(uint64_t))) && !setup_in_time("GGTT import")) {
+      kfree(occupied);
+      return false;
+    }
     if (!intel_display_gtt_read(i * PAGE_SIZE, &value)) {
       kfree(occupied);
       return false;
@@ -228,6 +247,22 @@ static bool choose_ggtt(size_t count)
   return false;
 }
 
+static bool abandon_setup(const char *reason)
+{
+  /* No SURF has been armed: uncertain auxiliary/GGTT state need not prevent
+   * CPU copying into a still-proven GOP front. Keep every new resource and
+   * hardware hold, fencing register writes without disabling presentation. */
+  if (fixed_layout() && intel_display_read(PLANE1 + PLANE_SURFACE) == gpu_surfaces[0] &&
+      intel_display_read(PLANE1 + PLANE_LIVE) == gpu_surfaces[0]) {
+    state = INTEL_FLIP_OFF;
+    intel_display_fence(reason);
+    kwarn("intel-flip: %s before SURF; ordinary GOP copying continues; setup resources retained until reboot\n", reason);
+  } else {
+    fail(reason);
+  }
+  return false;
+}
+
 bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_device *device,
     uint64_t bar, uint64_t aperture)
 {
@@ -235,6 +270,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     return false;
   }
   attempted = true;
+  setup_deadline = arch_monotonic_ns() + SETUP_TIMEOUT_NS;
   const struct boot_framebuffer *fb = &boot->framebuffer;
   inherited_trans = intel_display_read(TRANS_CONF(0));
   inherited_ddi = intel_display_read(TRANS_DDI(0));
@@ -279,24 +315,28 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
       return false;
     }
   }
-  if (!intel_display_claim() || !intel_dma_identity(boot, device->address) || !choose_ggtt(count)) {
+  kinfo("intel-flip: setup DMA admission; total budget=%lu ms\n", SETUP_TIMEOUT_NS / 1000000);
+  if (!setup_in_time("DMA admission") || !intel_display_claim() ||
+      !intel_dma_identity(boot, device->address) || !choose_ggtt(count)) {
     kinfo("intel-flip: unavailable: exclusive GGTT/DMA admission failed\n");
     return false;
   }
   if (!intel_gt_profile_prepare(boot, bar)) {
     if (intel_gt_profile_fenced()) {
-      fail("GT setup ownership uncertain");
+      return abandon_setup("GT setup ownership uncertain");
     }
     return false;
   }
-  if (!scanout_pages_prepare(fb->size, &pages[0]) ||
-      !scanout_pages_prepare(fb->size, &pages[1])) {
+  kinfo("intel-flip: setup preparing two UMA back buffers\n");
+  if (!scanout_pages_prepare(fb->size, setup_deadline, &pages[0]) ||
+      !scanout_pages_prepare(fb->size, setup_deadline, &pages[1])) {
     if (pages[0].address) {
       scanout_pages_discard(&pages[0]);
     }
     if (!intel_gt_profile_finish()) {
-      fail("GT cleanup after backing allocation failure uncertain");
+      return abandon_setup("GT cleanup after backing allocation failure uncertain");
     }
+    kinfo("intel-flip: backing allocation failed or setup deadline expired; keeping GOP copy\n");
     return false;
   }
   surfaces[0] = (struct framebuffer){fb->address, fb->size, fb->pitch,
@@ -306,26 +346,25 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     surfaces[n + 1].address = pages[n].address;
     for (size_t i = 0; i < count; ++i) {
       uint64_t old;
+      if (!setup_in_time("GGTT mapping publication")) {
+        return abandon_setup("GGTT setup deadline");
+      }
       if (!intel_display_holds_valid() || !intel_gt_profile_ready() ||
           !intel_display_gtt_read(gpu_surfaces[n + 1] + i * PAGE_SIZE, &old) || old) {
-        fail("GGTT ownership changed before new mapping");
-        return false;
+        return abandon_setup("GGTT ownership changed before new mapping");
       }
       uint64_t *entry = intel_display_gtt_write_window(gpu_surfaces[n + 1] + i * PAGE_SIZE);
       if (!entry) {
-        fail("GGTT mapping access uncertain");
-        return false;
+        return abandon_setup("GGTT mapping access uncertain");
       }
       *(volatile uint64_t *)entry = pages[n].frames[i] | GGTT_PTE_PRESENT | GGTT_PTE_PAT_MASK;
       if (!intel_gt_note_ggtt_write()) {
-        fail("GGTT write completion uncertain");
-        return false;
+        return abandon_setup("GGTT write completion uncertain");
       }
     }
   }
   if (!intel_gt_profile_finish() || !fixed_layout()) {
-    fail("GGTT finalization or inherited layout uncertain");
-    return false;
+    return abandon_setup("GGTT finalization or inherited layout uncertain");
   }
   intel_display_flip_event_control(false);
   metrics = boot_options_get()->display_flip_metrics;
