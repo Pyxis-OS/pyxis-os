@@ -635,9 +635,7 @@ static enum call_status capture_file(struct npfs_store_context *context, struct 
 {
   uint64_t size = npfs_store_size(job->node->inode);
   struct image_capture captured = {0};
-  uint64_t flags = cpu_save_interrupts();
-  enum call_status status = image_capture_allocate(size, &captured);
-  cpu_restore_interrupts(flags);
+  enum call_status status = image_capture_allocate_wait(size, &captured);
   if (status != CALL_OK) {
     return status;
   }
@@ -648,7 +646,7 @@ static enum call_status capture_file(struct npfs_store_context *context, struct 
     status = CALL_IO;
   }
   if (status != CALL_OK) {
-    flags = cpu_save_interrupts();
+    uint64_t flags = cpu_save_interrupts();
     image_capture_release(&captured);
     cpu_restore_interrupts(flags);
     return status;

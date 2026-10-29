@@ -22,6 +22,10 @@ struct image_capture {
  * structural-owner contention. */
 enum call_status image_capture_allocate(uint64_t size, struct image_capture *capture);
 
+/* BSP worker, IF=1. Same allocation, with the shared owner's bounded admission
+ * wait before mutation. Releases ownership before returning to storage I/O. */
+enum call_status image_capture_allocate_wait(uint64_t size, struct image_capture *capture);
+
 /* BSP, IF=0, after every BSP reader has finished. Transfers the complete range
  * and cleanup attribution to retained BSP VM retirement, then clears the source.
  * Actual backing reclamation and joined cleanup finish in the process reaper.

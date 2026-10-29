@@ -577,6 +577,15 @@ A kernel-root actor retains the CPU-neutral structural owner and disables
 interrupts for each mutation step; pinning alone does not prevent reentry. RAM-file backing and the layers below remain usable on the
 writing CPU under their existing contracts.
 
+Selected-image snapshots from npfs, FAT32 and host files acquire that owner in
+their sleep-safe worker context, with the existing one-second admission
+budget, and release it before storage reads. RAM snapshots and child/space/batch
+preparation likewise wait with interrupts enabled in the retained launch request
+before entering the interrupts-off mutation. Ordinary contention with the
+yielding reclaimer therefore waits rather than failing an immediate owner try;
+an exhausted admission budget still returns `BUSY`. The request retains its
+image operation and grants until admission or the normal failure cleanup.
+
 Three lower layers are safe on any CPU with interrupts disabled,
 outside interrupt and fault entry:
 
