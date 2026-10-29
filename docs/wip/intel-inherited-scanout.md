@@ -940,4 +940,34 @@ R8 measured57.173ms GGTT CPU-span setup and1486.009ms scalar import, out of
 so did not measure the native MM batching saving. R9 removes the mandatory
 full import, retains narrow aligned64-bit accesses and maps only needed
 read-only GGTT CPU windows. No wider-read/WC shortcut, reset, new invalidation
-or context-memory access is added. Native qualification remains pending.
+or context-memory access is added. R9 passes natively on vela (chronium,
+2026-10-29): all5,063 live GOP PTEs use PAT0;10,126 old PAT3 descriptors
+remain untouched and a new zero span is selected. All4,080 sampled flips
+confirm with no timeouts. OpenArena low/native results are49.4/15.7fps;
+chronium reports the low-resolution run looks good. This is a visual
+observation, not an automated tear-free proof.
+
+
+### Bounded GGTT publication checks (0.0.11)
+
+**Accepted (chronium, 2026-10-29):** retain the exclusive bootstrap owner and
+all display/GT power holds, and perform full ownership checks before and after
+batches of at most63 new PTE stores. Unexpected ownership loss is detected at
+a batch boundary, rather than after every store. Check each target's zero value
+immediately before its store; preserve the setup deadline, all stepping-required
+workaround/posting operations and final validation. A failed or uncertain batch
+keeps the existing fencing and retention-until-reboot rules.
+
+Accounting-only write notifications do not reread hardware. A notification that
+must perform the media-stepping workaround checks GT ownership before its write.
+The final partial workaround batch and posting reads remain unchanged. Writable
+GGTT-window admission and the last zero check share one lookup, avoiding the
+formerly discarded duplicate PTE read.
+
+Native R9's1,291.272ms preparation step included999.289ms publishing10,126PTEs;
+both UMA buffers took67.593ms, including13.602ms allocation plus zeroing.
+The publication loop repeated425,292 display/GT register reads plus PCI
+capability/BAR reads. This latency is accepted for0.0.10 and tracked by
+[debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617); this follow-up
+is for0.0.11. QEMU cannot emulate the Intel display, so native boot-phase and
+flip-completion qualification is still required before claiming the speedup.
