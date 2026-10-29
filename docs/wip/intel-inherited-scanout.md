@@ -207,8 +207,9 @@ memory, nor a flip latch/retirement rule.
   in both snapshots, layout stable and cleanup confirmed.
 - [x] Decide flip backing, synchronous operation/power lifetime and retirement
   (chronium, 2026-10-28).
-- [ ] Matched 2880×1800 OpenArena presentation baseline before implementation.
-- [ ] Implement source-qualified GGTT ownership, owned UMA buffers and synchronous
+- [x] Matched 2880×1800 OpenArena presentation baseline before implementation;
+  one native sample and its counter limits are recorded below.
+- [x] Implement source-qualified GGTT ownership, owned UMA buffers and synchronous
   correlated flips; no reuse after uncertain completion.
 - [ ] Hands-free vela qualification packet and matched presentation comparison.
 
@@ -313,8 +314,8 @@ prerequisite that prevents a safe first flip.
 ## Accepted setup contract (chronium, 2026-10-29)
 
 The buffer/power/retirement decisions above remain accepted. The following
-source-qualified setup effects are also authorized. Implementation still follows
-the matched baseline; no new flip writes have been implemented yet.
+source-qualified setup effects are also authorized. The baseline preceded the
+development backend below; native flip qualification remains pending.
 
 1. **Auxiliary GT access for cache validation:** permit
    only the reference bootstrap access needed to verify graphics PAT index 3,
@@ -443,3 +444,50 @@ Additional pinned-source references for setup/completion:
 - [PAT table and reads](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_pat.c), [forcewake](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_force_wake.c), and [MCR steering](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gt_mcr.c): powered/serialized PAT admission.
 - [Display pinning](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/display/xe_fb_pin.c) and [workaround rules](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_wa_oob.rules): fixed linear mappings and media-stepping qualification.
 - [Intel TGL Display Engine, pp. 198–200, 207, 280–282](https://cdrdv2-public.intel.com/705833/intel-gfx-prm-osrc-tgl-vol-12-display-engine.pdf): sticky event recording/delivery and synchronous flip completion.
+
+## Development flip backend
+
+`CONFIG_INTEL_INHERITED_FLIP=y` enables preparation in a development image;
+its default is off. `display.flip=0` retains copying. The matched Intel route
+must have a sole enabled pipe A/plane 1, disabled hardware cursor/other planes,
+unchanged linear XRGB8888 geometry and disabled PSR/replay/VRR. Admission proves
+the full GOP alias, relevant VT-d translation disabled and inherited PAT3
+UC/noncoherent under the bounded reference GT access protocol. Refusal leaves
+copy presentation when ownership is confirmed; uncertainty fences access.
+
+Two new PMM-backed WC buffers receive fixed owned GGTT mappings. The presenter
+copies a complete immutable composite into an inactive buffer, then arms one
+synchronous SURF update outside the context-latency keepout. A selected fresh
+plane flip-done event, expected programmed/live address, changed completion
+timestamp, frame progress and exactly one flip-start increment must agree.
+Hardware latch time is bounded even when CPU observation is delayed. The first
+owned-buffer flip retires GOP before one confirmed return to it; subsequent
+frames alternate the two UMA backs. Failed confirmation never authorizes reuse,
+a late completion or copying into an uncertain front. Frame skipping and frozen
+software captures keep their existing handoff; no per-frame PTE updates occur.
+
+Qualified display/DC0 ownership, mappings and scanout storage remain retained
+until reboot, including uncertain outcomes. This costs idle power and about
+40 MiB of backing at the measured mode; follow-up is [#1565](https://git.internal/PyxisOS/pyxis-os/issues/1565).
+Healthy panic presentation covers all three retained surfaces; a fenced backend
+uses the existing serial-only panic path. Neither failure-path nor optical
+tear-free behavior is natively qualified yet. QEMU cannot emulate this Intel
+register path, so its nonmatching boots cannot establish latch/retirement.
+
+Validation at code head `b4a86176e`: full default-off and enabled kernel builds
+pass with the unchanged `8bdf136` compiler container. Nested KVM/Q35, host+invtsc,
+4 CPUs/8 GiB, VirtIO-VGA with `display.flip=1` and VGA with `=0` each pass Remote
+echo, ordinary terminal glyph/scroll completion, the fixed 1803-frame 360×221
+llvmpipe demo and ordinary presentation metrics; neither admits Intel access or
+panics. These are correctness checks, not timing or Intel-MMIO qualification.
+An initial packet fixture invoked the workload from multiple spaces; it was
+corrected to Development-only startup before both passing checks.
+
+The hands-free candidate uses one common image and changes only
+`display.flip=0/1` between boots, preserving the baseline engine and data. It
+includes terminal output/scrolling, the exact 8× low-resolution run and the
+native-resolution cost run. Its collector requires actual flip admission,
+initial owned flip/GOP return, repeated correlated completions and zero timeouts;
+an ordinary fallback is a reported refusal. Packet:
+`/shared/present/vela-tearing/flips-native-20261029/`. Native execution remains
+with the orchestrator; this record does not claim that its checks have run.
