@@ -79,6 +79,8 @@ struct process {
   struct process *retired_next;
   struct process_control *retired_control;
   struct execution_group *retired_group;
+  /* TSC cycles of retired tasks, added by the BSP reaper; live tasks keep their own. */
+  uint64_t cpu_user_cycles, cpu_kernel_cycles;
 };
 
 /* Borrow the executing user task's process; NULL for scheduler/kernel tasks.

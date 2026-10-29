@@ -28,6 +28,15 @@ void arch_clock_tick(void);
  * wrap between samples, including boot, stalls and debugger/VM pauses. Reboot
  * after violating that bound; missed wraps cannot be detected or recovered. */
 uint64_t arch_monotonic_ns(void);
+
+/* Unordered TSC read for CPU-time accounting. Only differences between two
+ * reads on the same CPU are meaningful; it is never a clock. */
+static inline uint64_t arch_tsc_read(void)
+{
+  uint32_t low, high;
+  __asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
+  return ((uint64_t)high << 32) | low;
+}
 /* Static name of the current timestamp source, for measurement provenance. */
 const char *arch_clock_source(void);
 

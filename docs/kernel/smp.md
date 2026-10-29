@@ -775,6 +775,32 @@ more runnable tasks receives more CPU time. There are no priorities, per-space
 quotas or memory limits, and CPU sets do not protect against exhaustion of
 shared services.
 
+## CPU time accounting
+
+Each task counts its on-CPU time in TSC cycles, split into user and kernel time
+(chronium, 2026-10-29: exact TSC timing, chosen over timer sampling after the
+[native comparison](../development/experiments/cpu-accounting.md)).
+Each CPU also keeps busy and idle totals.
+
+- The scheduler loop reads the TSC once per dispatch, when the task switches
+  back. That read closes the task's interval and opens the next task's, so
+  loop work between two tasks (on the BSP, including reaping) is charged to the
+  next task. An idle CPU reads the TSC once more when it wakes and charges the
+  wait to idle.
+- `task_syscall_enter` and `task_syscall_leave` read it again to move the
+  boundary between user and kernel time. A task that switches out inside a
+  syscall, and every kernel worker, is charged as kernel time. Interrupts and
+  page faults taken from user mode count as user time.
+- Syscall entry and leave write only the task. Each CPU's mark and totals sit
+  in a static array with one cache line per CPU, written only by that CPU's
+  scheduler loop. The packed `schedulers` array shares lines with fields other
+  CPUs write when they queue work, so stores there could stall on another CPU's
+  line on the wake and dispatch paths.
+- Every interval starts and ends on one CPU, so no cross-CPU TSC agreement is
+  needed. The read is unordered: an edge can be off by a few tens of cycles.
+- The BSP reaper adds a retiring thread's cycles to its process. Cycles are not
+  converted to time here; the process listing that reads them does that.
+
 ## Remaining serial services and limits
 
 Kernel workers have fixed owner CPUs: they never migrate or get stolen by another
