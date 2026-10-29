@@ -1,26 +1,30 @@
 # Initial interface selection
 
 Trusted boot configuration defines ordered logical interfaces before spaces and
-session owners start. Explicit names identify configured roles; automatic wired
-names use the initial controller inventory. `lo` is predefined, Ethernet uses
-`ethN`, and Wi-Fi uses `wlanN`. A Wi-Fi definition can remain unbound until a
-configured radio backend binds it. The opt-in [AX200 backend](ax200-wifi.md)
+session owners start. Explicit names identify configured roles; automatic names
+use the initial controller inventory. `lo` is predefined, Ethernet uses `ethN`,
+and Wi-Fi uses `wlanN`. A Wi-Fi definition can bind a prepared radio before its
+MAC is known. The opt-in [AX200 backend](ax200-wifi.md)
 supports one legacy 2.4 GHz OPEN or WPA2-Personal/CCMP link through the separate
 [Wi-Fi interface](../interfaces/wifi.md). Defining a name grants no radio rights.
 See the [multiple-interface reference](network-interfaces.md) for qualification.
 
 The stock [network profile](networking.md#boot-configuration-and-use) enables
-`wired = { auto = true, exclude = {} }` with an empty explicit interface list.
+`wired = { auto = true, exclude = {} }` and
+`wifi = { auto = true, exclude = {} }` with an empty explicit interface list.
 After complete boot discovery, explicit entries reserve names and controllers;
-remaining supported Ethernet controllers get unused `ethN` names in ascending
-boot-local ID order. Carrier-down or unknown-carrier NICs are included. Generated
-entries have independent optional DHCP clients. `wired.exclude` omits listed
-MACs from IP configuration and delegated scopes, not mandatory driver draining;
-an exact selector naming an excluded NIC is refused. Linked roles filter
+remaining supported prepared controllers get unused `ethN` or `wlanN` names in
+ascending boot-local ID order within each class. Carrier-down or unknown-carrier
+Ethernet controllers are included. Generated entries have independent optional
+DHCP clients. `wired.exclude` and optional `wifi.exclude` omit listed MACs from
+IP configuration and delegated scopes, not mandatory driver draining; an exact
+selector naming an excluded controller is refused. Ethernet linked roles filter
 exclusions before preference/ID ranking and reservation, including late binding.
 A required linked role with no permitted prepared candidate refuses setup; a
-permitted candidate waiting for carrier can remain pending. Missing `wired` or
-`auto = false` keeps explicit-only behavior.
+permitted candidate waiting for carrier can remain pending. Omitting either
+class's configuration, or setting its `auto = false`, keeps that class
+explicit-only. Both classes share the ten-second discovery deadline and the
+aggregate limit of 254 non-loopback definitions.
 
 Generated names remain fixed until reboot; use an explicit MAC entry for a
 persistent hardware role. Newly attached post-boot controllers are not added.
@@ -33,6 +37,22 @@ require a unique class-matching controller; ambiguous matches or one controller
 selected twice are refused before binding publication. Optional absence omits a
 binding, preserving the logical definition for a later attempt. Existing bindings
 cannot be reassigned until reboot.
+
+## Wi-Fi identity and automatic binding
+
+Without Wi-Fi MAC selectors or exclusions, automatic Wi-Fi entries bind prepared
+controller IDs immediately, even before MAC identity is available. Configuration
+does not start firmware or issue a radio operation to discover a MAC. With Wi-Fi
+MAC pins or exclusions, affected bindings remain pending until a separately
+authorized Wi-Fi request reveals identity. Explicit roles and exclusions are
+resolved before automatic binding. If an explicit role takes a controller
+provisionally assigned to a generated name, that generated slot stays unbound
+and inert until reboot; it is not reassigned to another radio.
+
+Automatic naming uses the currently selected native Wi-Fi backend; it does not
+add a multi-radio backend. Binding and optional DHCP grant no READ, SCAN or
+CONNECT rights and do not authenticate a link. Management remains explicitly
+pinned. See [Wi-Fi authority](../interfaces/wifi.md#authority-and-startup).
 
 ## Eligibility and preference
 
