@@ -4,10 +4,12 @@
 #include <stdatomic.h>
 
 #define LOG_RING_BYTES (256 * 1024)
-/* Each line starts with its little-endian u32 length, then its level byte. */
+/* Each line starts with its little-endian u32 length, then its level byte and its
+ * source byte. */
 #define LOG_LINE_LENGTH_BYTES sizeof(uint32_t)
 #define LOG_LINE_LEVEL_OFFSET LOG_LINE_LENGTH_BYTES
-#define LOG_LINE_HEADER_BYTES (LOG_LINE_LENGTH_BYTES + 1)
+#define LOG_LINE_SOURCE_OFFSET (LOG_LINE_LEVEL_OFFSET + 1)
+#define LOG_LINE_HEADER_BYTES (LOG_LINE_SOURCE_OFFSET + 1)
 
 static char ring[LOG_RING_BYTES];
 static atomic_bool ring_locked;
@@ -16,6 +18,8 @@ static size_t first_index, used_bytes, current_index;
 static uint32_t current_length;
 static uint64_t first_line, next_line;
 static bool line_open, discard_line, exhausted;
+/* Stamped on the line a character opens; the caller holds the log lock. */
+static uint8_t open_source;
 
 /* Fatal entry may interrupt a writer or reader on this CPU, including before
  * GS is usable. Once panic starts, every acquisition becomes a single try. */
@@ -69,6 +73,16 @@ static uint8_t line_level(size_t index)
   return (uint8_t)ring[ring_index(index + LOG_LINE_LEVEL_OFFSET)];
 }
 
+static uint8_t line_source(size_t index)
+{
+  return (uint8_t)ring[ring_index(index + LOG_LINE_SOURCE_OFFSET)];
+}
+
+void log_ring_set_source(uint8_t source)
+{
+  open_source = source;
+}
+
 static void drop_first_line(void)
 {
   size_t bytes = LOG_LINE_HEADER_BYTES + line_length(first_index);
@@ -106,6 +120,7 @@ void log_ring_putc(enum log_level level, char c)
       current_length = 0;
       set_line_length(current_index, 0);
       ring[ring_index(current_index + LOG_LINE_LEVEL_OFFSET)] = (char)level;
+      ring[ring_index(current_index + LOG_LINE_SOURCE_OFFSET)] = (char)open_source;
       used_bytes += LOG_LINE_HEADER_BYTES;
       line_open = true;
     }
@@ -213,7 +228,8 @@ static enum call_status read_locked(struct log_cursor cursor, struct log_cursor 
     if (available > capacity - reply->size - sizeof(struct log_record)) {
       available = capacity - reply->size - sizeof(struct log_record);
     }
-    struct log_record record = {.length = (uint16_t)available, .level = line_level(index)};
+    struct log_record record = {.length = (uint16_t)available, .level = line_level(index),
+        .source = line_source(index)};
     memcpy(bytes + reply->size, &record, sizeof(record));
     reply->size += sizeof(record);
     for (size_t i = 0; i < available; ++i) {
