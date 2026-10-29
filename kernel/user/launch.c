@@ -221,7 +221,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, net_policy, NET_POLICY_RIGHT_MANAGE, 0, &net_policy_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||
       capability_install(&process->capabilities, system_info, system_info_rights, 0, &system_info_handle) != CAP_OK ||
-      capability_install(&process->capabilities, log, LOG_RIGHT_READ, 0, &log_handle) != CAP_OK ||
+      capability_install(&process->capabilities, log, LOG_RIGHT_READ | LOG_RIGHT_WRITE, 0, &log_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher,
           LAUNCHER_RIGHT_LAUNCH, 0, &launcher_handle) != CAP_OK) {
     goto fail;

@@ -47,6 +47,7 @@ enum bsp_service {
   BSP_SERVICE_WIFI_CONNECTION,
   BSP_SERVICE_WIFI_AUTH,
   BSP_SERVICE_JIT, /* Typed retained storage only; executes on caller CPU. */
+  BSP_SERVICE_LOG_STREAM_CREATE,
   BSP_SERVICE_COUNT,
 };
 

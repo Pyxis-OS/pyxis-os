@@ -85,6 +85,7 @@ uint64_t object_protocol(const struct kernel_object *object)
   case OBJECT_TERMINAL_INPUT:
   case OBJECT_TERMINAL_OUTPUT:
   case OBJECT_CONSOLE:
+  case OBJECT_LOG_STREAM:
     return PROTOCOL_CONSOLE;
   case OBJECT_FILE:
   case OBJECT_OUTPUT_PRODUCER:
@@ -228,7 +229,8 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
   }
   return (protocol == PROTOCOL_FILE && (type == OBJECT_FILE || type == OBJECT_OUTPUT_PRODUCER)) ||
       (protocol == PROTOCOL_CONSOLE && (type == OBJECT_CONSOLE ||
-          type == OBJECT_TERMINAL_INPUT || type == OBJECT_TERMINAL_OUTPUT)) ||
+          type == OBJECT_TERMINAL_INPUT || type == OBJECT_TERMINAL_OUTPUT ||
+          type == OBJECT_LOG_STREAM)) ||
       (protocol == PROTOCOL_PIPE && type == OBJECT_PIPE);
 }
 
@@ -384,7 +386,9 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_SYSTEM_INFO:
     return !(rights & ~(SYSTEM_INFO_RIGHT_READ | SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE));
   case OBJECT_LOG:
-    return !(rights & ~LOG_RIGHT_READ);
+    return !(rights & ~(LOG_RIGHT_READ | LOG_RIGHT_WRITE));
+  case OBJECT_LOG_STREAM:
+    return !(rights & ~CONSOLE_RIGHT_WRITE);
   case OBJECT_CLOCK:
     return !(rights & ~CLOCK_RIGHTS);
   case OBJECT_DISPLAY:

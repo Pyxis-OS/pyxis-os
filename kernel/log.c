@@ -1,5 +1,8 @@
+#include <abi/log.h>
+#include <arch/clock.h>
 #include <kernel/log.h>
 #include <kernel/log_ring.h>
+#include <kernel/space.h>
 #include <kernel/net/log_udp.h>
 #include <arch/console.h>
 #include <arch/cpu.h>
@@ -16,6 +19,8 @@
 #define LOG_COLOUR_DEFAULT "\x1b[39m"
 
 static atomic_bool log_locked;
+/* A line written by a space is being logged; the log lock protects it. */
+static bool log_user_line;
 static atomic_bool panic_output;
 static struct tty *log_tty;
 /* Ordinary output and the one-time replay share the presentation lock. */
@@ -188,15 +193,105 @@ void log_putc(enum log_level level, char c)
   if (!console_shows(level)) {
     return;
   }
-  console_putc(c);
-  if (atomic_load_explicit(&panic_output, memory_order_relaxed)) {
+  bool panicking = atomic_load_explicit(&panic_output, memory_order_relaxed);
+  /* Serial is slow (a few milliseconds per line) and the log lock is held
+   * throughout, so lines written by spaces stay off it and off the early console.
+   * They remain in the ring, on the Caelum TTY and in UDP capture. */
+  bool mirrored = !log_user_line || panicking;
+  if (mirrored) {
+    console_putc(c);
+  }
+  if (panicking) {
     early_console_panic_putc(c);
     return;
   }
-  early_console_putc(c);
+  if (mirrored) {
+    early_console_putc(c);
+  }
   /* Log lock, then the TTY's output lock: the documented order. */
   if (log_tty && log_tty->initialized && tty_lock(log_tty)) {
     tty_put_char(log_tty, c);
     tty_unlock(log_tty);
   }
+}
+
+static void log_emit_line(uint8_t source, enum log_level level, const char *name,
+    const char *text, size_t length)
+{
+  log_ring_set_source(source);
+  log_user_line = source != 0;
+  log_record_begin(level);
+  for (const char *c = name; *c; ++c) {
+    log_putc(level, *c);
+  }
+  log_putc(level, ':');
+  log_putc(level, ' ');
+  for (size_t i = 0; i < length; ++i) {
+    log_putc(level, text[i]);
+  }
+  log_putc(level, '\n');
+  log_record_end(level);
+  log_user_line = false;
+  log_ring_set_source(0);
+}
+
+/* Refill one line per LOG_RATE_LINES_PER_SECOND's interval, up to the burst. */
+static bool log_space_may_write(struct space *space, uint64_t now)
+{
+  const uint64_t interval = UINT64_C(1000000000) / LOG_RATE_LINES_PER_SECOND;
+  uint64_t lines = (now - space->log_refilled_ns) / interval;
+  if (lines) {
+    space->log_tokens = lines >= LOG_RATE_BURST - space->log_tokens ?
+        LOG_RATE_BURST : space->log_tokens + lines;
+    space->log_refilled_ns = space->log_tokens == LOG_RATE_BURST ? now :
+        space->log_refilled_ns + lines * interval;
+  }
+  if (!space->log_tokens) {
+    return false;
+  }
+  --space->log_tokens;
+  return true;
+}
+
+void log_write_line(struct space *space, enum log_level level, const char *text, size_t length)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool locked = log_begin();
+  if (locked) {
+    uint64_t now = arch_monotonic_ns();
+    if (!log_space_may_write(space, now)) {
+      ++space->log_dropped;
+    } else {
+      if (space->log_dropped && now - space->log_summary_ns >= UINT64_C(1000000000)) {
+        char count[24];
+        size_t digits = 0;
+        for (uint64_t value = space->log_dropped; value; value /= 10) {
+          count[digits++] = (char)('0' + value % 10);
+        }
+        char summary[64];
+        size_t used = 0;
+        static const char prefix[] = "dropped ";
+        for (size_t i = 0; i < sizeof(prefix) - 1; ++i) {
+          summary[used++] = prefix[i];
+        }
+        for (const char *c = space->name; *c && used < 40; ++c) {
+          summary[used++] = *c;
+        }
+        summary[used++] = ' ';
+        while (digits) {
+          summary[used++] = count[--digits];
+        }
+        static const char suffix[] = " log lines";
+        for (size_t i = 0; i < sizeof(suffix) - 1; ++i) {
+          summary[used++] = suffix[i];
+        }
+        log_emit_line(0, LOG_LEVEL_WARN, "log", summary, used);
+        space->log_dropped = 0;
+        space->log_summary_ns = now;
+      }
+      log_emit_line(space->log_source, level, space->name, text, length);
+    }
+  }
+  log_end(locked);
+  cpu_restore_interrupts(flags);
 }
