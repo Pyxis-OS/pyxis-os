@@ -161,7 +161,9 @@ a raw OVMF pair (`OVMF_CODE` and `OVMF_VARS` override the usual locations) and
 matches its line in the given `SHA256SUMS`, and never replaces an existing
 output. It boots the ISO on a blank sparse 32 GiB disk, types the installer's
 answers through QEMU's monitor, waits on the kernel-log lines the installer
-writes to serial (the prompts themselves are only on the screen), converts with
+writes to serial (the prompts themselves are only on the screen) and, for the
+network, on the DHCP acknowledgement in QEMU's packet capture of the guest, which
+no longer logs it to serial; it then converts with
 `qemu-img convert -c`, then runs `verify` on the result.
 
 `verify IMAGE` checks that the file is a 32 GiB qcow2 without a backing file and

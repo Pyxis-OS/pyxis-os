@@ -34,8 +34,9 @@ FIRMWARE = (
 
 # Kernel-log lines that reach the serial file and mark the installer's prompts
 # (the prompts themselves are only on the screen). Each is the last thing the
-# installer logs before it waits for the next answer.
-NETWORK_UP = "eth0: DHCP"
+# installer logs before it waits for the next answer. Lines a space writes with
+# system_log() are not mirrored to serial, so the network coming up is read from
+# the capture of the guest's network instead (dhcp_acknowledged).
 JOURNAL_PROMPT = "installer progress PAUSE Obtaining fresh disk and volume identities:"
 REVIEW_READY = "installer progress END Hashing immutable install sources:"
 INSTALL_DONE = "installer progress END Opening program volume for cleanup:"
@@ -65,6 +66,33 @@ def sha256_file(path):
         for block in iter(lambda: stream.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def dhcp_acknowledged(capture):
+    """Whether the pcap bytes hold a DHCPACK, the server's reply that gives the
+    guest its address. Records cut off by the end of the file are ignored."""
+    offset = 24  # the pcap file header
+    while offset + 16 <= len(capture):
+        captured = int.from_bytes(capture[offset + 8:offset + 12], "little")
+        frame = capture[offset + 16:offset + 16 + captured]
+        offset += 16 + captured
+        if len(frame) < captured or frame[12:14] != b"\x08\x00" or frame[23] != 17:
+            continue  # not IPv4 carrying UDP
+        udp = 14 + (frame[14] & 0xf) * 4
+        bootp = udp + 8
+        if (int.from_bytes(frame[udp:udp + 2], "big") == 67 and
+                int.from_bytes(frame[udp + 2:udp + 4], "big") == 68 and
+                frame[bootp] == 2 and frame[bootp + 236:bootp + 240] == b"\x63\x82\x53\x63"):
+            options = frame[bootp + 240:]
+            at = 0
+            while at + 2 < len(options) and options[at] != 255:
+                if options[at] == 0:
+                    at += 1
+                    continue
+                if options[at] == 53 and options[at + 2] == 5:
+                    return True
+                at += 2 + options[at + 1]
+    return False
 
 
 def find_tool(variable, name):
@@ -106,6 +134,7 @@ class Machine:
                       "discard=unmap,detect-zeroes=unmap",
             "-device", "virtio-blk-pci,drive=disk,disable-legacy=on",
             "-netdev", "user,id=net0", "-device", "virtio-net-pci,netdev=net0,disable-legacy=on",
+            "-object", "filter-dump,id=capture,netdev=net0,file=network.pcap",
             "-object", "rng-random,id=rng0,filename=/dev/urandom",
             "-device", "virtio-rng-pci,rng=rng0,disable-legacy=on",
             "-display", "none", "-serial", "file:serial.log",
@@ -185,6 +214,15 @@ class Machine:
             require(time.monotonic() < deadline, f"timed out waiting for {what}")
             time.sleep(0.5)
 
+    def wait_network(self, timeout, what):
+        deadline = time.monotonic() + timeout
+        while True:
+            if dhcp_acknowledged((self.directory / "network.pcap").read_bytes()):
+                return
+            require(self.process.poll() is None, self.failure(f"QEMU exited while waiting for {what}"))
+            require(time.monotonic() < deadline, f"timed out waiting for {what}")
+            time.sleep(0.5)
+
     def wait_exit(self, timeout, what):
         try:
             self.process.wait(timeout)
@@ -209,7 +247,7 @@ def accelerator(arguments):
 def drive_installer(machine, timeout):
     """Answer the installer's prompts on a blank disk: Install, Classic, Blank or
     marked disks, the default journal, Apply, wipe, Restart."""
-    machine.wait(NETWORK_UP, 0, timeout, "the install network")
+    machine.wait_network(timeout, "the install network (DHCP)")
     time.sleep(3)
     machine.type("1\n")
     time.sleep(2)
@@ -300,7 +338,7 @@ def verify_image(image, accel, screens, timeout):
             machine = Machine(work, overlay, "qcow2", accel)
             try:
                 machine.wait(INSTALLED_BOOT, 0, timeout, f"the installed system (boot {boot})")
-                machine.wait(NETWORK_UP, 0, timeout, f"the network (boot {boot})")
+                machine.wait_network(timeout, f"the network (boot {boot})")
                 # The Pyxis tab takes over by itself unless a key arrives first.
                 time.sleep(15)
                 if screens:
@@ -316,6 +354,7 @@ def verify_image(image, accel, screens, timeout):
             finally:
                 machine.close()
             os.replace(work / "serial.log", work / f"serial{boot}.log")
+            os.replace(work / "network.pcap", work / f"network{boot}.pcap")
 
 
 def verify(arguments):
