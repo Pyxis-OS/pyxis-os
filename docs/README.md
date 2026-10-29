@@ -38,7 +38,9 @@ exercises its native sessions; [pointer qualification](development/system-pointe
 records runtime evidence and limits.
 
 The [display reference](kernel/display.md) covers driver selection, transactional
-local resizing, panic ownership and application adaptation.
+local resizing, panic ownership and application adaptation. The
+[Intel two-plane scaling proposal](wip/intel-two-plane-scaling.md) considers a
+hardware-scaled game beneath native-resolution UI; it is not implemented.
 The [pointer input reference](devices/pointer-input-quality.md) covers report
 USB mice, shared scroll policy and calibrated Synaptics activation/filtering.
 [Screen capture](interfaces/screen-capture.md) describes whole-screen CAPTURE
