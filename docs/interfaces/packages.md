@@ -431,7 +431,9 @@ read-only view of the volume (`package_roots_open`); there are no per-package
 lookup, enumerate and read-files. The worker shares one validated immutable
 projection keyed by mounted-volume domain and set; it still reads `current`
 for every fresh live operation. See [cache visibility and capture lifetimes](command-search.md#live-package-command-directories),
-including delayed diagnostics for unsupported same-set index edits.
+including delayed diagnostics for unsupported same-set index edits. The
+[QEMU record](../development/experiments/package-projection-cache.md) measures
+small through near-limit projections.
 
 **Spaces** get the view as a root in `boot.lua`, only where the `packages`
 volume is defined (decision 47):
