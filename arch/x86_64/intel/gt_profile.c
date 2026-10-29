@@ -177,9 +177,6 @@ static bool holds_valid(void)
 
 static bool release_semaphore(void)
 {
-  if (read_reg(MCR_SELECTOR) != MCR_MULTICAST) {
-    return fail("MCR selector changed while semaphore held");
-  }
   /* Linux's handoff leaves multicast selected, never a stale saved selector.
    * Do not read the semaphore here: reading 1 acquires it again. */
   write_reg(STEER_SEMAPHORE, 1);
@@ -253,6 +250,11 @@ static bool unmap_pages(void)
   return true;
 }
 
+bool intel_gt_profile_fenced(void)
+{
+  return fenced;
+}
+
 bool intel_gt_profile_ready(void)
 {
   if (!active || fenced) {
@@ -323,11 +325,9 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
   media_gmd = read_reg(MEDIA_BASE + GMD_ID);
   unsigned release = (graphics_gmd >> GMD_RELEASE_SHIFT) & 0xff;
   bool profile = (graphics_gmd >> GMD_ARCH_SHIFT) == 30 &&
-      (release == 0 || release == 1 || release == 3 || release == 4) &&
+      (release == 0 || release == 1 || release == 3 || release == 4 || release == 5) &&
       (media_gmd >> GMD_ARCH_SHIFT) == 30 &&
       !((media_gmd >> GMD_RELEASE_SHIFT) & 0xff) &&
-      (graphics_gmd & GMD_STEP_MASK) <= GMD_STEP_B0 &&
-      (media_gmd & GMD_STEP_MASK) <= GMD_STEP_B0 &&
       read_reg(GMD_ID) == graphics_gmd && read_reg(MEDIA_BASE + GMD_ID) == media_gmd;
   kinfo("intel-gt: graphics GMD=%x media GMD=%x profile=%u\n", graphics_gmd, media_gmd, profile);
   if (!profile) {

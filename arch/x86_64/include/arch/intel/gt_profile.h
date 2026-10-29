@@ -11,6 +11,8 @@
  * prepare holds GT forcewake until finish. Failure prohibits further writes;
  * uncertain hardware/cleanup retains mappings and requests until reboot. */
 bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar);
+/* On true, the caller must retain its display power holds and MMIO mappings. */
+bool intel_gt_profile_fenced(void);
 /* Check before each new PTE write; does not acquire the MCR semaphore again. */
 bool intel_gt_profile_ready(void);
 /* Call after EVERY aligned 64-bit UC CPU PTE write, including error rollback.
