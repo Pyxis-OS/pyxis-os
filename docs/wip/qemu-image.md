@@ -60,8 +60,10 @@ the installed core archive.
    into the unmodified release ISO. Proposed. The sequence on a blank disk is
    Install, Classic, Blank or marked disks, the default journal size, Apply,
    `wipe`, then Restart under `-no-reboot` so QEMU exits after the kernel's flush.
-   The driver waits on serial kernel-log markers where they exist and on fixed
-   delays elsewhere. A build counts only once verification passes. If this proves
+   The driver waits on serial kernel-log markers where they exist, on the DHCP
+   reply in QEMU's capture of the guest's network where the guest no longer logs
+   to serial (spaces' `system_log` lines are not mirrored there since #1578/#1580),
+   and on fixed delays elsewhere. A build counts only once verification passes. If this proves
    flaky, stop and discuss an unattended installer mode or a host-built image;
    do not add retries.
 2. **One script,** `tools/qemu-image.py` (standard-library Python), with
