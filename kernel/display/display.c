@@ -529,6 +529,14 @@ static void copy_flip_surface(const struct framebuffer *surface)
     cursor_probe_copy();
   }
   size_t row_bytes = target->width * sizeof(uint32_t);
+  if (intel_flipping && surface->pitch == row_bytes && target->pitch == row_bytes) {
+    for (size_t offset = 0; offset < target->size && !display_is_panicking();
+        offset += DISPLAY_COPY_BYTES) {
+      size_t count = MIN(target->size - offset, DISPLAY_COPY_BYTES);
+      memcpy((void *)(surface->address + offset), (const void *)(staging + offset), count);
+    }
+    return;
+  }
   for (size_t y = 0; y < target->height && !display_is_panicking(); ++y) {
     for (size_t x = 0; x < row_bytes && !display_is_panicking();
         x += DISPLAY_COPY_BYTES) {

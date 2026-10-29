@@ -23,6 +23,10 @@
 #define SCALER_COUNT 2
 #define PIPE_STEP 0x1000u
 #define TRANS_ENABLE (1u << 31)
+#define PIPE_IRQ_IMR(p) (0x44404u + 0x10u * (p))
+#define PIPE_IRQ_IIR(p) (0x44408u + 0x10u * (p))
+#define PIPE_IRQ_IER(p) (0x4440cu + 0x10u * (p))
+#define PIPE_PLANE1_FLIP_DONE (1u << 3)
 #define WELL_REQUEST(index) (2u << (2 * (index)))
 #define WELL_STATE(index) (1u << (2 * (index)))
 #define PIPE_SCANLINE(p) (0x70000u + PIPE_STEP * (p))

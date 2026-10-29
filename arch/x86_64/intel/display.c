@@ -851,16 +851,16 @@ void intel_display_write_surface(uint32_t surface)
 
 void intel_display_flip_event_control(bool record)
 {
-  const uint32_t done = 1u << 3;
-  uint32_t ier = read_register(0x4440c);
-  flip_register_write(0x4440c, ier & ~done);
-  uint32_t imr = read_register(0x44404);
-  flip_register_write(0x44404, record ? imr & ~done : imr | done);
+  const uint32_t done = PIPE_PLANE1_FLIP_DONE;
+  uint32_t ier = read_register(PIPE_IRQ_IER(0));
+  flip_register_write(PIPE_IRQ_IER(0), ier & ~done);
+  uint32_t imr = read_register(PIPE_IRQ_IMR(0));
+  flip_register_write(PIPE_IRQ_IMR(0), record ? imr & ~done : imr | done);
 }
 
 void intel_display_clear_flip_event(void)
 {
-  flip_register_write(0x44408, 1u << 3);
+  flip_register_write(PIPE_IRQ_IIR(0), PIPE_PLANE1_FLIP_DONE);
 }
 
 bool intel_display_gtt_read(uint64_t gpu, uint64_t *value)
