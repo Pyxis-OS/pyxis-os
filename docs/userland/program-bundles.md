@@ -40,6 +40,8 @@ The resolver retains the selected revision, image, app directory and resource
 directories until its owning program view closes. The default and every command
 entry must be native FILE objects whose prefix matches `P1F_MAGIC`; scripts are
 rejected. Remaining P1F validation and executable capture belong to the kernel.
+A script's shebang may name a bundle as its interpreter; it then launches as
+that bundle ([script launch](script-launch.md#bundle-interpreters)).
 
 ## Manifest and stack
 

@@ -239,9 +239,9 @@ stdin/shebang loading and the upstream library profile are implemented; see
 [Lua](../userland/lua.md) and [script authority](../userland/script-authority.md).
 None depends on virtio-fs.
 
-Owner direction, 2026-10-13: allow bundle interpreters in shebangs (for example
-`#!bin://shell.pxb`), so `home://post.pxs` directly receives declared interpreter
-grants; Lua shares the gap. Today interpreters must be native executables.
+Bundle interpreters in shebangs (for example `#!bin://shell.pxb`) are implemented
+for the shell; see [script launch](../userland/script-launch.md#bundle-interpreters).
+Lua and libuv launches share the gap ([#1591](https://git.internal/PyxisOS/pyxis-os/issues/1591)).
 
 ## Networking and applications
 

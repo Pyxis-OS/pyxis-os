@@ -14,7 +14,9 @@ suffix or manifest ID. Trusted startup selects the interpreter files from its
 held archive/package publication views. Rootless interpreters retain their own
 held executable and supplied code records. A shebang's selected interpreter is
 held across preparation; the main script consumes the handed FILE rather than
-reopening its diagnostic name. Bundle-interpreter shebangs remain unsupported.
+reopening its diagnostic name. A bundle interpreter is launched as that bundle,
+with the script handed over as `script`; see
+[script launch](script-launch.md#bundle-interpreters).
 
 The SDK's `program_sources` owns only source capabilities and configured
 `source.*` entries. `program_interpreters` owns code-only READ FILE records.
