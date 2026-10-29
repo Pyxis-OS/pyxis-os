@@ -2,7 +2,7 @@
 
 The kernel has one system-wide BSP network worker and retained logical interface
 contexts. `lo` is predefined; trusted boot configuration defines ordered `ethN`
-and `wlanN` names and binds supported Ethernet controllers through trusted boot
+and `wlanN` names and binds supported prepared controllers through trusted boot
 policy. Class and hardware driver are separate. A logical Wi-Fi definition does
 not itself grant radio authority. The opt-in [AX200 backend](ax200-wifi.md)
 supports one legacy 2.4 GHz OPEN or WPA2-Personal/CCMP link through the
@@ -527,6 +527,7 @@ installed boots. The stock profile is:
 ```lua
 return {
   wired = { auto = true, exclude = {} },
+  wifi = { auto = true, exclude = {} },
   interfaces = {},
   routing = { auto = true },
   dns = { server = "1.1.1.1" },
@@ -547,9 +548,27 @@ from automatic definitions, DHCP and delegated packet scopes; explicitly selecti
 an excluded wired NIC is an error. It does not disable mandatory driver draining.
 Omitting `wired`, or using `auto = false`, retains explicit-only configuration.
 
+`wifi.auto = true` applies the same initial naming policy to prepared radios:
+explicit names and controllers come first, then remaining controller IDs receive
+unused `wlanN` names in ascending order and independent optional DHCP clients.
+Without Wi-Fi MAC pins or exclusions, bindings use controller IDs immediately,
+before MAC identity is known. Optional `wifi.exclude = {"02:00:00:00:00:01", ...}`
+has the same exclusion semantics as its wired counterpart. When Wi-Fi MAC pins
+or exclusions need unresolved identity, affected bindings stay pending until a
+separately authorized Wi-Fi request reveals it. Explicit roles and exclusions
+are resolved first; a displaced generated slot remains unbound and inert for
+the boot. Names and scopes do not expand later. Omitting `wifi`, or setting its
+`auto = false`, keeps Wi-Fi explicit-only.
+
+Configuration never starts Wi-Fi firmware or grants radio rights. Automatic
+naming uses the currently selected native backend, without adding multi-radio
+support. See [initial selection](net0-selection.md#wi-fi-identity-and-automatic-binding)
+and [Wi-Fi authority](../interfaces/wifi.md#authority-and-startup).
+
 Initial discovery has a ten-second setup deadline; failure publishes no automatic
-plan. The resolved plan permits 254 non-loopback definitions. Bindings and packet
-scopes remain fixed until reboot; brand-new post-boot adapters are outside this
+plan. Wired and Wi-Fi share this bound and the aggregate limit of 254
+non-loopback definitions. Bindings and packet scopes remain fixed until reboot;
+brand-new post-boot adapters are outside this
 slice. Same-controller recovery keeps its existing contract.
 
 Each explicit entry chooses exactly one selector: `select = "link"`,
@@ -558,17 +577,16 @@ eligible candidates with `prefer = {"MAC", ...}`, then ascending controller ID.
 A controller selected twice or an ambiguous explicit selector is refused.
 Optional absent entries remain defined and unbound; they can be bound later,
 without replacing an existing association. One absent interface does not hold up
-a working peer's client or the local shell. A Wi-Fi definition remains unbound
-until a configured, enabled radio backend binds it; ordinary spaces receive no
-radio rights unless explicitly configured.
+a working peer's client or the local shell. Ordinary spaces receive no radio
+rights unless explicitly configured.
 
 `dhcp = true` excludes static `address`, `prefix` and `gateway`. Static addresses
 use four decimal octets, prefixes 1..32 and an optional gateway; validation checks
 subnet/gateway relationships and duplicate addresses before effects. The legacy
 `net0` profile is rejected. Convert private profiles to an ordered interface
 entry and explicit routing/DNS/management names; names must refer to `lo` or a
-declared interface. In automatic mode a canonical generated `ethN` reference
-may be absent from the discovered set; that selection is unavailable, without
+declared interface. In automatic mode a canonical generated `ethN` or `wlanN`
+reference may be absent from the discovered set; that selection is unavailable, without
 fallback, so an offline or all-excluded machine still boots locally. The stock
 route and numeric DNS use [automatic preference](net0-selection.md#automatic-route-preference)
 within held scopes; management remains pinned to `eth0`.

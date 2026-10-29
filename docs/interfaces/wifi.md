@@ -122,6 +122,15 @@ limits and their programming or calibration enforcement.
 
 ## Authority and startup
 
+The stock [network profile](../devices/networking.md#boot-configuration-and-use)
+enables `wifi.auto` to name and bind prepared radios as `wlanN`, with optional
+DHCP. Binding by controller ID does not require a known MAC unless Wi-Fi MAC
+pins or exclusions need identity; those affected bindings wait for a separately
+authorized request. Configuration never starts firmware and grants no radio
+rights. [Initial selection](../devices/net0-selection.md#wi-fi-identity-and-automatic-binding)
+defines late identity, fixed names and exclusions. It uses the currently selected
+native backend, without adding multi-radio support; management remains pinned.
+
 `PROTOCOL_WIFI` has independently attenuable READ, SCAN and CONNECT rights. READ returns
 presence/preparation/rfkill/failure, actual DMA and ring/counter status; it never
 starts a scan or reveals nearby identities. SCAN starts one explicit operation.
@@ -164,7 +173,7 @@ returns UNAVAILABLE without a partial FILE. Unknown channel flags do not authori
 use; indoor/DFS/environment restrictions without a qualified TX interpretation
 remain listen-only. Firmware and source notices/pins are in `firmware/ax200-wifi/`.
 
-Boot configuration opts individual spaces in with
+Separately, boot configuration opts individual spaces in with
 `wifi = { read = true, scan = true, connect = true }` (each boolean independently optional).
 Stock configurations omit all three. Trusted session, Remote and mux startup carry
 only the selected rights. The `wifi` bundle declares each right separately;
