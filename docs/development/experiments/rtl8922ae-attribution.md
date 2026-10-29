@@ -3,7 +3,8 @@
 [Task 1](../../wip/rtl8922ae-wifi.md#next-discovery-slice--accepted-chronium-2026-10-29)
 adds startup observations and investigates a known nearby channel-6 network.
 Its BSSID and raw captures remain private. Channel-6 reception in Pyxis is not
-qualified; no decoder, RF retune, filter or dwell fix has been implemented.
+qualified; the accepted period change awaits matched native qualification; no decoder,
+RF retune or filter fix has been introduced.
 
 ## Software baseline and observation boundary
 
@@ -95,8 +96,9 @@ Old Linux exporter limitations (integer-only frequencies and exact-size scan
 reports) were corrected only in later packet tools; old seals/results remain
 unchanged. Unknown report tails are never exported publicly.
 
-The [proposed next candidate](../../wip/rtl8922ae-wifi.md#task-1-passive-period-proposal-2026-10-29-not-accepted)
+The [accepted candidate](../../wip/rtl8922ae-wifi.md#passive-scan-period--accepted-chronium-2026-10-29)
 is the same Pyxis 1+6 sequence with only period 45 changed to 232, retaining all
-power/RFK/filter/deadline and FILE checks. It requires chronium's decision and
-matched native known-BSSID evidence. A fixed dwell cannot guarantee every AP;
+power/RFK/filter/deadline and FILE checks. Chronium accepted it on 2026-10-29
+for the 1+6 profile and the default passive sweep. Implementation changes only
+the period constant; matched native known-BSSID evidence is pending. A fixed dwell cannot guarantee every AP;
 empty/partial results or capture loss never authorize an automatic retry.

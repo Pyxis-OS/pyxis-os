@@ -41,7 +41,7 @@
 #define SCAN_CHANNEL_INVALID 0xffu
 #define SCAN_START 1u
 #define SCAN_STOP 0u
-#define SCAN_CHANNEL_TIME_MS 45u
+#define SCAN_CHANNEL_TIME_MS 232u
 #define SCAN_PAUSE_DATA (UINT32_C(1) << 6)
 #define SCAN_NOTIFY_SHIFT 9u
 #define SCAN_NOTIFY_END (UINT32_C(1) << 6)

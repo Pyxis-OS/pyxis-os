@@ -1108,34 +1108,30 @@ place so a broader mask does not need a reboot, as Linux permits. The exact-mask
 limit above is temporary. Design its ownership, retirement and failure handling
 at that task; do not implement an unreviewed reset/retry mechanism in task 1.
 
-### Task-1 passive-period proposal (2026-10-29; not accepted)
+### Passive scan period — accepted (chronium, 2026-10-29)
 
-The [Linux controls](../development/experiments/rtl8922ae-attribution.md#native-and-linux-controls-vela-2026-10-29)
-also missed channel 6 with a 45-period 1+6 request; a channel-6-only request
-actually used period 232 and received two channel-6 BSSs. This supports testing
-a longer listen interval, not a speculative RF retune or decoder change. The
-exact known-BSSID comparison remains private/pending.
+Use fixed firmware period **232 per channel** for the RTL8922AE receive-only
+1+6 profile and the default passive sweep. The [Linux controls](../development/experiments/rtl8922ae-attribution.md#native-and-linux-controls-vela-2026-10-29)
+missed channel 6 at period 45; a channel-6-only control actually used 232 and
+received two channel-6 BSSs. The exact Linux known-BSSID comparison waits for
+the next Fedora window. This is an accepted receive policy, not a format limit
+or a universal Linux default.
 
-**Decision — proposed default:** use fixed firmware period **232 per channel**
-for the current receive-only RTL discovery profile, subject to a matched native
-1+6 qualification. It is the longer period actually observed receiving channel-6
-BSSs with the same firmware, not a format limit or a universal Linux default.
-Keep the current channel list, zero SSIDs/no probes, DFS/NO_IR interpretation,
-common power, RFK, filters, operation deadline and snapshot lifetime unchanged.
-No new request field or setting is needed for this fix. This proposal is not
-permission to implement the later full sweep or in-place re-preparation task.
+This task changes only period 45 to 232. Preserve channel-list contents,
+zero SSIDs/no probes, DFS/NO_IR interpretation, common power, RFK, filters,
+operation deadline and snapshot lifetime. No new request field or setting.
+The default sweep uses the same period when its later delivery lands; this
+does not assign the wider sweep or in-place re-preparation work.
 
-After acceptance, qualify the same two sequential 1+6 scans with the first
-immutable FILE held through the second. Change only the period from 45 to 232;
-record actual firmware period and privately compare the known channel-6 BSSID.
-Keep pre-filter tracing temporary and packet-only. A partial/empty result or
-capture loss is reported honestly and never causes an automatic retry.
+Qualify the same two sequential 1+6 scans with the first immutable FILE held
+through the second. Verify firmware-reported period 232 and the known channel-6
+BSSID using horse's private input. Keep pre-filter tracing temporary and
+packet-only. Report empty/partial results or capture loss honestly, never
+retrying automatically. Native channel-6 qualification is pending.
 
-Tradeoff: each passive visit lasts longer; caller deadlines and cancellation
-still apply. A fixed period cannot guarantee reception of every AP or beacon
-interval. The test distinguishes longer dwell from the successful Linux
-control's separate change to a channel-6-only mask. Do not claim channel-6
-qualification until the matched native evidence passes.
+Passive visits last longer; caller deadlines and cancellation remain effective.
+No fixed period guarantees reception of every AP or beacon interval. The matched
+1+6 test isolates duration from the Linux control's separate mask change.
 
 ### Ordered delivery
 
