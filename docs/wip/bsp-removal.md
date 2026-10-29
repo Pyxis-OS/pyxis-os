@@ -335,11 +335,20 @@ Keep task 4 unchecked and PR draft: native SEND completion still rises 8.1% in
 this instrumented pair. No performance waiver is accepted.
 
 Both temporary timing probes, their local branches/worktrees and their images
-are removed; only methods/results remain. Source-level locality/placement
-attribution is still open. The next ordinary existing-tool control mirrors
-only the process object's 392-to-432-byte size growth on main, with no task-4
-execution changes or timing mechanism. This is a local diagnostic allocation
-control, not a selected production fix.
+are removed; only methods/results remain. The ordinary main-plus-process-size
+control is now negative: native SEND4096 0.677 → 0.675 ms, admission unchanged
+at 0.095 ms. This excludes the 40-byte growth alone, not other boot allocations
+or preparation/reclamation chronology. Its source/worktrees/images are removed.
+Source-level attribution remains open; no validated fix is established. A
+CPU0-only current-base A/B is the next proposed existing-tool locality control,
+with fixed/network-service contention explicitly a confound. See the
+[control and #1584 integration record](../development/experiments/bsp-preparation.md#native-process-size-control).
+
+The rebased integration keeps #1584's bounded producer waits and task 4's
+narrow shared-stack/device admission, caller-owned rollback and AP capture
+retirement. Installed/RAM/pipeline checks pass at 1/4 QEMU CPUs; the broader
+16-command cohort passes at four. Native parity on the rebased head remains
+unqualified. Task 4 stays unchecked and draft.
 
 **You should know:** fixed cleanup actors add boot storage. Shared stack/capture
 admission can return BUSY after the existing bounded wait; cleanup contention can

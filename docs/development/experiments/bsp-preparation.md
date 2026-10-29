@@ -552,6 +552,73 @@ small numeric/source/cleanup notes. The directory is now evidence only.
 Product runtime is unchanged. Ordinary A/B QEMU and frozen host-parser checks
 passed before the native run; they are not native latency evidence.
 
+### Native process-size control
+
+The orchestrator completed two fresh vela boots, one per variant, with the same
+CPU1-only archive and controls. A is main `c65430c61e`; B is that same main with
+only the private process allocation growing from 392 to 432 bytes (local
+`29c822bcf`). Binary isolation changed only the constructor size/zeroing
+immediates and build identity; hot-path bytes and addresses were unchanged.
+Both variants retain main's preparation/reclamation behavior. All checks pass:
+
+| Interval, ms | A | B |
+| --- | --- | --- |
+| CALL64 / CALL4096 completion | 1.220 / 1.385 | 1.198 / 1.415 |
+| SEND64 completion / admission | 0.616 / 0.070 | 0.613 / 0.070 |
+| SEND4096 completion / admission | 0.677 / 0.095 | 0.675 / 0.095 |
+| Launch | 1030.3 | 1028.7 |
+| Pages | 24.93 | 24.95 |
+
+The 40-byte growth alone does **not** reproduce task 4's SEND4096 regression.
+This excludes that isolated factor, not fixed reaper boot allocations,
+preparation/reclamation CPU or allocation chronology. One boot per variant is
+not a repeated confidence estimate. The temporary allocation-control source,
+worktrees/builds and images are removed. All 101 native evidence files,
+comparison and run log are checksum-preserved under
+`/shared/present/bsp-removal/task4/native-process-footprint/`; it is evidence only.
+
+There is still no validated performance fix. The next proposed existing-tool
+control is current-base main versus task 4 with Remote/children on CPU0, all
+CPUs online. This tests a broad execution-locality/chronology dimension without
+new kernel instrumentation. CPU0 also hosts fixed/network services, so either
+outcome requires that confound; it cannot by itself identify or exonerate boot
+allocation. A true boot-storage-only control would need new experimental
+allocation code and a separately reviewed scope. Neither has run. No production
+fence, padding workaround, guard removal or performance waiver follows.
+
+### Integration with bounded installed-image admission
+
+Task 4 is linearly rebased onto main `1394079d5e94` (#1584); runtime resolution
+`badd1d1c5484`. Dependency pins equal that main. The older native measurements
+above retain their original bases; they do not qualify this rebased head.
+
+The npfs/FAT32/host producer workers keep the bounded IF=1 owner-acquisition
+helper and release the owner before storage I/O. RAM capture allocation keeps
+its bounded wait before shared mutation. Heavy caller-CPU private preparation
+keeps its actor proof, with only shared task-stack and fixed space/device work
+under structural ownership. Holding a token across the fixed-device handoff
+would self-block admission on a different actor. Old BSP-executor timeout
+cleanup is not applied to caller-owned captures; AP read/retirement tracking
+remains intact.
+
+The ordinary kernel and current C runtime/log reader build. Nested QEMU/KVM
+q35, 4 GiB, 1 and 4 CPUs each pass 77 installed/RAM/pipeline commands on a
+read-only disposable npfs disk: 60 installed/control commands, one RAM copy,
+eight RAM launches and eight installed pipelines. Twelve `less --version`
+commands intentionally exit 1 with their supported diagnostic; no launch BUSY.
+The actual existing 16-command launch/pages/IPC/thread/TLS/Go/Neovim cohort
+also passes at four CPUs, including independent identity checks and full Remote
+FINAL drains. These are correctness checks, not a new performance comparison.
+FAT32/host capture callsites are source-reviewed, not runtime-qualified here.
+
+The latter cohort explicitly reuses its frozen workloads, replacing only the
+log reader with one built at current headers/runtime: main's log source byte
+replaced a formerly reserved byte and the old reader rejects nonzero sources.
+Two initial host setup attempts stopped before the workload (lost executable
+mode, then a short expected revision); corrected without changing kernel code.
+All owned guests stopped; no native or PXE action. Small qualification records:
+`/shared/present/bsp-removal/task4/integration-1584/`.
+
 ## Storage and remaining limits
 
 Artifact type inspection: task 840 bytes, process 432 bytes (baseline 392),
