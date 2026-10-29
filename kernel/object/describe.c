@@ -2,6 +2,7 @@
 #include <abi/file.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/describe.h>
+#include <kernel/mm/shared.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
@@ -86,7 +87,10 @@ static enum call_status describe_object(struct kernel_object *object,
     }
     return status;
   }
-  if (object->type == OBJECT_FILE) {
+  if (object->type == OBJECT_SHARED_REGION) {
+    reply->description.flags = RESOURCE_LENGTH_KNOWN;
+    reply->description.length = shared_region_size(shared_region_from_object(object));
+  } else if (object->type == OBJECT_FILE) {
     struct file_object *file = (struct file_object *)object;
     file_description(file, &reply->description, &reply->properties);
   }

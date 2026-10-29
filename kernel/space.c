@@ -327,6 +327,8 @@ static struct space *space_alloc(const char *name, const char *title,
   };
   atomic_init(&space->title_locked, false);
   atomic_init(&space->execution_groups_locked, false);
+  atomic_init(&space->shared_allocated_bytes, 0);
+  atomic_init(&space->shared_quarantined_bytes, 0);
   memcpy(space->name, name, strlen(name) + 1);
   static uint8_t log_sources;
   if (log_sources < UINT8_MAX) {

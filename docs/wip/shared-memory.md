@@ -161,13 +161,17 @@ without its connected withdrawal implementation.
   routine native layout follows the contract below without compatibility readers.
   After this task chronium can review the before-code costs and the exact
   public authority/mapping contract.
-- [ ] **2. Region ownership and backing.** Native region/storage, zeroed fixed
-  allocation, READ/WRITE attenuation/DESCRIBE, origin accounting and last-reference
-  reclamation. Reserve required mapping/cleanup storage before exposure. Focused
-  kernel changes first; keep new creation authority undelegated until usable
-  mapping and revocation are integrated. No fake MAP or successful placeholder.
-  After this task chronium can inspect real backing/ownership and honest
-  allocation failures without an unrevocable public mapping escape.
+- [x] **2. Region ownership and backing.** Fixed zeroed native region storage,
+  READ/WRITE attenuation and DESCRIBE, retained origin accounting and bounded
+  last-reference reclamation are implemented. Ordinary build and source review
+  pass; [native controls](../development/experiments/shared-memory.md#task-2-native-controls--2026-10-29)
+  are at parity on vela (one fresh A1/B1 pair). Nested IPC changes did not
+  reproduce natively and remain unattributed. No public CREATE/MAP or creation
+  delegation is exposed. Constructor/view lifetime runtime qualification follows
+  with the connected mapping/withdrawal and consumer tasks; mapping cleanup
+  storage must be reserved before those tasks expose views.
+  After this task chronium can inspect real backing/ownership and allocation
+  failure handling without an unrevocable public mapping escape.
 - [ ] **3. Mapping and external withdrawal.** Process-owned view identities and
   RELEASE_RESERVATION/exit removal, persistent lineage enrollment, external VM
   admission, explicit CUT joins, auto-close withdrawal and uncertain-process

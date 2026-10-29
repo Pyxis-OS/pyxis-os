@@ -69,6 +69,8 @@ struct space
   /* Registry order. Spaces are only appended, on the BSP, and published with
    * a release store once complete, so BSP readers can walk without a lock. */
   struct space *next;
+  /* Origin physical charges, including quarantined frames; not a hard quota. */
+  atomic_size_t shared_allocated_bytes, shared_quarantined_bytes;
 };
 
 /* Creates Caelum's space, first in registry order, on CPU 0. BSP only, at boot. */

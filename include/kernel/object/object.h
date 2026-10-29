@@ -82,6 +82,8 @@ enum object_type {
   OBJECT_JIT = 81,
   OBJECT_LOG_STREAM = 82,
   OBJECT_PROCESS_VIEW = 83,
+  OBJECT_SHARED_REGION = 84,
+  OBJECT_SHARED_ORIGIN = 85, /* Internal origin charge, never a public grant. */
   OBJECT_BULK_GATE = 78, /* Internal process budget retained through data drain. */
   OBJECT_DESCRIPTION_STORAGE = 61, /* Internal immutable facets, no public grant. */
 };

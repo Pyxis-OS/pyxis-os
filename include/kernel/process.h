@@ -11,6 +11,7 @@
 #include <abi/process_view.h>
 
 struct space;
+struct shared_origin;
 struct environment_table;
 struct vm_space;
 struct private_allocation;
@@ -100,6 +101,7 @@ struct process {
   /* The space's execution tree guard: published and not yet retired. */
   struct process *space_next;
   bool listed;
+  struct shared_origin *shared_origin; /* Owned; no back-reference to this process. */
 };
 
 /* Borrow the executing user task's process; NULL for scheduler/kernel tasks.
@@ -113,6 +115,10 @@ struct process *process_current(void);
  * failure leaves it with the caller and clears *result when non-NULL. */
 enum mm_result process_create(struct space *space, struct vm_space *address_space,
                               struct process **result);
+/* Retained current user in kernel root, IF=0. Lazily capture the immutable
+ * origin charge owner; returns an owned metadata reference on success. */
+enum call_status process_shared_origin(struct process *process, struct shared_origin **result);
+
 /* IF=0, retained kernel-root actor exclusively owns this unpublished process. */
 void process_prepare_require(struct process *process);
 /* Transfer exclusive unpublished ownership to its preparation CPU RAM actor. */

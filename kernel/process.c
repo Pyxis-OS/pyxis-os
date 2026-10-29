@@ -16,6 +16,7 @@
 #include <arch/cpu_local.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/private.h>
+#include <kernel/mm/shared.h>
 #include <kernel/mm/vm.h>
 #include <kernel/mm/kernel_owner.h>
 #include <kernel/memory.h>
@@ -88,6 +89,45 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
   process_control_attach_process(process->control, process);
   *result = process;
   return MM_OK;
+}
+
+enum call_status process_shared_origin(struct process *process, struct shared_origin **result)
+{
+  KASSERT(!cpu_interrupts_enabled() && process == process_current() && task_vm_kernel_active());
+  *result = NULL;
+  spin_lock(&process->lifetime_lock);
+  struct shared_origin *origin = process->shared_origin;
+  if (origin) {
+    bool retained = object_retain(shared_origin_object(origin));
+    spin_unlock(&process->lifetime_lock);
+    if (!retained) {
+      return CALL_LIMIT;
+    }
+    *result = origin;
+    return CALL_OK;
+  }
+  spin_unlock(&process->lifetime_lock);
+
+  struct shared_origin *candidate = shared_origin_create(process->space, process->list_key);
+  if (!candidate) {
+    return CALL_NO_MEMORY;
+  }
+  spin_lock(&process->lifetime_lock);
+  if (!process->shared_origin) {
+    process->shared_origin = candidate;
+    candidate = NULL;
+  }
+  origin = process->shared_origin;
+  bool retained = object_retain(shared_origin_object(origin));
+  spin_unlock(&process->lifetime_lock);
+  if (candidate) {
+    object_release(shared_origin_object(candidate));
+  }
+  if (!retained) {
+    return CALL_LIMIT;
+  }
+  *result = origin;
+  return CALL_OK;
 }
 
 /* Pages, range records or page-table entries per interrupts-off teardown
@@ -214,6 +254,10 @@ static void release_records(struct process *process)
   private_memory_discard_records(process);
   environment_table_destroy(process->environment);
   capability_table_destroy(&process->capabilities);
+  if (process->shared_origin) {
+    object_release(shared_origin_object(process->shared_origin));
+    process->shared_origin = NULL;
+  }
   if (process->control) {
     process_control_detach_process(process->control);
     object_release(&process->control->object);
@@ -622,7 +666,7 @@ static void ram_reaper(void *argument)
     reaper->notified = false;
     if (!process && !notified && !task_ram_retire_pending() &&
         !vm_kernel_ram_retire_pending() && !launcher_ram_retire_pending() &&
-        !display_ram_pending()) {
+        !display_ram_pending() && !shared_memory_pending()) {
       struct task_wait *wait = task_wait_prepare();
       reaper->wait = wait;
       spin_unlock(&reaper->guard);
@@ -634,6 +678,7 @@ static void ram_reaper(void *argument)
     cpu_restore_interrupts(flags);
     task_reap_ram();
     display_ram_reap();
+    shared_memory_reap();
     if (process) {
       reclaim_ram(process);
     }
@@ -690,6 +735,7 @@ void process_reaper_init(void)
   vm_kernel_ram_reapers_init();
   launcher_ram_reapers_init();
   display_ram_init();
+  shared_memory_init();
   for (size_t cpu = 0; cpu < count; ++cpu) {
     enum mm_result result = kernel_ram_reaper_create(cpu, ram_reaper, &ram_reapers[cpu]);
     if (result != MM_OK) {
