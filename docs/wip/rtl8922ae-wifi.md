@@ -1108,6 +1108,35 @@ place so a broader mask does not need a reboot, as Linux permits. The exact-mask
 limit above is temporary. Design its ownership, retirement and failure handling
 at that task; do not implement an unreviewed reset/retry mechanism in task 1.
 
+### Task-1 passive-period proposal (2026-10-29; not accepted)
+
+The [Linux controls](../development/experiments/rtl8922ae-attribution.md#native-and-linux-controls-vela-2026-10-29)
+also missed channel 6 with a 45-period 1+6 request; a channel-6-only request
+actually used period 232 and received two channel-6 BSSs. This supports testing
+a longer listen interval, not a speculative RF retune or decoder change. The
+exact known-BSSID comparison remains private/pending.
+
+**Decision — proposed default:** use fixed firmware period **232 per channel**
+for the current receive-only RTL discovery profile, subject to a matched native
+1+6 qualification. It is the longer period actually observed receiving channel-6
+BSSs with the same firmware, not a format limit or a universal Linux default.
+Keep the current channel list, zero SSIDs/no probes, DFS/NO_IR interpretation,
+common power, RFK, filters, operation deadline and snapshot lifetime unchanged.
+No new request field or setting is needed for this fix. This proposal is not
+permission to implement the later full sweep or in-place re-preparation task.
+
+After acceptance, qualify the same two sequential 1+6 scans with the first
+immutable FILE held through the second. Change only the period from 45 to 232;
+record actual firmware period and privately compare the known channel-6 BSSID.
+Keep pre-filter tracing temporary and packet-only. A partial/empty result or
+capture loss is reported honestly and never causes an automatic retry.
+
+Tradeoff: each passive visit lasts longer; caller deadlines and cancellation
+still apply. A fixed period cannot guarantee reception of every AP or beacon
+interval. The test distinguishes longer dwell from the successful Linux
+control's separate change to a channel-6-only mask. Do not claim channel-6
+qualification until the matched native evidence passes.
+
 ### Ordered delivery
 
 Task 1 is assigned (chronium, 2026-10-29). Later implementation tasks need their
@@ -1122,7 +1151,7 @@ own assignment; native windows are separately scheduled by the orchestrator.
    an unexplained missing known network remains a bug, not a qualification pass.
    Native checkpoint (2026-10-29): the active-MAC startup cycle is observed;
    the known channel-6 BSSID is missing before filtering, so attribution remains
-   unqualified. See the [capture interpretation](../development/experiments/rtl8922ae-attribution.md#native-private-capture-vela-2026-10-29).
+   unqualified. See the [capture interpretation](../development/experiments/rtl8922ae-attribution.md#native-and-linux-controls-vela-2026-10-29).
    **After this task chronium can:** tell whether startup normalized an active
    MAC, and inspect evidence for a genuinely second-channel BSS.
 2. [ ] **Admitted 1–13 sweep.** Generalize common-image construction and the bounded
