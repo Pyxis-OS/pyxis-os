@@ -2008,6 +2008,69 @@ enum mm_result arch_range_vacant(const struct arch_address_space *space,
   return MM_OK;
 }
 
+bool arch_kernel_physical_overlap(uintptr_t virtual, size_t pages,
+    const struct vm_physical_range *ranges, size_t count)
+{
+  KASSERT(!cpu_interrupts_enabled() && vm_kernel_owner_held());
+  if (!space_valid(&kernel_space) || !pages || !count || !ranges ||
+      (virtual & (PAGE_SIZE - 1)) || !canonical(virtual) ||
+      pages - 1 > (UINTPTR_MAX - virtual) / PAGE_SIZE ||
+      !canonical(virtual + (pages - 1) * PAGE_SIZE)) {
+    return true;
+  }
+  uintptr_t end = virtual + (pages - 1) * PAGE_SIZE;
+  while (virtual <= end) {
+    bool locked = lock_kernel_mapping(&kernel_space, virtual);
+    uintptr_t next = 0;
+    phys_addr_t table = kernel_space.root;
+    for (unsigned level = LEVEL_PML4; level > LEVEL_PT && !next; --level) {
+      uint64_t entry = read_table_entry(table, index_at(virtual, level));
+      if (!(entry & PTE_PRESENT)) {
+        next = next_boundary(virtual, PAGE_OFFSET_BITS + (level - LEVEL_PT) * TABLE_INDEX_BITS);
+      } else if ((entry & PTE_LARGE) || !physical_valid(entry & PTE_ADDRESS_MASK)) {
+        panic("corrupt or unsupported page-table ancestor at %p", (void *)virtual);
+      } else {
+        table = entry & PTE_ADDRESS_MASK;
+      }
+    }
+    bool overlap = false;
+    if (!next) {
+      unsigned first = index_at(virtual, LEVEL_PT);
+      unsigned last = (end >> PD_INDEX_SHIFT) == (virtual >> PD_INDEX_SHIFT) ?
+          index_at(end, LEVEL_PT) : 511;
+      volatile uint64_t *entries = map_scratch(table, SCRATCH_TABLE);
+      for (unsigned i = first; i <= last && !overlap; ++i) {
+        uint64_t entry = entries[i];
+        if (!(entry & PTE_PRESENT)) {
+          continue;
+        }
+        phys_addr_t physical = entry & PTE_ADDRESS_MASK;
+        if (!physical_valid(physical)) {
+          panic("corrupt page-table leaf at %p", (void *)(virtual + (i - first) * PAGE_SIZE));
+        }
+        for (size_t n = 0; n < count; ++n) {
+          if (physical < ranges[n].physical + ranges[n].bytes &&
+              ranges[n].physical < physical + PAGE_SIZE) {
+            overlap = true;
+            break;
+          }
+        }
+      }
+      unmap_scratch(SCRATCH_TABLE);
+      next = next_boundary(virtual, PD_INDEX_SHIFT);
+    }
+    unlock_kernel_mapping(locked);
+    if (overlap) {
+      return true;
+    }
+    if (next <= virtual) {
+      break;
+    }
+    virtual = next;
+  }
+  return false;
+}
+
 static enum mm_result protect_page(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions)
 {

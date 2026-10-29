@@ -102,6 +102,12 @@ enum mm_result arch_page_protect(struct arch_address_space *space,
  * recursive inspection uses its separate path, without this normal guard. */
 enum mm_result arch_page_query(const struct arch_address_space *space,
                                uintptr_t virtual, struct page_translation *result);
+struct vm_physical_range;
+/* Shared structural owner, IF=0. Same physical-alias query over a registered
+ * kernel extent, scanning each leaf table under one scratch mapping/snapshot
+ * guard. Absent ancestors skip their whole span; no persistent proof/cache. */
+bool arch_kernel_physical_overlap(uintptr_t virtual, size_t pages,
+    const struct vm_physical_range *ranges, size_t count);
 /* IF=0 on the CPU exclusively executing this private space. Checks a lower-half
  * user range through recursive mappings, without scratch slots or allocation.
  * Zero bytes ignores the address but still requires the private root active.

@@ -1393,9 +1393,20 @@ enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical)
 
 bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes)
 {
+  const struct vm_physical_range range = {physical, bytes};
+  return vm_kernel_physical_overlap_any(&range, 1);
+}
+
+bool vm_kernel_physical_overlap_any(const struct vm_physical_range *ranges, size_t count)
+{
   require_kernel_owner(&kernel_space);
-  if (!bytes || bytes > UINT64_MAX - physical) {
-    return true;
+  if (!count) {
+    return false;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    if (!ranges[i].bytes || ranges[i].bytes > UINT64_MAX - ranges[i].physical) {
+      return true;
+    }
   }
   for (const struct vm_range *r = kernel_space.head; r; r = r->next) {
     /* Retirement may change BACKED to RETIRED without the logical owner.
@@ -1407,12 +1418,8 @@ bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes)
     if (!mapped) {
       continue;
     }
-    for (size_t page = 0; page < r->pages; ++page) {
-      struct page_translation mapping;
-      if (arch_page_query(page_space(&kernel_space), r->base + page * PAGE_SIZE, &mapping) == MM_OK &&
-          mapping.physical < physical + bytes && physical < mapping.physical + PAGE_SIZE) {
-        return true;
-      }
+    if (arch_kernel_physical_overlap(r->base, r->pages, ranges, count)) {
+      return true;
     }
   }
   return false;
