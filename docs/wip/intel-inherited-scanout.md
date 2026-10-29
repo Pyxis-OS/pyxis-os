@@ -844,3 +844,29 @@ without mutation and two complete cleanup cycles; no synthetic MMIO window is
 dereferenced. Independent pinned-source review found no topology, offset,
 parent-domain or cleanup defect. These checks do not emulate GT hardware or
 qualify native forcewake/status reads; r5 supplies those observations.
+
+### R6 implementation and qualification boundary
+
+The full GGTT import records every occupied entry and counts present PAT3
+references before selecting a free span. All qualified engine/domain holds
+remain joined through the final submitter recheck. Only then may the PAT page
+become writable and the MCR multicast write publish PAT3=0x3c. The write
+whitelist admits no other PAT index or value. A posting read logs the result;
+admission tests the required cache policy rather than unrelated reserved bits.
+Historical/undefined queue fields remain raw diagnostics, not extra refusals.
+
+Host checks of the actual admission code cover the accepted state, GuC/GSC
+activity, pending/current engine work, unknown reads, failed CPU protection and
+inherited UC selection. Full-GGTT import checks include a PAT3 reference outside
+the allocated span and an incomplete final read. These use host-owned synthetic
+memory, not device access. Default/enabled kernel builds and the non-Intel
+QEMU terminal/OpenArena path provide integration checks. Native PAT programming,
+flip completion and optical tearing remain unqualified until the R6 run.
+
+R6 retains the R1 terminal glyph/scroll and OpenArena1803-frame workloads
+(360x221 integer8x and2880x1800), and the accepted visible blank900s/collector840s
+bound. The log reader matches the current wire ABI. Compare with the retained
+ordinary R1 result; archive bytes differ only for the log reader, with game,
+demo, workload and renderer unchanged. A successful collector result requires
+confirmed Intel flip transactions; ordinary fallback is never labelled a flip
+pass. A firmware-start/submission implementation later must revisit PAT ownership.

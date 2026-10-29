@@ -592,12 +592,13 @@ static bool check_consumers(void)
     for (unsigned sample = 0; sample < 2; ++sample) {
       for (size_t n = 0; n < sizeof(registers) / sizeof(*registers); ++n) {
         values[sample][n] = read_reg(engines[i].base + registers[n]);
-        qualified &= values[sample][n] != UINT32_MAX;
-        if (sample) {
-          qualified &= values[0][n] == values[1][n];
-        }
       }
       qualified &= engine_idle(values[sample]);
+      if (sample) {
+        qualified &= values[0][0] == values[1][0] && values[0][1] == values[1][1] &&
+            values[0][2] == values[1][2] && values[0][6] == values[1][6] &&
+            !((values[0][4] ^ values[1][4]) & (EXECLIST_QUEUE_INVALID | EXECLIST_PENDING));
+      }
       kinfo("intel-consumer: engine=%s domain=%s base=%x sample=%u head=%x tail=%x ctl=%x mi=%x el=%x/%x lrca=%x mode=%x\n",
           engines[i].name, forcewake[engines[i].domain].name, engines[i].base, sample,
           values[sample][0], values[sample][1], values[sample][2], values[sample][3],
@@ -642,6 +643,9 @@ bool intel_gt_profile_admit_pat(bool ggtt_pat3_unused)
       return false;
     }
     uint32_t before = read_reg(PAT_INDEX0 + PAT_DISPLAY_INDEX * sizeof(uint32_t));
+    if (before == UINT32_MAX || !holds_valid()) {
+      return fail("PAT3 pre-write state uncertain");
+    }
     pat_write_armed = true;
     write_reg(PAT_INDEX0 + PAT_DISPLAY_INDEX * sizeof(uint32_t), PAT_UC_NONCOHERENT);
     pat_write_armed = false;
