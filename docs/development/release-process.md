@@ -142,6 +142,37 @@ previous ABI (25 in 0.0.9), and clients refuse those per package.
 Run the same three on the `releases` tree, where the new release's package is
 the one added entry and `--abi` does not apply (a `release` entry has no `abi`).
 
+## The QEMU image
+
+`tools/qemu-image.py` builds the release's ready-to-run image
+([plan](../wip/qemu-image.md)) from the release ISO, after the signed
+repositories are live, because the installer fetches `base` from `public`:
+
+```sh
+tools/qemu-image.py build "$OUT/images/pyxis-0.0.10.iso" "$OUT/images/pyxis-0.0.10.qcow2" \
+  --sums "$OUT/images/SHA256SUMS" --screens "$OUT/qemu-image-screens"
+```
+
+It needs `qemu-system-x86_64`, `qemu-img` (set `QEMU_IMG` if it is not on `PATH`),
+a raw OVMF pair (`OVMF_CODE` and `OVMF_VARS` override the usual locations) and
+`/dev/kvm`; it needs no root and about three minutes. It refuses unless the ISO
+matches its line in the given `SHA256SUMS`, and never replaces an existing
+output. It boots the ISO on a blank sparse 32 GiB disk, types the installer's
+answers through QEMU's monitor, waits on the kernel-log lines the installer
+writes to serial (the prompts themselves are only on the screen), converts with
+`qemu-img convert -c`, then runs `verify` on the result.
+
+`verify IMAGE` checks that the file is a 32 GiB qcow2 without a backing file and
+passes `qemu-img check`, then boots a throwaway overlay twice, so the image is
+never written, waiting for the installed system and its network. With `--screens`
+it types `cat boot://os-release` and `pkg upgrade` after each boot and saves a
+screenshot; read both. Expect the release and revision of the tag, and `pkg:
+VERSION is already running` (the command exits with status 1 when nothing is
+newer). `--accel tcg` runs the same checks without KVM; raise `--timeout`.
+
+A build that does not reach the end of the install, or a screenshot that shows
+anything else, means the image is not published. The script does not retry.
+
 ## Signing and publication
 
 The release is signed with the intermediate CA that chronium issued from his

@@ -28,15 +28,14 @@ Proposed and not yet answered: driving the installer by QEMU key injection
 
 Measured on the published 0.0.9 ISO, not 0.0.10: a blank 32 GiB sparse disk,
 QEMU 10.2.2, q35, KVM, four CPUs, 4 GiB, user networking, Fedora 44 edk2 OVMF, on
-one VM. `qemu-img` was not installed there, so the compressed size is estimated,
-and the first real build confirms it.
+one VM.
 
 | What | Result |
 | --- | --- |
 | Install, `wipe` to `installed` | about 87 s; the action list is up about 25 s after QEMU starts |
 | Total guest writes (QEMU block statistics) | 115 MiB in 5,928 writes |
 | Allocated on the sparse file | 106 MiB (1,702 non-zero 64 KiB clusters, the last being the backup GPT) |
-| Estimated qcow2 with `-c` (deflate per 64 KiB cluster) | about 40 MiB |
+| qcow2 with `-c`, estimated from deflating each 64 KiB cluster | about 40 MiB; the real conversion measured 44,498,944 bytes (42.4 MiB) with `tools/qemu-image.py` |
 | Fresh boot of the installed disk, no ISO, fresh OVMF variables | shell about 50 s after QEMU starts |
 | `pkg upgrade` on it | `pkg: 0.0.9 is already running`, exit status 1 |
 
@@ -123,8 +122,11 @@ the installed core archive.
 
 ## Tasks
 
-- [ ] 1. `tools/qemu-image.py` (`build`, `verify`), run once against the 0.0.10
-  candidate ISO on the release builder, with the launcher and manual section.
+- [x] 1. `tools/qemu-image.py` (`build`, `verify`), the launcher and the manual
+  section. Checked end to end on the published 0.0.9 ISO (install 56 s on KVM,
+  both boots to the shell with KVM and with `-accel tcg`, the launcher with and
+  without KVM). The first run on the 0.0.10 ISO belongs to the release flow, since
+  the live `public` repository must offer that revision's `base`.
 - [ ] 2. Release tooling: `SUMS_LINE`, `sign-images.sh`, the Worker allow-list
   diff for the orchestrator to approve and deploy, and the release-process step
   with its failure rule.
