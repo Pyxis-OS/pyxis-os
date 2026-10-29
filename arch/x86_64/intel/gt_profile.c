@@ -18,6 +18,12 @@
 #define MCR_MULTICAST (1u << 31)
 #define PAT_INDEX0 0x04800u
 #define GGTT_PAT_ENTRIES 4u
+#define PAT_DISPLAY_INDEX 3u
+#define GUC_MIA_IN_RESET (1u << 0)
+#define GSC_INIT_COMPLETE (1u << 9)
+#define EXECLIST_QUEUE_INVALID (1u << 0)
+#define EXECLIST_PENDING ((1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | \
+    (1u << 7) | (1u << 30))
 #define PAT_CACHE_MASK ((1u << 9) | 0x3fu)
 #define PAT_UC_NONCOHERENT 0x3cu
 #define GT_FORCEWAKE 0x0a188u
@@ -108,6 +114,8 @@ static struct {
 static uint32_t graphics_gmd, media_gmd;
 static unsigned pending_writes;
 static unsigned pat_index = GGTT_PAT_ENTRIES;
+static uint32_t consumer_ccs, consumer_media;
+static bool consumers_mapped, pat_write_armed, pat_admitted;
 static bool attempted, active, fenced, semaphore_owned, write_workaround;
 static uint64_t started_ns, phase_ns;
 
@@ -225,7 +233,9 @@ static bool write_allowed(uint32_t offset, uint32_t value)
           value == (FORCEWAKE_KERNEL_MASK | FORCEWAKE_KERNEL);
     }
   }
-  return (offset == MCR_SELECTOR && value == MCR_MULTICAST) ||
+  return (offset == PAT_INDEX0 + PAT_DISPLAY_INDEX * sizeof(uint32_t) &&
+          value == PAT_UC_NONCOHERENT && pat_write_armed) ||
+      (offset == MCR_SELECTOR && value == MCR_MULTICAST) ||
       (offset == STEER_SEMAPHORE && value == 1) ||
       (offset == MEDIA_BASE + GMD_ID && value == 0 && write_workaround);
 }
@@ -326,7 +336,7 @@ static bool release_semaphore(void)
   return read_reg(GMD_ID) == graphics_gmd || fail("MCR handoff posting read failed");
 }
 
-static bool read_pat(uint32_t pat[GGTT_PAT_ENTRIES])
+static bool acquire_semaphore(void)
 {
   if (!holds_valid()) {
     return false;
@@ -350,10 +360,18 @@ static bool read_pat(uint32_t pat[GGTT_PAT_ENTRIES])
     return false;
   }
   write_reg(MCR_SELECTOR, MCR_MULTICAST);
+  return true;
+}
+
+static bool read_pat(uint32_t pat[GGTT_PAT_ENTRIES])
+{
+  if (!acquire_semaphore()) {
+    return false;
+  }
   for (unsigned i = 0; i < GGTT_PAT_ENTRIES; ++i) {
     pat[i] = read_reg(PAT_INDEX0 + i * sizeof(uint32_t));
     uint32_t second = read_reg(PAT_INDEX0 + i * sizeof(uint32_t));
-    if (pat[i] != second || !holds_valid()) {
+    if (pat[i] == UINT32_MAX || pat[i] != second || !holds_valid()) {
       return fail("PAT readback/forcewake unstable");
     }
   }
@@ -424,7 +442,7 @@ bool intel_gt_profile_ready(void)
 
 unsigned intel_gt_profile_pat_index(void)
 {
-  KASSERT(active && !fenced && pat_index < GGTT_PAT_ENTRIES);
+  KASSERT(active && !fenced && pat_admitted && pat_index < GGTT_PAT_ENTRIES);
   return pat_index;
 }
 
@@ -524,20 +542,47 @@ static bool inventory_consumers(const struct boot_info *boot, uint64_t bar)
     return false;
   }
   log_phase("consumer-windows-ready");
+  consumer_ccs = ccs;
+  consumer_media = media;
+  for (size_t i = 0; i < sizeof(engines) / sizeof(*engines); ++i) {
+    if (engine_present(i, ccs, media) && !hold_forcewake(engines[i].domain)) {
+      return false;
+    }
+  }
+  consumers_mapped = true;
+  return true;
+}
+
+static bool engine_idle(const uint32_t values[8])
+{
+  /* Modern execution queue: invalid, no valid/pending/active context.
+   * Do not use the Gen8 port masks or demand the undefined reset context ID. */
+  return values[0] != UINT32_MAX && values[0] == values[1] && !values[2] &&
+      (values[4] & (EXECLIST_QUEUE_INVALID | EXECLIST_PENDING)) ==
+          EXECLIST_QUEUE_INVALID && !values[6];
+}
+
+static bool check_consumers(void)
+{
+  if (!consumers_mapped || !holds_valid() ||
+      read_reg(0x009114) != consumer_ccs || read_reg(0x389140) != consumer_media) {
+    return false;
+  }
   uint32_t guc[2][2];
-  bool stable = true;
+  bool qualified = true;
   for (unsigned i = 0; i < 2; ++i) {
     uint32_t offset = i ? 0x38c000 : 0x00c000;
     guc[i][0] = read_reg(offset);
     guc[i][1] = read_reg(offset);
-    stable &= guc[i][0] == guc[i][1];
-    kinfo("intel-consumer: guc gt=%s status=%x/%x reset-bit=%u/%u; absence-unproven\n",
+    qualified &= guc[i][0] != UINT32_MAX && guc[i][0] == guc[i][1] &&
+        (guc[i][0] & GUC_MIA_IN_RESET);
+    kinfo("intel-consumer: guc gt=%s status=%x/%x reset-bit=%u/%u; submitter-check\n",
         i ? "media" : "graphics", guc[i][0], guc[i][1], guc[i][0] & 1, guc[i][1] & 1);
   }
-  /* These are raw supported diagnostics, not an idle/PPGTT-absence predicate. */
+  /* Accepted boot-only submitter proof; no context memory is dereferenced. */
   static const uint32_t registers[] = {0x34, 0x30, 0x3c, 0x9c, 0x234, 0x238, 0x240, 0x29c};
   for (size_t i = 0; i < sizeof(engines) / sizeof(*engines); ++i) {
-    if (!engine_present(i, ccs, media)) {
+    if (!engine_present(i, consumer_ccs, consumer_media)) {
       continue;
     }
     if (!hold_forcewake(engines[i].domain) || !holds_valid()) {
@@ -547,10 +592,12 @@ static bool inventory_consumers(const struct boot_info *boot, uint64_t bar)
     for (unsigned sample = 0; sample < 2; ++sample) {
       for (size_t n = 0; n < sizeof(registers) / sizeof(*registers); ++n) {
         values[sample][n] = read_reg(engines[i].base + registers[n]);
+        qualified &= values[sample][n] != UINT32_MAX;
         if (sample) {
-          stable &= values[0][n] == values[1][n];
+          qualified &= values[0][n] == values[1][n];
         }
       }
+      qualified &= engine_idle(values[sample]);
       kinfo("intel-consumer: engine=%s domain=%s base=%x sample=%u head=%x tail=%x ctl=%x mi=%x el=%x/%x lrca=%x mode=%x\n",
           engines[i].name, forcewake[engines[i].domain].name, engines[i].base, sample,
           values[sample][0], values[sample][1], values[sample][2], values[sample][3],
@@ -564,23 +611,55 @@ static bool inventory_consumers(const struct boot_info *boot, uint64_t bar)
    * Status is read only after the matching GSC domain was acknowledged. */
   KASSERT(forcewake[FW_GSC].held);
   uint32_t gsc = read_reg(0x116c40), gsc_second = read_reg(0x116c40);
-  stable &= gsc == gsc_second;
-  kinfo("intel-consumer: gsc FWSTS1=%x/%x loaded-bit=%u/%u; absence-unproven\n",
+  qualified &= gsc != UINT32_MAX && gsc == gsc_second && !(gsc & GSC_INIT_COMPLETE);
+  kinfo("intel-consumer: gsc FWSTS1=%x/%x loaded-bit=%u/%u; submitter-check\n",
       gsc, gsc_second, !!(gsc & (1u << 9)), !!(gsc_second & (1u << 9)));
   if (!holds_valid()) {
     return false;
   }
-  for (unsigned i = FW_COUNT; i-- > FW_RENDER;) {
-    if (!release_forcewake(i)) {
-      return false;
-    }
-  }
-  if (!write_workaround && !release_forcewake(FW_MEDIA_GT)) {
+  kinfo("intel-consumer: submitter proof qualified=%u; host submission/firmware start excluded at bootstrap\n",
+      qualified);
+  log_phase("consumer-proof-checked");
+  return qualified;
+}
+
+bool intel_gt_profile_admit_pat(bool ggtt_pat3_unused)
+{
+  if (!intel_gt_profile_ready() || pat_admitted || !ggtt_pat3_unused || !check_consumers()) {
+    kinfo("intel-gt: PAT admission refused: GGTT/submitter proof incomplete; keeping GOP copy\n");
     return false;
   }
-  kinfo("intel-consumer: capture engines=%zu ccs=%x vdbox=%x vebox=%x stable=%u proof=unestablished PAT3-write=0\n",
-      count, (ccs >> 16) & 0xf, media & 0xff, (media >> 16) & 0xf, stable);
-  log_phase("consumer-observation-complete");
+  uint32_t pat[GGTT_PAT_ENTRIES];
+  if (!read_pat(pat)) {
+    return false;
+  }
+  pat_index = select_pat(pat);
+  if (pat_index == GGTT_PAT_ENTRIES) {
+    /* Only this page becomes writable, only after the independent full GGTT
+     * scan and consumer proof. The whitelist admits exactly PAT3=0x3c. */
+    if (vm_protect(vm_kernel_space(), mappings[1].window, PAGE_WRITE) != MM_OK ||
+        !check_consumers() || !acquire_semaphore()) {
+      return false;
+    }
+    uint32_t before = read_reg(PAT_INDEX0 + PAT_DISPLAY_INDEX * sizeof(uint32_t));
+    pat_write_armed = true;
+    write_reg(PAT_INDEX0 + PAT_DISPLAY_INDEX * sizeof(uint32_t), PAT_UC_NONCOHERENT);
+    pat_write_armed = false;
+    uint32_t after = read_reg(PAT_INDEX0 + PAT_DISPLAY_INDEX * sizeof(uint32_t));
+    kinfo("intel-gt: PAT3 programmed before=%x after=%x; PAT0-2 untouched, submitter/GGTT proof confirmed\n",
+        before, after);
+    if (!release_semaphore() || !holds_valid()) {
+      return false;
+    }
+    /* Admit the required cache policy, not equality of unrelated/reserved bits. */
+    if ((after & PAT_CACHE_MASK) != PAT_UC_NONCOHERENT) {
+      return fail("PAT3 uncached display policy not established");
+    }
+    pat_index = PAT_DISPLAY_INDEX;
+    log_phase("PAT3-programmed");
+  }
+  pat_admitted = true;
+  kinfo("intel-gt: PAT%u admitted for new UMA PTEs only\n", pat_index);
   return true;
 }
 
@@ -634,14 +713,11 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
   }
   active = true;
   log_phase("forcewake-acknowledged");
-  if (inventory_profile && !inventory_consumers(boot, bar)) {
+  if (!inventory_profile || !inventory_consumers(boot, bar) || !check_consumers()) {
     if (!fenced) {
       intel_gt_profile_finish();
     }
     return false;
-  }
-  if (!inventory_profile) {
-    kinfo("intel-consumer: unavailable: engine topology is not qualified for this GMD profile\n");
   }
   uint32_t pat[GGTT_PAT_ENTRIES];
   if (!read_pat(pat)) {
@@ -650,15 +726,7 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
   log_phase("PAT-read");
   kinfo("intel-gt: inherited PAT0=%x PAT1=%x PAT2=%x PAT3=%x media-A0-write-WA=%u\n",
       pat[0], pat[1], pat[2], pat[3], write_workaround);
-  pat_index = select_pat(pat);
-  if (pat_index != GGTT_PAT_ENTRIES) {
-    kinfo("intel-gt: inherited PAT%u=%x qualifies as UC; not activated during read-only consumer qualification\n",
-        pat_index, pat[pat_index]);
-  }
-  /* This slice observes registers only. Neither an idle sample nor a GuC
-   * status bit proves that inherited PPGTT contexts cannot select PAT3. */
-  if (intel_gt_profile_finish()) {
-    kinfo("intel-consumer: observation finished cleanup=confirmed proof=unestablished PAT3-write=0 GGTT-write=0 plane-write=0; keeping GOP copy\n");
-  }
-  return false;
+  /* Keep every qualified hold until GGTT import and the final submitter
+   * recheck. Pyxis has no other GT submitter or firmware-start path. */
+  return true;
 }

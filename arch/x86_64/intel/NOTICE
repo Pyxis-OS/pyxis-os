@@ -11,7 +11,9 @@ register definitions; xe/xe_ggtt.c inherited raw-PTE read layout; xe_force_wake.
 xe_pat.c and xe_wa_oob.rules bootstrap forcewake/MCR/PAT admission and the
 stepping-required CPU GGTT-write workaround; xe_pci.c/xe_hw_engine.c engine
 topology and fuse handling, xe_engine_regs.h/xe_gt_regs.h register definitions,
-and xe_gsc.c/xe_guc_regs.h firmware-status readout. Synchronous plane completion
+and xe_gsc.c/xe_guc_regs.h firmware-status readout, xe_execlist.c modern
+execution-queue active status and the Gen12 PRM execution-queue fields
+(Vol2c Part1, printed pages893–895). Synchronous plane completion
 follows the display IRQ/register and CRTC update definitions; intel_vrr.c and
 intel_vrr_regs.h provide display30 fixed-refresh timing-generator readout.
 

@@ -205,7 +205,7 @@ static bool qualify_timing(void)
   return false;
 }
 
-static bool choose_ggtt(size_t count)
+static bool choose_ggtt(size_t count, bool *pat3_unused)
 {
   /* Import every nonzero inherited entry, then allocate only within our
    * exclusive ledger above maximum WOPCM and below the reference GuC ceiling. */
@@ -214,6 +214,8 @@ static bool choose_ggtt(size_t count)
     return false;
   }
   size_t entries = GGTT_ADDRESS_BYTES / PAGE_SIZE;
+  size_t pat3_references = 0;
+  *pat3_unused = false;
   uint8_t *occupied = kmalloc(entries / 8);
   if (!occupied) {
     return false;
@@ -229,10 +231,16 @@ static bool choose_ggtt(size_t count)
       kfree(occupied);
       return false;
     }
+    if ((value & GGTT_PTE_PRESENT) && (value & GGTT_PTE_PAT_MASK) == GGTT_PTE_PAT(3)) {
+      ++pat3_references;
+    }
     if (value || i * PAGE_SIZE < GGTT_RESERVED_LOW || i * PAGE_SIZE >= GGTT_ALLOC_END) {
       occupied[i / 8] |= 1u << (i % 8);
     }
   }
+  *pat3_unused = !pat3_references;
+  kinfo("intel-flip: full GGTT imported entries=%zu present-PAT3-references=%zu\n",
+      entries, pat3_references);
   size_t run = 0;
   for (size_t i = GGTT_RESERVED_LOW / PAGE_SIZE; i < GGTT_ALLOC_END / PAGE_SIZE; ++i) {
     run = occupied[i / 8] & (1u << (i % 8)) ? 0 : run + 1;
@@ -315,9 +323,9 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
       return false;
     }
   }
-  kinfo("intel-flip: setup consumer observation; total budget=%lu ms\n", SETUP_TIMEOUT_NS / 1000000);
+  kinfo("intel-flip: setup consumer proof; total budget=%lu ms\n", SETUP_TIMEOUT_NS / 1000000);
   if (!setup_in_time("GT consumer access") || !intel_display_claim()) {
-    kinfo("intel-flip: unavailable: exclusive consumer-observation access failed\n");
+    kinfo("intel-flip: unavailable: exclusive consumer-proof access failed\n");
     return false;
   }
   if (!intel_gt_profile_prepare(boot, bar)) {
@@ -326,8 +334,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     }
     return false;
   }
-  /* Register observation does not need an identity-DMA assumption. Any future
-   * write admission still proves it before allocating new scanout backing. */
+  /* New scanout backing still needs identity-DMA admission before any PTE. */
   if (!setup_in_time("DMA admission") || !intel_dma_identity(boot, device->address)) {
     if (!intel_gt_profile_finish()) {
       return abandon_setup("GT cleanup after DMA refusal uncertain");
@@ -335,15 +342,16 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     kinfo("intel-flip: unavailable: DMA admission failed\n");
     return false;
   }
-  /* Cache policy is a prerequisite: reject it before scanning all GGTT PTEs. */
-  uint64_t pat = GGTT_PTE_PAT(intel_gt_profile_pat_index());
-  if (!choose_ggtt(count)) {
+  bool pat3_unused;
+  if (!choose_ggtt(count, &pat3_unused) || !setup_in_time("PAT admission") ||
+      !intel_gt_profile_admit_pat(pat3_unused)) {
     if (!intel_gt_profile_finish()) {
       return abandon_setup("GT cleanup after GGTT import refusal uncertain");
     }
     kinfo("intel-flip: unavailable: GGTT import refused; keeping GOP copy\n");
     return false;
   }
+  uint64_t pat = GGTT_PTE_PAT(intel_gt_profile_pat_index());
   kinfo("intel-flip: setup preparing two UMA back buffers\n");
   if (!scanout_pages_prepare(fb->size, setup_deadline, &pages[0]) ||
       !scanout_pages_prepare(fb->size, setup_deadline, &pages[1])) {
