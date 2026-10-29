@@ -34,6 +34,13 @@ config HPET_MAINTENANCE_TICKS
     Interrupt delays also count toward the less-than-one-wrap sampling
     requirement; elapsed time always comes from HPET, not timer ticks.
 
+config INTEL_INHERITED_FLIP
+  bool "Development Intel inherited-mode synchronized flips"
+  default n
+  help
+    Prepare fixed owned UMA/GGTT backs for the qualified inherited Intel pipe.
+    Keeps DC0 while active; no modesetting or normal default activation yet.
+
 config XHCI
   bool "XHCI"
   default y

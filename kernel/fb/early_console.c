@@ -43,7 +43,7 @@ static _Atomic uint32_t message_owner = EARLY_CONSOLE_NO_OWNER;
 static atomic_bool message_finished;
 
 /* Rendering state, changed only by the current rendering owner. */
-static uintptr_t addresses[2];
+static uintptr_t addresses[3];
 static size_t pitch, pixel_width, pixel_height, scale, columns, rows, column, row;
 static uint32_t foreground, background;
 static char cells[EARLY_CONSOLE_ROWS_MAX][EARLY_CONSOLE_COLUMNS_MAX];
@@ -65,7 +65,7 @@ static void draw_cell(size_t cell_row, size_t cell_column)
   const uint8_t *glyph = font_glyph(font, character);
   size_t x = cell_column * font->width * scale;
   size_t y = cell_row * font->height * scale;
-  for (unsigned surface = 0; surface < 2; ++surface) {
+  for (unsigned surface = 0; surface < 3; ++surface) {
     if (!addresses[surface]) {
       continue;
     }
@@ -155,7 +155,7 @@ static void configure_layout(const struct framebuffer *fb)
 {
   const struct font *font = &bizcat;
   addresses[0] = fb->address;
-  addresses[1] = 0;
+  addresses[1] = addresses[2] = 0;
   pitch = fb->pitch;
   pixel_width = fb->width;
   pixel_height = fb->height;
@@ -174,7 +174,7 @@ static void configure_layout(const struct framebuffer *fb)
 
 static void clear_screen(void)
 {
-  for (unsigned surface = 0; surface < 2; ++surface) {
+  for (unsigned surface = 0; surface < 3; ++surface) {
     if (!addresses[surface]) {
       continue;
     }
@@ -259,9 +259,11 @@ void early_console_panic_begin(void)
     /* Keep panic_owner unset until layout/reset finish. A fault here reports
      * on serial because its nested claim loses and no renderer is published. */
     configure_layout(target);
-    const struct framebuffer *second = display_panic_surface(1);
-    if (second) {
-      addresses[1] = second->address;
+    for (unsigned i = 1; i < 3; ++i) {
+      const struct framebuffer *surface = display_panic_surface(i);
+      if (surface) {
+        addresses[i] = surface->address;
+      }
     }
     if (!columns || !rows) {
       return;

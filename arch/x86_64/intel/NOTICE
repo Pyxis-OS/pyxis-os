@@ -7,12 +7,21 @@ https://github.com/torvalds/linux/tree/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/
 Adapted subset: i915/display/intel_display_power_well.c DC-state settling and
 additive BIOS-held power-well requests; intel_display_regs.h,
 skl_universal_plane_regs.h, intel_cursor_regs.h and intel_vdsc_regs.h numeric
-register definitions; xe/xe_ggtt.c inherited raw-PTE read layout.
+register definitions; xe/xe_ggtt.c inherited raw-PTE read layout; xe_force_wake.c, xe_gt_mcr.c,
+xe_pat.c and xe_wa_oob.rules bootstrap forcewake/MCR/PAT admission and the
+stepping-required CPU GGTT-write workaround; xe_pci.c/xe_hw_engine.c engine
+topology and fuse handling, xe_engine_regs.h/xe_gt_regs.h register definitions,
+and xe_gsc.c/xe_guc_regs.h firmware-status readout, xe_execlist.c modern
+execution-queue active status and the Gen12 PRM execution-queue fields
+(Vol2c Part1, printed pages893–895). Synchronous plane completion
+follows the display IRQ/register and CRTC update definitions; intel_vrr.c and
+intel_vrr_regs.h provide display30 fixed-refresh timing-generator readout.
 
 Local changes: matched-profile startup, retained inherited request ownership,
-read-only configuration/GGTT mappings, a two-register control write boundary,
-bounded observations and uncertain-cleanup retention. No Linux power manager,
-DMC firmware loader, modesetting, interrupt programming or BO manager is imported.
+read-only configuration readout, owned UMA/GGTT mappings, bounded power/GT and
+selected-plane flip-event/surface writes, and uncertain-cleanup retention.
+No Linux power manager, DMC firmware loader, modesetting, generic interrupt
+layer or BO manager is imported.
 No upstream source is fetched by the build.
 
 Copyright © 2021, 2022, 2023, 2024, 2025 Intel Corporation

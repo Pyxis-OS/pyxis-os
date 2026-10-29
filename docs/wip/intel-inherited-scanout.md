@@ -207,8 +207,9 @@ memory, nor a flip latch/retirement rule.
   in both snapshots, layout stable and cleanup confirmed.
 - [x] Decide flip backing, synchronous operation/power lifetime and retirement
   (chronium, 2026-10-28).
-- [ ] Matched 2880×1800 OpenArena presentation baseline before implementation.
-- [ ] Implement source-qualified GGTT ownership, owned UMA buffers and synchronous
+- [x] Matched 2880×1800 OpenArena presentation baseline before implementation;
+  one native sample and its counter limits are recorded below.
+- [x] Implement source-qualified GGTT ownership, owned UMA buffers and synchronous
   correlated flips; no reuse after uncertain completion.
 - [ ] Hands-free vela qualification packet and matched presentation comparison.
 
@@ -233,9 +234,10 @@ slots with DM clear. The inherited stolen range remains reserved, including
 after the first flip; do not overwrite its PTEs or allocate adjacent stolen
 storage. A failed alias check leaves the existing copy backend running.
 
-The GGTT address allocator must import inherited mappings and reference-defined
-firmware reservations under exclusive device ownership; zero PTEs alone are
-not allocation authority. The inherited span crosses Linux's GuC-specific
+Under exclusive device ownership and the accepted live-consumer proof, the
+GGTT allocator preserves inherited nonzero mappings, excludes the live GOP and
+reference-defined firmware reservations, and claims only a verified-zero span.
+Zero PTEs without that ownership/consumer proof are not allocation authority. The inherited span crosses Linux's GuC-specific
 `0xfee00000` allocator ceiling, which is not permission to truncate it. New
 UMA mappings require a proven DMA/IOMMU address contract, CPU WC/cache-alias
 handling and the inherited PAT interpretation. No guessed identity DMA or
@@ -313,15 +315,15 @@ prerequisite that prevents a safe first flip.
 ## Accepted setup contract (chronium, 2026-10-29)
 
 The buffer/power/retirement decisions above remain accepted. The following
-source-qualified setup effects are also authorized. Implementation still follows
-the matched baseline; no new flip writes have been implemented yet.
+source-qualified setup effects are also authorized. The baseline preceded the
+development backend below; native flip qualification remains pending.
 
 1. **Auxiliary GT access for cache validation:** permit
-   only the reference bootstrap access needed to verify graphics PAT index 3,
-   not program it: GT forcewake kernel request (`0xa188`, write-mask bit 16
+   only the reference bootstrap access needed to verify graphics PAT indices 0–3,
+   with only the conditional PAT3 programming exception below: GT forcewake kernel request (`0xa188`, write-mask bit 16
    and request bit 0; acknowledgement at `0xdfc`), the firmware-shared MCR
    semaphore (`0xfd0`, read-acquire/write-1 release), and selector (`0xfd4`,
-   group 0/instance 0, multicast bit 31) around the PAT read at `0x480c`.
+   group 0/instance 0, multicast bit 31) around read-only PAT registers `0x4800` through `0x480c`.
    Preserve other forcewake owners; follow Linux's multicast selector handoff,
    rather than inventing a selector save/restore. Keep waits bounded and apply
    the accepted fence/retention rule to uncertain ownership/cleanup. Verify an
@@ -329,7 +331,9 @@ the matched baseline; no new flip writes have been implemented yet.
    firmware's table. Independently identify graphics/media stepping. If the
    media-A0 CPU GGTT-write workaround applies, allow only its documented dummy
    media-GMD write after each 63 PTE writes. No GT reset, firmware load, engine
-   submission, PAT programming or generic GT TLB invalidation. Existing display
+   submission or generic GT TLB invalidation. PAT0–2 remain read-only; the
+   conditional PAT3 write below supersedes only that part of the earlier
+   no-PAT-programming boundary. Existing display
    DC0/well holds do not substitute for this GT access protocol.
 2. **UMA DMA admission:** initially admit new UMA only
    when the relevant VT-d remapper is proven to have translation disabled;
@@ -380,6 +384,45 @@ aspect-fits the canvas into 2828×1768 with 26-pixel side margins. The older
 for cumulative compose/copy statistics; those include startup/session frames,
 not just game rendering. No new benchmark framework is needed.
 
+## Native presentation baseline and remaining tearing (2026-10-29)
+
+Orchestrator-run baseline A on vela, AC via USB-C charger without a dock:
+kernel `397a22bff`, userland `8cefca40`, ports `18b56bf`; 2880×1800 GOP and
+engine canvas, llvmpipe/default workers, HWP applied on 16 CPUs, existing copy
+backend, confirmed Intel startup cleanup. The fixed demo completed 1803 frames
+in 115.9 s (15.6 fps); engine frame times min/mean/max/stddev were
+41.0/64.3/535.0/11.7 ms. One native sample, not a statistical comparison.
+Evidence: `/shared/present/vela-tearing/flip-baseline-20261029/results-vela-A/`.
+
+The existing presenter counters at frame 1800 report composition 2.182 ms and
+final copy 4.036 ms per presented frame. Interior deltas over frames 120–1800
+are approximately 2.171 ms composition and 4.033 ms copy. These counters run in
+the presenter, while engine timing also includes simulation, rendering, OSMesa
+readback, SDL scaling/submission and waits; work can overlap across CPUs. Thus
+copy is numerically about 6.3% of the engine's 64.3 ms mean, but subtracting it
+does not measure pure rendering time. Flips still require a complete staged
+copy into the inactive back buffer; this work promises synchronization, not
+removal of all copy cost.
+
+Chronium saw no tearing in that low-cadence game run, but reports clear tearing
+while typing in the terminal. The exact 2026-10-27 attended image (`d99630dc`,
+ports `bf08f5da`) already contained OSMesa double buffering and explicit swaps:
+the audit folded the extension into another patch before that image, rather
+than removing it. The old/current engine source contents and SDL/Mesa swap
+implementations match; only SDL CPU-count configuration changed in the relevant
+port paths. Kernel presentation sources are unchanged through this baseline.
+Neither build synchronizes the final GOP copy. A copy into a live scanout can
+therefore tear when it intersects visible scanning; complete software frames
+alone do not prevent that. The visual difference between those unmatched runs
+has not been attributed to a specific cause.
+
+The next matched visibility check includes ordinary terminal character output
+and scrolling, plus a low-resolution OpenArena run. The 32-pixel bar leaves a
+2880×1768 content area; use 360×221 for an exact 8× SDL viewport without changing
+its scaling policy. A nominal 320×200 would not be integer-scaled in that content
+area. Retain the native-resolution run separately for the presentation-cost
+comparison. No physical keyboard input is fabricated by the output script.
+
 ## Pinned references
 
 Linux v6.19 `05f7e89ab9731565d8a62e3b5d1ec206485eeb0b` is the source reference,
@@ -393,6 +436,7 @@ not a claim of identical initialization to observed Fedora 7.2.10-200.fc44.
 - [Plane readout](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/skl_universal_plane.c) and [Xe initial plane](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/display/xe_plane_initial.c): power-guarded layout and bounded early timestamp wait.
 - [Stolen device-memory layout](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c): `detect_bar2_integrated()` GSM-relative DM PTEs and BAR2 CPU access.
 - [PSR register definitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_psr_regs.h): enable, idle and link-state fields.
+- [VRR timing readout](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_vrr.c): display30 fixed-refresh timing generator, VMIN/VMAX/FLIPLINE and guardband-derived vblank.
 - [Plane register definitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/skl_universal_plane_regs.h): 8888/channel order, alpha and display-30 SURF async selection.
 - [CRTC update](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_crtc.c) and [vblank timing](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_vblank.c): safe update window and completion arming.
 - [Xe GGTT](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_ggtt.c): table extent/location and raw inherited-PTE reader.
@@ -404,3 +448,496 @@ Additional pinned-source references for setup/completion:
 - [PAT table and reads](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_pat.c), [forcewake](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_force_wake.c), and [MCR steering](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gt_mcr.c): powered/serialized PAT admission.
 - [Display pinning](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/display/xe_fb_pin.c) and [workaround rules](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_wa_oob.rules): fixed linear mappings and media-stepping qualification.
 - [Intel TGL Display Engine, pp. 198–200, 207, 280–282](https://cdrdv2-public.intel.com/705833/intel-gfx-prm-osrc-tgl-vol-12-display-engine.pdf): sticky event recording/delivery and synchronous flip completion.
+
+## Development flip backend
+
+`CONFIG_INTEL_INHERITED_FLIP=y` enables preparation in a development image;
+its default is off. `display.flip=0` retains copying. The matched Intel route
+must have a sole enabled pipe A/plane 1, disabled hardware cursor/other planes,
+unchanged linear XRGB8888 geometry, disabled PSR/replay and fixed refresh
+(including display30's fixed-refresh VRR timing-generator mode). Admission proves
+the full GOP alias, relevant VT-d translation disabled and an inherited GGTT-reachable PAT entry
+UC/noncoherent under the bounded reference GT access protocol. Refusal leaves
+copy presentation when ownership is confirmed; uncertainty fences access.
+
+Two new PMM-backed WC buffers receive fixed owned GGTT mappings. The presenter
+copies a complete immutable composite into an inactive buffer, then arms one
+synchronous SURF update outside the context-latency keepout. A selected fresh
+plane flip-done event, expected programmed/live address, changed completion
+timestamp, frame progress and exactly one flip-start increment must agree.
+Hardware latch time is bounded even when CPU observation is delayed. The first
+owned-buffer flip retires GOP before one confirmed return to it; subsequent
+frames alternate the two UMA backs. Failed confirmation never authorizes reuse,
+a late completion or copying into an uncertain front. Frame skipping and frozen
+software captures keep their existing handoff; no per-frame PTE updates occur.
+
+Qualified display/DC0 ownership, mappings and scanout storage remain retained
+until reboot, including uncertain outcomes. This costs idle power and about
+40 MiB of backing at the measured mode; follow-up is [#1565](https://git.internal/PyxisOS/pyxis-os/issues/1565).
+Healthy panic presentation covers all three retained surfaces; a fenced backend
+uses the existing serial-only panic path. Neither failure-path nor optical
+tear-free behavior is natively qualified yet. QEMU cannot emulate this Intel
+register path, so its nonmatching boots cannot establish latch/retirement.
+
+Validation at code head `b4a86176e`: full default-off and enabled kernel builds
+pass with the unchanged `8bdf136` compiler container. Nested KVM/Q35, host+invtsc,
+4 CPUs/8 GiB, VirtIO-VGA with `display.flip=1` and VGA with `=0` each pass Remote
+echo, ordinary terminal glyph/scroll completion, the fixed 1803-frame 360×221
+llvmpipe demo and ordinary presentation metrics; neither admits Intel access or
+panics. These are correctness checks, not timing or Intel-MMIO qualification.
+An initial packet fixture invoked the workload from multiple spaces; it was
+corrected to Development-only startup before both passing checks.
+
+The hands-free candidate uses one common image and changes only
+`display.flip=0/1` between boots, preserving the baseline engine and data. It
+includes terminal output/scrolling, the exact 8× low-resolution run and the
+native-resolution cost run. Its collector requires actual flip admission,
+initial owned flip/GOP return, repeated correlated completions and zero timeouts;
+an ordinary fallback is a reported refusal. Packet:
+`/shared/present/vela-tearing/flips-native-20261029/`. Native execution remains
+with the orchestrator; this record does not claim that its checks have run.
+
+### First flip A/B admission correction (2026-10-29)
+
+The orchestrator's common-image A completed terminal output/scrolling and both
+1803-frame demos: 360×221 at 47.1 fps (38.3 s), native canvas at 15.6 fps
+(115.6 s). B refused before any GGTT/plane programming. Its inherited values
+were CONF `c0000000`, plane CTL `84000008`, COLOR `2000`, MISC2 `8000`,
+IIR `1`, VRR_CTL `a40007f7`. MISC2's plane selector (bits 2:0) is zero;
+IIR bit 0 is outside the selected fault mask; the format matches the earlier
+inventory. The bit-31 VRR-generator rejection was incorrect for display30.
+
+Pinned Linux `intel_vrr_always_use_vrr_tg()` uses the VRR timing generator for
+fixed refresh on display30+. `intel_vrr_get_config()` distinguishes fixed
+refresh through equal nonzero decoded VMIN/VMAX/FLIPLINE, uses VMIN for VTOTAL
+and subtracts the guardband for vblank start. A set VRR_CTL enable bit alone
+does not imply variable refresh. The earlier “VRR off” observation described
+Fedora's post-modeset CRTC property; the Pyxis inventory did not capture these
+firmware timing-generator registers. Their range is not inferred from the
+control word and must be measured on the next admission.
+
+The corrected backend reads and reports those inherited registers, admits
+fixed refresh using the same Linux readout, retains them unchanged, and uses
+the derived update boundary for keepout. Unequal timing limits or CMRR retain
+the copy path because the fixed-cadence proof does not cover them. No timing,
+VRR, push or mode register is written. Evidence remains under
+`/shared/present/vela-tearing/flips-native-20261029/results-vela-A/` and
+`results-vela-B/`; the refused B is not a completed flip qualification.
+
+### Bounded setup after the r2 boot stall
+
+The orchestrator's r2 boot left the early console frozen and never became
+Remote-ready; no target log was captured, so the precise stalled instruction
+is unobserved. Source review found no pre-AP flip-done wait: SURF submission
+happens later in the presenter. The concrete pre-AP cost was the full GGTT
+import: 2048 lazy page mappings each called the kernel physical-alias scan,
+walking roughly 139000 initrd pages again (about 285 million page queries,
+each walking scratch-mapped page tables). This runs before AP/network startup.
+It is finite but plausibly explains the prolonged early-console silence.
+
+The import now retires its small read-only inventory windows, validates the
+whole 8 MiB physical span once, and reserves/maps it as one read-only CPU range.
+The same physical-exclusion proof remains; only selected owned PTE pages later
+become writable. Setup has a five-second software deadline, including bounded
+mapping, import and scanout-allocation loops, with phase/refusal messages.
+Existing timing qualification (200 ms), forcewake ACK (50 ms), MCR semaphore
+(10 us), power settling and runtime flip completion remain bounded. These
+software bounds assume individual MMIO instructions and the qualified clock
+continue to make progress; no bus-hang watchdog is introduced.
+
+A refusal before SURF keeps ordinary copying. After partial auxiliary/GGTT
+setup, it may retain resources/holds and fence register writes while preserving
+CPU copies only if the unchanged active GOP front is re-proven. After an
+ambiguous SURF completion, the accepted fence/retention rule still applies:
+an ordinary copy into an uncertain front is not a safe fallback. The scheduler
+and Remote do not depend on a flip-done interrupt. Native qualification remains
+open. The collector now persists its initial result, reports no beacon/Remote
+readiness within its configurable 60-second default, and saves interruption
+results even before a connection exists.
+
+### R3 native prerequisite result and cache-policy decision
+
+R3 boots and cleans up normally. Captured VMIN=VMAX=FLIPLINE=`0xeff`
+confirms fixed refresh. The measured period 16663 us is approximately60.01Hz:
+firmware uses htotal3080/vtotal3840, while Fedora's captured120Hz mode uses
+htotal3080/vtotal1920 at essentially the same709.6MHz pixel clock. No refresh
+change is authorized here; the inherited mode is preserved. Chronium accepts
+this inherited 60 Hz mode for now (2026-10-29); 120 Hz belongs to later full
+Intel modesetting ownership.
+
+DMA admission is measured with GPU DRHD `0xfc800000`, GSTS `0x40000000` twice:
+translation-enable bit31 clear. GraphicsGMD `0x07804000` is30.1A0; mediaGMD
+`0x07800004` is30.0B0, so the media-A0 workaround is inapplicable. The next
+refusal is exactly inherited graphicsPAT3=`0`, expected`0x3c`. Forcewake is
+released and display cleanup confirmed; no scanout backing or plane write
+is reached. Native flips remain unqualified.
+
+Pinned xe `xe_pat_init_early()` chooses its Xe2/Xe3 table for graphics30;
+`xe_pat_init()` programs that table during GT initialization under forcewake,
+using multicast graphics writes. The display pin path selects `XE_CACHE_NONE`
+(index3 in xe's table). Its value`0x3c` means L3UC/L4UC/no-snoop/compression-off;
+zero means L3WB/L4WB/no-snoop/compression-off, not uncached. CPU PAT5/WC and
+SFENCE do not establish a GPU cache invalidation protocol. Accepting zero
+could therefore produce stale scanout on reuse; this is an unqualified cache
+contract, not evidence of an invalid address or a guaranteed crash. On this
+profile Linux classifies PAT as INSTANCE0, so the selected(0,0) read is not a
+guessed fused-off target.
+
+**Accepted (chronium, 2026-10-29), option 1:** retain no PAT writes; inventory
+GGTT-reachable entries0..3 and reuse an existing UC/noncoherent/compression-off
+entry if present, encoding its index in only the new UMA PTEs. Leave all entries
+and the inherited GOP PTEs unchanged. If none qualifies, log the reason and
+keep ordinary copy presentation; never refuse the boot. Only PAT3 was
+captured, so another usable entry must not be assumed.
+
+The implementation reads each of entries0..3 twice under the existing bounded
+forcewake/MCR protocol and chooses the first whose L3/L4 policies are UC,
+coherency is no-snoop and compression is disabled. CLOS/no-promote do not
+change that uncached policy and are preserved. The selected index is encoded
+only in the two new UMA back buffers; table and GOP PTEs remain unchanged.
+The existing phase timestamps remain enabled for the next native capture.
+
+Alternatives not selected:
+
+- Permit PAT programming as a revision of the accepted no-write boundary.
+  Prefer a single proven-unused reachable slot over xe's entire32-entry GT
+  initialization. Before any write, establish its consumers, required GT/cache
+  quiescence and scope; unused GGTT entries alone do not prove no PPGTT user.
+  Do not rewrite the index selected by the inherited GOP. This requires a
+  separate write/ownership decision after the evidence, not a silent table
+  replacement under the display-only owner.
+- Keep copying and defer the missing PAT initialization to fuller GPU ownership.
+  Safe with today's data, but this hardware remains without synchronized flips.
+
+Changing CPU WC to UC, or simply accepting cacheable PAT0, is not a substitute
+for a device-cache contract. A more aggressive cacheable/flush path requires
+reference-proven device cache maintenance and is outside this slice.
+
+### Startup latency follow-up
+
+R3 still showed the early console for multiple seconds. Its packet autostarts
+terminal output and both OpenArena demos; the collector only observes them.
+The orchestrator's Remote reboot explains the reported reset. The retained
+capture contains only Intel lines, not a fault log, so it cannot establish a
+separate application fault. Future collectors retain a masked full kernel log
+and available application/phase logs before returning an admission refusal.
+
+The remaining source-visible work repeats physical-alias scans for display
+and GT register windows and imports the entire GGTT before checking PAT.
+The implementation now batches the exact existing MMIO spans into one kernel
+mapping walk per group, validates contiguous inventory PTE windows once,
+checks PAT before the full import, and removes the duplicate40ms timing
+observation when flip timing qualification follows. No exclusion or ownership
+rule changes. Development phase logs include target t-us/elapsed-us/step-us,
+plus the presentation handoff timestamp. Native phase attribution remains to
+be measured; no guess about forcewake/DC0 consuming their timeout is recorded
+as a measurement.
+
+### PAT option-1 qualification
+
+A host check compiles the actual selector from `gt_profile.c`: UC in each of
+indices0–3 selects and encodes that index without changing the physical PTE
+address; first-qualified ordering and CLOS/no-promote preservation pass.
+Compression-enabled, coherent, L3/L4-cacheable, all-zero and all-ones tables
+are refused. This is CPU-only policy/encoding evidence, not a GPU readback.
+The next native packet must capture all four real values before claiming a
+usable inherited entry or synchronized flips.
+
+### R4 native result and register-window cost — 2026-10-29
+
+R4 boots with confirmed cleanup but still uses ordinary copying:
+PAT0=PAT1=PAT2=PAT3=`0`. There is no reachable uncached policy to reuse.
+Evidence: `/shared/present/vela-tearing/flips-native-20261029-r4/results-vela-B-r4/`.
+The native phase deltas are register windows376.914ms, inherited alias202.709ms,
+GT identity windows187.890ms, GT cache windows188.020ms; copy-backend-ready
+is1175.593ms from display preparation start. GT forcewake acknowledgment is
+0.580ms, PAT reads0.267ms and GT cleanup0.292ms. These do not identify a
+hardware wait of190ms.
+
+Source attribution: display GMD and remaining register windows each perform a
+full kernel physical-alias scan; GT's two identity windows share one scan, and
+its remaining cache windows share another. Each scalar page query repeatedly
+maps/unmaps page-table scratch slots, invalidating them at each descent.
+The window pages themselves are mapped once, not repeatedly. GOP inspection
+and VT-d admission add their own scans. VA reservation uses a linked free-range
+list, not a bitmap; PMM starts its bitmap search at its maintained first candidate.
+
+A disposable, never-merged observer called through GDB measured the components
+with in-guest monotonic timestamps. One matched run per version, nested KVM,
+invariant TSC, 8GiB guest, same569479680-byte archive. This is not a native boot
+measurement. Baseline registered candidate pages157569, fixed157570 (one extra
+kernel page); both have20 VM ranges,40960 PMM bitmap words and first candidate831.
+
+| Component | Before | Leaf-batched query |
+| --- | ---: | ---: |
+| VA reservation, one page | 0.150ms | 0.152ms |
+| PMM allocate one frame | 0.139ms | 0.047ms |
+| MMIO map one page | 0.148ms | 0.049ms |
+| Protect that page RO | 0.141ms | 0.048ms |
+| Alias query, one physical span | 175.304ms | 0.626ms |
+| Alias query, sixteen spans | 183.257ms | 1.921ms |
+| Sixteen warmed reserve/map/RO/unmap/release cycles together | 0.133ms | 0.132ms |
+
+These samples attribute the long path to alias queries, not PMM or VA allocation;
+cold single-call differences are not allocator performance claims. A32GiB guest
+could not start (`Cannot allocate memory`), so RAM-size scaling on vela was not
+measured. No VM-host memory policy was changed.
+
+The correction is in shared MM/paging: scan each present leaf table through one
+scratch mapping, skip absent ancestors' complete spans, and release the short
+snapshot guard between leaf tables. Every present frame is checked against the
+same requested physical extents; the structural owner, reserved-memory/PCI/GOP
+exclusions, corruption checks and cleanup remain. No cached alias proof, retained
+scratch pointer, allocator change or hardware write is introduced. This removes
+per-page scratch invalidations without weakening the mapping checks.
+
+CPU-only QEMU/GDB checks pass for full2048-page RO/NX/UC spans, native-size5063-page
+WC backing/zeroing/cleanup, mapped-RAM aliases in either vector order, zero/overflow
+refusal, six first/last leaf slots across three tables, byte4095 intersections,
+adjacent absent frames, and an empty8GiB reservation. The observer is excluded
+from the final kernel. Small evidence is in
+`/shared/present/vela-tearing/window-cost-20261029/`. Native startup cost after
+this correction and native flips remain unqualified.
+
+### What the zero PAT entries mean
+
+An index selects the contents of a GPU PAT entry; index0 is not inherently WB.
+For the matched graphics30/Xe2-style encoding, value0 is L3WB, L4WB, no-snoop,
+compression-off, CLOS0 and promotable. Thus all four reachable indices currently
+select that same cacheable policy. This does not establish why firmware left
+them zero or what the unreachable entries contain. CPU x86 PAT/WC is a separate
+mechanism; CPU stores/SFENCE alone do not supply GPU cache invalidation.
+
+Pinned Linux `xe_pat.c` selects the Xe2 table for graphics30 and programs it at
+GT initialization. Reachable entries0/1/2 are respectively`0x0c/0x0e/0x0f`
+(L3WB/L4UC with no-snoop/one-way/two-way coherence); entry3 is`0x3c`
+(L3UC/L4UC/no-snoop/compression-off). Display `xe_fb_pin.c` uses
+`XE_CACHE_NONE`, which this profile assigns to index3. Firmware's zero table
+therefore does not satisfy the cache policy Linux establishes for new display
+buffers.
+
+**Accepted (chronium, 2026-10-29), narrowed option 2:** program ONLY graphics
+PAT entry3 to Linux xe's display value`0x3c` (L3/L4UC, no-snoop, compression-off),
+leaving entries0–2 unchanged. This explicitly revisits the earlier no-PAT-write
+boundary. Before writing, apply the accepted live-consumer proof below; the later
+2026-10-29 decision replaces the global absence-of-PAT3-PTE condition. Use the
+reference forcewake/MCR protocol and log before/after. A failed proof makes no
+PAT write and keeps ordinary copying; it must not refuse boot.
+
+The MM batching foundation is split into [#1587](https://git.internal/PyxisOS/pyxis-os/pulls/1587),
+based on main, with its own CI. #1563 is linearly based on that published head.
+Merge order: #1587, then #1563. The MM bodies have no remaining diff in #1563.
+
+### Accepted boot submitter proof for conditional PAT3 programming
+
+**Accepted (chronium, 2026-10-29):** the submitter argument replaces the earlier
+requirement to find a separate documented all-consumer certificate. A saved
+context cannot run without submission: GuC, GSC firmware and the host are the
+possible submitters. Pyxis has no GT submission/firmware-start path. Before
+programming PAT3, under the bounded qualified forcewake holds and exclusive
+bootstrap owner, recheck all of the following:
+
+- Graphics and media GuC MIA reset bits set, stable and readable.
+- GSC firmware initialization-complete bit clear, stable and readable.
+- Every fuse-present engine idle: HEAD=TAIL, CTL=0, current LRCA=0 and the
+  execution queue invalid with no valid, pending or active entry. Do not
+  interpret historical switch reasons or the undefined reset context ID as
+  pending work. Retain two raw status snapshots in the log.
+- Before changing PAT3, every PTE in the complete live GOP span uses another
+  PAT index. Unknown/read failure refuses. Dormant entries outside the proven
+  live consumers do not prevent the write.
+
+The engine queue predicate uses the modern execution-queue layout (Gen12 PRM,
+Vol2c Part1, printed pages893–895); pinned xe reads the same status registers
+and uses active bit7. It does not use the old Gen8 execlist port bit layout.
+References at Linux`05f7e89ab9731565d8a62e3b5d1ec206485eeb0b`:
+[engine status](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_execlist.c),
+[GuC reset](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_guc.c),
+[GSC initialization](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gsc.c).
+
+Keep all relevant holds through the bounded zero-span search and final live
+GOP/submitter recheck. With the
+proof confirmed, the existing MCR multicast protocol may program only PAT3
+with`0x3c`, logging before/after; PAT0–2 and all inherited PTEs remain untouched.
+An already-qualified inherited uncached entry needs no PAT write. Only the two
+new UMA buffers use the selected index. Any failed/uncertain condition keeps
+ordinary GOP copying; uncertain hardware cleanup fences and retains resources
+until reboot. The independent DMA, power, mode, GGTT ownership and correlated
+flip-retirement checks remain mandatory. No GuC/GSC start or context submission
+may be added later without revisiting this ownership contract.
+
+This explicitly accepts the submitter proof for dormant PPGTT mappings; it does
+not claim that saved context memory was enumerated or that its page tables were
+read. No context-memory access, reset, submission or firmware command is added.
+
+### Native consumer observation and MM batching result
+
+R5 on vela captured all seven engines (RCS0/BCS0/BCS8/CCS0/VCS0/VECS0/GSCCS0),
+with stable idle-looking samples, both GuCs in MIA reset, GSC initialization
+incomplete, PAT0–3 zero, and confirmed cleanup. It performed no PAT/GGTT/plane
+writes. This native observation informed the accepted submitter argument above;
+R6 independently rechecks it at each boot before its conditional write.
+
+Single native observations, same matched archive/profile; not repeated samples:
+
+| Preparation phase | R4 | R5 including MM #1587 |
+| --- | ---: | ---: |
+| Display register windows | 376.9 ms | 3.3 ms |
+| GT identity windows | 187.9 ms | 1.1 ms |
+| GT cache windows | 188.0 ms | 1.3 ms |
+| GOP alias inspection | 202.7 ms | 15.8 ms |
+| Total display preparation | 1175.6 ms | 112.7 ms |
+
+R5 includes the additional consumer inventory; total preparation nevertheless
+fell about90%. Raw captures stay outside the repository at
+`/shared/present/vela-tearing/flips-native-20261029-r5/results-vela-r5/`.
+
+### Implemented bounded consumer inventory (r5)
+
+Rebased on main including merged MM query PR#1587. The development packet is
+the gate; no new boot option or public ABI is introduced. For the matched
+graphics30.1/media30.0 topology, read CCS presence from`0x9114[19:16]` and
+media presence from`0x389140[7:0,19:16]` under the corresponding GT forcewake.
+One means present. Include RCS0, BCS0 and BCS8, all fuse-present CCS0–3,
+VCS0–7 and VECS0–3, and GSCCS0. Do not apply Linux software CCS reductions or
+its own missing-firmware filter to inherited state. Media GSI translation
+applies only below`0x40000`; engine bases and GSC HECI1 remain untranslated.
+
+Each present engine is read twice under its matching acknowledged domain:
+head, tail, control, MI_MODE, execlist status low/high, current LRCA and mode.
+Both GuC status registers and GSC FWSTS1 are read twice. Logs retain raw values
+and a stability observation; no idle/reset/loaded bit is treated as proof that
+all inherited PPGTT consumers are absent. No context-memory pointer is followed.
+
+Only kernel request bit0 with write-mask bit16 is written on these controls:
+
+| Domain | Control | Acknowledge |
+| --- | --- | --- |
+| Main/media GT | `0xa188` / `0x38a188` | `0xdfc` / `0x380dfc` |
+| Main render | `0xa278` | `0xd84` |
+| Present media VDBOX n | `0x38a540+4*n` | `0x380d50+4*n` |
+| Present media VEBOX n | `0x38a560+4*n` | `0x380d70+4*n` |
+| Media GSC | `0x38a618` | `0x380df8` |
+
+Preserve inherited kernel requests; release only added requests, children before
+parents. ACK waits keep the Linux50ms bound. Unknown acquisition/cleanup fences
+and retains mappings/holds until reboot; ordinary CPU-copy boot may continue
+with a proven unchanged GOP. CPU mapping refusal cleans up confirmed resources.
+Other consumer/status windows are RO/NX/UC and map once with batched alias proof.
+
+The R5 **read-only observation slice ended before write admission**,
+even if a usable inherited PAT entry happens to exist: no PAT, GGTT PTE or plane
+write is issued. It returned to copying after confirmed GT cleanup. R6 supersedes that
+observation-only boundary with the explicitly accepted submitter proof above. No reset,
+submission, firmware command, modeset or arbitrary context-memory read occurs.
+
+R5 is hands-free, immediately blanks the OLED on presentation, has no game or
+benchmark autorun and leaves NVMe writes off. It includes a log reader rebuilt
+for current main's log wire format; the other exercised file/launch ABI remains
+unchanged from the qualification archive. The Remote collector saves masked
+kernel/Intel logs and checks topology, two samples per present engine, GuC/GSC
+records and joined release/cleanup. `CAPTURED` means those observations arrived;
+it is not a flip, absence or optical-tearing qualification.
+
+Qualification before the native inventory: actual-code host checks pass for
+all20 potential engines, zero/single/full fuse masks and the write whitelist
+(rejecting PAT, engine mode/control and GuC command writes). CPU-only QEMU/GDB
+checks pass for25 RO/NX/UC inventory windows, idempotent reuse, capacity refusal
+without mutation and two complete cleanup cycles; no synthetic MMIO window is
+dereferenced. Independent pinned-source review found no topology, offset,
+parent-domain or cleanup defect. These checks do not emulate GT hardware or
+qualify native forcewake/status reads; r5 supplies those observations.
+
+### R6 implementation and qualification boundary
+
+The full GGTT import records every occupied entry and counts present PAT3
+references before selecting a free span. All qualified engine/domain holds
+remain joined through the final submitter recheck. Only then may the PAT page
+become writable and the MCR multicast write publish PAT3=0x3c. The write
+whitelist admits no other PAT index or value. A posting read logs the result;
+admission tests the required cache policy rather than unrelated reserved bits.
+Historical/undefined queue fields remain raw diagnostics, not extra refusals.
+
+Host checks of the actual admission code cover the accepted state, GuC/GSC
+activity, pending/current engine work, unknown reads, failed CPU protection and
+inherited UC selection. Full-GGTT import checks include a PAT3 reference outside
+the allocated span and an incomplete final read. These use host-owned synthetic
+memory, not device access. Default/enabled kernel builds and the non-Intel
+QEMU terminal/OpenArena path provide integration checks. Native PAT programming,
+flip completion and optical tearing remain unqualified until the R6 run.
+
+R6 retains the R1 terminal glyph/scroll and OpenArena1803-frame workloads
+(360x221 integer8x and2880x1800), and the accepted visible blank900s/collector840s
+bound. The log reader matches the current wire ABI. Compare with the retained
+ordinary R1 result; archive bytes differ only for the log reader, with game,
+demo, workload and renderer unchanged. A successful collector result requires
+confirmed Intel flip transactions; ordinary fallback is never labelled a flip
+pass. A firmware-start/submission implementation later must revisit PAT ownership.
+
+### R6 native flips and optical observation (2026-10-29)
+
+Vela, USB-C AC/no dock,2880x1800 inherited approximately60Hz, liveRAM,
+llvmpipe LLVM23.1.3 with upstream default workers. R6 at`913480dfa` passes
+terminal output/scroll and both1803-frame OpenArena workloads. The native log
+records`submitter proof qualified=1`, full GGTT`entries=1048576
+present-PAT3-references=0`, then`PAT3 programmed before=0 after=3c` with PAT0–2
+untouched. Initial owned flip and GOP return both confirm. The last sampled
+counter has4080 submitted/4080 confirmed, no deferrals or timeouts.
+
+| OpenArena workload | R1 ordinary A | R6 flip B |
+| --- | ---: | ---: |
+|360x221 integer8x|47.1fps /38.3s|50.3fps /35.9s|
+|2880x1800|15.6fps /115.6s|15.9fps /113.7s|
+
+These are single native runs, not repeated statistics. Chronium visually
+observed **no tearing** in both OpenArena runs on2026-10-29. This is his optical
+observation, not an automated tear-free proof; no separate attended terminal
+observation is claimed. Evidence stays at
+`/shared/present/vela-tearing/flips-native-20261029-r6/results-vela-B-r6/`.
+
+The flip-mode`copy` metric is the CPU transfer of the completed compositor
+staging image into the inactive owned WC UMA back buffer, including its store
+fence. It does not copy into the actively scanned front and does not include
+the subsequent flip wait. Composition remains separate. At2880x1800 the reported
+means are about1.92ms composition and1.1ms back-buffer copy; this is synchronized
+presentation, not zero-copy rendering.
+
+Keep the PR draft while addressing the startup regression: native preparation
+was2967ms total, with2947ms after alias inspection. The existing timestamps
+bracket approximately1570ms for DMA/GGTT mapping/import plus a consumer recheck,
+and1273ms after PAT admission for buffer setup, PTE publication and cleanup.
+They do not yet isolate the individual operations inside either interval.
+
+### Live-consumer PAT admission and bounded search (R9)
+
+**Accepted (chronium, 2026-10-29):** replace the global “no PAT3 PTE anywhere”
+condition with live-consumer admission. Retain the stable GuC-reset,
+GSC-not-loaded, idle-engine/no-current-or-pending-context, no-host-submission
+proof and the single stable GOP-only display profile. Before changing PAT3,
+check the actual PAT bits of every live GOP PTE. A live GOP reference to3
+prevents that write; an already-qualified inherited UC entry needs no table
+change. Dormant descriptors outside proven live consumers are not users.
+
+**Accepted (chronium, 2026-10-29):** preserve every inherited nonzero PTE and
+all reference reserved ranges. Search for a sufficient verified-zero span,
+stop when found, then recheck zero before publishing each new PTE. Do not run
+an unconditional million-entry import, clear old entries or recover old
+physical pages. Exhausted space or the existing setup budget keeps ordinary
+copying. Reclamation needs its own later ownership/remap/completion rule.
+Remaining mappings can accumulate across warm reboots; this is a GGTT virtual
+address limit, not permission to reserve or read their former physical backing.
+
+R8 at641f6ef3 correctly reached GT setup and saw10,126 PAT3 descriptors with
+PAT0–3 reset to0. R6 allocated exactly two5,063-page buffers at
+`[0x00800000,0x01bc7000)` and`[0x01bc7000,0x02f8e000)`, disjoint from GOP
+`[0xfec00000,0xfffc7000)`. This supports warm persistence, but the aggregate R8
+capture does not prove those locations or old physical-frame provenance.
+R9 logs complete GOP PAT counts, chosen zero span, and encountered retained
+PAT3 count/address bounds; its acceptance never depends on matching R6.
+
+R8 measured57.173ms GGTT CPU-span setup and1486.009ms scalar import, out of
+1655.526ms total display preparation. It refused before new UMA preparation,
+so did not measure the native MM batching saving. R9 removes the mandatory
+full import, retains narrow aligned64-bit accesses and maps only needed
+read-only GGTT CPU windows. No wider-read/WC shortcut, reset, new invalidation
+or context-memory access is added. Native qualification remains pending.

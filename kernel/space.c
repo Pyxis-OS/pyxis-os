@@ -855,7 +855,7 @@ static bool begin_presenting(void)
   cpu_restore_interrupts(flags);
   if (owned) {
     presenting = true;
-    kinfo("display: presentation started; early console retired\n");
+    kinfo("display: presentation started; early console retired t-us=%lu\n", arch_monotonic_ns() / 1000);
   }
   return owned;
 }

@@ -12,9 +12,15 @@
 #include <arch/syscall.h>
 #include <arch/user.h>
 #include <arch/amd/renoir_inventory.h>
+#include <arch/intel/dma.h>
+#include <kernel-config.h>
 #include <kernel/boot/options.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
+
+#ifndef CONFIG_INTEL_INHERITED_FLIP
+#define CONFIG_INTEL_INHERITED_FLIP 0
+#endif
 
 #define STAR_KERNEL_CS_SHIFT 32
 #define STAR_SYSRET_BASE_SHIFT 48
@@ -70,6 +76,9 @@ void arch_init(struct boot_info *boot)
   arch_clock_prepare(boot);
   if (options->display_inventory || options->display_flip) {
     renoir_inventory_boot(boot);
+  }
+  if (CONFIG_INTEL_INHERITED_FLIP && options->display_flip) {
+    intel_dma_capture_boot(boot);
   }
   paging_init(boot);
   arch_clock_init();

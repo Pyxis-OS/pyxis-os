@@ -23,6 +23,10 @@
 #define SCALER_COUNT 2
 #define PIPE_STEP 0x1000u
 #define TRANS_ENABLE (1u << 31)
+#define PIPE_IRQ_IMR(p) (0x44404u + 0x10u * (p))
+#define PIPE_IRQ_IIR(p) (0x44408u + 0x10u * (p))
+#define PIPE_IRQ_IER(p) (0x4440cu + 0x10u * (p))
+#define PIPE_PLANE1_FLIP_DONE (1u << 3)
 #define WELL_REQUEST(index) (2u << (2 * (index)))
 #define WELL_STATE(index) (1u << (2 * (index)))
 #define PIPE_SCANLINE(p) (0x70000u + PIPE_STEP * (p))
@@ -52,6 +56,7 @@ enum plane_register {
 #define PLANE_TILING_MASK 0x1c00u
 #define PLANE_COMPRESSION_MASK ((1u << 15) | (1u << 4))
 #define PLANE_RGBX (1u << 20)
+#define PLANE_ASYNC_FLIP (1u << 9)
 #define PLANE_ROTATION_MASK 3u
 #define PLANE_FLIP_HORIZONTAL (1u << 8)
 #define CURSOR_BASE(p) (0x70080u + PIPE_STEP * (p))
@@ -69,6 +74,7 @@ enum scaler_register { SCALER_POSITION = 112, SCALER_SIZE = 116, SCALER_CONTROL 
 #define GGTT_PTE_PRESENT UINT64_C(1)
 #define GGTT_PTE_DM UINT64_C(2)
 #define GGTT_PTE_PAT_MASK (UINT64_C(3) << 52)
+#define GGTT_PTE_PAT(index) ((uint64_t)(index) << 52)
 #define GGTT_PTE_ADDRESS_LIMIT (UINT64_C(1) << 46)
 
 #endif
