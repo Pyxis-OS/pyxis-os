@@ -117,9 +117,9 @@ upgrade`: boot the 0.0.10 installer and choose Update** (see the release notes).
   the firmware set up and presents frames with a synchronized flip at vblank. On
   the IdeaPad (vela) chronium saw no tearing in OpenArena at low and native
   resolution; at the native resolution the frame rate went from 15.6 to 15.9
-  (single runs, 1803 frames). Preparing the flip delays boot by about 1.3 s, an
-  accepted limit fixed in 0.0.11
-  ([debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617)). Full Intel
+  (single runs, 1803 frames). Preparing the flip delayed boot by about 1.3 s; batching its
+  ownership and deadline checks cut that step to 0.39 s on vela, and the rest is
+  tracked in [debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617). Full Intel
   modesetting is later work.
 - **ABI:** this is a new, deliberate ABI break. `include/abi/` no longer keeps
   every line of 0.0.9's, and 0.0.10 provides only the `"0.0.10"` ABI name; it does
