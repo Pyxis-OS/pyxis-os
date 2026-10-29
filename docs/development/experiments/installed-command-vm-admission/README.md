@@ -10,7 +10,7 @@ the exited process.
 On kernel `31e07a36d096674423ef0b48c46fa0ae062346be`, a four-vCPU nested KVM
 run reproduced four failed npfs-backed launches out of 60 commands. A second
 run reproduced three. GDB stopped at the failed `vm_kernel_owner_try()` branch
-in `launcher_start()`. In both captures the current owner's actor had
+in `launcher_start()`. The second capture also inspected the current owner's actor and found
 `kernel_entry = reaper`; the request stack was
 `request_worker -> launcher_request_execute -> launcher_start`.
 
