@@ -318,11 +318,11 @@ source-qualified setup effects are also authorized. The baseline preceded the
 development backend below; native flip qualification remains pending.
 
 1. **Auxiliary GT access for cache validation:** permit
-   only the reference bootstrap access needed to verify graphics PAT index 3,
+   only the reference bootstrap access needed to verify graphics PAT indices 0–3,
    not program it: GT forcewake kernel request (`0xa188`, write-mask bit 16
    and request bit 0; acknowledgement at `0xdfc`), the firmware-shared MCR
    semaphore (`0xfd0`, read-acquire/write-1 release), and selector (`0xfd4`,
-   group 0/instance 0, multicast bit 31) around the PAT read at `0x480c`.
+   group 0/instance 0, multicast bit 31) around read-only PAT registers `0x4800` through `0x480c`.
    Preserve other forcewake owners; follow Linux's multicast selector handoff,
    rather than inventing a selector save/restore. Keep waits bounded and apply
    the accepted fence/retention rule to uncertain ownership/cleanup. Verify an
@@ -453,7 +453,7 @@ its default is off. `display.flip=0` retains copying. The matched Intel route
 must have a sole enabled pipe A/plane 1, disabled hardware cursor/other planes,
 unchanged linear XRGB8888 geometry, disabled PSR/replay and fixed refresh
 (including display30's fixed-refresh VRR timing-generator mode). Admission proves
-the full GOP alias, relevant VT-d translation disabled and inherited PAT3
+the full GOP alias, relevant VT-d translation disabled and an inherited GGTT-reachable PAT entry
 UC/noncoherent under the bounded reference GT access protocol. Refusal leaves
 copy presentation when ownership is confirmed; uncertainty fences access.
 
@@ -558,7 +558,9 @@ R3 boots and cleans up normally. Captured VMIN=VMAX=FLIPLINE=`0xeff`
 confirms fixed refresh. The measured period 16663 us is approximately60.01Hz:
 firmware uses htotal3080/vtotal3840, while Fedora's captured120Hz mode uses
 htotal3080/vtotal1920 at essentially the same709.6MHz pixel clock. No refresh
-change is authorized here; the inherited mode is preserved.
+change is authorized here; the inherited mode is preserved. Chronium accepts
+this inherited 60 Hz mode for now (2026-10-29); 120 Hz belongs to later full
+Intel modesetting ownership.
 
 DMA admission is measured with GPU DRHD `0xfc800000`, GSTS `0x40000000` twice:
 translation-enable bit31 clear. GraphicsGMD `0x07804000` is30.1A0; mediaGMD
@@ -578,13 +580,21 @@ contract, not evidence of an invalid address or a guaranteed crash. On this
 profile Linux classifies PAT as INSTANCE0, so the selected(0,0) read is not a
 guessed fused-off target.
 
-**Decision needed — recommended first step:** retain no PAT writes; inventory
+**Accepted (chronium, 2026-10-29), option 1:** retain no PAT writes; inventory
 GGTT-reachable entries0..3 and reuse an existing UC/noncoherent/compression-off
 entry if present, encoding its index in only the new UMA PTEs. Leave all entries
-and the inherited GOP PTEs unchanged. Refuse if none qualifies. Only PAT3 was
+and the inherited GOP PTEs unchanged. If none qualifies, log the reason and
+keep ordinary copy presentation; never refuse the boot. Only PAT3 was
 captured, so another usable entry must not be assumed.
 
-Alternatives:
+The implementation reads each of entries0..3 twice under the existing bounded
+forcewake/MCR protocol and chooses the first whose L3/L4 policies are UC,
+coherency is no-snoop and compression is disabled. CLOS/no-promote do not
+change that uncached policy and are preserved. The selected index is encoded
+only in the two new UMA back buffers; table and GOP PTEs remain unchanged.
+The existing phase timestamps remain enabled for the next native capture.
+
+Alternatives not selected:
 
 - Permit PAT programming as a revision of the accepted no-write boundary.
   Prefer a single proven-unused reachable slot over xe's entire32-entry GT
@@ -619,3 +629,13 @@ rule changes. Development phase logs include target t-us/elapsed-us/step-us,
 plus the presentation handoff timestamp. Native phase attribution remains to
 be measured; no guess about forcewake/DC0 consuming their timeout is recorded
 as a measurement.
+
+### PAT option-1 qualification
+
+A host check compiles the actual selector from `gt_profile.c`: UC in each of
+indices0–3 selects and encodes that index without changing the physical PTE
+address; first-qualified ordering and CLOS/no-promote preservation pass.
+Compression-enabled, coherent, L3/L4-cacheable, all-zero and all-ones tables
+are refused. This is CPU-only policy/encoding evidence, not a GPU readback.
+The next native packet must capture all four real values before claiming a
+usable inherited entry or synchronized flips.

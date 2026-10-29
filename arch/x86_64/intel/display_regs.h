@@ -74,6 +74,7 @@ enum scaler_register { SCALER_POSITION = 112, SCALER_SIZE = 116, SCALER_CONTROL 
 #define GGTT_PTE_PRESENT UINT64_C(1)
 #define GGTT_PTE_DM UINT64_C(2)
 #define GGTT_PTE_PAT_MASK (UINT64_C(3) << 52)
+#define GGTT_PTE_PAT(index) ((uint64_t)(index) << 52)
 #define GGTT_PTE_ADDRESS_LIMIT (UINT64_C(1) << 46)
 
 #endif

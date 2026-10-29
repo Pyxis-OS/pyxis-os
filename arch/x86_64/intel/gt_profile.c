@@ -15,7 +15,9 @@
 #define STEER_SEMAPHORE 0x00fd0u
 #define MCR_SELECTOR 0x00fd4u
 #define MCR_MULTICAST (1u << 31)
-#define PAT_INDEX3 0x0480cu
+#define PAT_INDEX0 0x04800u
+#define GGTT_PAT_ENTRIES 4u
+#define PAT_CACHE_MASK ((1u << 9) | 0x3fu)
 #define PAT_UC_NONCOHERENT 0x3cu
 #define GT_FORCEWAKE 0x0a188u
 #define FORCEWAKE_KERNEL 1u
@@ -42,6 +44,7 @@ static struct {
 } forcewake[] = {{0, false, false}, {MEDIA_BASE, false, false}};
 static uint32_t graphics_gmd, media_gmd;
 static unsigned pending_writes;
+static unsigned pat_index = GGTT_PAT_ENTRIES;
 static bool attempted, active, fenced, semaphore_owned, write_workaround;
 static uint64_t started_ns, phase_ns;
 
@@ -223,7 +226,7 @@ static bool release_semaphore(void)
   return read_reg(GMD_ID) == graphics_gmd || fail("MCR handoff posting read failed");
 }
 
-static bool read_pat(uint32_t *pat)
+static bool read_pat(uint32_t pat[GGTT_PAT_ENTRIES])
 {
   if (!holds_valid()) {
     return false;
@@ -247,12 +250,26 @@ static bool read_pat(uint32_t *pat)
     return false;
   }
   write_reg(MCR_SELECTOR, MCR_MULTICAST);
-  *pat = read_reg(PAT_INDEX3);
-  uint32_t second = read_reg(PAT_INDEX3);
-  if (*pat != second || !holds_valid()) {
-    return fail("PAT readback/forcewake unstable");
+  for (unsigned i = 0; i < GGTT_PAT_ENTRIES; ++i) {
+    pat[i] = read_reg(PAT_INDEX0 + i * sizeof(uint32_t));
+    uint32_t second = read_reg(PAT_INDEX0 + i * sizeof(uint32_t));
+    if (pat[i] != second || !holds_valid()) {
+      return fail("PAT readback/forcewake unstable");
+    }
   }
   return release_semaphore();
+}
+
+static unsigned select_pat(const uint32_t pat[GGTT_PAT_ENTRIES])
+{
+  for (unsigned i = 0; i < GGTT_PAT_ENTRIES; ++i) {
+    /* Xe2/Xe3: L3/L4 UC, no snoop, compression disabled. CLOS and
+     * no-promote do not change this uncached policy; leave them untouched. */
+    if ((pat[i] & PAT_CACHE_MASK) == PAT_UC_NONCOHERENT) {
+      return i;
+    }
+  }
+  return GGTT_PAT_ENTRIES;
 }
 
 static bool drain_writes(void)
@@ -303,6 +320,12 @@ bool intel_gt_profile_ready(void)
     return fail("bootstrap CPU ownership changed");
   }
   return holds_valid();
+}
+
+unsigned intel_gt_profile_pat_index(void)
+{
+  KASSERT(active && !fenced && pat_index < GGTT_PAT_ENTRIES);
+  return pat_index;
 }
 
 bool intel_gt_note_ggtt_write(void)
@@ -390,17 +413,22 @@ bool intel_gt_profile_prepare(const struct boot_info *boot, uint64_t bar)
     return false;
   }
   log_phase("forcewake-acknowledged");
-  uint32_t pat;
-  if (!read_pat(&pat)) {
+  uint32_t pat[GGTT_PAT_ENTRIES];
+  if (!read_pat(pat)) {
     return false;
   }
   active = true;
   log_phase("PAT-read");
-  kinfo("intel-gt: inherited PAT3=%x expected=%x media-A0-write-WA=%u\n",
-      pat, PAT_UC_NONCOHERENT, write_workaround);
-  if (pat != PAT_UC_NONCOHERENT) {
-    intel_gt_profile_finish();
+  kinfo("intel-gt: inherited PAT0=%x PAT1=%x PAT2=%x PAT3=%x media-A0-write-WA=%u\n",
+      pat[0], pat[1], pat[2], pat[3], write_workaround);
+  pat_index = select_pat(pat);
+  if (pat_index == GGTT_PAT_ENTRIES) {
+    if (intel_gt_profile_finish()) {
+      kinfo("intel-gt: no inherited GGTT-reachable uncached PAT entry; keeping GOP copy\n");
+    }
     return false;
   }
+  kinfo("intel-gt: selected inherited PAT%u=%x for new UMA PTEs only; table unchanged\n",
+      pat_index, pat[pat_index]);
   return intel_gt_profile_ready();
 }

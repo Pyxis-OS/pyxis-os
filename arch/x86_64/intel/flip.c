@@ -331,6 +331,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     return false;
   }
   /* Cache policy is a prerequisite: reject it before scanning all GGTT PTEs. */
+  uint64_t pat = GGTT_PTE_PAT(intel_gt_profile_pat_index());
   if (!choose_ggtt(count)) {
     if (!intel_gt_profile_finish()) {
       return abandon_setup("GT cleanup after GGTT import refusal uncertain");
@@ -368,7 +369,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
       if (!entry) {
         return abandon_setup("GGTT mapping access uncertain");
       }
-      *(volatile uint64_t *)entry = pages[n].frames[i] | GGTT_PTE_PRESENT | GGTT_PTE_PAT_MASK;
+      *(volatile uint64_t *)entry = pages[n].frames[i] | GGTT_PTE_PRESENT | pat;
       if (!intel_gt_note_ggtt_write()) {
         return abandon_setup("GGTT write completion uncertain");
       }
