@@ -941,7 +941,7 @@ static void resize_buffers_quarantine(const struct resize_buffers *buffers)
 
 /* Sole presenter, between frame leases. Device waits retain the published
  * TTY set, including output that APs write while scanout is being changed. */
-static void resize_display_transaction(void)
+static void resize_display_transaction(bool *preparing)
 {
   struct vm_kernel_owner owner = {0};
   if (!vm_kernel_owner_acquire(&owner)) {
@@ -1051,6 +1051,10 @@ static void resize_display_transaction(void)
   screen = display_layout();
   uint64_t elapsed = arch_monotonic_ns() - started;
   log_end(locked);
+  /* The new layout is coherent. Consumers awakened below must be able to
+   * reserve that generation even while the presenter retires old backing. */
+  display_geometry_end();
+  *preparing = false;
   drawn_nav_valid = false;
   volume_ui_cancel();
   volume_ui_end_frame(false);
@@ -1094,9 +1098,12 @@ static void resize_display(void)
   if (!admitted) {
     return;
   }
-  resize_display_transaction();
+  bool preparing = true;
+  resize_display_transaction(&preparing);
   flags = cpu_save_interrupts();
-  display_geometry_end();
+  if (preparing) {
+    display_geometry_end();
+  }
   cpu_restore_interrupts(flags);
 }
 
