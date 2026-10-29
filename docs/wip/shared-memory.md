@@ -139,7 +139,10 @@ Each task updates its checkbox and records validation, limits and exact heads.
 Focused dependencies publish before a parent pin; do not expose revocable MAP
 without its connected withdrawal implementation.
 
-- [ ] **1. Baseline and concrete interface closure.** Freeze current main and
+- [ ] **1. Baseline and concrete interface closure.** The
+  [before-code 1/4-CPU controls](../development/experiments/shared-memory.md) pass
+  at clean main `20c99b3fa`; no implementation yet. This row remains open for
+  the task-boundary completion answers below. Freeze current main and
   compiler/configuration; run existing launch/private-pages/CALL/SEND64/4096
   controls before implementation, one run/config for threshold questions. Record
   source/ABI, CPU/clock/HWP/XSAVE, backing and variation. Finalize routine native
