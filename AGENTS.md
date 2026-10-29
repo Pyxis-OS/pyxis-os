@@ -134,11 +134,9 @@
   documented hardware hazard; no write-then-readback equality checks, refusals on
   unexpected values or warnings turned into aborts.
 - Physical addresses are not C pointers. Keep ownership, overflow checks and
-  failure unwinding explicit. BSP-owned allocation and VM mutation
-  (docs/kernel/smp.md, docs/kernel/memory.md) is being removed: it is an interim
-  implementation, not a contract to preserve or extend. Until the removal
-  milestone lands, work within it without adding new BSP-only paths, and never
-  access memory after relinquishing ownership.
+  failure unwinding explicit. Follow the caller-CPU VM and fixed RAM-reaper
+  ownership in docs/kernel/vm-ownership.md; device and firmware owners stay
+  separate. Never access memory after relinquishing ownership.
 - Pin dependencies and record local changes and licenses. Do not preserve backwards
   compatibility unless requested. Replace obsolete interfaces, formats and
   implementations, updating in-tree consumers together. Do not increment versions

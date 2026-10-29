@@ -4,7 +4,7 @@
 `CPUS` is the total logical CPU count and defaults to one. `THREADS` defaults
 to one and must divide `CPUS`; `make run CPUS=8 THREADS=2` creates four cores
 with two threads each. Both settings also apply to debug and USB launches. With multiple CPUs,
-Launch/image/startup and native thread-context preparation execute in retained
+launch/image/startup and native thread-context preparation execute in retained
 kernel-root continuations on the calling CPU, as do private MEMORY operations.
 Each CPU has one fixed RAM reaper; device hooks and hardware workers retain
 their existing fixed owners. Boot init creates the configured
@@ -205,8 +205,8 @@ Batch launch separates caller-owned `user_task_prepare()` from atomic
 `user_task_publish_group()`. Preparation owns each inactive process, task stack,
 request/profile storage and observer reservation until publication. The small
 shared stack reservation uses bounded structural-owner admission; private image
-backing/copying does not hold that global owner. Fixed space setup, device grants
-and final reporting remain BSP phases around caller-owned child preparation.
+backing/copying does not hold that global owner. Fixed space setup and device
+grants remain BSP phases around caller-owned child preparation and publication.
 Publication keeps the same group and queue guards, child placement and exact
 reserved slots. It transfers tasks/processes together, then uses only saved
 CPU indices to notify destinations. A refused unpublished batch transfers its
@@ -221,13 +221,15 @@ whose cleanup moves away from the producer CPU, require confirmed shared-range
 retirement before VA/backing reuse. A failed acknowledgement retains the whole
 range and joined cleanup until reboot; a late acknowledgement cannot reclaim it.
 
-The current task metadata is 840 bytes; process metadata is 432 bytes. Each user
-task owns a 6,592-byte request area and 776-byte profiling area, plus its 16 KiB
+The task-4/task-5 artifacts record 840-byte task and 480-byte process metadata
+(previously 432 bytes per process). Each user task owns a 6,592-byte request area
+and 776-byte profiling area, plus its 16 KiB
 kernel stack, excluding heap overhead. These artifact-derived sizes are tuning
 and change with the service catalog. A fixed RAM actor adds one 16 KiB stack and
 840-byte task record per CPU, without user request/profile areas. Its RAM-process,
 prepared-launch, captured-range and task queue storage adds 88 bytes per CPU,
-excluding allocation headers and page tables. All actors are mandatory and
+excluding allocation headers and page tables. DISPLAY retirement adds 32 bytes
+of queue storage per CPU. All actors are mandatory and
 prepared before runtime user admission; creation failure follows core-worker
 boot failure rather than enabling a partial mode.
 
@@ -238,9 +240,12 @@ and stack/TLS unpin precede thread completion. The last departing task records
 the process's immutable RAM-cleanup destination independently of later queue
 ordering; a delayed cleanup-pin release uses it too.
 
-Process cleanup keeps its existing order: BSP session hooks, assigned-CPU private
-VM release, BSP post-VM endpoint/device hooks, then assigned-CPU allocation records
-and capability/environment table walks. Bounded steps yield with no scratch alias
+Process cleanup alternates fixed BSP session/reference/device phases with
+assigned-CPU private display unmapping, VM release and allocation records/table
+walks. Unleased display backing joins actual process completion; independently
+presenter-leased frames keep separate group cleanup. A pending display join
+retains the process and requeues it only after actual reclamation, leaving the
+RAM actor free for unrelated work. Bounded steps yield with no scratch alias
 or short guard held. Process completion follows actual storage/VM/record cleanup;
 execution-group completion additionally joins attributed deferred object/device
 work. Process WAIT does not newly promise all asynchronous device callbacks have
@@ -270,19 +275,20 @@ Vector 37 is reserved for rescheduling. Interrupt handlers release their locks
 and acknowledge EOI before checking for a context switch. Device interrupts also
 make this check, so an awakened BSP worker can preempt an eligible running task.
 The existing rules still apply: AP kernel execution and userspace syscall paths
-are non-preemptible; kernel tasks run preemptibly on the BSP. An interrupt arriving
+are non-preemptible. BSP kernel tasks are timer-preemptible; fixed AP RAM actors
+park/yield explicitly between bounded steps. An interrupt arriving
 while the scheduler is idle returns to its ready-queue loop. IF=0 and STI/HLT's
 interrupt shadow cover publication between the empty-queue check and halt.
 
-Display requests publish to the common BSP request FIFO only once their caller
-has left its private root and task stack, cleared entry/current state and become
-parked. Native thread and private-memory operations instead use retained caller
-kernel-root continuations under the same process VM mutation transaction
-([memory](memory.md#execution)). Publication detaches an idle executor's waiter under the
-request lock and wakes it after unlocking. The ordinary ready queue and existing
-rescheduling IPI make the worker runnable on the BSP. A BSP caller sends no
-self-IPI and uses the same deferred handoff. Scheduler/preemption code has no
-display queue checks. No remote allocation or new interrupt handler is added.
+DISPLAY mapping requests, native thread-context changes and private-memory
+operations use retained caller kernel-root continuations under the same drained
+process VM transaction ([memory](memory.md#execution)). DISPLAY reserves and
+publishes fixed control phases through the BSP executor around caller-CPU backing
+and private mapping work. Separate typed headers live in provisioned shared task
+storage; no remote stack loan or structural VM owner crosses the actor handoff.
+SIZE/SUBMIT and presentation retain their fixed owners. Normal executor
+notification and the existing rescheduling IPI wake fixed control work; no
+scheduler display-queue sweep or new interrupt handler is added.
 
 Capability growth, process-environment staging/commit/capture, endpoint
 creation/export and RAMFS entry/name allocation and discard publish to that same FIFO before the caller
@@ -394,34 +400,21 @@ EXIT records only that thread's word and leaves siblings running. Last ordinary
 thread retirement supplies process EXITED/zero only if no earlier terminal
 event exists.
 
-After switching to its permanent stack and reloading the kernel root, the CPU
-clears its task entry-stack pointer and publishes the completed task. It must
-not touch the task afterward. An AP that publishes a completed task notifies the
-BSP; without that, an idle BSP retired the process only at its next timer tick,
-which added up to 8.33 ms to process exit. The BSP takes completed tasks under the queue lock,
-then detaches each process member outside it. Only the last linked member closes
-VM admission. It moves out the owned context pins and observer, frees kernel
-stack/request/profile/metadata, releases the pins, then publishes the immutable
-thread result. Completion retains neither process nor task pointers.
+After permanent-stack/kernel-root departure, the CPU publishes the completed
+task without further access. BSP stop/member detachment hands whole task storage
+to its departure CPU's RAM actor. Stack/request/profile/FP release and context
+unpin precede the immutable thread result; no completion retains a task pointer.
+`process_task_reclaimed()` drops retiring-storage accounting only afterward.
 
-`process_task_reclaimed()` decrements retiring-storage accounting only after
-that sequence. Final process teardown requires no linked tasks, retained task
-storage or VM activity. The scheduler only marks the process RETIRED, detaches
-its control and group links and queues it for the BSP process reaper, without
-allocating. From then on TERMINATE finds no process and WAIT keeps waiting; the
-group still counts the member. The reaper is a BSP kernel task. Under group
-cleanup attribution held in its own task record, it ends device sessions, then
-releases the private address space in steps of at most 256 backed pages, range
-records or page-table entries with interrupts off, enabling interrupts and
-yielding to runnable BSP work between steps. Only after the remaining resources
-are released does it publish process control completion and complete the group
-member, so WAIT still means the memory is free. The budget is tuning, not a
-contract. Endpoint, capability-table and object release after the address space
-still run as one interrupts-off step, as does object reaping in the scheduler.
-Deferred cleanup can still delay group completion. Every admitted reference and operation
-must unwind before task retirement. Kernel tasks have no process or user
-request/profile allocations. A pending completion makes the BSP's next user
-timer interrupt return to the scheduler even with no second runnable BSP task.
+Final process cleanup requires no linked tasks, retained task storage or VM
+activity. It retains controls, cleanup pins and group attribution across the
+fixed device/session phases and recorded-CPU RAM phases described above.
+TERMINATE finds no retired process while WAIT continues until actual cleanup.
+Execution-group completion additionally joins attributed deferred object/device
+work; independent asynchronous device callbacks are not a new process-WAIT
+promise. Cleanup contention can delay completion without reporting RAM freed.
+Every admitted reference/operation must unwind before task retirement. Kernel
+tasks have no process or user request/profile allocations.
 
 [Audio exit](../interfaces/audio.md#handoff-and-output-limits) clears the session
 owner and invalidates its generation without allocation or sleeping. Queue
@@ -488,7 +481,8 @@ its receipt storage while releasing the caller; its pending cancellation notice
 uses that same record and existing recipient handle, without table growth or
 additional queue capacity.
 
-Kernel tasks share the BSP ready queue with any BSP userspace. Create one with
+Device kernel tasks share the BSP ready queue with BSP userspace; fixed RAM
+actors use their recorded CPU's normal queue. Create an ordinary BSP worker with
 `kernel_task_create(entry, argument)` after scheduler initialization, on the BSP
 with interrupts disabled. Its entry runs on a private stack in the kernel
 address space with interrupts enabled. The timer can preempt it; returning from
@@ -536,8 +530,10 @@ The [BSP request executor](bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
 It currently services pipe creation, display, screen capture and audio admission,
 capability growth, process-environment staging/commit/capture, endpoint
-creation/export, RAMFS entry/name allocation and discard, launch preparation/publication and HOST
-forwarding. Preparation zeroes the selected typed record in the caller's reusable
+creation/export, RAMFS entry/name allocation and discard, fixed launch space/device setup and HOST
+forwarding. Private launch/image/task preparation instead uses its caller's
+kernel-root continuation; DISPLAY uses the split control/VM path above.
+Preparation zeroes the selected typed record in the caller's reusable
 request area. One reservation spans preparation, publication, completion and
 result consumption; it does not allocate. Task adapters expose reservation,
 current request/profile storage and deferred handoff. Subsystems own their
@@ -568,8 +564,9 @@ The executor always finishes a published wait before reusing its wait record.
 Synchronous BSP request clients remain user-only, so the executor cannot submit
 to itself and wait. Its subsystem operations use local helpers; RAMFS allocation
 and disposal and FILE buffer replacement helpers are static to their subsystems.
-Launch preparation calls BSP-local loading, capability installation and task
-preparation directly; it does not submit nested service requests.
+Caller-owned launch preparation/publication uses typed fixed control phases for
+space/device setup; it does not make the BSP executor wait on nested service
+requests. Shared ownership is released before either actor handoff.
 
 [Audio requests](../interfaces/audio.md) stage bounded PCM in reusable shared
 request storage before submission. Their publication needs no private-root or
@@ -688,7 +685,7 @@ CPU-neutral logical owner; it never holds a spinlock across allocation or waits.
 Unpublished preparation and private VM work run on their retained caller;
 retirement uses its recorded fixed RAM actor. DISPLAY control/presentation and
 other device callbacks stay fixed. None gains VM ownership from CPU identity.
-See the [shared-VM contract](../wip/vm-invalidation.md#decision-6--shared-ownership-queries-and-safe-admission).
+See the [shared-VM contract](vm-ownership.md#shared-kernel-mappings-and-invalidation).
 
 Private spaces are built before publication. Dispatch reserves root activity
 under the process VM guard before CR3 activation. Scheduler departure reloads the
@@ -697,8 +694,9 @@ copy leases cannot cross a wait/departure. MEMORY and DISPLAY mapping mutations
 close admission, permit old syscall continuations to drain, and require zero
 roots/borrowers before effects. Mutator-only reply reentry remains closed to
 ordinary dispatch until its final copy/cleanup. MEMORY drainage notifies its
-caller directly; BSP clients retain the pending-list worker. Neither blocks the
-BSP executor. Retirement reclaims only drained activity. Kernel-root user
+caller directly; DISPLAY's fixed phases return control to that same retained
+caller. Neither parks the BSP executor behind VM drainage. Retirement reclaims
+only drained activity. Kernel-root user
 continuations retain their task, CPU and FP/TLS ownership; they reserve no
 private-root activity while executing or parked in that mode.
 Native siblings share the process address space under these rules; an ordinary
@@ -710,8 +708,9 @@ the retirement protocol below. A shared kernel range must not be
 unmapped, remapped or protected while another CPU can use it.
 
 Task activation reloads CR3 before accessing a newly published task stack. Task
-retirement reloads it after leaving that stack, before the BSP can reclaim the
-backing. With PCID and global pages disabled, these reloads invalidate the local
+retirement reloads it after leaving that stack, before its recorded RAM actor
+can reclaim the backing. With PCID and global pages disabled, these reloads
+invalidate the local
 translations, including those of reused kernel-stack ranges. A task executes on
 one CPU at a time; after a move, the previous CPU has already left the task's
 stack and dropped its private root, and the destination reloads CR3 before using
@@ -763,8 +762,10 @@ running user code at its next syscall return, user-mode timer preemption or
 dispatch from a ready queue; parked tasks sit on a held list outside every queue.
 Release requeues them through the normal placement path.
 
-Kernel tasks stay on the BSP. Shared user address spaces and kernel-task fault
-recovery are not supported; a kernel-task fault is fatal.
+Device workers stay on the BSP; fixed per-CPU RAM actors are the explicit
+exception. Native sibling threads share one process address space under the
+VM transaction. Kernel-task fault recovery is unsupported; a kernel-task fault
+is fatal.
 
 ## Spaces and fairness
 
@@ -814,11 +815,12 @@ These stay on the BSP:
 - the request executor and every service in its catalog: pipe and terminal
   creation, capability growth, process-environment mutation and capture,
   endpoint creation and export,
-  RAMFS entries, launch preparation, display, audio, HOST and
+  RAMFS entries, launch space/device setup, display control, audio, HOST and
   native filesystem admission, readiness waits and system-info memory;
 - the network, native filesystem, HOST transport, virtio-blk, USB, ACPI, audio
   and presentation workers;
-- task reaping, the process reaper and object retirement;
+- stop/member detachment, session/device cleanup hooks and object retirement;
+  heavy task/process RAM reclamation uses fixed per-CPU actors;
 - device interrupt routing.
 
 Physical allocation covers addresses below 64 GiB. Boot intersects every usable
@@ -844,7 +846,11 @@ Accepted limits are recorded in [technical debt](https://git.internal/PyxisOS/py
 - [scratch-slot false sharing](https://git.internal/PyxisOS/pyxis-os/issues/1314)
 - [PMM first-fit search](https://git.internal/PyxisOS/pyxis-os/issues/1311)
 - [the never-reused heap arena](https://git.internal/PyxisOS/pyxis-os/issues/1316)
-- [BSP-only allocation and VM mutation](https://git.internal/PyxisOS/pyxis-os/issues/1310)
+- [shared VM serialization and retained cleanup](https://git.internal/PyxisOS/pyxis-os/issues/1514)
+- [accepted native SEND residual](https://git.internal/PyxisOS/pyxis-os/issues/1588)
+- [native mixed-load/UDP coverage](https://git.internal/PyxisOS/pyxis-os/issues/1600)
+- [extended timeout/retirement-race coverage](https://git.internal/PyxisOS/pyxis-os/issues/1601)
+- [historical IPC CALL residuals](https://git.internal/PyxisOS/pyxis-os/issues/1310)
 
 Placement is not topology-aware: SMT siblings count as separate CPUs.
 
@@ -859,7 +865,7 @@ nested-VM runs unless marked native:
 | [Task 4a](../development/experiments/smp-task4a/README.md) | Placement, balancing, migration; native ThinkPad check |
 | [Task 5](../development/experiments/smp-task5/README.md) | PMM lock, per-CPU scratch slots, stress |
 | [Task 6](../development/experiments/smp-task6/README.md) | Concurrent heap growth, arena, stress |
-| [Task 7a](../development/experiments/smp-task7a/README.md) | Local private memory (superseded: private memory again runs through the BSP VM transaction) |
+| [Task 7a](../development/experiments/smp-task7a/README.md) | Local private memory (historical; current caller-CPU ownership is in [VM ownership](vm-ownership.md)) |
 | [Task-7 PMM](../development/experiments/smp-task7-pmm/README.md) | PMM word search, scratch false sharing |
 | [Task 7b](../development/experiments/smp-task7b/README.md) | Userspace on the BSP |
 | [Task 8](../development/experiments/smp-task8/README.md) | Final matched set, native ThinkPad check, lifetime scenarios |

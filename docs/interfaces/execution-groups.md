@@ -116,10 +116,13 @@ terminating the script stops their whole subtree ([script mode](../userland/shel
 
 ## Launch publication and ownership
 
-The BSP owns allocation and inactive child preparation through the existing launch
-request service. A batch's temporary preparation object is separate from its
-execution group. It owns prepared children and provisional process observers until
-publication or discard.
+The retained caller's kernel-root continuation owns inactive child preparation;
+fixed space/device setup keeps its BSP phases. Atomic publication runs on the
+preparation CPU under the existing group/queue guards. A batch's
+temporary preparation object is separate from its execution group. It owns
+prepared children and provisional observers until publication or complete owned
+rollback on its preparation CPU's RAM actor. See
+[VM ownership](../kernel/vm-ownership.md#preparation-and-ram-reclamation).
 
 A launch reservation counts admission before image capture or group creation and survives every
 preparation request until staging is published or discarded. Admission is checked

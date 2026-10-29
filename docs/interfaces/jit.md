@@ -90,7 +90,8 @@ break. No compatibility operation or reader is added.
 
 Region lookup is linear within the 4096-region tuning limit. Wait withdrawal
 scans the existing global buckets outside the page-step bound. Launch preparation,
-final process destruction and remaining BSP clients have not moved as part of
-JIT; the [BSP-removal milestone](../wip/bsp-removal.md) tracks them. No native
+process reclamation and DISPLAY mapping work share the
+[VM ownership and retirement paths](../kernel/vm-ownership.md); JIT does not
+change fixed device/control owners. No native
 hardware qualification or enabled LLVM consumer is implied by the manual
 generated-code example.

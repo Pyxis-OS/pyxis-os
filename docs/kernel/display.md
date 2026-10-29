@@ -351,8 +351,11 @@ clock READ handle; absent clock authority preserves legacy input behavior.
 Acquired graphics slots keep their address, extent, pitch and dimensions
 until owner-only REPLACE or RELEASE. Presentation clips the top-left
 intersection and fills uncovered destination margins. REPLACE takes an expected
-generation, prepares a zeroed slot set at a disjoint user address through the
-parked-process BSP loan, and returns BUSY on mismatch. Allocation or mapping
+generation and returns BUSY on mismatch. Fixed display control reserves and
+revalidates geometry/ownership; the requesting task's kernel-root continuation
+prepares the zeroed slot set at a disjoint address and changes private mappings
+on its caller CPU. Fixed control then publishes the new set. See
+[VM ownership](vm-ownership.md#display-mapping-and-backing-lifetime). Allocation or mapping
 failure leaves the old slots and ownership intact. Success retires the old
 user aliases within the call while the session's on-screen reference and
 presenter leases retain old backing. There is no RELEASE/ACQUIRE gap; a visible

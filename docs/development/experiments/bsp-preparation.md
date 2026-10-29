@@ -1,6 +1,6 @@
 # Caller-CPU preparation and RAM retirement
 
-Task 4 of [BSP removal](../../wip/bsp-removal.md), accepted placement/lifetime
+Task 4 of [BSP removal](../../kernel/vm-ownership.md), accepted placement/lifetime
 rules in #1550. This record separates source inspection, nested QEMU results
 and native qualification. No new guest benchmark or profiling code is
 part of the implementation.
@@ -263,7 +263,7 @@ cost. No check was removed or redundant-check speedup claimed.
 Reports, exact source references, disassembly counts, hashes and small raw
 captures: `/shared/present/bsp-removal/task4/ipc-isolation/`. The default remains
 unfixed in these measured artifacts; the accepted
-[placement rule](../../wip/bsp-removal.md#initial-placement-after-caller-preparation--accepted)
+[placement rule](../../kernel/vm-ownership.md#preparation-and-ram-reclamation)
 discounts only the executing user preparation actor and awaits matched
 qualification. Fixed RAM owners and confirmed capture retirement
 do not inherently require placing ordinary IPC peers on different CPUs.
