@@ -328,12 +328,14 @@ per 256-message pass, median (range) across three boot medians:
 | SEND64 admission | 0.0720 (0.0720–0.0730) | 0.0790 (0.0785–0.0795) | +9.7% |
 | SEND4096 admission | 0.0965 (0.0960–0.0990) | 0.1235 (0.1215–0.1295) | +28.0% |
 
-Chronium assesses CALL as parity; the nonoverlapping SEND cost is not an accepted
-trade-off. Paired per-pass completion-minus-admission medians leave about
+Chronium assesses CALL as parity. The nonoverlapping SEND cost was initially
+rejected and later accepted for merge (chronium, 2026-10-29), with
+[debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588). Paired per-pass completion-minus-admission medians leave about
 49.5/50.0 microseconds additional cost outside admission for 64/4096 bytes.
 That is about 1.55 microseconds per eight-message group, but this remainder is
 not a separate DRAIN timer. The native packet's `comparison.json` and six result
-directories retain full samples. Merge remains blocked pending explanation.
+directories retain full samples. Attribution below records the investigation
+before the accepted residual.
 
 ### Residual investigation — 2026-10-29
 
@@ -481,7 +483,7 @@ of median whole-pass time. Receiver/drain work is not instrumented.
 
 Task 4 does not inherently require this extra per-message work. No particular
 corrective change is established by the data, so no guard removal, copy rewrite
-or performance waiver follows; merge remains blocked. Chronium subsequently authorized a focused release-lock/store-completion
+or performance fix follows; merge was held for the following control. Chronium subsequently authorized a focused release-lock/store-completion
 control. Its result follows. Local timing
 code/branches and experiment images from both controls are removed; only small
 evidence/methods remain. Source/product runtime is unchanged.
@@ -543,7 +545,8 @@ physical-cache-neighbor trace or isolated allocation control identifies which
 change produced the extra store-completion latency. No safe concrete patch
 follows yet. A production MFENCE would add ordering and move cost; removing the
 guard would break the current ownership invariant. Neither is delivered.
-No native performance waiver follows, and the task remains blocked on cause/fix.
+No concrete fix follows from this control. Chronium subsequently accepted the
+residual for merge, recorded below and in debt #1588.
 
 Both timing probes' temporary kernel source/branches/worktrees, patches/builds
 and packet images are removed. Raw results, comparison and run log are checksum-preserved under
@@ -577,14 +580,13 @@ worktrees/builds and images are removed. All 101 native evidence files,
 comparison and run log are checksum-preserved under
 `/shared/present/bsp-removal/task4/native-process-footprint/`; it is evidence only.
 
-There is still no validated performance fix. The next proposed existing-tool
-control is current-base main versus task 4 with Remote/children on CPU0, all
-CPUs online. This tests a broad execution-locality/chronology dimension without
-new kernel instrumentation. CPU0 also hosts fixed/network services, so either
-outcome requires that confound; it cannot by itself identify or exonerate boot
-allocation. A true boot-storage-only control would need new experimental
-allocation code and a separately reviewed scope. Neither has run. No production
-fence, padding workaround, guard removal or performance waiver follows.
+There is still no validated performance fix. Chronium accepted the roughly
+8–10% 4 KiB SEND residual for merge (2026-10-29), retaining the launch gain;
+[debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588) records its
+consequence, ruled-out list and revisit point. The proposed CPU0-only control
+is cancelled and has not run. No production fence, padding workaround or guard
+removal is delivered. Native timings retain their recorded revisions; no parity
+claim is made for the later rebased integration.
 
 ### Integration with bounded installed-image admission
 

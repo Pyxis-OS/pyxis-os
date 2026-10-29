@@ -173,7 +173,7 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 | 1. Private MEMORY on its caller CPU | Per-space owner proof, stable queries, counters/identities and pin synchronization; kernel-root continuations; all existing ordinary/guarded/sparse MEMORY operations. Preserve the BSP clients' use of the same gate. Check real AP execution, unrelated processes mutating concurrently, same-process competition, parked I/O and stop/unwind. | Run memory-heavy processes on APs without CPU0 servicing their MEMORY bodies; sibling quiescence still applies. |
 | 2. Frame allocation on each CPU | First measure PMM lock/search/zero/map costs with the routing bottleneck gone and bring chronium the decision whether to move frame allocation out. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
 | 3. Invalidation and shared kernel VM (merged, #1500) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
-| [ ] 4. Preparation and reclamation (#1554; IPC regression blocks merge) | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
+| [x] 4. Preparation and reclamation (#1554; residual accepted, #1588) | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
 | 5. Remaining VM consumers | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Complete the remaining VM-client audit and migration; the earlier JIT task already uses the common caller-CPU transaction. |
 
 ## Task 4 scope and decisions — accepted (chronium, 2026-10-28)
@@ -183,8 +183,10 @@ confirmed shared capture retirement. See [SMP ownership](../kernel/smp.md),
 [memory](../kernel/memory.md) and the
 [baseline/qualification record](../development/experiments/bsp-preparation.md).
 Device hooks and actual object destructors retain their fixed owners. Six native
-vela A/B boots pass functionally, but their IPC regression blocks merge. No
-material IPC regression against main is a requirement (chronium, 2026-10-28).
+vela A/B boots pass functionally. Chronium accepted the remaining 4 KiB SEND
+cost for merge (2026-10-29), superseding the earlier parity requirement; track
+its consequence, ruled-out causes and revisit point in
+[debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588).
 
 ### Decision 10 — fixed RAM cleanup owners
 
@@ -279,7 +281,7 @@ not preserved decision 11's placement behavior. That candidate's native launch i
 and pages are flat, but CALL64/4096 completion rises 32.6%/45.4%; SEND completion
 rises too. That trade-off is not accepted.
 
-- [ ] Resolve the placement regression and repeat matched QEMU and native IPC
+- [x] Resolve the placement regression and repeat matched QEMU and native IPC
   controls before qualifying task 4. The configuration-only isolation in the
   [experiment](../development/experiments/bsp-preparation.md#ipc-regression-attribution)
   removes the large IPC penalty with all kernel checks unchanged; it is not a
@@ -307,9 +309,11 @@ assessment; SEND retains a nonoverlapping 9–11% completion cost. The residual
 does not reproduce in the subsequent QEMU controls, and no cleanup/check
 change is justified by the current observations. See the
 [residual investigation](../development/experiments/bsp-preparation.md#residual-investigation--2026-10-29).
-Native IPC must reach main's level and retain the launch gain before merge;
-chronium decides after the SEND residual is explained. QEMU improvement and
-green CI do not satisfy that gate.
+**Accepted (chronium, 2026-10-29):** retain the 15–18% native launch gain and
+accept the remaining roughly 8–10% 4 KiB SEND cost. Its underlying source remains
+unproved; this decision permits task 4 to merge without a speculative fix.
+[Debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588) carries the
+consequence, ruled-out list and revisit point. Do not run the CPU0-only control.
 
 Keep the VM, endpoint and task-lifetime guards protecting live operations.
 
@@ -331,24 +335,23 @@ task-4 allocation/cache/preparation change causing the underlying delay remains
 unproved; no safe specific fix within task 4 is established. A production fence,
 guard removal or speculative padding/copy rewrite as a fix is not justified. The design
 does not require new per-message release work, but that is not proof of a fix.
-Keep task 4 unchecked and PR draft: native SEND completion still rises 8.1% in
-this instrumented pair. No performance waiver is accepted.
+Native SEND completion rises 8.1% in this instrumented pair. The residual is
+accepted for task 4 under the 2026-10-29 decision and debt #1588 above.
 
 Both temporary timing probes, their local branches/worktrees and their images
 are removed; only methods/results remain. The ordinary main-plus-process-size
 control is now negative: native SEND4096 0.677 → 0.675 ms, admission unchanged
 at 0.095 ms. This excludes the 40-byte growth alone, not other boot allocations
 or preparation/reclamation chronology. Its source/worktrees/images are removed.
-Source-level attribution remains open; no validated fix is established. A
-CPU0-only current-base A/B is the next proposed existing-tool locality control,
-with fixed/network-service contention explicitly a confound. See the
+Source-level attribution remains open; no validated fix is established. The
+proposed CPU0-only control is cancelled by chronium's acceptance. See the
 [control and #1584 integration record](../development/experiments/bsp-preparation.md#native-process-size-control).
 
 The rebased integration keeps #1584's bounded producer waits and task 4's
 narrow shared-stack/device admission, caller-owned rollback and AP capture
 retirement. Installed/RAM/pipeline checks pass at 1/4 QEMU CPUs; the broader
-16-command cohort passes at four. Native parity on the rebased head remains
-unqualified. Task 4 stays unchecked and draft.
+16-command cohort passes at four. Native parity on the rebased head is not
+claimed; chronium accepts the recorded residual and task 4 is ready for merge.
 
 **You should know:** fixed cleanup actors add boot storage. Shared stack/capture
 admission can return BUSY after the existing bounded wait; cleanup contention can
