@@ -37,6 +37,10 @@ static inline uint64_t arch_tsc_read(void)
   __asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
   return ((uint64_t)high << 32) | low;
 }
+/* IF=0, after clock selection: CYCLES of arch_tsc_read() differences as
+ * nanoseconds, from the calibrated TSC rate or, under KVM, this vCPU's
+ * published scale. Zero when neither rate is known. */
+uint64_t arch_tsc_cycles_ns(uint64_t cycles);
 /* Static name of the current timestamp source, for measurement provenance. */
 const char *arch_clock_source(void);
 

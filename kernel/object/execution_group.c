@@ -1,7 +1,9 @@
 #include <kernel/object/clipboard.h>
 #include <abi/wait.h>
+#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
+#include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/capability.h>
@@ -117,6 +119,16 @@ static void destroy_group(struct kernel_object *object)
       !group->children && !group->first_child && !group->next_sibling);
   struct execution_group *parent = group->parent;
   lock_tree(group->space);
+  if (!parent) {
+    struct execution_group **link = &group->space->root_groups;
+    while (*link && *link != group) {
+      link = &(*link)->root_next;
+    }
+    /* A group that failed creation was never linked. */
+    if (*link) {
+      *link = group->root_next;
+    }
+  }
   KASSERT(group->space->execution_group_count);
   --group->space->execution_group_count;
   unlock_tree(group->space);
@@ -153,7 +165,7 @@ enum call_status execution_group_create(struct space *space,
     return CALL_NO_MEMORY;
   }
   *group = (struct execution_group){.space = space,
-    .depth = parent ? parent->depth + 1 : 1};
+    .depth = parent ? parent->depth + 1 : 1, .list_key = process_list_key_next()};
   atomic_init(&group->result_flags, 0);
   object_init(&group->object, OBJECT_EXECUTION_GROUP, destroy_group);
   lock_tree(group->space);
@@ -167,6 +179,9 @@ enum call_status execution_group_create(struct space *space,
     group->next_sibling = parent->first_child;
     parent->first_child = group;
     ++parent->children;
+  } else {
+    group->root_next = space->root_groups;
+    space->root_groups = group;
   }
   unlock_tree(group->space);
   if (status != CALL_OK) {
@@ -286,12 +301,32 @@ void execution_group_launch_end(struct execution_group *group)
   object_release(&group->object);
 }
 
+/* Tree guard held, before the tasks become runnable. */
+static void list_locked(struct space *space, struct task **tasks, size_t count,
+    uint64_t group_key)
+{
+  uint64_t now = arch_monotonic_ns();
+  for (size_t i = 0; i < count; ++i) {
+    struct process *process = user_task_process(tasks[i]);
+    KASSERT(process->space == space && !process->listed);
+    process->group_key = group_key;
+    process->start_ns = now;
+    process->listed = true;
+    process->space_next = space->processes;
+    space->processes = process;
+  }
+}
+
 enum call_status execution_group_publish(struct execution_group *group,
     struct task **tasks, size_t count)
 {
   KASSERT(!cpu_interrupts_enabled());
   if (!group) {
+    struct space *space = user_task_process(tasks[0])->space;
+    lock_tree(space);
+    list_locked(space, tasks, count, 0);
     user_task_publish_group(tasks, count);
+    unlock_tree(space);
     return CALL_OK;
   }
   lock_tree(group->space);
@@ -309,10 +344,91 @@ enum call_status execution_group_publish(struct execution_group *group,
       group->first_member = member;
     }
     group->members += count;
+    list_locked(group->space, tasks, count, group->list_key);
     user_task_publish_group(tasks, count);
   }
   unlock_tree(group->space);
   return status;
+}
+
+void execution_group_unlist(struct process *process)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  if (!process->listed) {
+    return;
+  }
+  struct space *space = process->space;
+  lock_tree(space);
+  struct process **link = &space->processes;
+  while (*link != process) {
+    KASSERT(*link);
+    link = &(*link)->space_next;
+  }
+  *link = process->space_next;
+  process->space_next = NULL;
+  process->listed = false;
+  unlock_tree(space);
+}
+
+_Static_assert(sizeof(((struct space *)0)->name) == PROCESS_LIST_SPACE_MAX,
+    "listed space names carry the whole fixed name");
+
+static void list_group(const struct execution_group *group,
+    struct process_list_record *record)
+{
+  *record = (struct process_list_record){
+    .kind = PROCESS_LIST_GROUP,
+    .state = (group->sealed ? PROCESS_LIST_GROUP_SEALED : 0) |
+        (group->stopping ? PROCESS_LIST_GROUP_STOPPING : 0) |
+        (group->complete ? PROCESS_LIST_GROUP_COMPLETE : 0),
+    .key = group->list_key,
+    .group_key = group->parent ? group->parent->list_key : 0,
+    .threads = group->members > UINT32_MAX ? UINT32_MAX : (uint32_t)group->members,
+    .depth = (uint32_t)group->depth,
+  };
+}
+
+size_t execution_group_list(struct space *space, struct process_list_record *records,
+    size_t capacity, uint64_t *total)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  size_t filled = 0;
+  uint64_t seen = 0;
+  lock_tree(space);
+  /* Preorder over each root's subtree, without recursion. */
+  for (struct execution_group *root = space->root_groups; root; root = root->root_next) {
+    struct execution_group *group = root;
+    for (;;) {
+      if (filled < capacity) {
+        list_group(group, &records[filled++]);
+      }
+      ++seen;
+      if (group->first_child) {
+        group = group->first_child;
+        continue;
+      }
+      while (group != root && !group->next_sibling) {
+        group = group->parent;
+      }
+      if (group == root) {
+        break;
+      }
+      group = group->next_sibling;
+    }
+  }
+  for (struct process *process = space->processes; process; process = process->space_next) {
+    if (filled < capacity) {
+      records[filled] = (struct process_list_record){0};
+      process_list_sample(process, &records[filled++]);
+    }
+    ++seen;
+  }
+  unlock_tree(space);
+  for (size_t i = 0; i < filled; ++i) {
+    memcpy(records[i].space, space->name, sizeof(space->name));
+  }
+  *total = seen;
+  return filled;
 }
 
 void execution_group_member_detach(struct execution_group *group,

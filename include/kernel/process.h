@@ -8,6 +8,7 @@
 #include <kernel/process_vm.h>
 #include <kernel/display_retire.h>
 #include <abi/process.h>
+#include <abi/process_view.h>
 
 struct space;
 struct environment_table;
@@ -89,8 +90,16 @@ struct process {
   struct process *retired_next;
   struct process_control *retired_control;
   struct execution_group *retired_group;
-  /* TSC cycles of retired tasks, added by the BSP reaper; live tasks keep their own. */
+  /* TSC cycles of retired tasks, added under lifetime_lock when the BSP
+   * reaper detaches them; live tasks keep their own. */
   uint64_t cpu_user_cycles, cpu_kernel_cycles;
+  /* Process listing (abi/process_view.h). The key is fixed at creation; the
+   * label and launcher during preparation; the rest at publication. */
+  uint64_t list_key, launched_by, group_key, start_ns;
+  char label[PROCESS_LIST_LABEL_MAX];
+  /* The space's execution tree guard: published and not yet retired. */
+  struct process *space_next;
+  bool listed;
 };
 
 /* Borrow the executing user task's process; NULL for scheduler/kernel tasks.
@@ -124,6 +133,13 @@ void process_task_attach(struct process *process, struct process_task_member *me
 void process_task_discard(struct process *process, struct process_task_member *member);
 /* Exclusive preparation, before ready-queue publication. Transfers process lifetime to finalization. */
 void process_publish(struct process *process);
+/* Preparation: the listed label is PATH's last component, truncated. */
+void process_set_label(struct process *process, const char *path);
+/* A per-boot listing key, never reused; processes and groups share the series. */
+uint64_t process_list_key_next(void);
+/* Space execution tree guard held, IF=0: fills RECORD's process fields from
+ * PROCESS, taking its lifetime lock. */
+void process_list_sample(struct process *process, struct process_list_record *record);
 
 /* Caller CPU, IF=0, lifetime_lock held. Adds a sibling only while admission is open;
  * retained storage, including retiring threads, counts toward the tunable bound.
@@ -159,7 +175,9 @@ bool process_result_get(struct process *process, struct process_result *result);
  * resources, and only then publishes control and group completion. */
 /* Permanent scheduler stack, after final root/stack departure, before enqueue. */
 void process_task_depart(struct process *process, size_t departure_cpu);
-void process_task_detach(struct process *process, struct process_task_member *member);
+/* Also adds the departing task's CYCLES to the process totals. */
+void process_task_detach(struct process *process, struct process_task_member *member,
+    uint64_t user_cycles, uint64_t kernel_cycles);
 bool process_task_reclaimed(struct process *process);
 /* IF=0, caller already keeps the submitted process live. Retain borrowed
  * process records through whole-record cleanup after the syscall returns.

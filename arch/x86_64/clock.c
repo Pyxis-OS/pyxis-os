@@ -605,6 +605,25 @@ static bool kvm_select(void)
   return true;
 }
 
+uint64_t arch_tsc_cycles_ns(uint64_t cycles)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  if (tsc_hz) {
+    /* Whole seconds, then the remainder: no 128-bit division in the kernel.
+     * The remainder product fits while the rate is below 18 GHz. */
+    return cycles / tsc_hz * 1000000000u + cycles % tsc_hz * 1000000000u / tsc_hz;
+  }
+  if (!atomic_load_explicit(&kvm_selected, memory_order_acquire)) {
+    return 0;
+  }
+  /* The host's current TSC-to-time scale, applied to a plain interval. */
+  struct kvm_sample sample = kvm_sample(kvm_current_clock());
+  sample.tsc = cycles;
+  sample.timestamp = 0;
+  sample.system_time = 0;
+  return kvm_sample_ns(&sample);
+}
+
 static uint64_t kvm_monotonic_ns(void)
 {
   uint64_t flags = cpu_save_interrupts();

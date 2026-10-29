@@ -34,6 +34,7 @@
 #include <kernel/object/uefi.h>
 #include <abi/uefi.h>
 #include <kernel/object/screen_capture.h>
+#include <kernel/object/process_view.h>
 #include <abi/acpi_tables.h>
 #include <kernel/object/bluetooth_hci.h>
 #include <kernel/object/wifi.h>
@@ -122,6 +123,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *power = NULL;
   struct kernel_object *uefi = NULL;
   struct kernel_object *screen_capture = NULL;
+  struct kernel_object *process_view = NULL;
   struct directory_object *acpi_tables = NULL;
   struct kernel_object *bluetooth_hci = NULL, *wifi = NULL;
   struct file_object *boot_kernel = NULL, *boot_archive = NULL;
@@ -164,6 +166,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   power = power_create();
   uefi = uefi_create();
   screen_capture = screen_capture_create();
+  process_view = process_view_create();
   bluetooth_hci = bluetooth_hci_create();
   wifi = wifi_create(process);
   profile = profile_create();
@@ -171,7 +174,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   service = endpoint_service_create();
   terminal_service = terminal_service_create();
   retention_factory = retention_factory_create();
-  if (!memory || !threads || !launcher || !clock || !system_info || !log || !net_registry || !net_policy || !random || !power || !uefi || !screen_capture || !bluetooth_hci || !wifi || !profile || !pipe || !service || !terminal_service || !retention_factory) {
+  if (!memory || !threads || !launcher || !clock || !system_info || !log || !net_registry || !net_policy || !random || !power || !uefi || !screen_capture || !process_view || !bluetooth_hci || !wifi || !profile || !pipe || !service || !terminal_service || !retention_factory) {
     goto fail;
   }
 
@@ -181,6 +184,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   handle_t profile_handle, pipe_handle, service_handle, terminal_service_handle;
   handle_t retention_factory_handle;
   handle_t system_info_handle, power_handle, uefi_handle, log_handle, screen_capture_handle;
+  handle_t process_view_handle;
   handle_t bluetooth_hci_handle, wifi_handle;
   handle_t input_policy_handle = HANDLE_INVALID;
   handle_t script_handle = HANDLE_INVALID;
@@ -214,6 +218,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, uefi, UEFI_RIGHTS, 0, &uefi_handle) != CAP_OK ||
       capability_install(&process->capabilities, screen_capture,
           SCREEN_CAPTURE_RIGHT_CAPTURE, 0, &screen_capture_handle) != CAP_OK ||
+      capability_install(&process->capabilities, process_view,
+          PROCESS_VIEW_RIGHT_LIST, 0, &process_view_handle) != CAP_OK ||
       capability_install(&process->capabilities, wifi,
           WIFI_RIGHTS | WIFI_RIGHT_SUPPLICANT, 0, &wifi_handle) != CAP_OK ||
       capability_install(&process->capabilities, bluetooth_hci,
@@ -359,6 +365,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   uefi = NULL;
   object_release(screen_capture);
   screen_capture = NULL;
+  object_release(process_view);
+  process_view = NULL;
   object_release(bluetooth_hci);
   bluetooth_hci = NULL;
   object_release(wifi);
@@ -405,6 +413,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   entries[entry_count++] = (struct process_environment_entry){"wifi", ENVIRONMENT_CAP, 0, wifi_handle, 0};
   entries[entry_count++] = (struct process_environment_entry){"retention_factory",
     ENVIRONMENT_CAP, 0, retention_factory_handle, 0};
+  /* Not exported: boot init hands it on explicitly, and bundles request it. */
+  entries[entry_count++] = (struct process_environment_entry){"process_view",
+    ENVIRONMENT_CAP, 0, process_view_handle, 0};
   if (input_policy_handle != HANDLE_INVALID) {
     entries[entry_count++] = (struct process_environment_entry){"input_policy", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, input_policy_handle, 0};
   }
@@ -483,6 +494,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   if (process_prepare_startup(process, &startup) != MM_OK) {
     goto fail;
   }
+  process_set_label(process, argument_count ? arguments[0] : image_uri);
   kinfo("userspace: boot init %s entry=%p\n", image_uri, (void *)entry);
   if (user_task_create(process, entry, stack_top) != MM_OK) {
     goto fail;
@@ -503,6 +515,9 @@ fail:
   }
   if (screen_capture) {
     object_release(screen_capture);
+  }
+  if (process_view) {
+    object_release(process_view);
   }
   if (wifi) {
     object_release(wifi);

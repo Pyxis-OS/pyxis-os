@@ -57,6 +57,9 @@ struct vm_space {
   struct vm_range *head;
   size_t total_pages;
   atomic_size_t waiters;
+  /* Sum of ranges' backed_pages. Owners update it with each change; it is
+   * readable without ownership while the space exists, as a gauge. */
+  atomic_size_t backed_pages;
   bool retired; /* Owner committed to release; no other operation follows. */
 };
 
@@ -96,6 +99,16 @@ static void registry_unlock(const struct vm_space *space)
   if (space == &kernel_space) {
     spin_unlock(&registry_guard);
   }
+}
+
+static void backed_add(struct vm_space *space, size_t pages)
+{
+  atomic_fetch_add_explicit(&space->backed_pages, pages, memory_order_relaxed);
+}
+
+static void backed_remove(struct vm_space *space, size_t pages)
+{
+  atomic_fetch_sub_explicit(&space->backed_pages, pages, memory_order_relaxed);
 }
 
 static struct arch_address_space *page_space(struct vm_space *space)
@@ -219,6 +232,7 @@ static void release_range(struct vm_space *space, struct vm_range *range)
 {
   KASSERT(!range->quarantined && !range->retirement_group && !range->retirement_next);
   range->state = RANGE_FREE;
+  backed_remove(space, range->backed_pages);
   range->backed_pages = 0;
   KASSERT(!range->wait_tokens);
   KASSERT(!range->extents);
@@ -552,6 +566,7 @@ bool vm_back_step(struct vm_space *space, struct vm_backing *backing, size_t bud
       }
       registry_lock(space);
       range->wait_tokens = backing->tokens;
+      backed_add(space, backing->pages - range->backed_pages);
       range->backed_pages = backing->pages;
       range->state = RANGE_BACKED;
       registry_unlock(space);
@@ -662,6 +677,7 @@ bool vm_free_step(struct vm_reclaim *reclaim, size_t budget)
     free_backing(space, backing_base(range), pages);
     registry_lock(space);
     range->backed_pages -= pages;
+    backed_remove(space, pages);
     registry_unlock(space);
   }
   if (range->backed_pages) {
@@ -1172,6 +1188,7 @@ static void sparse_discard_step(struct vm_sparse_update *update, size_t *budget)
     update->cursor += pages * PAGE_SIZE;
     update->remaining -= pages;
     update->range->backed_pages -= pages;
+    backed_remove(update->space, pages);
     *budget -= pages;
     return;
   }
@@ -1226,6 +1243,7 @@ bool vm_sparse_step(struct vm_space *space, struct vm_sparse_update *update,
         *update->link = extent;
         update->link = &extent->next;
         update->range->backed_pages += extent->pages;
+        backed_add(space, extent->pages);
       }
       --budget;
       break;
@@ -1300,6 +1318,11 @@ static struct vm_stats space_stats(const struct vm_space *space)
   return stats;
 }
 
+size_t vm_space_backed_pages(const struct vm_space *space)
+{
+  return atomic_load_explicit(&space->backed_pages, memory_order_relaxed);
+}
+
 struct vm_stats vm_get_stats(const struct vm_space *space)
 {
   registry_lock(space);
@@ -1338,6 +1361,7 @@ enum mm_result vm_space_create(struct vm_space **result)
   }
   *space = (struct vm_space){0};
   atomic_init(&space->waiters, 0);
+  atomic_init(&space->backed_pages, 0);
 
   struct vm_range *range = take_record(space);
   if (!range) {
@@ -1418,6 +1442,7 @@ bool vm_space_release_step(struct vm_space *space, size_t budget)
         extent->base += pages * PAGE_SIZE;
         extent->pages -= pages;
         range->backed_pages -= pages;
+        backed_remove(space, pages);
         budget -= pages;
       } else {
         range->extents = extent->next;
@@ -1432,6 +1457,7 @@ bool vm_space_release_step(struct vm_space *space, size_t budget)
       size_t pages = range->backed_pages < budget ? range->backed_pages : budget;
       free_backing(space, backing_base(range), pages);
       range->backed_pages -= pages;
+      backed_remove(space, pages);
       budget -= pages;
       continue;
     }

@@ -11,6 +11,7 @@
 #include <kernel/object/audio.h>
 #include <kernel/object/bluetooth_hci.h>
 #include <arch/smp.h>
+#include <arch/clock.h>
 #include <arch/paging.h>
 #include <arch/cpu_local.h>
 #include <kernel/mm/heap.h>
@@ -36,6 +37,13 @@
 _Static_assert(__atomic_always_lock_free(sizeof(atomic_uint_fast64_t), 0),
                "process result election must be fault-safe");
 
+static _Atomic uint64_t next_list_key = 1;
+
+uint64_t process_list_key_next(void)
+{
+  return atomic_fetch_add_explicit(&next_list_key, 1, memory_order_relaxed);
+}
+
 enum mm_result process_create(struct space *space, struct vm_space *address_space,
                               struct process **result)
 {
@@ -55,7 +63,7 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
   *process = (struct process){
     .space = space, .address_space = address_space, .lifetime = PROCESS_PREPARING,
     .preparation_actor = task_current_actor(), .preparation_cpu = arch_cpu_index(),
-    .retirement_cpu = arch_cpu_index(),
+    .retirement_cpu = arch_cpu_index(), .list_key = process_list_key_next(),
   };
   atomic_init(&process->lifetime_lock.locked, false);
   if (!process_vm_activity_init(process)) {
@@ -301,6 +309,50 @@ void process_publish(struct process *process)
   spin_unlock(&process->lifetime_lock);
 }
 
+void process_set_label(struct process *process, const char *path)
+{
+  KASSERT(process->lifetime == PROCESS_PREPARING);
+  const char *name = path;
+  for (const char *cursor = path; *cursor; ++cursor) {
+    if (*cursor == '/' && cursor[1]) {
+      name = cursor + 1;
+    }
+  }
+  size_t length = 0;
+  while (name[length] && name[length] != '/' && length < sizeof(process->label) - 1) {
+    ++length;
+  }
+  memset(process->label, 0, sizeof(process->label));
+  memcpy(process->label, name, length);
+}
+
+void process_list_sample(struct process *process, struct process_list_record *record)
+{
+  KASSERT(!cpu_interrupts_enabled() && process->listed);
+  struct task_list_sample tasks = {0};
+  spin_lock(&process->lifetime_lock);
+  uint64_t user_cycles = process->cpu_user_cycles;
+  uint64_t kernel_cycles = process->cpu_kernel_cycles;
+  task_list_sample(process->tasks, &tasks);
+  size_t threads = process->task_count;
+  bool exiting = process->stopping || process_result_committed(process);
+  spin_unlock(&process->lifetime_lock);
+
+  record->kind = PROCESS_LIST_PROCESS;
+  record->state = exiting ? PROCESS_LIST_EXITING :
+      tasks.runnable ? PROCESS_LIST_RUNNING : PROCESS_LIST_WAITING;
+  record->key = process->list_key;
+  record->group_key = process->group_key;
+  record->launched_by = process->launched_by;
+  memcpy(record->label, process->label, sizeof(record->label));
+  record->threads = threads > UINT32_MAX ? UINT32_MAX : (uint32_t)threads;
+  record->user_ns = arch_tsc_cycles_ns(user_cycles + tasks.user_cycles);
+  record->kernel_ns = arch_tsc_cycles_ns(kernel_cycles + tasks.kernel_cycles);
+  /* Listed processes keep their address space until they are unlisted. */
+  record->private_bytes = (uint64_t)vm_space_backed_pages(process->address_space) * PAGE_SIZE;
+  record->start_ns = process->start_ns;
+}
+
 enum call_status process_thread_attach_locked(struct process *process,
     struct process_task_member *member, struct task *task)
 {
@@ -376,10 +428,14 @@ void process_task_depart(struct process *process, size_t departure_cpu)
   spin_unlock(&process->lifetime_lock);
 }
 
-void process_task_detach(struct process *process, struct process_task_member *member)
+void process_task_detach(struct process *process, struct process_task_member *member,
+    uint64_t user_cycles, uint64_t kernel_cycles)
 {
   KASSERT(arch_cpu_index() == 0);
   spin_lock(&process->lifetime_lock);
+  /* With the unlink below, so a listing never counts a task twice. */
+  process->cpu_user_cycles += user_cycles;
+  process->cpu_kernel_cycles += kernel_cycles;
   KASSERT(process->lifetime == PROCESS_SUBMITTED && process->task_count &&
       process->task_storage_count >= process->task_count);
   struct process_task_member **link = &process->tasks;
@@ -411,6 +467,7 @@ void process_task_detach(struct process *process, struct process_task_member *me
 
 static void queue_retired_process(struct process *process)
 {
+  execution_group_unlist(process);
   /* Waiters keep the control and the group keeps its member count until the
    * reaper has released the address space and resources. */
   process_control_detach_process(process->control);

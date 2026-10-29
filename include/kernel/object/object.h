@@ -81,6 +81,7 @@ enum object_type {
   OBJECT_UEFI = 80,
   OBJECT_JIT = 81,
   OBJECT_LOG_STREAM = 82,
+  OBJECT_PROCESS_VIEW = 83,
   OBJECT_BULK_GATE = 78, /* Internal process budget retained through data drain. */
   OBJECT_DESCRIPTION_STORAGE = 61, /* Internal immutable facets, no public grant. */
 };
