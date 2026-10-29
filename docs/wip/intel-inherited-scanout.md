@@ -310,6 +310,76 @@ of Fedora's modeset. A native tear-free claim waits for this evidence.
 GOP alias and the exact owned-buffer/write/retirement contract, or one reported
 prerequisite that prevents a safe first flip.
 
+## Setup decisions exposed by source qualification (pending)
+
+The accepted buffer/power/retirement decisions stand. No new flip writes have
+been implemented. The first implementation step exposed these additional
+boundaries, which need decisions before their effects are introduced.
+
+1. **Auxiliary GT access for cache validation. Recommended default:** permit
+   only the reference bootstrap access needed to verify graphics PAT index 3,
+   not program it: GT forcewake kernel request (`0xa188`, write-mask bit 16
+   and request bit 0; acknowledgement at `0xdfc`), the firmware-shared MCR
+   semaphore (`0xfd0`, read-acquire/write-1 release), and selector (`0xfd4`,
+   group 0/instance 0, multicast bit 31) around the PAT read at `0x480c`.
+   Preserve other forcewake owners; follow Linux's multicast selector handoff,
+   rather than inventing a selector save/restore. Keep waits bounded and apply
+   the accepted fence/retention rule to uncertain ownership/cleanup. Verify an
+   inherited UC/noncoherent PAT entry; do not assume Linux initialized the
+   firmware's table. Independently identify graphics/media stepping. If the
+   media-A0 CPU GGTT-write workaround applies, allow only its documented dummy
+   media-GMD write after each 63 PTE writes. No GT reset, firmware load, engine
+   submission, PAT programming or generic GT TLB invalidation. Existing display
+   DC0/well holds do not substitute for this GT access protocol.
+2. **UMA DMA admission. Recommended default:** initially admit new UMA only
+   when the relevant VT-d remapper is proven to have translation disabled;
+   otherwise retain GOP copy presentation and report why flips are unavailable.
+   Read DMAR scopes and remapper status, without changing firmware/IOMMU policy.
+   The saved vela DMAR table names a dedicated IGD remapper at `0xfc800000`
+   for PCI `0:2.0`; its live translation state remains unmeasured. DM-set stolen
+   scanout proves no identity-DMA relationship for DM-clear system pages. Pyxis
+   currently has no IGD IOMMU mapping implementation; adding one is outside this
+   slice. Absence of a complete remapper-coverage proof also refuses admission.
+3. **Presentation baseline versus unattended OLED blanking. Recommended
+   default:** authorize a bounded visible baseline/candidate run, with kernel
+   idle blanking at 900 s and host collection deadline 840 s; restore the usual
+   immediately-blank standing PXE image and reboot through Remote after capture.
+   This is a run-sheet exception, not a new shipped blanking default. The normal
+   unattended `display.idle_blank=0` collapses blank generations, so whole-frame
+   skipping suppresses the presentation workload being compared. No owner
+   interaction is required. The timeout still blanks a hung/uncollected run.
+
+### Completion source result (no additional policy decision)
+
+Use a freshly recorded primary-plane flip-done event, not `PIPE_FLIPCNT` as a
+retirement event: Intel documents that counter as incrementing at flip start.
+The pinned Linux display-30 path uses pipe IIR bit 3 for plane-1 flip done.
+IMR controls event recording; IER controls CPU delivery, so selected-bit polling
+can keep CPU delivery disabled. Clear only the selected sticky bit to establish
+a clean baseline, arm one synchronous SURF update, then require the fresh event,
+latched expected SURFLIVE, flip-done timestamp and coherent frame progress.
+`PIPE_MISC2`'s flip-information selector must select plane 1; it is itself double
+buffered. Keepout uses normalized scanline and the reference 100 µs interval
+computed from qualified timing/clock; raw scanline is not a memory-fetch frontier.
+
+The public TGL/RKL register narrative is supported by the pinned Linux PTL
+register/mask path, not a claim that a PTL flip has already passed natively.
+Qualification must show one confirmed flip and return before repeated updates.
+Two fixed, newly created GGTT mappings stay pinned; no per-frame PTE remapping.
+Linux's DE-only linear display pin path does not call generic GT invalidation,
+so no GuC/TLB-control sequence is inferred from a different consumer.
+
+### Matched baseline definition
+
+Use the existing fixed 1803-frame OpenArena demo (SHA-256
+`c02c5a071f520939a33dc00ffd05c8e4f7b9c190b85e9289203cab685c1d8d9f`),
+llvmpipe/default workers and an engine canvas of 2880×1800. Record that separately
+from physical scanout 2880×1800 and the space's 2880×1768 content area; SDL
+aspect-fits the canvas into 2828×1768 with 26-pixel side margins. The older
+320×240 timedemo result is not this baseline. Reuse `display.flip.metrics=1`
+for cumulative compose/copy statistics; those include startup/session frames,
+not just game rendering. No new benchmark framework is needed.
+
 ## Pinned references
 
 Linux v6.19 `05f7e89ab9731565d8a62e3b5d1ec206485eeb0b` is the source reference,
@@ -328,3 +398,9 @@ not a claim of identical initialization to observed Fedora 7.2.10-200.fc44.
 - [Xe GGTT](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_ggtt.c): table extent/location and raw inherited-PTE reader.
 - [PHY selection](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_display.c) and [PSR workarounds](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_psr.c): Panther Lake has no combo-PHY recovery and this B0 is outside the A0–before-B0 DC5/DC6 workaround.
 - [Pinned Limine configuration](https://github.com/Limine-Bootloader/Limine/blob/e3aa138d383ca4fe061f05931b5a54497cd502f2/CONFIG.md): per-entry resolution request and fallback.
+
+Additional pinned-source references for setup/completion:
+
+- [PAT table and reads](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_pat.c), [forcewake](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_force_wake.c), and [MCR steering](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_gt_mcr.c): powered/serialized PAT admission.
+- [Display pinning](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/display/xe_fb_pin.c) and [workaround rules](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_wa_oob.rules): fixed linear mappings and media-stepping qualification.
+- [Intel TGL Display Engine, pp. 198–200, 207, 280–282](https://cdrdv2-public.intel.com/705833/intel-gfx-prm-osrc-tgl-vol-12-display-engine.pdf): sticky event recording/delivery and synchronous flip completion.
