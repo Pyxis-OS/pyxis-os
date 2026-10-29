@@ -187,6 +187,12 @@ enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical);
 enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical);
 /* Structural owner, IF=0, before publication: scan kernel ranges for aliases. */
 bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes);
+struct vm_physical_range {
+  phys_addr_t physical;
+  size_t bytes;
+};
+/* Same owner/exclusion rules; walks kernel mappings once for a set of spans. */
+bool vm_kernel_physical_overlap_any(const struct vm_physical_range *ranges, size_t count);
 enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
                         phys_addr_t *physical);
 /* Protect one mapped page in a reservation or VM-owned allocation. */
