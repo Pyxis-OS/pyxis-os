@@ -95,7 +95,9 @@ upgrade`: boot the 0.0.10 installer and choose Update** (see the release notes).
     caller of the query benefits;
   - a bundle-interpreter shebang costs no more than launching the bundle by
     hand: 2.85 ms against 2.95 ms per launch ([record](development/experiments/bundle-shebang.md)).
-- **Network:** bulk `pkg install` no longer fails after hundreds of short HTTP
+- **Network:** `pkg` and the HTTP tools report why a transfer failed (for
+  example `Connection refused` with its native status, or `HTTP GET timed out`).
+  Bulk `pkg install` no longer fails after hundreds of short HTTP
   transfers. Ephemeral ports advance per destination instead of being drawn at
   random, so a new connection no longer reuses a tuple the peer still holds.
 - **Kernel:** process, thread and image preparation, private memory changes and
@@ -111,16 +113,19 @@ upgrade`: boot the 0.0.10 installer and choose Update** (see the release notes).
 - **Wi-Fi:** the Realtek RTL8922AE on the IdeaPad scans passively on channels
   1 to 13 by default (`wifi scan`, or an explicit channel set), and reports a
   truncated result as truncated. There is no association on this adapter yet ([Wi-Fi](interfaces/wifi.md)).
-<!-- PENDING intel-flips (chronium, 2026-10-29): keep only if alpha's #1599 and #1563 merge with a passing native run (r9) before the release is otherwise ready; otherwise delete this bullet. -->
 - **Intel display:** on matched Intel GPUs the display driver reads the scanout
-  the firmware set up and presents frames with a synchronized flip at vblank, which
-  removes the tearing seen on the IdeaPad. Full Intel modesetting is later work.
+  the firmware set up and presents frames with a synchronized flip at vblank. On
+  the IdeaPad (vela) chronium saw no tearing in OpenArena at low and native
+  resolution; at the native resolution the frame rate went from 15.6 to 15.9
+  (single runs, 1803 frames). Preparing the flip delays boot by about 1.3 s, an
+  accepted limit fixed in 0.0.11
+  ([debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617)). Full Intel
+  modesetting is later work.
 <!-- PENDING wifi-connect (chronium, 2026-10-29): default out. Add a connecting bullet here only if the RTL8922AE association PR (#1597 and userland #433) is merged with a native pass before the release is otherwise ready. -->
 - **ABI:** this is a new, deliberate ABI break. `include/abi/` no longer keeps
   every line of 0.0.9's, and 0.0.10 provides only the `"0.0.10"` ABI name; it does
   not provide `"0.0.8"` or `"0.0.9"`. What breaks, and what only grew, is listed in
   the release notes ([ABI](interfaces/abi.md)).
-- **QEMU image:** <!-- PENDING qemu-image: add "`pyxis-0.0.10.qcow2`, a ready-to-run 32 GiB image with 0.0.10 installed, beside the ISO ([manual](manual/install.md#run-the-ready-made-image))." only after it is built, verified, signed and uploaded; otherwise delete this bullet. -->
 
 Release notes:
 
