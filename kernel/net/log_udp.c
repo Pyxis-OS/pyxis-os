@@ -85,7 +85,7 @@ static bool take_sequence(uint64_t *value)
 /* Complete IPv4/UDP limited broadcast without allocation, ARP or lwIP.
  * IPv4 permits a zero UDP checksum; the IP header is checksummed here. */
 static size_t frame_header(uint8_t *frame, const uint8_t mac[6], uint32_t source, uint8_t flags,
-    enum log_level level, struct log_cursor cursor, size_t text_length,
+    enum log_level level, uint8_t log_source, struct log_cursor cursor, size_t text_length,
     uint64_t packet_sequence)
 {
   memset(frame, 0, LOG_TEXT_OFFSET);
@@ -108,6 +108,7 @@ static size_t frame_header(uint8_t *frame, const uint8_t mac[6], uint32_t source
   struct log_udp_fragment fragment = {
     .flags = flags | (packet_sequence == 0 ? LOG_UDP_FLAG_START : 0),
     .level = level,
+    .source = log_source,
     .sequence = packet_sequence,
     .line = cursor.line,
     .offset = cursor.offset,
@@ -167,8 +168,8 @@ bool net_log_udp_service(void)
     } else {
       normal_next.offset += record.length;
     }
-    normal_length = frame_header(normal_frame, mac, source, 0, record.level, first, record.length,
-        packet_sequence);
+    normal_length = frame_header(normal_frame, mac, source, 0, record.level, record.source,
+        first, record.length, packet_sequence);
   }
   /* Queue-full retries preserve the same sequence and cursor. A fatal CPU
    * closes the driver's gate before touching its own separate frame. */
@@ -246,8 +247,8 @@ void net_log_udp_panic_putc(enum log_level level, char c)
     if (!take_sequence(&packet_sequence)) {
       atomic_store_explicit(&fatal_failed, true, memory_order_relaxed);
     } else {
-      size_t length = frame_header(fatal_frame, mac, fatal_source, LOG_UDP_FLAG_FATAL, fatal_level,
-          fatal_cursor, fatal_length, packet_sequence);
+      size_t length = frame_header(fatal_frame, mac, fatal_source, LOG_UDP_FLAG_FATAL,
+          fatal_level, 0, fatal_cursor, fatal_length, packet_sequence);
       if (!net_driver_panic_transmit(fatal_interface, fatal_frame, length)) {
         atomic_store_explicit(&fatal_failed, true, memory_order_relaxed);
       }

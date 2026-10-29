@@ -531,6 +531,10 @@ launch profile, with the original rights or deliberate attenuation. Provider
 startup receives declared dependencies and omits its own publication names.
 FILE providers use the [shared file bridge](../interfaces/file-providers.md).
 
+A service's stdout and stderr go to the [system log](../interfaces/kernel-log.md#system-log-writes)
+as the shell's space (info and warn); `service start|replace --terminal` keeps the
+space console instead.
+
 `service start --optional` continues after a provider explicitly reports setup
 failure; malformed handshakes, launch failures, environment publication errors and cleanup
 failures are still errors. `service start|replace --read-only` restricts the

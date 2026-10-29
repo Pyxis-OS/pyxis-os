@@ -12,6 +12,7 @@
 #include <kernel/fb/early_console.h>
 #include <kernel/acpi.h>
 #include <kernel/mm/types.h>
+#include <abi/log.h>
 #include <kernel/space.h>
 #include <kernel/display.h>
 #include <kernel/defs.h>
@@ -327,6 +328,12 @@ static struct space *space_alloc(const char *name, const char *title,
   atomic_init(&space->title_locked, false);
   atomic_init(&space->execution_groups_locked, false);
   memcpy(space->name, name, strlen(name) + 1);
+  static uint8_t log_sources;
+  if (log_sources < UINT8_MAX) {
+    ++log_sources;
+  }
+  space->log_source = log_sources;
+  space->log_tokens = LOG_RATE_BURST;
   size_t length = strlen(title);
   KASSERT(length && length <= SPACE_TITLE_MAX);
   memcpy(space->title, title, length + 1);

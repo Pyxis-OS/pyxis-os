@@ -10,6 +10,9 @@
  * Level is stored when c opens a line and ignored on an open line. */
 void log_ring_putc(enum log_level level, char c);
 void log_ring_panic_begin(void);
+/* Source stamped on each line later characters open: 0 for the kernel, a space's
+ * log index otherwise. Caller holds the log lock and restores 0 before releasing it. */
+void log_ring_set_source(uint8_t source);
 /* Any CPU; preserve IF. Copy into kernel-owned storage under the ring lock;
  * never access user mappings, allocate or log while holding it. A read fills
  * bytes with packed log_record pieces, as the log ABI's READ reply. */

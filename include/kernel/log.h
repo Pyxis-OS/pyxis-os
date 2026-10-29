@@ -1,6 +1,7 @@
 #ifndef KERNEL_LOG_H
 #define KERNEL_LOG_H
 #include <abi/log.h>
+#include <stddef.h>
 #include <stdarg.h>
 #include <kernel-log-config.h>
 
@@ -55,6 +56,12 @@ void log_end(bool locked);
 void log_putc(enum log_level level, char c);
 void log_record_begin(enum log_level level);
 void log_record_end(enum log_level level);
+/* Logs one line written by SPACE at LEVEL under its index and name, as
+ * "NAME: TEXT\n". TEXT is already sanitised and at most LOG_WRITE_MAX bytes.
+ * Charges the space's rate bucket; a line beyond it is dropped and counted, and
+ * the next logged line reports the count at warn. Any CPU, preserves IF. */
+struct space;
+void log_write_line(struct space *space, enum log_level level, const char *text, size_t length);
 /* Irreversibly select unlocked emergency output for fatal diagnostics.
  * Safe without GS, heap or a functioning lock owner; lines may interleave.
  * Ring capture tries its separate lock once, skipping bytes if it is held.

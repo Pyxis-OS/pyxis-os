@@ -64,13 +64,55 @@ It takes the log lock and then the terminal's output lock, so its ordering with
 kernel lines matches serial output. Ordinary local and remote terminal output is not
 serial-mirrored and does not feed back into the ring.
 
-Each retained line costs five bytes of length and level bookkeeping within the
+Each retained line costs six bytes of length, level and source bookkeeping within the
 ring. Overflow evicts whole oldest lines and counts them. A single line longer
 than 262139 bytes, including its newline, cannot fit: its retained prefix is evicted
 and its remaining bytes are discarded through the newline. This counts as one
 lost line. The ring needs no heap, clock, network or initialized CPU-local state.
 It is volatile and does not survive reboot.
 
+
+## System log writes
+
+Spaces, services and programs write to the system log instead of an interactive
+terminal. Decisions accepted by chronium on 2026-10-29; the first slice implements
+the rows marked done.
+
+- **Authority.** `LOG_RIGHT_WRITE` on the `log` resource, beside READ. Boot init
+  holds it, forwards it to each space's init, and a session handoff keeps it for
+  the shell. Programs a shell launches inherit READ only. Nothing else writes,
+  except the allocator's `LOG_PUTCHAR`.
+- **`LOG_WRITE`.** One call is one line: a level and up to 255 text bytes. Control
+  bytes other than tab are logged as `?`. The kernel stamps the caller's space, so
+  the line reads `NAME: text`, the space's fixed name and `: `. The ring header
+  carries the space's index (a record's `source`; 0 is the kernel), so readers
+  filter without a name table. `libpyxis` has `log_write`.
+- **Streams.** `LOG_STREAM` returns a write-only console-protocol handle for a
+  level. Writes are assembled into lines of at most 255 bytes, ended by `\n` or by
+  that length; `\r` is dropped, control bytes become `?`, an unfinished line is
+  logged when the last handle closes. `isatty` is true and SIZE and READ fail.
+  `libpyxis` has `log_open_stream`.
+- **Services.** `service start` and `service replace` bind a service's stdout to
+  an info stream and its stderr to a warn stream, as the shell's space.
+  `--terminal` keeps the space console. A shell without the write right keeps the
+  console too, as before.
+- **Rate.** A space may log 1000 lines per second with a burst of 5000. A line
+  beyond that is dropped and counted; the next line logged reports
+  `log: dropped NAME N log lines` at warn, at most once a second. The bucket is
+  per space and kept under the log lock. The rate is a starting point to be tuned
+  from real use.
+- **Display.** Lines show on the Caelum pane at or above `log.level`, coloured by
+  level, with the prefix. Lines written by spaces are not mirrored to serial or the
+  early console: serial costs milliseconds per line while the log lock is held. They
+  stay in the ring, so `log` and UDP capture have them. `log -s NAME` shows only
+  one space's lines. The UDP wire's spare header byte carries the source index.
+- **Background jobs.** `&` jobs stay on the terminal; an opt-in redirect to the
+  log is a later slice.
+- **Not done yet.** `system_log()` (the DHCP line) and `LOG_PUTCHAR` are unchanged,
+  so those lines still have no prefix and appear on serial.
+- **Cost.** A written line costs about 0.9 µs at a hidden level and 2.7 µs at a
+  shown one, against 1.5-1.8 µs for a framebuffer terminal write; see
+  [the cost record](../development/experiments/system-log-cost.md).
 
 ## Read authority and cursors
 
@@ -88,7 +130,7 @@ dropped-line count and ring capacity. A cursor contains a boot-local line
 sequence and byte offset, allowing long or unfinished lines to span reads.
 READ starts at `{0, 0}` or a previously returned cursor. It returns at most
 1024 bytes of records, a next cursor and the number of lines missed by this
-reader. Each record is a four-byte header with its length and level, followed
+reader. Each record is a four-byte header with its length, level and source, followed
 by the text of one piece of one line. A piece without a final newline ends the
 reply; the line continues in the next read under the same level.
 Readers consume nothing globally and maintain their own cursors; there is no
@@ -107,7 +149,7 @@ Libpyxis supplies `log_get_snapshot`, `log_read` and `log_next_record` through
 `<log.h>`; `log_read` validates every record. `log` prints through one captured
 end and exits, even while new output arrives. It starts each line with its
 level letter (`E`, `W`, `I`, `D`, `T`), and `log -l LEVEL` prints only that
-level and more severe ones.
+level and more severe ones, and `log -s NAME` only the lines one space wrote.
 `log -f` first prints retained history, then drains new text, sleeping 100 ms
 when caught up. Lost-line notices go to stderr. Following costs ten idle checks
 per second and up to 100 ms polling delay, plus scheduler/output delays.

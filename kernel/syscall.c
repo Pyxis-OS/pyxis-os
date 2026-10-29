@@ -280,6 +280,12 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return terminal_application_call(object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_LOG_STREAM:
+    if (header.protocol != PROTOCOL_CONSOLE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return log_stream_call(object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
   case OBJECT_CONSOLE:
     if (header.protocol != PROTOCOL_CONSOLE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

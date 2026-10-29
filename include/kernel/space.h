@@ -52,6 +52,12 @@ struct space
   uint64_t *effective_cpus;
   uint64_t *affinity_staging;
   bool setup_open;
+  /* System log writes (abi/log.h). Index stamped on this space's lines: 1 for
+   * the first space, saturating at 255 (0 is the kernel). The bucket holds
+   * lines this space may still write; the log lock protects all of it. */
+  uint8_t log_source;
+  uint64_t log_tokens, log_refilled_ns;
+  uint64_t log_dropped, log_summary_ns;
   /* Registry order. Spaces are only appended, on the BSP, and published with
    * a release store once complete, so BSP readers can walk without a lock. */
   struct space *next;
