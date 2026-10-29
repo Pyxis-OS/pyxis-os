@@ -599,8 +599,9 @@ caller.
 ## Memory and output boundaries
 
 Private VM metadata and page-table mutation have one process owner, with IF=0
-per step. MEMORY runs in a kernel-root continuation on its caller CPU; DISPLAY
-and thread-context changes remain BSP clients of the same gate. All use
+per step. MEMORY, JIT, DISPLAY mapping work and thread-context changes run in
+kernel-root continuations on their caller CPUs under the same gate. DISPLAY
+control/publication and hardware presentation retain their fixed owner. All use
 [process quiescence](memory.md#execution): the caller leaves its root before the
 transaction begins. The general kernel VM area still
 requires separate quiescence and acknowledged invalidation for reused ranges.
@@ -684,8 +685,9 @@ Private queries/mutation require stable ownership; MEMORY uses its drained
 process token on the calling CPU. Shared queries use short guarded snapshots,
 which are not resource leases. General kernel mutation requires a retained
 CPU-neutral logical owner; it never holds a spinlock across allocation or waits.
-Unpublished preparation, retirement and DISPLAY/thread clients still run on the
-BSP, enrolling in that same owner rather than gaining ownership from CPU identity.
+Unpublished preparation and private VM work run on their retained caller;
+retirement uses its recorded fixed RAM actor. DISPLAY control/presentation and
+other device callbacks stay fixed. None gains VM ownership from CPU identity.
 See the [shared-VM contract](../wip/vm-invalidation.md#decision-6--shared-ownership-queries-and-safe-admission).
 
 Private spaces are built before publication. Dispatch reserves root activity
@@ -828,8 +830,11 @@ arena's existing capacity bound is unchanged; see the
 
 The heap, PMM, scratch mappings and RAM-file backing work on any CPU; private
 MEMORY mutations run on the calling CPU under the process transaction.
-Remaining DISPLAY/thread-context mutations and final process destruction retain
-their BSP ownership.
+DISPLAY/thread-context VM mutations use caller transactions; process RAM
+retirement uses its recorded actor. Fixed device/session hooks retain the BSP.
+Final display backing transfers to the preparation CPU's existing RAM reaper
+after its actual final consumer releases it. Unconfirmed retirement retains the
+backing and joined cleanup, without parking that RAM actor behind one process.
 Moving a worker off the BSP is a later step; see the
 [follow-ups](../wip/scheduling-and-threads.md#serial-services-off-the-bsp).
 

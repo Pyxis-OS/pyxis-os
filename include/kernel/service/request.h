@@ -67,8 +67,9 @@ enum bsp_request_state {
  * parked handoff. Queue publication and wait notification synchronize loans.
  * FORWARDED belongs to the HOST, native filesystem, readiness, audio or ACPI worker,
  * the USB worker, or the sole screen presenter until final completion.
- * MEMORY/JIT use the same retained typed storage locally, without queue publication
- * or a completion notification; its kernel-root caller consumes the result.
+ * MEMORY/JIT/thread and DISPLAY VM work use retained typed storage locally.
+ * DISPLAY embeds a separate control header in that storage for fixed-owner
+ * publication; neither phase lends a remote stack pointer.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {
   struct bsp_request *next;
@@ -79,7 +80,7 @@ struct bsp_request {
   struct forwarder_operation *operation;
   enum bsp_service service;
   enum bsp_request_state state;
-  struct process *vm_process; /* Staged local MEMORY or deferred BSP VM mutation. */
+  struct process *vm_process; /* Retained local process-VM transaction. */
   struct task *vm_mutator;
   bool vm_reply_owned; /* Consumed before releasing the completed record. */
 };

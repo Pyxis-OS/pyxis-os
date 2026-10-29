@@ -941,7 +941,7 @@ static void resize_buffers_quarantine(const struct resize_buffers *buffers)
 
 /* Sole presenter, between frame leases. Device waits retain the published
  * TTY set, including output that APs write while scanout is being changed. */
-static void resize_display(void)
+static void resize_display_transaction(bool *preparing)
 {
   struct vm_kernel_owner owner = {0};
   if (!vm_kernel_owner_acquire(&owner)) {
@@ -954,6 +954,19 @@ static void resize_display(void)
     cpu_restore_interrupts(flags);
     return;
   }
+  /* An idle presenter must not close mapping admission while merely polling
+   * or waiting for a VM owner. Reserve geometry only for a real candidate. */
+  uint64_t geometry_flags = cpu_save_interrupts();
+  bool admitted = display_geometry_begin();
+  cpu_restore_interrupts(geometry_flags);
+  if (!admitted) {
+    display_resize_defer();
+    geometry_flags = cpu_save_interrupts();
+    vm_kernel_owner_release(&owner);
+    cpu_restore_interrupts(geometry_flags);
+    return;
+  }
+  *preparing = true;
   struct resize_buffers buffers = {0};
   uint64_t flags = cpu_save_interrupts();
   struct space *registry_tail = last_space;
@@ -1051,6 +1064,10 @@ static void resize_display(void)
   screen = display_layout();
   uint64_t elapsed = arch_monotonic_ns() - started;
   log_end(locked);
+  /* The new layout is coherent. Consumers awakened below must be able to
+   * reserve that generation even while the presenter retires old backing. */
+  display_geometry_end();
+  *preparing = false;
   drawn_nav_valid = false;
   volume_ui_cancel();
   volume_ui_end_frame(false);
@@ -1084,6 +1101,17 @@ static void resize_display(void)
   cpu_restore_interrupts(flags);
   kinfo("display: resized to %lux%lu; copied %lu TTYs' cells in %lu ns\n",
       screen->width, screen->height, count, elapsed);
+}
+
+static void resize_display(void)
+{
+  bool preparing = false;
+  resize_display_transaction(&preparing);
+  uint64_t flags = cpu_save_interrupts();
+  if (preparing) {
+    display_geometry_end();
+  }
+  cpu_restore_interrupts(flags);
 }
 
 /* A session keeps its original extent and pitch. The destination alone changes;

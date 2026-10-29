@@ -53,22 +53,6 @@ static bool residency_empty(const struct process *process)
   return true;
 }
 
-static struct process *pending_processes; /* BSP, IF=0. */
-static struct spinlock worker_lock;
-static struct task_wait *worker_wait; /* worker_lock; queues nest inside it. */
-
-static void wake_worker(void)
-{
-  spin_lock(&worker_lock);
-  if (worker_wait) {
-    struct task_wait *wait = worker_wait;
-    worker_wait = NULL;
-    /* Keep timeout detachment from racing a notifier holding this pointer. */
-    task_wait_wake(wait);
-  }
-  spin_unlock(&worker_lock);
-}
-
 static bool access_allowed(struct process *process, struct task *task)
 {
   return process->vm.phase == PROCESS_VM_OPEN ||
@@ -107,8 +91,6 @@ void process_vm_root_depart(struct process *process, struct process_vm_root_epoc
       process->vm.generation == epoch.generation);
   process->vm.resident_cpus[cpu / 64] &= ~(UINT64_C(1) << (cpu % 64));
   --process->vm.roots;
-  bool pending = process->vm.pending &&
-      process->vm.pending->service == BSP_SERVICE_DISPLAY;
   if (process->vm.local_wait) {
     struct task_wait *wait = process->vm.local_wait;
     process->vm.local_wait = NULL;
@@ -116,9 +98,6 @@ void process_vm_root_depart(struct process *process, struct process_vm_root_epoc
     task_wait_wake(wait);
   }
   spin_unlock(&process->vm.lock);
-  if (pending) {
-    wake_worker();
-  }
 }
 
 bool process_vm_execution_closed(struct process *process)
@@ -208,8 +187,6 @@ void process_vm_unhold(struct process *process, struct task *task)
   }
 }
 
-static void finish_mutation(struct process *process, bool expired, bool local);
-
 static void refuse_mutation(struct bsp_request *request, enum call_status status)
 {
   if (request->service == BSP_SERVICE_MEMORY) {
@@ -227,7 +204,8 @@ static void refuse_mutation(struct bsp_request *request, enum call_status status
     thread->caller = NULL;
   } else {
     KASSERT(request->service == BSP_SERVICE_DISPLAY);
-    struct display_request *display = (void *)request;
+    struct display_request *display = (void *)((char *)request -
+        offsetof(struct display_request, vm_request));
     display->result = status;
     display->loan = NULL;
     display->display = NULL;
@@ -236,60 +214,12 @@ static void refuse_mutation(struct bsp_request *request, enum call_status status
   request->vm_mutator = NULL;
 }
 
-void process_vm_mutation_forward(struct bsp_request *request)
-{
-  KASSERT(arch_cpu_index() == 0 && request->state == BSP_REQUEST_SERVICING);
-  KASSERT(request->service == BSP_SERVICE_DISPLAY);
-  struct process *process = request->vm_process;
-  struct task *mutator = request->vm_mutator;
-  KASSERT(process && mutator);
-  spin_lock(&process->vm.lock);
-  KASSERT(!task_vm_borrow_count(mutator));
-  if (process->vm.phase != PROCESS_VM_OPEN) {
-    spin_unlock(&process->vm.lock);
-    refuse_mutation(request, CALL_BUSY);
-    bsp_request_complete(request);
-    return;
-  }
-  KASSERT(!process->vm.pending && !process->vm.mutator && !process->vm.next_pending);
-  /* The scheduler has already dropped this caller's root. Surrender its
-   * continuation so the transaction cannot wait for its own final reply. */
-  task_vm_set_continuation(mutator, false);
-  bool drained = !process->vm.roots && !process->vm.borrowers;
-  process->vm.phase = drained ? PROCESS_VM_MUTATING : PROCESS_VM_DRAINING;
-  process->vm.mutator = mutator;
-  process->vm.mutation_cpu = 0;
-  process->vm.pending = request;
-  if (!drained) {
-    uint64_t now = arch_monotonic_ns();
-    process->vm.deadline = now > UINT64_MAX - VM_QUIESCENCE_NS ?
-      UINT64_MAX : now + VM_QUIESCENCE_NS;
-  }
-  spin_unlock(&process->vm.lock);
-  request->state = BSP_REQUEST_FORWARDED;
-  if (drained) {
-    /* BSP DISPLAY/thread clients keep the same gate. Only drainage needs
-     * the VM worker; private MEMORY never enters this pending list. */
-    finish_mutation(process, false, false);
-    return;
-  }
-  struct process **tail = &pending_processes;
-  while (*tail) {
-    tail = &(*tail)->vm.next_pending;
-  }
-  *tail = process;
-  /* Current one-task processes already have no other root. Future siblings
-   * observe closure at their syscall entry/return or timer preemption. */
-  wake_worker();
-}
-
 void process_vm_require_mutation(struct process *process)
 {
   spin_lock(&process->vm.lock);
   KASSERT(arch_cpu_index() == process->vm.mutation_cpu);
   struct task *actor = task_current_user();
-  KASSERT(actor ? task_vm_kernel_active() && actor == process->vm.mutator :
-      arch_cpu_index() == 0);
+  KASSERT(actor && task_vm_kernel_active() && actor == process->vm.mutator);
   KASSERT(process->vm.phase == PROCESS_VM_MUTATING && !process->vm.roots &&
       !process->vm.borrowers && residency_empty(process) &&
       process->vm.pending && process->vm.mutator);
@@ -349,36 +279,7 @@ void process_vm_retire(struct process *process)
   spin_unlock(&process->vm.lock);
 }
 
-static struct process *select_pending(uint64_t now, uint64_t *deadline, bool *expired)
-{
-  struct process **link = &pending_processes;
-  while (*link) {
-    struct process *process = *link;
-    spin_lock(&process->vm.lock);
-    /* BSP clients may arrive already drained and MUTATING. */
-    bool mutating = process->vm.phase == PROCESS_VM_MUTATING;
-    bool drained = mutating || (!process->vm.roots && !process->vm.borrowers);
-    *expired = !drained && now >= process->vm.deadline;
-    if (drained || *expired) {
-      KASSERT(mutating || process->vm.phase == PROCESS_VM_DRAINING);
-      if (drained) {
-        process->vm.phase = PROCESS_VM_MUTATING;
-      }
-      spin_unlock(&process->vm.lock);
-      *link = process->vm.next_pending;
-      process->vm.next_pending = NULL;
-      return process;
-    }
-    if (process->vm.deadline < *deadline) {
-      *deadline = process->vm.deadline;
-    }
-    spin_unlock(&process->vm.lock);
-    link = &process->vm.next_pending;
-  }
-  return NULL;
-}
-
-static void finish_mutation(struct process *process, bool expired, bool local)
+static void finish_mutation(struct process *process, bool expired)
 {
   struct bsp_request *request = process->vm.pending;
   KASSERT(request && request->state == BSP_REQUEST_FORWARDED);
@@ -410,7 +311,7 @@ static void finish_mutation(struct process *process, bool expired, bool local)
       thread_request_execute((struct thread_request *)request);
     } else {
       KASSERT(request->service == BSP_SERVICE_DISPLAY);
-      display_request_execute((struct display_request *)request);
+      display_vm_request_execute(request);
     }
     object_cleanup_leave(previous);
     request->vm_reply_owned = true;
@@ -434,15 +335,11 @@ static void finish_mutation(struct process *process, bool expired, bool local)
   }
   spin_unlock(&process->vm.lock);
   resume_held(held);
-  if (local) {
-    /* No endpoint publication or waiter owns this record: its caller executed
-     * it synchronously under kernel CR3 and now consumes the staged result. */
-    request->wait = NULL;
-    request->cleanup_group = NULL;
-    request->state = BSP_REQUEST_COMPLETE;
-  } else {
-    bsp_request_complete(request);
-  }
+  /* No endpoint publication or waiter owns this record: its caller executed
+   * it synchronously under kernel CR3 and now consumes the staged result. */
+  request->wait = NULL;
+  request->cleanup_group = NULL;
+  request->state = BSP_REQUEST_COMPLETE;
 }
 
 void process_vm_private_call(struct bsp_request *request)
@@ -450,7 +347,7 @@ void process_vm_private_call(struct bsp_request *request)
   struct process *process = request->vm_process;
   struct task *mutator = request->vm_mutator;
   KASSERT((request->service == BSP_SERVICE_MEMORY || request->service == BSP_SERVICE_JIT ||
-      request->service == BSP_SERVICE_THREAD) &&
+      request->service == BSP_SERVICE_THREAD || request->service == BSP_SERVICE_DISPLAY) &&
       request->state == BSP_REQUEST_PREPARED && mutator == task_current_user());
   task_vm_kernel_enter();
   spin_lock(&process->vm.lock);
@@ -497,50 +394,6 @@ void process_vm_private_call(struct bsp_request *request)
       process->vm.local_wait = NULL;
     }
   }
-  finish_mutation(process, expired, true);
+  finish_mutation(process, expired);
   task_vm_kernel_leave();
-}
-
-static void vm_worker(void *argument)
-{
-  (void)argument;
-  for (;;) {
-    uint64_t flags = cpu_save_interrupts();
-    struct task_wait *wait = task_wait_prepare();
-    spin_lock(&worker_lock);
-    KASSERT(!worker_wait);
-    worker_wait = wait;
-    spin_unlock(&worker_lock);
-
-    uint64_t now = pending_processes ? arch_monotonic_ns() : 0;
-    uint64_t deadline = UINT64_MAX;
-    bool expired = false;
-    struct process *process = select_pending(now, &deadline, &expired);
-    if (process) {
-      /* Finish the published wait even when work is immediately available. */
-      deadline = now;
-    }
-    if (deadline == UINT64_MAX) {
-      task_wait_sleep(wait);
-    } else {
-      task_wait_sleep_until(wait, deadline);
-    }
-    spin_lock(&worker_lock);
-    if (worker_wait == wait) {
-      worker_wait = NULL;
-    }
-    spin_unlock(&worker_lock);
-    if (process) {
-      finish_mutation(process, expired, false);
-    }
-    cpu_restore_interrupts(flags);
-    kernel_task_yield_if_runnable();
-  }
-}
-
-void process_vm_init(void)
-{
-  KASSERT(arch_cpu_index() == 0);
-  atomic_init(&worker_lock.locked, false);
-  KASSERT(kernel_task_create(vm_worker, NULL) == MM_OK);
 }

@@ -42,8 +42,7 @@ struct process_vm_activity {
   uint64_t resident_cpus[(ARCH_CPU_LIMIT + 63) / 64];
   struct process_vm_held *held;
   struct task *mutator;
-  struct bsp_request *pending;
-  struct process *next_pending; /* BSP VM worker list, IF=0. */
+  struct bsp_request *pending; /* Retained caller-owned local transaction. */
   uint64_t deadline;
   size_t mutation_cpu; /* Exclusive owner, set before MUTATING; never a CPU0 assumption. */
   struct task_wait *local_wait; /* VM guard joins timeout detachment and notification. */
@@ -66,11 +65,9 @@ void process_vm_syscall_leave(struct process *process, struct task *task);
 bool process_vm_borrow_acquire(struct process *process);
 void process_vm_borrow_release(struct process *process);
 
-/* Executor transfers a request without waiting for drainage. The preallocated
- * record owns process/task lifetime through its uninterruptible caller. */
-void process_vm_mutation_forward(struct bsp_request *request);
-/* Admitted private MEMORY/JIT/thread caller, IF=0; retained record, no BSP publication.
- * Leaves its root, drains under the common gate, executes and rejoins for reply. */
+/* Admitted private MEMORY/JIT/thread/DISPLAY caller, IF=0; retained local record,
+ * no BSP publication. Leaves its root, drains under the common gate, executes
+ * and rejoins for reply. Any fixed-owner control uses separate request storage. */
 void process_vm_private_call(struct bsp_request *request);
 void process_vm_reply_finish(struct process *process);
 void process_vm_require_mutation(struct process *process);
@@ -86,6 +83,5 @@ void process_vm_unhold(struct process *process, struct task *task);
 void process_vm_retire(struct process *process);
 /* Zero-initialized unpublished process. False on root-incarnation exhaustion. */
 bool process_vm_activity_init(struct process *process);
-void process_vm_init(void);
 
 #endif
