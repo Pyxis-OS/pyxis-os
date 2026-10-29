@@ -25,6 +25,14 @@ warm-host QEMU passthrough through identification of the MX Master 3S; see the
 [final report](../development/bluetooth-investigation.md). Production mouse work
 remains in the [mouse milestone](bluetooth-mouse.md).
 
+- [x] [BSP allocation and VM ownership](../kernel/vm-ownership.md), 2026-10-29:
+  caller-CPU memory, preparation and DISPLAY mapping work, acknowledged shared
+  retirement and fixed per-CPU RAM reapers. Device/control owners remain fixed;
+  [qualification gaps](https://git.internal/PyxisOS/pyxis-os/issues/1600),
+  [extended races](https://git.internal/PyxisOS/pyxis-os/issues/1601),
+  [retained cleanup](https://git.internal/PyxisOS/pyxis-os/issues/1514) and the
+  [SEND residual](https://git.internal/PyxisOS/pyxis-os/issues/1588) remain tracked.
+
 [BSP pinning inventory](../wip/scheduling-and-threads.md#serial-services-off-the-bsp),
 2026-10-14: its first slice, [bounded process teardown](../development/experiments/bounded-teardown/README.md),
 is implemented; fixed worker CPUs are an [SMP rule](../kernel/smp.md#remaining-serial-services-and-limits)

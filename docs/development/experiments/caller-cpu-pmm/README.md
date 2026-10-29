@@ -2,7 +2,7 @@
 
 Measured 2026-10-26 after [#1254](https://git.internal/PyxisOS/pyxis-os/pulls/1254)
 removed the CPU0 MEMORY dispatcher. This is task 2's required measurement and
-[decision input](../../../wip/bsp-removal.md#task-2-measured-allocation-decision-accepted-2026-10-26),
+input to [bounded frame batches](../../../kernel/vm-ownership.md#backing-and-queries),
 not an allocator implementation or native result.
 
 ## Method and provenance

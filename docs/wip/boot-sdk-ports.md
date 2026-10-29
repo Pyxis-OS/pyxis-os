@@ -150,14 +150,6 @@ installed ThinkPad is open.
 
 [Everyday gaps](everyday-gaps.md): small things noticed in use.
 
-## Planned next kernel milestone
-
-[Remove BSP-owned allocation and VM mutation](bsp-removal.md): tasks 1–3 and the
-interposed JIT grant are merged. Tasks 4–5 are assigned to Codex beta (chronium,
-2026-10-28): task 4's cleanup-placement/lifetime decisions are accepted; the
-remaining VM-client audit follows. BSP removal remains active; no retained
-per-CPU frame cache or device-worker migration is authorized.
-
 ## Candidates for the next milestone
 
 Other candidates; current assignments are listed above.

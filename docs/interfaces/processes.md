@@ -319,8 +319,9 @@ overflow, user accessibility and read/write permissions, and copy through a
 defined user-memory access path. Invalid buffers must produce an error rather
 than a fatal kernel exception. Request metadata must be captured before use;
 request, reply and data buffers must all be validated before side effects.
-The implementation must respect the kernel's current BSP-only VM operations
-and allocation/reclamation constraints when a syscall runs on an AP.
+Copies and allocation/reclamation follow the kernel's
+[VM ownership](../kernel/vm-ownership.md) and subsystem lifetime constraints on
+whichever CPU executes the syscall.
 
 ### Handle restrictions
 
@@ -827,33 +828,34 @@ core read/metadata rights. It publishes a complete owned copy only on success;
 errors or an unexpected short read publish no staging bytes. The immutable view
 fixes identity and generation, provided the attached image is not modified by
 an external writer. The native request reservation is released before launch
-preparation uses the BSP executor. Staging remains owned by launch capture and
-is freed on every success, failure or stop path, outside the native adapter's
-wrapper budget. RAM copying also runs on BSP. Allocation failures return
-CALL_NO_MEMORY and unwind any partially backed prefix and its virtual reservation.
-Release after loading returns all capture data frames; shared kernel page-table
-ancestors retain their ordinary lifetime. Only BSP accesses capture buffers;
-APs transfer ownership descriptors without reading them. This adds no aggregate
-staging cap across callers; physical-memory exhaustion still rejects.
+preparation runs on the caller CPU's retained kernel-root continuation. Capture
+owns the staging through every success, failure or stop path, outside the native
+adapter's wrapper budget. Allocation failures return CALL_NO_MEMORY and unwind
+the partially backed prefix and virtual reservation. Shared owner admission can
+return BUSY before effects. AP-read captures, or captures retired away from their
+producer CPU, require confirmed shared-range retirement before reuse; uncertainty
+retains backing and joined cleanup until reboot. Shared intermediate page tables
+retain their ordinary lifetime. See [VM ownership](../kernel/vm-ownership.md).
+There is no aggregate staging cap; physical-memory exhaustion still rejects.
 
-BSP creates an inactive process and initial stack using the same helper as boot
-setup, installs explicit grants and prepares startup. It installs a WAIT observer
-in the parent's table before task submission; failure after installation closes
-that unpublished observer and destroys the child. Only successful submission
-makes the child runnable. The image operation is released before submission,
-and staging storage is freed before waking the caller. BSP never dereferences
-caller addresses or a remote task-stack request. Caller mappings are unchanged.
+The retained caller creates the inactive process, stack, grants and startup,
+using the common boot/runtime helpers. Fixed space/device setup remains BSP work;
+atomic child/batch publication runs on the preparation CPU under the existing
+group/queue guards. A WAIT observer is reserved before publication;
+failure destroys the unpublished child and observer through owned rollback.
+Only successful submission makes the child runnable. The source FILE operation
+ends when capture or in-place image reads finish. Captured backing has a separate
+owned retirement lifetime and can remain queued after launch success, with group
+cleanup attribution retained. No fixed helper dereferences caller addresses or
+a remote task-stack request. Caller mappings are unchanged.
 
-Launch capture allocation/disposal, single-child preparation/publication and
-batch group operations use typed requests on the common BSP FIFO. The request
-captures the parent process and assigned CPU before publication. Loading and
-capability installation use BSP-local helpers directly, without executor
-self-waits. The caller consumes returned handles or owned allocation results
-before releasing the request; cleanup submission itself needs no allocation.
-Capture and group allocations outlive individual requests. Each stage consumes
-its capture, while the group retains prepared children and provisional observers
-until a later publish or discard request. No user address or remote stack pointer
-is part of the service record.
+Typed launch records retain the parent process and assigned CPU across caller
+preparation and fixed control phases. The caller consumes returned handles or
+owned results before releasing the reservation; cleanup submission needs no
+allocation. Capture and batch allocations outlive individual requests. Each
+stage consumes its capture, while the batch retains children and provisional
+observers until publish or actual discard. Publication is atomic; queueing
+rollback is not reclamation.
 
 Success returns one owned process-control handle. The child may run or exit
 before the parent resumes; the handle retains completion independently. Failure

@@ -63,9 +63,11 @@ inactive VM and release scratch reservations and any partial backing. Guard,
 stack or process-creation failures also destroy the inactive VM. Subsequent
 startup/grant/task-preparation failures destroy the unpublished process; a failed
 batch discards its earlier prepared children before publication. Normal retirement
-reclaims task storage on the BSP, then destroys process-owned backing and
-reservations before publishing the final process-control result. See
-[process lifetime](../interfaces/processes.md) and [BSP ownership](smp.md).
+reclaims task storage on its departure CPU's fixed RAM actor, then destroys
+process-owned backing and reservations on the recorded RAM owner before
+publishing the final process-control result. Device/session hooks retain their
+fixed owners. See [process lifetime](../interfaces/processes.md) and
+[preparation and retirement](vm-ownership.md#preparation-and-ram-reclamation).
 
 The guard catches accesses into its page, but a large stack adjustment can skip
 it. There is no stack growth or demand paging. P1F contains no stack-size field.
@@ -84,14 +86,16 @@ bytes coexist with eager image backing and stacks, and a batch retains earlier
 prepared children while capturing its next image.
 
 [Capture ownership](../../include/kernel/user/image_capture.h) is an address,
-serialized size and page-rounded backing size. The BSP eagerly backs whole
-RW/NX kernel pages, reads/copies into them, loads the image, then releases their
-data frames and virtual reservation on success or failure. Partial allocation
-unwinds the mapped prefix; an empty descriptor owns nothing. Shared kernel
-page-table ancestors keep their ordinary VM lifetime. Only the BSP accesses the
-buffer: APs transfer the descriptor through request metadata, so reused capture
-mappings have no remote translations to retire. RAM capture keeps its source
-FILE busy across the BSP copy and ends that operation exactly once.
+serialized size and page-rounded backing size. The file/I/O producer prepares
+RW/NX kernel backing under bounded shared-owner admission, releases that owner
+before storage reads and transfers one immutable owned read phase to the
+caller-CPU image preparation. RAM capture keeps its source FILE busy through
+copy and ends the operation exactly once; no producer refill follows handoff.
+Partial allocation unwinds the mapped prefix; an empty descriptor owns nothing.
+AP-read captures, or captures retired away from their producer CPU, require
+confirmed shared-range retirement before VA/backing reuse. Unconfirmed retirement
+retains the capture and joined cleanup until reboot; a late ACK cannot reclaim
+it. Shared kernel page-table ancestors keep their ordinary retained lifetime.
 
 Over-ceiling requests return `CALL_LIMIT`, allocation failures `CALL_NO_MEMORY`,
 and I/O errors retain their existing status. A failed batch publishes no children

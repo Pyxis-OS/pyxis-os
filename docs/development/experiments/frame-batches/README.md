@@ -1,6 +1,6 @@
 # Caller-owned PMM frame batches
 
-Task 2 implementation of [decision 4](../../../wip/bsp-removal.md#task-2-measured-allocation-decision-accepted-2026-10-26),
+Task 2 implementation of [bounded frame batches](../../../kernel/vm-ownership.md#backing-and-queries),
 accepted by chronium on 2026-10-26. The
 [pre-change measurement](../caller-cpu-pmm/README.md) prompted this bounded
 alternative to retained per-CPU free caches.

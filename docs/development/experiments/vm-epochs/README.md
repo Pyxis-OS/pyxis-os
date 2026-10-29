@@ -1,7 +1,7 @@
 # Private root epochs and concurrent flush initiators
 
 Task 3 foundation, 2026-10-26. Implements part of the
-[accepted invalidation design](../../../wip/vm-invalidation.md); shared kernel
+[accepted invalidation design](../../../kernel/vm-ownership.md#shared-kernel-mappings-and-invalidation); shared kernel
 VM ownership and its caller conversions follow in the shared-owner section
 below. The initial foundation kept the general kernel VM's BSP assertion and
 private whole-process drainage.

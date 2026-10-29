@@ -1,6 +1,6 @@
 # Caller-CPU DISPLAY VM work
 
-Task 5 of [BSP removal](../../wip/bsp-removal.md), 2026-10-29.
+Task 5 of [BSP removal](../../kernel/vm-ownership.md), 2026-10-29.
 Decisions 12–13 accepted by chronium: fixed display control/publication,
 caller-CPU VM preparation, and final frame retirement on its preparation CPU's
 existing RAM reaper. Public ABI, rights and whole-process quiescence remain.

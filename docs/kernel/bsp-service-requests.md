@@ -1,9 +1,10 @@
 # BSP service requests
 
 Caelum separates task execution from BSP-owned subsystem operations through a
-closed service catalog and one FIFO executor. Allocation, VM mutation and final
-object destruction remain BSP-owned. The request mechanism stays internal to the
-kernel; each service defines its own public operation contract.
+closed service catalog and one FIFO executor. Fixed device/control operations
+and object destruction retain their BSP owners. Caller-CPU VM/preparation and
+fixed RAM reclamation use the separate [ownership paths](vm-ownership.md).
+The request mechanism is internal; each service owns its public contract.
 
 ## Ownership boundaries
 
@@ -13,7 +14,8 @@ kernel; each service defines its own public operation contract.
 | [Request mechanism](../../kernel/service/request.c) | Storage sizing, reservation, publication, dispatch and completion |
 | Subsystem | Typed inputs/results, authority checks, resource loans, actual operation and rollback |
 | BSP executor | Nonblocking operations under the existing allocation and VM contracts |
-| VM worker | Pending process quiescence and stepped (large) ALLOCATE; other ready mutations can complete directly in the executor |
+| Caller kernel-root continuation | Process quiescence, bounded private VM/image/task work and typed fixed control handoffs; no BSP VM worker |
+| Fixed per-CPU RAM reapers | Recorded-owner task/process RAM retirement and unpublished rollback, joined through actual cleanup |
 | HOST worker | Blocking filesystem transport and final completion of forwarded requests |
 | Native filesystem worker | Policy/view operations, block waits and final completion of forwarded requests |
 | Network worker | TCP/mixed readiness observation and final completion of forwarded waits |
@@ -43,8 +45,8 @@ objects retain their own lifetimes across operations.
 
 Kernel workers allocate neither user-request nor profiling storage. Failed task
 preparation, unpublished-task discard and normal retirement free each owned
-allocation once on BSP with IF=0. Failure leaves the inactive process owned by
-the preparer. Retirement asserts no request reservation, deferred publication,
+allocation once on its preparation/recorded RAM owner. Failure leaves the inactive
+process owned by the preparer. Retirement asserts no request reservation, deferred publication,
 timed wait or resource queue link remains; request destruction requires FREE
 state. There is no external cancellation of an outstanding synchronous request.
 
@@ -85,16 +87,14 @@ the request afterward; the caller may immediately consume, reuse or retire it.
 COMPLETE is not an asynchronous polling interface. The caller consumes results,
 updates any caller-local profile and explicitly releases the reservation.
 
-MEMORY and every DISPLAY operation use DEFERRED publication after the caller
-leaves its stack/root and establishes parking. MEMORY and DISPLAY mapping
-mutations close process VM admission, drain acknowledged roots/short borrowers,
-and retain exclusive mutator reply access through the final copy. Ready mutation
-runs directly in the executor; pending drainage, or an ALLOCATE larger than one
-256-page step, transfers FORWARDED ownership to the VM worker without blocking
-the executor. The worker runs that allocation in interrupts-off steps and
-yields between them ([private memory](memory.md#execution)). SIZE/SUBMIT do not mutate mappings.
-Unsubmitted loading and final reclamation retain their separate exclusive/drained
-ownership. See [private memory](memory.md#execution).
+MEMORY, JIT and native thread-context changes use retained caller-CPU kernel-root
+continuations, rather than the BSP FIFO for their VM bodies. DISPLAY mapping
+operations use the same drained process transaction around fixed control phases;
+SIZE/SUBMIT keep fixed control ownership. Quiescence, bounded page steps and
+mutator-only reply are described in [private memory](memory.md#execution).
+Separate local and fixed headers fit the existing task request allocation;
+structural ownership is released before an actor handoff. Final RAM reclamation
+uses the recorded CPU's fixed reaper, not the request executor.
 
 Screen capture retains DEFERRED publication. Its caller claims a destination
 slot before submission; the shared request owns that capacity through FILE
@@ -144,10 +144,10 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | Process environment | Ordinary; cell staging, one atomic SET or UNSET commit, snapshot capture, TEXT-file and command-list allocation; grant acquisition and user copies stay in the caller ([environment](../interfaces/environment.md)) |
 | Endpoint creation/export | Ordinary; preclaimed result slots, owned receiver snapshot and BSP owner-list mutation |
 | RAM directory allocation/discard | Ordinary; returned unpublished entries or transferred detached entries |
-| Group creation / launch preparation and publication | Ordinary; claimed result capacity, owned grant captures, private observers, atomic publication and unpublished-child rollback |
-| Native thread CREATE / initial FS binding | Deferred; drained process VM transaction, exclusive context pins, claimed observer slot and stop-serialized membership/runnable publication; final creator copy precedes sibling root admission |
-| Private memory | Deferred; process VM transaction, precommit output recheck and exclusive mutator reply |
-| Display acquire/present/release | Deferred; mapping mutations use the same VM transaction, other operations preserve display backing ownership |
+| Group creation, RAM capture and launch space/device setup | Fixed control around caller-owned preparation/publication; claimed results, owned captures/observers and recorded-CPU rollback |
+| Native thread CREATE / initial FS binding | Caller kernel-root continuation; drained VM transaction, exclusive context pins, claimed observer slot and stop-serialized publication; final creator copy precedes sibling root admission |
+| Private memory | Caller kernel-root continuation; drained VM transaction, precommit output recheck and exclusive mutator reply |
+| Display acquire/replace/release and submit | Caller VM work with fixed reservation/validation/publication phases; SUBMIT retains fixed control ownership |
 | Screen capture | Deferred admission, then forwarded; preclaimed result slot, one pending/in-flight presenter request, owned READ-only FILE publication or unpublished-backing rollback |
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |
 | Native filesystem forwarding | Ordinary admission; bounded native worker owns core views/I/O and final completion |
@@ -160,9 +160,10 @@ launch preparation following HOST/native result consumption begins only after
 releasing that filesystem request reservation. Native executable capture runs on
 the owning filesystem worker with the original publication deadline and actual
 caller rights. It transfers complete independently owned launch staging on
-success; errors transfer no bytes. The 16 MiB per-image staging limit is separate
-from native wrapper accounting. Launcher discard/preparation frees that staging
-on the BSP, including stop and launch-failure paths.
+success; errors transfer no bytes. The 128 MiB selected-image limit is separate
+from native wrapper accounting. Caller preparation or its recorded RAM rollback
+owner retires staging on success/failure/stop, confirming shared-range retirement
+before reuse where required.
 
 ## Executor policy
 
@@ -178,7 +179,7 @@ The worker always finishes its published wait before reuse, including early
 notification. It parks without polling. A remote wake sends the existing IPI;
 a BSP caller sends no self-IPI.
 
-Each operation runs with IF=0 under current BSP allocation/VM rules. Afterward,
+Each fixed operation runs with IF=0 under its subsystem ownership rules. Afterward,
 the worker restores interrupts and yields if the BSP ready queue has another
 runnable task. The scheduler owns that decision. Individual operations remain
 non-preemptible; there are no priorities, elapsed-time budgets or batch quotas.
@@ -284,24 +285,21 @@ stopped. Owner-host timing remains unavailable.
 
 ## Retained limits
 
-BSP-only allocation and inactive-root VM ownership remain intentional. Long
-operations can delay later FIFO requests; a separate policy decision and measured
-mixed-workload evidence are needed before introducing service budgets or workers.
+Fixed subsystem operations can delay later FIFO requests; a separate policy
+decision and measured mixed-workload evidence are needed before introducing service budgets or workers.
 Eager request/profile allocation charges every user task even when it never uses
 HOST or enables profiling. Lazy provisioning must preserve guaranteed cleanup
 capacity and define BSP handoff and allocation-failure ownership. These costs and
 revisit points are recorded in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4).
 
-Public asynchronous I/O, cancellation and multiple outstanding service requests
-per task are not provided. Asynchronous submission would need independently
-owned storage, completion observation and resource retention. Continued caller
-execution needs stable independently captured input, rather than borrowed user
-buffers or inactive VM ownership.
+This synchronous area supports one reserved request per task. Native
+[completion operations](../interfaces/native-completion.md) use independently
+owned storage and scoped cancellation instead; they do not make this area a
+multiple-outstanding asynchronous interface.
 
 Shared-table delivery replaces exclusive table loans with owned inputs and
 claims. VM admission, short user-copy leases and native sibling lifecycle are
 implemented; unsupported competing device operations have scoped native refusals.
-Parking, language TLS and ordinary thread-safe runtime remain separately assigned
-gates. Kernel clients likewise need an explicit nesting/dependency contract
+Kernel clients need an explicit nesting/dependency contract
 before synchronous submission can be allowed. See the
 [thread follow-ups](../interfaces/threads.md).

@@ -134,7 +134,8 @@ Large eager backing and sparse commit/decommit/release yield between bounded
 page/extent steps while retaining exclusive ownership. They execute on the
 caller CPU. There is no BSP VM-mutation worker. DISPLAY keeps fixed-owner
 control/publication phases around its caller-CPU VM work; native thread-context
-preparation uses the same retained caller-CPU transaction. RESERVE
+preparation uses the same retained caller-CPU transaction; see
+[VM ownership](vm-ownership.md). RESERVE
 stays independent of the unused virtual span.
 The current one-second quiescence budget is an implementation choice, not an ABI
 operation deadline. Failure returns BUSY before effects and preserves mappings
