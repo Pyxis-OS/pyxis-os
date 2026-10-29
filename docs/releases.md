@@ -46,8 +46,8 @@ upgrade`: boot the 0.0.10 installer and choose Update** (see the release notes).
 - **Signals and Neovim:** the first cooperative signal slice gives programs a
   real `SIGWINCH` and `SIGINT`, `pthread_sigmask`, and signal-aware waits at
   audited I/O points. Neovim and libuv use their upstream signal code, and the
-  Kilo editor is retired: it is no longer in `base`, so an update drops it
-  ([signals](userland/cooperative-signals.md)).
+  Kilo editor is retired: it is no longer in `base`, and Update asks you to approve
+  removing it ([signals](userland/cooperative-signals.md)).
 - **Shell:**
   - a script can name a bundle as its interpreter, as in `#!bin://shell.pxb`; the
     script receives exactly the grants the bundle's manifest declares
@@ -158,7 +158,8 @@ Release notes:
   `process_view` and `uefi` headers, `SYSCALL_SPACE_PROCESSES`, the log write
   operations, the `READ_STATUS` and `WRITE_STATUS` wait interests, bulk FILE
   reads, and the Wi-Fi PHY and full status replies.
-- **Kilo is gone.** Use `vi` or Neovim.
+- **Kilo is gone.** Update lists `remove kilo` and asks `[y/N]`; answer `y`. Use `vi`
+  or Neovim.
 - **Not in this release:** Rust and the `hexyl` package (planned for 0.0.11), Ship of Harkinian's game, Wi-Fi association and
   native hardware qualification of `pkg upgrade` on an installed system
   ([debt #1509](https://git.internal/PyxisOS/pyxis-os/issues/1509)).
