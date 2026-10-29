@@ -1,10 +1,10 @@
 # vi
 
 The image includes BusyBox vi at `boot://vi.pxe`, with its GPL-2.0-only license
-at `boot://share/licenses/busybox/LICENSE`. The shell resolves `vi` to it. It is
-the first modal editor, ahead of [Neovim](neovim.md#milestone-and-delivery); Kilo remains
-available. The [recipe notes](../../ports/busybox/README.md) record the source
-pin, both patches and the adapter.
+at `boot://share/licenses/busybox/LICENSE`. The shell resolves `vi` to it.
+[Neovim](neovim.md) is also available. The
+[recipe notes](../../ports/busybox/README.md) record the source pin, patches and
+adapter.
 
 ```text
 vi hello.c
@@ -13,7 +13,8 @@ vi -c 'set ts=4' home://a.txt home://b.txt
 ```
 
 Relative paths use the inherited working directory. vi draws on the named
-`input`/`output` console grants through libterm, as Kilo does. It holds
+`input`/`output` console grants. Output and geometry use libterm; keyboard input
+uses an adopted libc descriptor and BusyBox's upstream key decoder. It holds
 [Ctrl+C passthrough](foreground-interruption.md) for the whole session, so the
 shell cannot terminate it and discard unsaved edits. It runs on the framebuffer
 console and through the [remote terminal](remote-terminal.md).
@@ -28,9 +29,12 @@ The build enables:
 - `:set` options, multiple files with `:n`, `:e`, `:r` and `:w NAME`;
 - read-only viewing (`-R`) and startup commands from `-c` or `EXINIT`.
 
-Arrows, Home/End, Delete and Page Up/Down come from libterm's key decoder, and
-a standalone Escape is recognized after 100 ms. The screen size is re-read
-at each redraw.
+Arrows, Home/End, Delete and Page Up/Down come from BusyBox's key decoder,
+which uses 50 ms continuation waits for escape sequences. The screen size is
+re-read at each redraw.
+
+For a first edit, press `i` to insert text, then Escape to return to command
+mode. Enter `:wq` to save and quit, or `:q!` to discard unsaved edits.
 
 The packaged [session configuration](session-configuration.md) sets `EXINIT`
 to `set ts=3 et ai`:
@@ -45,19 +49,19 @@ session. Tabs already in a file stay tabs.
 
 ## How the port maps onto Pyxis
 
-Only `editors/vi.c` is built. A recipe-local `libbb.h`, feature header and
-adapter replace BusyBox's Kconfig and libbb. The adapter covers only the
-helpers vi references, so another BusyBox applet would extend it. The
-patch changes only the Unix-specific parts:
+The recipe builds selected upstream applet and libbb sources without Kconfig
+or the multicall dispatcher. A recipe-local `libbb.h`, feature header and
+adapter supply the Pyxis build and console integration. The vi patch maps
+Unix-specific behavior onto native facilities:
 
 | Upstream | Pyxis |
 | --- | --- |
-| termios raw/cooked mode, `VERASE` | libterm passthrough; console input is already raw. BS and DEL both erase. |
-| `poll` on stdin | A timed libterm key read that keeps the key for the next read |
+| termios raw/cooked mode, `VERASE` | libc's native raw hold keeps Ctrl+C passthrough; console input is already unechoed. BS and DEL both erase. |
+| `poll` and key reads on stdin | Upstream polling and byte/escape decoding on the adopted named input descriptor, with libc `ppoll` and signal masks |
 | stdout drawing, alternate screen | Buffered output to the named console, flushed before waiting for input. Upstream's alternate screen is kept, so on exit the shell's screen and cursor return as they were. |
-| `fstat` size and `S_ISREG` | Read to EOF. Opening a directory fails with its native error. |
-| `access(W_OK)` and mode bits | `[Readonly]` when the file cannot be opened for WRITE now |
-| `stat` before `:w NAME` | Refuse unless opening NAME reports ENOENT; `:w!` overrides |
+| `fstat` size and `S_ISREG` | Upstream validation and sizing through native file metadata in libc |
+| `access(W_OK)` and mode bits | `[Readonly]` when libc reports no native WRITE authority; no Unix mode-bit check |
+| `stat` before `:w NAME` | Upstream existence check through libc; `:w!` overrides |
 | `~/.exrc` owner/mode check | Not read; `EXINIT` from session configuration still works |
 
 Userland libc gained `ftruncate` over native `FILE_RESIZE`, plus `memrchr`,
@@ -95,7 +99,7 @@ keep line anchors and advance after zero-length matches.
   the regex engine consumes a whole UTF-8 code point.
 - **Shell:** there is no `:!` and no shell filters.
 - **Screen size:** a change takes effect at the next redraw, since there is no
-  resize notification.
+  resize handler enabled for vi.
 - **Saves:** atomic replacement within the
   [atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407). Directory
   CREATE and REMOVE are required. A full or failing write was not exercised
@@ -178,5 +182,3 @@ following was exercised:
   in under 0.5 s, including the polling interval, and `G` reached the end.
 - **Framebuffer console (QEMU `sendkey`):** full-screen drawing, arrows, `A`,
   Escape and `:wq` to `host://`, with a clean prompt after exit.
-
-`vi.pxe` is 96,720 bytes; Kilo's is 68,960.

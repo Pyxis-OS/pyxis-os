@@ -9,7 +9,6 @@ endif
 port_outputs = $(addprefix build/ports/$(1)/stage/,$(shell $(LUA) -e \
   'for _, path in pairs(dofile("ports/$(1)/metadata.lua").outputs) do print(path) end'))
 
-KILO_INPUTS := $(wildcard ports/*.lua ports/kilo/*.lua ports/kilo/Makefile ports/kilo/patches/*.patch)
 DOOM_INPUTS := $(wildcard ports/doom/*.lua ports/doom/Makefile ports/doom/manifest.json ports/doom/*.c \
                          ports/doom/patches/*.patch) ports/ports.lua ports/build.lua
 QUAKE_INPUTS := $(wildcard ports/quake/*.lua ports/quake/Makefile ports/quake/manifest.json ports/quake/*.c \
@@ -227,7 +226,6 @@ TREE_SITTER_INPUTS += ports/LICENSE ports/LICENSING.md
 UTF8PROC_INPUTS += ports/LICENSE ports/LICENSING.md
 ZLIB_INPUTS += ports/LICENSE ports/LICENSING.md
 
-KILO_OUTPUTS := $(call port_outputs,kilo)
 DOOM_OUTPUTS := $(call port_outputs,doom)
 QUAKE_OUTPUTS := $(call port_outputs,quake)
 IOQUAKE3_OUTPUTS := $(call port_outputs,ioquake3)
@@ -297,22 +295,13 @@ all: $(OPUS_OUTPUTS)
 all: $(OPUSFILE_OUTPUTS)
 all: $(JSON_OUTPUTS)
 all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) $(FMT_OUTPUTS) $(SDL2_OUTPUTS) \
-     $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(KILO_OUTPUTS) $(LUA_OUTPUTS) \
+     $(BUSYBOX_OUTPUTS) $(LINKS_OUTPUTS) $(JQ_OUTPUTS) $(PKGCONF_OUTPUTS) $(LUA_OUTPUTS) \
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 all: $(IMGUI_OUTPUTS) $(LIBULTRASHIP_OUTPUTS)
 all: $(NCURSESW_OUTPUTS) $(HEXCURSE_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 all: $(LUA_LANGUAGE_SERVER_OUTPUTS)
-
-# This work tree is disposable build output. Port edits belong in ports/kilo,
-# not the fetched source copy, which is replaced when its inputs change.
-$(KILO_OUTPUTS) &: $(KILO_INPUTS) $(SDK_INPUTS) scripts/ports.mk
-	@command -v $(LUA) >/dev/null 2>&1 || { \
-	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; \
-	  exit 1; }
-	rm -rf build/ports/kilo
-	$(LUA) ports/build.lua kilo --sdk $(abspath build/sdk) --work $(abspath build/ports/kilo)
 
 $(LUA_OUTPUTS) &: $(LUA_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \

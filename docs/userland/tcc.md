@@ -11,7 +11,7 @@ package; see the [edit/build/run walkthrough](../development/edit-build-run.md).
   nothing from the host. TCC wrote P1F executables directly and read a guest
   SDK at what became `boot://sdk`.
 - **Later September and October:** TCC compiled Pyxis programs in place:
-  - from Kilo, from host exports and on USB volumes;
+  - from host exports and on USB volumes;
   - in multiplexer panes and remote shells;
   - fetched over HTTPS;
   - with `#include` by URI.

@@ -117,7 +117,7 @@ limit before launch. No socket option weakens the daemon's export permissions.
 ## Persistent development walkthrough
 
 With the writable daemon above and the default init selections, CPU 1 can use
-Kilo, Clang, `mkdir`, `rm`, `rmdir` and `mv` in the export. CPU 2 sees the live
+vi, Clang, `mkdir`, `rm`, `rmdir` and `mv` in the export. CPU 2 sees the live
 tree through read-only grants; its attempted mutations fail even when the host
 daemon permits writes. Neither CPU number nor the `host://` name sets authority:
 boot init delegates the root grants from the configuration. See
@@ -130,10 +130,11 @@ In CPU 1's shell, create a directory and edit a source file there:
 cd host://
 mkdir work
 cd work
-kilo hello.c
+vi hello.c
 ```
 
-Enter this program, save with Ctrl-S and quit Kilo with Ctrl-Q:
+Press `i` to enter insert mode and type this program. Then press Escape, type
+`:wq` and press Enter to save and quit:
 
 ```c
 #include <stdio.h>
@@ -151,16 +152,17 @@ files and the affected directories:
 ```text
 clang hello.c -o hello.pxe
 ./hello.pxe
-kilo hello.c
+vi hello.c
 clang hello.c -o hello.pxe
 ./hello.pxe
 sync host://work/hello.c host://work/hello.pxe host://work host://
 ```
 
-On the second Kilo visit, change the message, save and quit before rebuilding.
+On the second vi visit, press `i` to edit the message, then press Escape and
+enter `:wq` to save and quit before rebuilding.
 In the Read-only shell, `cat host://work/hello.c` reads the same source. Attempts to
 `mkdir host://work/blocked`, remove or rename that source with `rm` or `mv`, or
-save an edit in Kilo fail under the read-only grant. Stop QEMU and the daemon
+save an edit in vi fail under the read-only grant. Stop QEMU and the daemon
 as described above, start a fresh daemon and QEMU pair using the same export
 directory, then read and run the saved files again:
 

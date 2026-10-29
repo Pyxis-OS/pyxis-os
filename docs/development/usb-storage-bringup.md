@@ -577,8 +577,8 @@ testing is still deferred, and the accepted GUID/discovery limits are unchanged.
 
 Manual qualification on 2026-10-04 used main `91bf91d`, containing merged C.1
 PR #395. Pins were fs `d352c7e`, ports `55b6f8e`, userspace `61cad34`, lwIP
-`a1aadb9`. None changed in this task. Kilo, TCC, native filesystem and USB runtime
-sources were unchanged: C.2 adds the
+`a1aadb9`. None changed in this task. The then-editor, TCC, native filesystem
+and USB runtime sources were unchanged: C.2 adds the
 [development walkthrough](edit-build-run.md#persistent-usb-development),
 qualification record and milestone completion. There is no performance change
 or timing comparison claimed.
@@ -622,15 +622,15 @@ remote terminal events and debugger observations were captured manually under
 
 ### Editor, compiler and checkpoint
 
-The existing machine client was kept open for interactive Kilo input, with
-100 columns and 35 rows. Foreground input went to Kilo until it quit; command
-completion events were checked before the next stage. The guest created
-`usb://work`, changed into it and entered the walkthrough's C program in Kilo.
-Ctrl-S saved it and Ctrl-Q quit. `tcc hello.c -o hello.pxe` exited 0, and
+The existing machine client was kept open for the then-editor's interactive
+input, with 100 columns and 35 rows. Command completion events were checked
+before the next stage. The guest created `usb://work`, changed into it and
+entered and saved the walkthrough's C program in the editor.
+`tcc hello.c -o hello.pxe` exited 0, and
 `./hello.pxe` printed `Hello from USB, first build` and exited 0.
 
-Kilo reopened the same source. Its search selected `first`, which was replaced
-with `second`; save and quit succeeded. The second build used:
+The editor reopened the same source. Its search selected `first`, which was
+replaced with `second`; save and quit succeeded. The second build used:
 
 ```text
 tcc -c hello.c -o hello.o
@@ -668,7 +668,7 @@ device writable/flush true but the mounted pool writable false. Reads, hashes
 and saved executable launch passed. Creating a directory, removing or renaming
 the source, and TCC output to the existing USB executable each failed with
 permission denial and status 1. TCC could still read USB source, compile into
-RAM-backed `home://` and run that output successfully. Kilo displayed
+RAM-backed `home://` and run that output successfully. The then-editor displayed
 `Can't save! I/O error: Permission denied` for a buffer edit. The edit was
 discarded with its repeated quit confirmation; editor exit 0 did not mean a
 successful save. Saved file hashes remained unchanged. BOT recorded zero writes

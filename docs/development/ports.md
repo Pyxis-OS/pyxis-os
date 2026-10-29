@@ -98,9 +98,7 @@ rescue set, and installed systems run packages through the `bin://` command view
 (see the [system layout](../userland/system-layout.md)). A `DISTRIBUTION=full`
 image keeps every program and its licenses in the archive.
 
-The `kilo` package provides Kilo, with its BSD-2-Clause license at
-`pkg://kilo/licenses/kilo/LICENSE`. The shell resolves the bare command `kilo` to
-that executable. The ports-owned `install.lua` selects guest
+The ports-owned `install.lua` selects guest
 payloads into a dedicated tree, which the root [archive manifest](boot-archive.md)
 combines with userland and the guest SDK. Intermediate and host outputs stay out.
 Fresh staging removes obsolete files and preserves unchanged output timestamps. Kernel-only
@@ -366,7 +364,7 @@ It is upstream sbase grep with `-r` added over libc `opendir`/`readdir`, `fmemop
 replaced by line splitting, name prefixes on `-c`, and block output. Patterns
 use libc's regex engine, so classes and case folding are ASCII-only. See the
 [reference](../userland/grep.md) for behavior, limits and validation, and the
-[recipe notes](../../ports/sbase/README.md#grep) for the adaptation.
+[recipe notes](../../ports/sbase/README.md) for the adaptation.
 
 ## SHA-256 digests with sbase sha256sum
 
@@ -390,50 +388,44 @@ See the [recipe notes](../../ports/sbase/README.md) for remaining upstream limit
 
 ## Editing in Pyxis
 
+[BusyBox vi](../userland/vi.md) is included at `boot://vi.pxe` with its
+GPL-2.0-only license at `boot://share/licenses/busybox/LICENSE`. The shell
+resolves `vi` to it. [Neovim](../userland/neovim.md) is also available.
+
 Select the Development space with Super+Right. The shell starts at `home://`:
 
 ```text
-kilo hello.c
+vi hello.c
 cat hello.c
-kilo hello.c
+vi hello.c
 ```
 
-Enter text, save with Ctrl-S and quit with Ctrl-Q before the next command.
-Ctrl-F searches; arrows select matches, Enter accepts and Escape cancels.
-Arrows, Home/End, Page Up/Down, Backspace and Delete provide normal editing.
-Kilo uses the inherited working directory and terminal grants, libterm for
-input/output and size, and libc streams for files. It retains C syntax
-highlighting. It keeps Ctrl+C as editor input for its whole session, so an armed
-shell cannot terminate it; Ctrl-Q quits. See the [recipe notes](../../ports/kilo/README.md) for the source pin
-and local patches, and [terminal behavior](../userland/terminal.md) for shared facilities.
+In vi, press `i` to insert text. Press Escape to return to command mode, then
+enter `:wq` to save and quit before the next shell command. `:q!` discards
+unsaved edits. `/pattern` searches forward, and `n` repeats the search. Arrows,
+Home/End and Page Up/Down move through the file. Ctrl+C stays editor input for
+the whole session; it does not terminate vi.
 
-The current editor is ASCII, redraws at the new size when the terminal is
-[resized](../kernel/display.md), accepts LF/CRLF
-and saves LF with a final newline per row. Saves truncate before writing:
-failures can leave partial files. Ordinary status messages expire after five
-seconds using the inherited monotonic clock, including while idle; an active
-search prompt remains visible until the search ends. Actual terminal input EOF
-exits cleanly for an unchanged buffer and reports failure if unsaved edits are
-lost. Allocation failure reports an error and exits, losing unsaved edits.
+vi uses the inherited working directory and named terminal grants. Its saves
+use atomic replacement and need CREATE and REMOVE authority on the containing
+directory. See the [vi reference](../userland/vi.md) for editing, save semantics
+and limits, the [recipe notes](../../ports/busybox/README.md) for the source pin
+and local patches, and [terminal behavior](../userland/terminal.md) for shared
+facilities. The same editor runs through the
+[remote host client](../userland/remote-terminal.md).
+
 Installed systems keep `home://` on the npfs pool; on live boots `home://` and
 `tmp://` are RAM-backed, and `boot://` is always read-only. An optional `host://`
 mount persists files in its host export, subject to host permissions and the
 [virtiofs setup](../devices/virtio-fs.md). Processes receive a fixed 1 MiB
 stack with a reserved, unmapped guard page below it and no automatic growth.
 
-The same editor runs through the [remote host client](../userland/remote-terminal.md).
-Pyxis has [atomic replacement](../interfaces/filesystem-mutations.md), but Kilo
-still saves in place.
-[BusyBox vi](../userland/vi.md) is packaged at `boot://vi.pxe` with its GPL-2.0-only
-license at `boot://share/licenses/busybox/LICENSE`, and the shell resolves `vi`
-to it. It is a modal alternative to Kilo, with the same terminal grants and
-Ctrl+C passthrough; see the [recipe notes](../../ports/busybox/README.md).
 [Links](../userland/links.md) is the `links` package, with its GPL
 license at `pkg://links/licenses/links/COPYING`. It is a text web browser that
 loads local files and HTTP(S) pages through libc; see the
 [recipe notes](../../ports/links/README.md).
 
-The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and hosted Clang;
+The [edit/build/run walkthrough](edit-build-run.md) combines vi and hosted Clang;
 [guest Lua](../userland/lua.md) is independent of the host recipe runner.
 
 ## Paging and archives with BusyBox

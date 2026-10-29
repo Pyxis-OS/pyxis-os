@@ -64,3 +64,49 @@ not an instrumented wait-entry trace or an exhaustive interleaving proof.
 You should know: native asynchronous signals, later TERM/HUP/CHLD/ALRM sources
 and arbitrary-thread libuv delivery remain outside this slice. See the
 [contract and rebuild needs](../../userland/cooperative-signals.md).
+
+## Initial-thread loop consumers (2026-10-29)
+
+Baseline parent `c65430c6`, userland `22295c9e`, ports `64f3f914`.
+Qualified userland `bb25aeef`, ports `8b71e0c7`, same kernel sources; parent
+integration changes documentation and pins only. Existing LLVM builder
+`pyxis-llvm23.1.3-8bdf136`, `make -j16 image DISTRIBUTION=full`, nested
+Q35/KVM host CPU, four vCPUs/4 GiB, VirtIO GPU/net and matching OVMF.
+Local optical boot and plain remote terminals; no private assets or Go changes.
+
+Neovim rendered and changed from 80×24 to 100×32; `:echo &columns &lines`
+reported 100 32. Raw Ctrl+C interrupted `:sleep 100` without exiting. In
+`nvim --headless -u NONE -c "sleep 100"`, Ctrl+C produced upstream
+"Caught deadly signal 'SIGINT'", cleanup and ordinary exit status 1.
+Two additional luv WINCH watchers each received one resize. A callback that
+stopped/closed itself and its sibling produced counts 1/0, with clean exit.
+GDB stopped Neovim's signal_watcher_cb under uv__pyxis_signal_dispatch/uv_run,
+not a libc handler.
+
+The original consumer-qualification evidence is retained in the handoff report;
+that editor's port/package was subsequently retired. The retained signal stack
+restores Neovim's full upstream watcher lifecycle using dormant watchers for
+undelivered numbers. Its platform patch drops 829→705 lines, total 3536→3412
+(main baseline 735/3515). Native libuv C and two public headers total 4714
+lines against 4393 on main. Its upstream patch stays 62 lines. SDK libc also
+provides initial-thread pthread_sigmask, preserving errno and returning errors
+directly; no port shim or new delivery source is added.
+
+Four one-second whole-QEMU idle Neovim samples were 4/4/3/4% before and
+4/6/4/4% after, discarding the initial cumulative sample. The retired timed-read consumer baseline
+was 4/4/4/5%; a final-image repeat was 10/8/9/6/6%. An earlier run
+was 10/12.9/11/12%. No local build ran during samples, but other host load
+and substantial steal time varied. The higher timed-read idle cost is unresolved;
+these short nested observations do not establish attribution or native cost.
+That comparison used ordinary timed libc reads plus a zero-timeout EOF poll
+in place of a native resize/input wait adapter. The observation may matter to
+other ports; retirement does not resolve the library-cost question, but it no
+longer gates this slice.
+
+You should know: this qualifies the exercised consumers, queued fanout and
+close cancellation, not every mask/lifecycle interleaving, output-backpressure
+schedule or arbitrary-thread delivery. Nonlocal exits, one-shot libuv watchers,
+other signal sources and BusyBox vi's signal bundle remain outside the slice.
+Libuv layout changes require consumer recompilation; no kernel ABI or compiler
+container rebuild is required. Raw logs, debugger stacks and image hashes stay
+in the handoff report.

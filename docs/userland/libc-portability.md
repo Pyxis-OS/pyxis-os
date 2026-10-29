@@ -135,16 +135,16 @@ result points into the argument, or to a static `"."` for NULL or an empty path.
 | `dir/` | `.` | `dir` |
 | (empty) | `.` | `.` |
 
-`<signal.h>` exists so ISO C programs compile. It defines `sig_atomic_t`,
-`SIG_DFL`, `SIG_IGN`, `SIG_ERR` and the six ISO numbers (`SIGINT`, `SIGILL`,
-`SIGABRT`, `SIGFPE`, `SIGSEGV`, `SIGTERM`). `signal` returns `SIG_ERR` and
-`raise` returns -1, both without installing or delivering anything, with errno
-`ENOTSUP` (`EINVAL` for another number). There is no signal emulation, and
-`abort` does not call `raise`. A program that depends on delivery fails at
-run time instead of silently continuing.
+`<signal.h>` supplies the [cooperative signal profile](cooperative-signals.md):
+initial-thread WINCH and opted-in INT, real masks/actions/pending state, and
+local raise at audited safe points. Other signal sources, asynchronous delivery
+and nonlocal handler exits remain unsupported. `abort` does not call `raise`.
+Native loops can use the public `<pyxis/signal.h>` wait/checkpoint bridge;
+handlers run only after the caller withdraws temporary native registrations.
 
-`<sys/time.h>` declares only `struct timeval`. `gettimeofday`, `select` and the
-interval timers are not provided; use `timespec_get` or `clock_gettime`.
+`<sys/time.h>` declares `struct timeval`; `select`/`pselect` are provided through
+`<sys/select.h>` with real temporary masks. `gettimeofday` and interval timers
+are not provided; use `timespec_get` or `clock_gettime`.
 
 `strptime` is English C-locale only, with no locale selection and no
 `<langinfo.h>`. It accepts `%a %A %b %B %h %c %C %d %D %e %H %I %j %m %M %n %p
@@ -304,6 +304,7 @@ x86-64 LP64 interface is:
 | `unistd.h` | read, write, pread, pwrite, dup, close, lseek, ftruncate, fsync, unlink, link, rmdir, access, isatty; F_OK/X_OK/W_OK/R_OK = 0/1/2/4; STDIN_FILENO/STDOUT_FILENO/STDERR_FILENO = 0/1/2 |
 | `sys/stat.h` | stat, lstat, fstat, mkdir; type-only st_mode and file st_size; independently valid st_dev/st_ino/st_mtim/st_nlink under st_valid |
 | `arpa/inet.h` | htonl, htons, ntohl, ntohs only; no socket or address parsing/formatting declarations |
+| `pyxis/signal.h` | initial-thread borrowed signal interests and clean checkpoints; optional terminal selection |
 | `pyxis/terminal.h` | supplied-fd terminal detection, SIZE, owned raw-state snapshots/restoration and bounded native readiness; no termios or signals |
 | `sys/types.h` | ssize_t and off_t as signed long; mode_t as unsigned int; dev_t, ino_t and nlink_t as uint64_t |
 | `limits.h` | SSIZE_MAX as LONG_MAX |
@@ -697,9 +698,9 @@ cat host://input | tee home://first home://second | cksum
 Implementation builds used `make -j16 image` with the installed Pyxis compiler;
 no compiler rebuild was needed. Manual QEMU validation ran inside the development
 VM on q35/KVM with 256 MiB, one/four CPUs for ownership integration, and four CPUs,
-virtio-fs/RNG and no NIC for the packaged consumers. Existing Kilo save, guest TCC
-compile/run, redirects and pipelines continued to work. Upstream signedness
-warnings in cksum/tee remain.
+virtio-fs/RNG and no NIC for the packaged consumers. Guest TCC compile/run,
+redirects and pipelines continued to work. Upstream signedness warnings in
+cksum/tee remain.
 
 Guest cksum and host GNU coreutils 9.10 matched these inputs:
 

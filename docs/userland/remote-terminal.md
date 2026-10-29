@@ -619,8 +619,9 @@ groups if the server exits or faults.
 ## Consumers and limits
 
 The client supports persistent command use, pipelines/redirection,
-benchmark output capture and interactive Kilo through the same application
-terminal contract as local framebuffer use. See the [shell guide](shell.md),
+benchmark output capture and interactive terminal applications through the same
+application terminal contract as local framebuffer use. See the
+[shell guide](shell.md),
 [edit/build/run walkthrough](../development/edit-build-run.md),
 [allocation benchmark](../development/allocation-profiling.md) and
 [I/O benchmark reference](../development/io-ipc-baselines.md) for command usage.
@@ -697,8 +698,9 @@ Temporary uncommitted native exercises covered terminal ordering/backpressure,
 rights, EOF versus Ctrl+D, controlling-grant closure and queued IPC authority.
 A blocked terminal writer filled exactly 65,536 bytes; later draining delivered
 128 KiB unchanged. Terminal-only waits worked without a NIC, mixed TCP/terminal
-waits progressed, and Kilo exited successfully on clean input EOF and failed with
-unsaved edits. Local shell/Kilo editing, navigation, save, quit and readback passed.
+waits progressed. The then-editor exited successfully on clean input EOF and
+failed with unsaved edits; local editing, navigation, save, quit and readback
+passed.
 
 Execution-group exercises covered membership, batch publication/sealing,
 launcher-policy rejection, observer independence, final supervisor exit/fault,
@@ -716,9 +718,10 @@ and END_INPUT; four concurrent shells remained independent. HOST creation/readba
 was checked from guest and host. Root-shell exit stopped a background Lua loop;
 client disconnection stopped foreground spinning and terminal-blocked work. A
 stalled host reader left writable readiness pending while another session completed.
-Kilo edited/saved a HOST file and normalized Enter and SS3 navigation/Home. Ctrl+]
-received acknowledged termination. A loop with 6000 queued input bytes exercised
-the client's five-second close timeout and corrected abortive-close path; GDB
+The then-editor edited/saved a HOST file and normalized Enter and SS3
+navigation/Home. Ctrl+] received acknowledged termination. A loop with 6000
+queued input bytes exercised the client's five-second close timeout and corrected
+abortive-close path; GDB
 observed reclamation and listener-only readiness afterward. The independent local
 framebuffer shell remained usable; boots without NET/HOST reported network
 unavailable on Remote while preserving local startup.
@@ -742,10 +745,10 @@ no committed tests, exercise programs or boot/output automation were added.
 
 ### Combined acceptance
 
-Combined acceptance started from Pyxis `a2c4ab2` with userland `5cbfbbd`; the
-Kilo fix was rechecked with ports `fc728f7`. It used four CPUs, nested KVM,
-256 MiB, VirtIO NET/RNG and
-a writable virtiofs export, with the default Remote init and loopback forwarding.
+Combined acceptance started from Pyxis `a2c4ab2` with userland `5cbfbbd`; an
+editor follow-up used ports `fc728f7`. It used four CPUs, nested KVM, 256 MiB,
+VirtIO NET/RNG and a writable virtiofs export, with the default Remote init and
+loopback forwarding.
 Ordinary image and host-client builds used the existing compiler. Two persistent
 machine clients used separate input FIFOs and JSON captures; an interactive
 client ran alongside them. The local Development shell also completed `ls`
@@ -753,8 +756,9 @@ through physical-key input while remote work continued. A framebuffer capture
 was used only to inspect that local UI; remote commands and reports were read
 as text.
 
-Kilo created `host://hello.c`, searched for and edited its message, saved,
-reopened and quit. Its idle status message cleared without another keypress.
+The then-editor created `host://hello.c`, searched for and edited its message,
+saved, reopened and quit. Its idle status message cleared without another
+keypress.
 TCC compiled the saved source to `host://hello.pxe`, which printed the edited
 message and completed successfully. Missing compiler input produced a readable
 diagnostic and status 1. The other session retained its independent `boot://share`
@@ -769,7 +773,7 @@ window. Both returned success and their full reports arrived through machine
 output records. These checks establish usability and report collection, not a
 new performance baseline.
 
-Ctrl+] while interactive Kilo waited for input returned acknowledged group
+Ctrl+] while the then-editor waited for input returned acknowledged group
 termination and complete output draining. Disconnecting a client running a
 foreground Lua CPU loop reclaimed its session. Pausing a host reader during a
 large Lua output stream filled the terminal queue to exactly 65,536 bytes; GDB
@@ -778,16 +782,7 @@ client continued completing commands. After disconnecting that reader and
 exiting the remaining shell, GDB showed listener-only readiness, one transport
 record and empty completed-task, object-retirement and TCP-retirement queues.
 
-Page Down on a file shorter than Kilo's viewport exposed a cursor-boundary defect
-in the pinned upstream editor: it could move past the EOF insertion row, and Left
-could then read beyond the row array. The maintained port patch clamps paging to
-EOF and bounds Left's previous-row lookup. A rebuilt image confirmed Page Down
-on an eight-line file stops at the EOF insertion row, Left returns to the last
-line, and editing/saving at EOF succeeds. Empty-file paging, Left, insertion,
-save and quit were checked through the same native client.
-
-The final ports change required a Kilo/ports image rebuild, not a compiler-container
-rebuild. Validation used the actual clients, manual QEMU input and read-only GDB;
+Validation used the actual clients, manual QEMU input and read-only GDB;
 no tests, new exercise programs, fault injection or boot/output automation were
 added. All client, QEMU, debugger and virtiofsd jobs were stopped after validation.
 

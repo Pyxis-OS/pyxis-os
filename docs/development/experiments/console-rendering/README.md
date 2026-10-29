@@ -84,8 +84,7 @@ whole-raster copy was not measured in this run.
 
 ## Correctness checks (nested, after image)
 
-- **Kilo**, on a 300-line file: page down and page up showed the right lines.
-- **Neovim**, on the same file:
+- **Neovim**, on a 300-line file:
   - five Ctrl-E line scrolls and two Ctrl-Y showed the right rows;
   - `:split` scrolled each window within its own region;
   - leaving restored the shell's primary screen.

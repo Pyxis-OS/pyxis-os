@@ -89,8 +89,8 @@ before resize. These observed peaks are not admission guarantees or quotas.
   120×40 → 30×8 → 1×1 → 200×60 and up to 512×256 preserved panes, restored
   layouts, split cwd and digit focus. Explicit 80×24 ceilings held at larger
   host sizes, followed 60×20 shrink, ignored transient 0×0, and restored 80×24.
-- Kilo resized and saved content. With explicit launch delegation, Neovim's
-  TUI and same-image embedded child survived 60×20 → 400×80, insertion, Tab,
+- With explicit launch delegation, Neovim's TUI and same-image embedded child
+  survived 60×20 → 400×80, insertion, Tab,
   `:wq` and a subsequent file read. RGB foreground/background, styles and
   supported single-cell UTF-8 (`é`, `─`, `│`) remained visible.
 - Two mux connections with eight panes each coexisted with two successful plain

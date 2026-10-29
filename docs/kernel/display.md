@@ -347,8 +347,6 @@ buffer. A resize redraw returns toward the old rendered origin, clamping at
 the top when that origin was cropped. It can scroll without clearing surviving
 preceding rows. Adaptive event decoding uses an explicitly delegated
 clock READ handle; absent clock authority preserves legacy input behavior.
-Kilo redraws its editor and search prompt while retaining its existing minimum
-of two columns and three rows.
 
 Acquired graphics slots keep their address, extent, pitch and dimensions
 until owner-only REPLACE or RELEASE. Presentation clips the top-left
@@ -574,11 +572,11 @@ warnings remain. The matched idle run measured 2.346790, 4.174720, 2.623370,
 ranges. No regression or speedup is established. Changed ELF SHA-256:
 `12cb5f4bbd1fdf9001ba43fe4a3f1ecccc23659ba58fb7a1fb591eb23b1ce170`.
 
-Interactive GTK growth/shrink woke a blocked shell and Kilo, including Kilo's
-active search prompt. Kilo saved `tmp://r`, retained its text/search and returned
-to the shell. The shell kept an input larger than a 32x9-cell destination,
-showed a cursor window, accepted Home, and restored the full wrapped text on
-growth to 1024x741 without a key. GDB observed its next wait carrying the new
+Interactive GTK growth/shrink woke a blocked shell and the then-editor, including
+its active search prompt. The editor saved `tmp://r`, retained its text/search
+and returned to the shell. The shell kept an input larger than a 32x9-cell
+destination, showed a cursor window, accepted Home, and restored the full wrapped
+text on growth to 1024x741 without a key. GDB observed its next wait carrying the new
 generation. Mandelbrot redrew with the new aspect; a real REPLACE returned
 CALL_OK with a disjoint address and retained visible selection. Doom also
 replaced at 1024x709 content geometry. At a 256x185 physical destination it
@@ -613,8 +611,8 @@ then successfully replaced at 800x541 after pressure withdrawal and a fresh
 resize. The performance samples above precede this main integration; no
 integrated-head performance claim is made. Combined ELF SHA-256:
 `9514567b265dfa87debaca5531c8177e08be07fccb7124106664ef4ae32f0a90`.
-Kilo also redrew while idle at 640x453 on the combined revision, then exited
-normally. All validation processes were closed.
+The then-editor also redrew while idle at 640x453 on the combined revision,
+then exited normally. All validation processes were closed.
 
 The next ordinary owner-run ThinkPad boot should check terminal sizing and
 Doom or Quake startup after the ABI changes. No such native check is claimed

@@ -23,8 +23,10 @@ The `pyxis` scheme highlights C with Comment, Statement, Type, PreProc, Constant
 and String groups, all `cterm=NONE`. Startup sets `NVIM_NOTTYFAST=1`, removes
 `COLORTERM` and defaults to `notermguicolors`; it sends no unsupported terminal
 probes. The terminals' newer RGB and style support is available for a separate
-profile follow-up. Input retains a native RAW passthrough grant; resize observes
-console geometry generations, including mux panes. Exit restores the shell
+profile follow-up. Input retains a native RAW passthrough grant. Queued
+initial-thread SIGWINCH watchers re-query console geometry, including mux panes.
+Raw Ctrl+C retains upstream edit interruption; actual SIGINT retains upstream
+preserve-exit behavior. Exit restores the shell
 screen and releases input ownership.
 
 The bundle statically links Neovim's seven bundled Tree-sitter grammars: C,
@@ -294,7 +296,7 @@ rather than the edited file's permission bits. Names
 longer than 255 bytes fail with "name too long" on `home://` installed volumes
 and `host://`, and a `host://` symbolic link is never followed
 ([name limits and links](libc-portability.md#name-limits-and-symbolic-links)).
-`:terminal`, PTY and detached jobs, listeners, signals, numeric PIDs,
+`:terminal`, PTY and detached jobs, listeners, delivery for signals other than WINCH/INT, numeric PIDs,
 workers, asynchronous filesystem calls, file watches, dynamic Lua modules and
 dynamic tree-sitter grammar loading remain unavailable. Explicit requests return errors;
 the automatic socket listener is omitted. Legacy Vimscript syntax needs no

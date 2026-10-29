@@ -37,8 +37,9 @@ Ctrl+C still cancels the line being edited.
   - libterm's line helpers hold passthrough while a line is being edited, so
     the Lua REPL cancels a typed line while its running code stays
     interruptible.
-  - Kilo holds passthrough for its whole session, so Ctrl+C cannot discard
-    unsaved edits; Ctrl-Q quits it.
+  - vi holds passthrough for its whole session, so Ctrl+C cannot discard
+    unsaved edits; Escape followed by `:wq` saves and quits, and `:q!` discards
+    changes.
 - **Raw keyboard owners.** Programs such as Doom receive key events rather than
   console text, so they are never interrupted; Ctrl stays a game key.
 
@@ -101,9 +102,6 @@ for the kernel traces.
   - Repeated presses coalesced, and typeahead such as `lz` + Enter was discarded.
   - Ctrl+C at the prompt cancelled the line.
   - In the Lua REPL, Ctrl+C cancelled a typed line and terminated running code.
-- **Kilo** (local and remote): typing, two Ctrl+C presses and more typing kept
-  the edits; the file saved and Kilo quit normally. A following Lua loop was
-  still interruptible.
 - **Ctrl+C during launch.** GDB set the latch at kernel launch entry, after the
   shell armed and before the stages existed. Both stages of `cat | cat` were
   terminated, and no byte reached them.
@@ -130,7 +128,6 @@ Some paths were reviewed in source only:
 - discarding a launch preparation;
 - a fault racing a terminate;
 - terminal hangup reporting `WAIT_ERROR`;
-- Kilo's exit when the passthrough request fails;
 - the remote full-queue limit.
 
 GDB's all-stop mode cannot reproduce true concurrency, so the timing cases were

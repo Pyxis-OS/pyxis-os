@@ -10,10 +10,10 @@ The installer remains a consumer of that library, not the prerequisite for it.
 ## Libc compatibility follow-up
 
 - [x] Step 1 (chronium, 2026-10-27): raw termios over the native terminal API
-  and covered upstream Kilo code; ordinary full build and representative QEMU
+  with ordinary full build and representative QEMU
   qualification completed. Accepted: the byte-only CS8/MIN/TIME/winsize profile and shared native/termios
 raw-plus-timing snapshots. TCSADRAIN/TCSAFLUSH use a real bounded native
-output-prefix drain and pending-input flush; Kilo retains its upstream calls.
+output-prefix drain and pending-input flush.
 See the [implemented contract](../userland/terminal.md#raw-termios-subset). This assignment does not change the accepted
 native raw/cbreak or foreground-interruption contracts below.
 

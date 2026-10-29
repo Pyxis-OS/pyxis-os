@@ -1,9 +1,8 @@
 # Edit, build and run inside Pyxis
 
-A `DISTRIBUTION=full` image includes Kilo for editing; on an installed system it
-is the `kilo` package. The compiler is hosted Clang, the
-`clang-hosted` package: install it once with `pkg install clang-hosted` from a
-configured repository ([package installation](hosted-tools.md#package-installation)).
+The image includes [BusyBox vi](../userland/vi.md) for editing. The compiler is
+hosted Clang, the `clang-hosted` package: install it once with
+`pkg install clang-hosted` from a configured repository ([package installation](hosted-tools.md#package-installation)).
 Then a C program can be created, compiled and run entirely inside Pyxis.
 
 Build and boot with the normal [SDK and ports setup](ports.md#building-and-packaging):
@@ -14,7 +13,7 @@ make run DISTRIBUTION=full CPUS=4
 ```
 
 Select the application space with Super+Right. From the shell's initial `home://`
-directory, run `kilo hello.c` and enter:
+directory, run `vi hello.c`, press `i` to enter insert mode and type:
 
 ```c
 #include <stdio.h>
@@ -26,24 +25,24 @@ int main(void)
 }
 ```
 
-Save with Ctrl-S and quit with Ctrl-Q, then compile and launch:
+Press Escape, type `:wq` and press Enter to save and quit, then compile and launch:
 
 ```text
 clang hello.c -o hello.pxe
 ./hello.pxe
 ```
 
-Reopen `kilo hello.c`, change the message, save and quit. Repeat the same compiler
-and launch commands to see the updated output. No ISO rebuild or host conversion
-is needed between edits. Use `cat hello.c` to inspect saved bytes as terminal
-output; the TTY displays tabs at eight-column stops, while Kilo expands them
-for its own display.
+Reopen `vi hello.c`, press `i` to edit the message, then Escape and `:wq` to save
+and quit. Repeat the same compiler and launch commands to see the updated
+output. No ISO rebuild or host conversion is needed between edits. Use `cat hello.c` to inspect saved bytes as terminal
+output; the TTY displays tabs at eight-column stops, while vi uses its configured
+`tabstop` for display.
 
 Clang reports compile and link errors through the terminal. Correct the source
 and rebuild before running the output again: a failed build may leave an older
 executable, or a partial file if output writing began. The shell reports nonzero
-child exit status. Kilo saves by truncating and rewriting, so a failed save can
-also leave partial content.
+child exit status. vi uses [atomic replacement](../userland/vi.md#how-the-port-maps-onto-pyxis)
+for saves; it requires CREATE and REMOVE authority on the containing directory.
 
 On a live boot, `home://` and `tmp://` are RAM-backed and disappear on reboot;
 an [installed system](../userland/installer.md) keeps `home://` on its npfs pool.
@@ -52,7 +51,8 @@ or a [writable host export](../devices/virtio-fs.md#persistent-development-walkt
 keeping source and output under the corresponding root. `boot://` is read-only.
 The native `pkg` client installs packages such as `fonts` and `clang-hosted`
 from a configured repository ([package formats](../interfaces/packages.md)).
-Atomic Kilo saves and toolchain self-hosting remain unsupported. The host Clang continues to build maintained OS/userland sources.
+Toolchain self-hosting remains unsupported. The host Clang continues to build
+maintained OS/userland sources.
 
 ## Try the pointer example
 
@@ -67,7 +67,7 @@ clang boot://share/examples/pointer-min.c -o pointer-min.pxe
 ```
 
 Copy it with `cp boot://share/examples/pointer-min.c home://` to edit it with
-Kilo. The same source is built with Clang as the installed `pointer-min`
+vi. The same source is built with Clang as the installed `pointer-min`
 program. Its comments explain each Pyxis-specific step; the
 [pointer reference](../interfaces/pointer.md) has the contract.
 
@@ -87,7 +87,7 @@ clang boot://share/examples/font-min.c -lfont -o font-min.pxb/app/bin/font-min.p
 
 See the [font reference](../userland/fonts.md) for the library contract.
 
-See [hosted Clang](hosted-tools.md#compile-link-run), [Kilo controls](ports.md#editing-in-pyxis)
+See [hosted Clang](hosted-tools.md#compile-link-run), [vi controls](ports.md#editing-in-pyxis)
 and [terminal behavior](../userland/terminal.md) for details.
 
 ## Persistent USB development
@@ -194,20 +194,21 @@ In another host terminal, connect with
 ```text
 mkdir usb://work
 cd usb://work
-kilo hello.c
+vi hello.c
 ```
 
-Enter the program above, using `Hello from USB, first build` as its message.
-Save with Ctrl-S, quit with Ctrl-Q, then run:
+Press `i` and enter the program above, using `Hello from USB, first build` as its
+message. Press Escape, type `:wq` and press Enter to save and quit, then run:
 
 ```text
 clang hello.c -o hello.pxe
 ./hello.pxe
-kilo hello.c
+vi hello.c
 ```
 
-Change the message to `Hello from USB, second build`, save and quit. An object
-build exercises the same persistent paths:
+Press `i`, change the message to `Hello from USB, second build`, then press Escape
+and enter `:wq` to save and quit. An object build exercises the same persistent
+paths:
 
 ```text
 clang -c hello.c -o hello.o
@@ -221,8 +222,9 @@ Check each compiler and sync result before proceeding. Successful save, close
 or compilation alone does not establish persistence. Native file/directory
 sync commits the current pool and completes the backend's ordered flush. A
 successful sync reaches durable COMMITTED; background checkpointing later makes
-the journal EMPTY. A failed compile may leave an older or partial output; Kilo's truncate/rewrite
-save is not atomic.
+the journal EMPTY. A failed compile may leave an older or partial output. vi's
+atomic replacement does not establish persistence across a power loss; the
+[atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407) still apply.
 
 ### Restart and inspect read-only
 
@@ -238,7 +240,7 @@ sha256sum hello.c hello.o hello.pxe
 ```
 
 The saved source, hashes and second message should match the earlier session.
-You can reopen Kilo and rebuild again without rebuilding the ISO or disk.
+You can reopen vi and rebuild again without rebuilding the ISO or disk.
 
 For a separate read-only session, stop QEMU, change the trusted script's mount
 to `--read-only`, then rebuild only the ISO with the same `MOUNT_DISK` and init
@@ -254,10 +256,11 @@ complete without new edits, then stop and retry the read-only session. See the
 for the completion points. No host process may modify an attached disk.
 
 The [C.2 qualification record](usb-storage-bringup.md#persistent-usb-development-loop-c2)
-records manual editor/compiler, restart and read-only observations. An orderly
-QEMU restart is not a physical cache or power-loss qualification. Restore
-the checked-in `CONFIG_XHCI=y` and run `make image DISTRIBUTION=full` without init/mount overrides to return to
-the checked-in boot defaults.
+records the earlier manual editor/compiler, restart and read-only observations
+at its recorded revisions. The walkthrough above now uses vi. An orderly QEMU
+restart is not a physical cache or power-loss qualification. Restore the
+checked-in `CONFIG_XHCI=y` and run `make image DISTRIBUTION=full` without
+init/mount overrides to return to the checked-in boot defaults.
 
 ## Use a remote terminal
 
@@ -275,7 +278,7 @@ Leave QEMU running. In another host terminal, connect from the repository root:
 build/tools/pyxis-remote 127.0.0.1 2323
 ```
 
-The same Kilo, Clang and execution commands above work in the remote shell.
+The same vi, Clang and execution commands above work in the remote shell.
 An optional HOST export is writable from the default Remote space, subject to
 host permissions. Remote and local sessions share the actual filesystem roots;
 choose distinct output names when working concurrently.
@@ -283,7 +286,7 @@ choose distinct output names when working concurrently.
 For command tools without a controlling terminal, use the
 [persistent machine-client workflow](../userland/remote-terminal.md#persistent-use-through-command-tools).
 Wait for each typed completion event before sending the next shell command;
-while Kilo or another foreground reader runs, input belongs to that program.
+while vi or another foreground reader runs, input belongs to that program.
 A completion's `kind` distinguishes `exited` with the exact `exit_status`,
 launch failure, builtin status and rejected input. Keep compiler diagnostics and
 check for `exited` with status 0 before executing an output file that may
