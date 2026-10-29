@@ -341,6 +341,24 @@ git-package: build/os-release
 	python3 tools/pxpkg.py pack --build build packages/git.lua "$(REPOSITORY)"
 	$(PUBLISH_REPOSITORY)
 
+# Optional first-party space editor; built like git-package.
+.PHONY: spaces-package
+ifneq ($(filter spaces-package,$(MAKECMDGOALS)),)
+ifeq ($(REPOSITORY),)
+$(error Usage: make spaces-package REPOSITORY=DIR GO_PREFIX=ABSOLUTE_DIR)
+endif
+ifeq ($(GO_PREFIX),)
+$(error spaces needs the pinned native Go cross-toolchain: set GO_PREFIX)
+endif
+ifneq ($(shell git status --porcelain --ignore-submodules=none),)
+$(error spaces-package: the checkout has local changes, so its revision would not name these bytes)
+endif
+endif
+spaces-package: build/os-release
+	userspace/space-editor/build.sh "$(GO_PREFIX)" "$(CURDIR)/build/spaces"
+	python3 tools/pxpkg.py pack --build build packages/spaces.lua "$(REPOSITORY)"
+	$(PUBLISH_REPOSITORY)
+
 tools:
 	$(MAKE) -C tools
 

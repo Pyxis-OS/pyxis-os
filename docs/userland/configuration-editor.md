@@ -4,7 +4,8 @@ An installed system's configuration is three files on the pool:
 `system://config/boot.lua`, `session.lua` and `network.lua`
 ([installed configuration](init.md#installed-configuration)). Edit them
 directly; they apply at the next boot. Boot applies none of them unless all
-three are valid, and otherwise starts the rescue space.
+three are valid, and otherwise starts the rescue space. The optional
+[space editor](spaces.md) edits the spaces in `boot.lua`.
 
 `config validate` checks them the way boot reads them, as literal data:
 

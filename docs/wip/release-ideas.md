@@ -203,8 +203,10 @@ archive cpio.
 
 ## 6. Space editor
 
-Status: **accepted and assigned (chronium, 2026-10-29).**
-Target: later. Covered by: [space editor](space-editor.md).
+Status: **implemented as the optional `spaces` package; hardware test pending
+(chronium, 2026-10-29).**
+Target: later. Covered by: [space editor](space-editor.md),
+[reference](../userland/spaces.md).
 
 
 A small curses tool that edits spaces graphically: pick a space, toggle its
@@ -218,15 +220,16 @@ What exists today:
 
 - Spaces are configured in `system://config/boot.lua`; the shape is in the
   shipped `userspace/config/system/boot.lua`, and the loading rules are in
-  [init](../userland/init.md).
+  [init](../userland/init.md). `pkg install spaces` adds the
+  [space editor](../userland/spaces.md).
 - `config validate` checks that file and its neighbours the way boot reads them
   ([reference](../userland/configuration-editor.md)). The editor that edited the
   retired ESP copy went with task 2b of [package upgrades](pkg-upgrade.md); an
   editing half of Polaris would start again from the pool files.
 
-The space editor would turn today's manual edit, adding `package_management = true`
-and the packages grant to a space so that `pkg` can manage the
-[packages volume](../interfaces/packages.md), into a checkbox.
+The space editor turns the manual edit that lets `pkg` manage the
+[packages volume](../interfaces/packages.md) in another space into a checkbox
+plus the packages grant.
 
 ## 7. Shell prompt and last exit status
 
