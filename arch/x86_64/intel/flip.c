@@ -54,7 +54,7 @@ static uint32_t inherited_vrr, inherited_vmin, inherited_vmax, inherited_fliplin
 static uint32_t front, back = 1, pending, sequence;
 static uint32_t submit_frame, submit_flip, submit_done_time, submit_clock;
 static uint64_t deadline;
-static uint64_t setup_deadline;
+static uint64_t setup_deadline, setup_phase;
 static unsigned vtotal, vblank_start, keepout_lines;
 static uint64_t submitted, confirmed, deferred, timeouts;
 static bool metrics, attempted;
@@ -74,6 +74,15 @@ static bool setup_in_time(const char *phase)
   }
   kinfo("intel-flip: setup deadline during %s; ordinary GOP copying requested\n", phase);
   return false;
+}
+
+static void log_setup_phase(const char *phase)
+{
+  uint64_t now = arch_monotonic_ns();
+  kinfo("intel-flip: phase=%s elapsed-us=%lu step-us=%lu\n", phase,
+      (now - (setup_deadline - SETUP_TIMEOUT_NS)) / 1000,
+      (now - setup_phase) / 1000);
+  setup_phase = now;
 }
 
 static bool fixed_layout(void)
@@ -213,6 +222,7 @@ static bool choose_ggtt(size_t count, bool *pat3_unused)
   if (!intel_display_prepare_gtt(setup_deadline)) {
     return false;
   }
+  log_setup_phase("GGTT-cpu-span-ready");
   size_t entries = GGTT_ADDRESS_BYTES / PAGE_SIZE;
   size_t pat3_references = 0;
   *pat3_unused = false;
@@ -238,6 +248,7 @@ static bool choose_ggtt(size_t count, bool *pat3_unused)
       occupied[i / 8] |= 1u << (i % 8);
     }
   }
+  log_setup_phase("GGTT-read-imported");
   *pat3_unused = !pat3_references;
   kinfo("intel-flip: full GGTT imported entries=%zu present-PAT3-references=%zu\n",
       entries, pat3_references);
@@ -278,7 +289,8 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     return false;
   }
   attempted = true;
-  setup_deadline = arch_monotonic_ns() + SETUP_TIMEOUT_NS;
+  setup_phase = arch_monotonic_ns();
+  setup_deadline = setup_phase + SETUP_TIMEOUT_NS;
   const struct boot_framebuffer *fb = &boot->framebuffer;
   inherited_trans = intel_display_read(TRANS_CONF(0));
   inherited_ddi = intel_display_read(TRANS_DDI(0));
@@ -334,6 +346,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     }
     return false;
   }
+  log_setup_phase("GT-proof-prepared");
   /* New scanout backing still needs identity-DMA admission before any PTE. */
   if (!setup_in_time("DMA admission") || !intel_dma_identity(boot, device->address)) {
     if (!intel_gt_profile_finish()) {
@@ -342,6 +355,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     kinfo("intel-flip: unavailable: DMA admission failed\n");
     return false;
   }
+  log_setup_phase("DMA-qualified");
   bool pat3_unused;
   if (!choose_ggtt(count, &pat3_unused) || !setup_in_time("PAT admission") ||
       !intel_gt_profile_admit_pat(pat3_unused)) {
@@ -351,6 +365,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     kinfo("intel-flip: unavailable: GGTT import refused; keeping GOP copy\n");
     return false;
   }
+  log_setup_phase("PAT-admitted");
   uint64_t pat = GGTT_PTE_PAT(intel_gt_profile_pat_index());
   kinfo("intel-flip: setup preparing two UMA back buffers\n");
   if (!scanout_pages_prepare(fb->size, setup_deadline, &pages[0]) ||
@@ -364,6 +379,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
     kinfo("intel-flip: backing allocation failed or setup deadline expired; keeping GOP copy\n");
     return false;
   }
+  log_setup_phase("UMA-buffers-ready");
   surfaces[0] = (struct framebuffer){fb->address, fb->size, fb->pitch,
       fb->width, fb->height, fb->red_shift, fb->green_shift, fb->blue_shift};
   for (unsigned n = 0; n < 2; ++n) {
@@ -387,6 +403,7 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
         return abandon_setup("GGTT write completion uncertain");
       }
     }
+    log_setup_phase(n ? "back1-GGTT-published" : "back0-GGTT-published");
   }
   if (!intel_gt_profile_finish() || !fixed_layout()) {
     return abandon_setup("GGTT finalization or inherited layout uncertain");
