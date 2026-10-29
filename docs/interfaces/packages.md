@@ -427,8 +427,11 @@ grants = {
 Every installed package with files is read as `pkg://ID/...` through one live,
 read-only view of the volume (`package_roots_open`); there are no per-package
 `ID://` roots ([decisions 30 and 39](../wip/sdk-view.md)). Each lookup reads the
-set active at that moment and returns the package's tree with lookup, enumerate
-and read-files.
+`current` selector active at that moment and returns the package's tree with
+lookup, enumerate and read-files. The worker shares one validated immutable
+projection keyed by mounted-volume domain and set; it still reads `current`
+for every fresh live operation. See [cache visibility and capture lifetimes](command-search.md#live-package-command-directories),
+including delayed diagnostics for unsupported same-set index edits.
 
 **Spaces** get the view as a root in `boot.lua`, only where the `packages`
 volume is defined (decision 47):

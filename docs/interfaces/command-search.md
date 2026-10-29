@@ -95,8 +95,26 @@ missing/damaged active index is IO, never an empty result or a fallback. The
 kernel recognizes only the bounded existing literal selector schema, not package
 Lua or executable configuration. The filesystem worker validates and owns the
 projection and its originating root; no user buffers or user-process lifetime
-are borrowed. Current admission is 256 exports per projection, within the
-shared 1 MiB native-wrapper budget; exhaustion returns LIMIT, never truncation.
+are borrowed. Current admission is 256 command exports and at most 1 MiB per
+index. Captured indexes use the shared 4 MiB package-index budget, separate from
+the 1 MiB native-wrapper budget; exhaustion returns LIMIT, never truncation.
+
+Every fresh live lookup, enumeration and capture reads `current`. Its selector
+read chooses the set for that operation; the atomic rename publishes a switch
+before its final durability sync. The worker retains one validated projection
+for the whole system, keyed by mounted-volume domain and set, and shares it with
+fixed captures. Root/command mode, backing-root authority, rights and CUT lineage
+remain per caller. A mismatched cache reference is released before loading the
+selected index. A failed load fails the request and is never negatively cached;
+`pkg reindex` can therefore supply a previously missing index for the same set.
+Held fixed captures retain their old projection independently of cache eviction.
+
+Published projections are immutable by the publisher contract, not kernel write
+protection. Rewriting, removing or damaging a cached same-set index can remain
+unseen until eviction, another set selection or reboot. This applies to any
+admitted native volume root, not only the named package store. Missing or malformed
+selectors still take effect on the next fresh live operation, and a failed
+new-set load never falls back to cached old-set records.
 
 INFO reports a kernel-issued volume domain, diagnostic pool/volume UUIDs, set,
 live/fixed state, count and limit. The held-lifetime domain identifies captures;
