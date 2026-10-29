@@ -43,10 +43,57 @@ IPC entries sum all 100 verified 256-message passes in each boot:
 Launch's paired changes are +41.2%, +3.6%, −14.1%; the sign is not consistent.
 SEND4096 has one large B observation while the other two overlap A. These
 ranges do not establish a speedup or a consistent material regression. The
-native comparison remains required; #1588 does not waive a new task-5 cost.
+native comparison below is the performance gate; #1588 does not waive a new
+task-5 cost.
 Earlier post-change cohorts overlapped our graphics VM and are functional-only,
 not a valid matched performance comparison. Raw outcomes and variation are
 retained under `/shared/present/bsp-removal/task5/matched-qemu/`.
+
+## Native vela comparison — complete
+
+The orchestrator completed six fresh vela boots A1/B1/A2/B2/A3/B3, all PASS,
+on 2026-10-29. A is shared-base main `32b600d878f0`, ELF
+`0aef1fa09125f7658f5699b99d9834710221a3870e373f317ac57768faed2c76`;
+B is `057dfc2156e6`, ELF
+`603dfcfce7bd0a7afd49ed7ef181b0938427659e16749cb645db98a44de2134d`.
+The pair includes #1587 and shares the same later main changes, published
+builder/flags/configuration and RAM archive
+`d5726f9943b336a76ebacd597ef00c7871d73105a76e5192caf66ee05333d09e`.
+The default PXE resolution is 2880×1800; all 16 CPUs remain online, Remote
+uses CPU1 and the declared fixture space allows CPUs 1/3. The collector checks
+AC/HWP/clock/XSAVE identity and complete command/Remote drainage.
+
+The DISPLAY fixture passes **6/6 boots**, each requiring four real EXITED-0
+child waits, four owner-recovery releases and twelve stale-generation refusals
+before the unchanged timed cohort. The hidden native fixture qualifies those
+API/lifetime paths; it does not claim visible presentation, physical resize or
+uncertain-ACK recovery. GTK QEMU observations remain separate.
+
+Median (range across three independent boot medians), ms. IPC values describe
+a 256-message pass; each boot contributes its median of 100 verified passes,
+not 100 independent boot samples:
+
+| Workload | Main A | Caller-CPU DISPLAY B |
+| --- | --- | --- |
+| 1,024 launches | 871.4122 (869.7225–873.6382) | 867.4304 (863.5446–871.9223) |
+| Private pages | 24.9730 (24.9510–25.0350) | 24.8680 (24.8400–24.9480) |
+| CALL64 completion | 1.2085 (1.1950–1.2175) | 1.1980 (1.1905–1.2085) |
+| CALL4096 completion | 1.4265 (1.4080–1.4350) | 1.4075 (1.3895–1.4230) |
+| SEND64 completion | 0.6270 (0.6265–0.6295) | 0.6135 (0.6100–0.6205) |
+| SEND-64 admission | 0.0725 (0.0710–0.0730) | 0.0690 (0.0685–0.0710) |
+| SEND4096 completion | 0.7280 (0.7260–0.7285) | 0.7210 (0.7185–0.7230) |
+| SEND-4096 admission | 0.1310 (0.1290–0.1310) | 0.1310 (0.1235–0.1320) |
+
+B is at parity or slightly better in every measured median; there is no
+material task-5 regression in this native comparison. The small differences
+are not a general speedup claim. This closes task 5's native gate; it does not
+remove task 4's already accepted [SEND residual](https://git.internal/PyxisOS/pyxis-os/issues/1588),
+which is present in the shared baseline.
+
+Raw six-boot outcomes and `comparison.json` remain at
+`/shared/present/bsp-removal/task5/native/`. Measurements were run by the
+orchestrator, not by the implementation agent. The sealed packet remains
+measurement evidence; no further boots are required for this result update.
 
 ## Ordinary graphics and lifetime qualification
 
@@ -82,7 +129,8 @@ Failed runs and corrected host setup/observer attempts are preserved separately.
 The genuine unedited resize failure is kept in the glitches gallery handoff.
 
 Evidence: `/shared/present/bsp-removal/task5/graphics/` and
-`/shared/present/bsp-removal/task5/fixture-qualification/`. No native claim yet.
+`/shared/present/bsp-removal/task5/fixture-qualification/`. Native coverage is
+limited to the separate comparison above.
 
 ## Remaining-consumer proof and limits
 
@@ -107,5 +155,6 @@ parking its sole RAM reaper. The new timeout/join schedule is source-reviewed,
 not newly fault-injected. Ordinary runs do not prove every presenter-overlap
 schedule, malformed reply-buffer case or partial allocation-failure unwind.
 Existing device worker placement and the [shared-VM limits](https://git.internal/PyxisOS/pyxis-os/issues/1514)
-remain. Native packet/run results will be recorded separately after the
-orchestrator's hands-free vela comparison; no staging has occurred here.
+remain. The native gate above is complete; the implementation agent performed
+no native staging or runs. The noted extended fault/race coverage is not
+inferred from these ordinary successes.

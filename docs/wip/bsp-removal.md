@@ -15,7 +15,8 @@ Tasks 4–5 are assigned to Codex beta (chronium, 2026-10-28). Task 4 starts
 with the accepted cleanup-placement/lifetime decisions below; task 5 raises its own
 remaining-consumer decisions when reached. Task 4 is merged in #1554; its accepted native SEND residual is tracked by
 [debt #1588](https://git.internal/PyxisOS/pyxis-os/issues/1588). Task 5's accepted
-split is implemented and undergoing qualification; native comparison is pending.
+split and qualification are complete in #1595, ready for merge. The six-boot
+native vela comparison passes without a material task-5 regression.
 
 ## Goal and boundary
 
@@ -174,7 +175,7 @@ reached. Task 2 begins with the explicit measure-then-decide point above.
 | 2. Frame allocation on each CPU | First measure PMM lock/search/zero/map costs with the routing bottleneck gone and bring chronium the decision whether to move frame allocation out. Propose any cache budgets/refill/remote-free/pressure rules before code; retain exact allocator statistics and zero-before-publication. | Exercise parallel backing and pressure without hidden stranded frame pools or a CPU0 refill owner. |
 | 3. Invalidation and shared kernel VM (merged, #1500) | CPU-neutral private and shared mapping coordination; root generations/residency publication; acknowledgement and refill exclusion; safe general kernel range reuse. Define timeout/uncertain outcomes before effects can escape. Exercise permission reduction as well as map/unmap. | Reuse mappings and change permissions without stale remote access or a privileged CPU0 mutator. |
 | [x] 4. Preparation and reclamation (#1554; residual accepted, #1588) | Off-BSP process/image/task preparation, context pin/unpin, unpublished rollback, and heavy retirement. Propose cleanup placement/lifetime when reached (exit continuation or fixed-owner reapers); keep device-owner callbacks separate and results tied to real retirement. | Launch and retire large processes without funneling their RAM/page tables through CPU0. |
-| [ ] 5. Remaining VM consumers (implementation/QEMU complete; native pending) | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Complete the remaining VM-client audit and migration; the earlier JIT task already uses the common caller-CPU transaction. |
+| [x] 5. Remaining VM consumers (#1595; QEMU/native complete, ready for merge) | Route DISPLAY's VM segment and every existing metadata/query/mapping caller through the common interface; hardware stays with its owner. Audit hidden BSP dependencies and qualify the internal range-permission primitive. | Complete the remaining VM-client audit and migration; the earlier JIT task already uses the common caller-CPU transaction. |
 
 ## Task 4 scope and decisions — accepted (chronium, 2026-10-28)
 
@@ -535,3 +536,14 @@ whole-process quiescence. Geometry changes may still return BUSY; uncertain
 shared-range retirement still retains memory. Display backing has an explicit RAM cleanup destination, while hardware and
 control ownership stay fixed. The [task-5 record](../development/experiments/bsp-display.md)
 separates baseline, QEMU and native qualification.
+
+### Task 5 native gate — complete (chronium/orchestrator, 2026-10-29)
+
+Six fresh vela A1/B1/A2/B2/A3/B3 boots pass every cohort and the DISPLAY
+fixture (6/6). Shared-base A32b600 versus B057dfc: launch 871.4 → 867.4 ms,
+private pages 24.97 → 24.87 ms; CALL64/4096 1.2085/1.4265 → 1.1980/1.4075 ms;
+SEND64/4096 0.6270/0.7280 → 0.6135/0.7210 ms, with admission
+0.0725/0.1310 → 0.0690/0.1310 ms. B is at parity or slightly better throughout.
+See the [native record and ranges](../development/experiments/bsp-display.md#native-vela-comparison--complete).
+Task 5 is ready for merge; extended coverage and existing debt remain explicitly
+separate. Milestone close-out waits for the orchestrator's remaining-work check.
