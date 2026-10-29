@@ -5,6 +5,7 @@
 #ifndef PYXIS_OS_SPACE_H
 #define PYXIS_OS_SPACE_H
 
+#include <abi/log.h>
 #include <abi/space.h>
 #include <abi/syscall.h>
 #include <stdatomic.h>
@@ -58,6 +59,9 @@ struct space
   uint8_t log_source;
   uint64_t log_tokens, log_refilled_ns;
   uint64_t log_dropped, log_summary_ns;
+  /* LOG_PUTCHAR text of this space not yet ended by a newline (log lock). */
+  uint16_t log_line_length;
+  char log_line[LOG_WRITE_MAX];
   /* Registry order. Spaces are only appended, on the BSP, and published with
    * a release store once complete, so BSP readers can walk without a lock. */
   struct space *next;

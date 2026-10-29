@@ -108,10 +108,17 @@ the rows marked done.
   one space's lines. The UDP wire's spare header byte carries the source index.
 - **Background jobs.** `&` jobs stay on the terminal; an opt-in redirect to the
   log is a later slice.
-- **Not done yet.** `system_log()` (the DHCP line) and `LOG_PUTCHAR` are unchanged,
-  so those lines still have no prefix and appear on serial.
+- **`LOG_PUTCHAR` and `system_log()`.** The system call takes one character of the
+  caller's space's info text. Lines are assembled per space (a newline or 255
+  bytes ends one; `\r` is dropped, control bytes become `?`) and logged like
+  `LOG_WRITE`, so the DHCP line reads `development: eth0: DHCP ...`, is rate
+  limited, and no longer goes to serial. Two processes of one space writing at
+  once can interleave in a line. It stays an ambient call for programs with no
+  handle, such as the allocator's diagnostics. After fatal output starts it writes
+  unattributed as before.
 - **Cost.** A written line costs about 0.9 µs at a hidden level and 2.7 µs at a
-  shown one, against 1.5-1.8 µs for a framebuffer terminal write; see
+  shown one, against 1.5-1.8 µs for a framebuffer terminal write, and 8 µs for an 81-call
+  `LOG_PUTCHAR` line (was 2.3 ms); see
   [the cost record](../development/experiments/system-log-cost.md).
 
 ## Read authority and cursors

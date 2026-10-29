@@ -253,44 +253,73 @@ static bool log_space_may_write(struct space *space, uint64_t now)
   return true;
 }
 
+/* Caller holds the log lock. */
+static void log_write_line_locked(struct space *space, enum log_level level, const char *text,
+    size_t length)
+{
+  uint64_t now = arch_monotonic_ns();
+  if (!log_space_may_write(space, now)) {
+    ++space->log_dropped;
+    return;
+  }
+  if (space->log_dropped && now - space->log_summary_ns >= UINT64_C(1000000000)) {
+    char count[24];
+    size_t digits = 0;
+    for (uint64_t value = space->log_dropped; value; value /= 10) {
+      count[digits++] = (char)('0' + value % 10);
+    }
+    char summary[64];
+    size_t used = 0;
+    static const char prefix[] = "dropped ";
+    for (size_t i = 0; i < sizeof(prefix) - 1; ++i) {
+      summary[used++] = prefix[i];
+    }
+    for (const char *c = space->name; *c && used < 40; ++c) {
+      summary[used++] = *c;
+    }
+    summary[used++] = ' ';
+    while (digits) {
+      summary[used++] = count[--digits];
+    }
+    static const char suffix[] = " log lines";
+    for (size_t i = 0; i < sizeof(suffix) - 1; ++i) {
+      summary[used++] = suffix[i];
+    }
+    log_emit_line(0, LOG_LEVEL_WARN, "log", summary, used);
+    space->log_dropped = 0;
+    space->log_summary_ns = now;
+  }
+  log_emit_line(space->log_source, level, space->name, text, length);
+}
+
 void log_write_line(struct space *space, enum log_level level, const char *text, size_t length)
 {
   uint64_t flags = cpu_save_interrupts();
   bool locked = log_begin();
   if (locked) {
-    uint64_t now = arch_monotonic_ns();
-    if (!log_space_may_write(space, now)) {
-      ++space->log_dropped;
-    } else {
-      if (space->log_dropped && now - space->log_summary_ns >= UINT64_C(1000000000)) {
-        char count[24];
-        size_t digits = 0;
-        for (uint64_t value = space->log_dropped; value; value /= 10) {
-          count[digits++] = (char)('0' + value % 10);
-        }
-        char summary[64];
-        size_t used = 0;
-        static const char prefix[] = "dropped ";
-        for (size_t i = 0; i < sizeof(prefix) - 1; ++i) {
-          summary[used++] = prefix[i];
-        }
-        for (const char *c = space->name; *c && used < 40; ++c) {
-          summary[used++] = *c;
-        }
-        summary[used++] = ' ';
-        while (digits) {
-          summary[used++] = count[--digits];
-        }
-        static const char suffix[] = " log lines";
-        for (size_t i = 0; i < sizeof(suffix) - 1; ++i) {
-          summary[used++] = suffix[i];
-        }
-        log_emit_line(0, LOG_LEVEL_WARN, "log", summary, used);
-        space->log_dropped = 0;
-        space->log_summary_ns = now;
-      }
-      log_emit_line(space->log_source, level, space->name, text, length);
+    log_write_line_locked(space, level, text, length);
+  }
+  log_end(locked);
+  cpu_restore_interrupts(flags);
+}
+
+void log_putchar(struct space *space, char c)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool locked = log_begin();
+  if (!locked) {
+    /* Fatal output has started: keep the old unlocked, unattributed path. */
+    log_putc(LOG_LEVEL_INFO, c);
+  } else if (c == '\n' || space->log_line_length == sizeof(space->log_line)) {
+    log_write_line_locked(space, LOG_LEVEL_INFO, space->log_line, space->log_line_length);
+    space->log_line_length = 0;
+    if (c != '\n' && c != '\r') {
+      space->log_line[space->log_line_length++] =
+          (unsigned char)c < ' ' && c != '\t' ? '?' : c;
     }
+  } else if (c != '\r') {
+    space->log_line[space->log_line_length++] =
+        ((unsigned char)c < ' ' && c != '\t') || c == 0x7f ? '?' : c;
   }
   log_end(locked);
   cpu_restore_interrupts(flags);

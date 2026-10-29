@@ -631,12 +631,9 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
     return forwarder_create_call(arg1, arg2, arg3);
   case SYSCALL_DESCRIBE:
     return describe_call(arg1, arg2, arg3, arg4);
-  case SYSCALL_LOG_PUTCHAR: {
-    bool locked = log_begin();
-    log_putc(LOG_LEVEL_INFO, (char)arg1);
-    log_end(locked);
+  case SYSCALL_LOG_PUTCHAR:
+    log_putchar(process_current()->space, (char)arg1);
     return (struct syscall_result){0, arg3};
-  }
   case SYSCALL_START_FAILED:
     if (arg1 > INT32_MAX || !process_start_failure_valid((int64_t)arg1)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
