@@ -62,6 +62,10 @@ void log_record_end(enum log_level level);
  * the next logged line reports the count at warn. Any CPU, preserves IF. */
 struct space;
 void log_write_line(struct space *space, enum log_level level, const char *text, size_t length);
+/* The LOG_PUTCHAR system call: one character of SPACE's info-level text. Lines are
+ * assembled per space, ended by a newline or LOG_WRITE_MAX bytes, sanitised, and
+ * then logged as by log_write_line. Any CPU, preserves IF. */
+void log_putchar(struct space *space, char c);
 /* Irreversibly select unlocked emergency output for fatal diagnostics.
  * Safe without GS, heap or a functioning lock owner; lines may interleave.
  * Ring capture tries its separate lock once, skipping bytes if it is held.

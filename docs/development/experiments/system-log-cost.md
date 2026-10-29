@@ -44,6 +44,23 @@ and on the same tree for the existing paths.
   burst) and then dropped 3997; after a 2 s pause the next line reported
   `log: dropped development 3997 log lines`.
 
+## LOG_PUTCHAR after source stamping
+
+Rerun 2026-10-29 on a quiet host (load average 1-3), same method, after
+`LOG_PUTCHAR` was made source-stamped and line-assembled (81 calls per 80-byte line,
+7 samples, ns per line):
+
+| Path | Median | Range |
+| --- | --- | --- |
+| Terminal write (framebuffer console) | 1569 | 1492-2520 |
+| `LOG_WRITE`, shown level | 2711 | 2688-2793 |
+| `LOG_PUTCHAR`, 81 calls, shown level | 8095 | 7893-9623 |
+
+`LOG_PUTCHAR` was 2.32 ms per line while it mirrored to serial. Now it costs about
+0.1 µs per call, 286 times less per line, but still 5 times a terminal write for
+the line because each character is a system call. A first run on a loaded host
+(median 21 µs for `LOG_PUTCHAR`, 5.9 µs for the terminal write) is not used.
+
 ## Limits
 
 Nested VM on a loaded host; one line size; the cost of the Caelum pane's drawing
