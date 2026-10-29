@@ -66,8 +66,8 @@ mkfs.fat -C -F 32 -S "$sector_bytes" -h "$esp_start" -n PYXIS_BOOT \
   "$staging/esp.img" "$((USB_ESP_MIB * 1024))"
 mmd -i "$staging/esp.img" ::/EFI ::/EFI/BOOT ::/boot ::/boot/limine
 mcopy -i "$staging/esp.img" third_party/limine/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
-mcopy -i "$staging/esp.img" build/caelum.elf ::/boot/caelum.elf
-mcopy -i "$staging/esp.img" build/initrd.cpio ::/boot/initrd.cpio
+mcopy -i "$staging/esp.img" build/caelum.elf.gz ::/boot/caelum.elf.gz
+mcopy -i "$staging/esp.img" build/initrd.cpio.gz ::/boot/initrd.cpio.gz
 mcopy -i "$staging/esp.img" build/limine.conf ::/boot/limine/limine.conf
 
 truncate -s "$((USB_IMAGE_MIB * mib_bytes))" "$staging/disk.img"

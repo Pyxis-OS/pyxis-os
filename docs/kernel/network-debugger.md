@@ -49,6 +49,9 @@ there is no ELF build-ID handshake. The digest in `debug.image` comes from outsi
 the ELF; the bridge verifies its `--kernel` file against it and refuses a
 mismatch. That is an operator staging claim, not a measurement of loaded bytes
 or authentication. Stage the ELF and PXE entry together.
+The digest names the uncompressed ELF: a PXE tree staging `caelum.elf.gz`
+([compressed boot media](../development/boot-archive.md#compressed-boot-media))
+passes the bridge the matching `build/caelum.elf`.
 
 Monitor commands are read-only. Addresses, BDF and offset are hexadecimal;
 width and count are decimal, widths are bits, at most eight values:
