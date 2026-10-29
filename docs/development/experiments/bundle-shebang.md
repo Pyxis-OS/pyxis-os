@@ -2,8 +2,9 @@
 
 ## Build and fixture
 
-Userland `c7a9739` (libpyxis selection `25be0e3`, shell `c7a9739`) on userland main
-`053e65d`; parent base `78143c17`. Compiler clang 23.1.3 (`8bdf1360`) from the
+Measured at userland `c7a9739` (libpyxis selection `25be0e3`, shell `c7a9739`) on
+userland main `053e65d`; parent base `78143c17`. The commits were then rebased
+unchanged onto userland `95709ee` as `1a14afb` and `294727e`. Compiler clang 23.1.3 (`8bdf1360`) from the
 builder container; full image (`DISTRIBUTION=full`).
 
 QEMU/KVM q35 with the patched QEMU, four vCPUs, 4 GiB RAM, OVMF, VirtIO network,
