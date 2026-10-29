@@ -143,8 +143,12 @@ Native loops can use the public `<pyxis/signal.h>` wait/checkpoint bridge;
 handlers run only after the caller withdraws temporary native registrations.
 
 `<sys/time.h>` declares `struct timeval`; `select`/`pselect` are provided through
-`<sys/select.h>` with real temporary masks. `gettimeofday` and interval timers
-are not provided; use `timespec_get` or `clock_gettime`.
+`<sys/select.h>` with real temporary masks. `gettimeofday` reads the same
+precise native UTC clock as `CLOCK_REALTIME` and truncates its fractional part
+to microseconds. It requires a non-NULL destination and a NULL timezone argument;
+a non-NULL timezone fails ENOTSUP. Clock failure leaves the destination unchanged.
+UTC quality and READ|PRECISE authority are unchanged. Interval timers are not
+provided.
 
 `strptime` is English C-locale only, with no locale selection and no
 `<langinfo.h>`. It accepts `%a %A %b %B %h %c %C %d %D %e %H %I %j %m %M %n %p
@@ -191,9 +195,10 @@ string, output limits never split a scalar, and invalid input fails with EILSEQ.
 `wcwidth` follows the C locale: NUL is zero columns, printable ASCII one and
 other values -1; it does not claim Unicode width support.
 
-`unistd.h` supplies `sleep` over the native clock without Unix signals. It
-returns zero after the full interval, or the requested seconds with errno on
-failure; zero seconds needs no clock authority.
+`unistd.h` supplies `sleep` and `usleep` over the native clock. `usleep`
+normalizes the full unsigned microsecond range and delegates to `nanosleep`,
+requiring READ|PRECISE|SLEEP authority. A caught cooperative signal returns EINTR
+without automatic restart; it does not turn a wall-clock read into a delay.
 
 `MB_CUR_MAX` and `MB_LEN_MAX` are 4.
 The decoder accepts Unicode scalar values, returns bytes consumed (zero for
@@ -545,6 +550,11 @@ backend removal, races and allocation-failure paths were not qualified by these
 RAM-file observations.
 
 ## Name limits and symbolic links
+
+`symlink(target, path)` fails ENOTSUP without resolving or creating a name.
+The native directory protocol has no symbolic-link creation operation, including
+on HOST. Existing host symlinks may be enumerated or removed, but are not
+followed; native hard links remain the separate `link` operation.
 
 `NAME_MAX` in `limits.h` is 255: the longest path component, in bytes, that
 native (npfs) and host directories accept. The kernel refuses a longer
