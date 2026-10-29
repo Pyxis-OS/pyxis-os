@@ -326,8 +326,9 @@ browser ([reference](../userland/links.md)); it is not a new curses port.
 | [dfrotz](../../ports/dfrotz/README.md) | GPL-2.0-or-later | Packaged unchanged dumb Z-machine frontend, plain stdio and Blorb; user-supplied stories, no sound or bundled story data. |
 | [moon-buggy](https://github.com/seehuhn/moon-buggy) | GPL-3.0 (current COPYING) | C, curses, select/signals, high-score/config files; native input/timers/storage; small. |
 
-These licence labels are a quick look, not the eventual pinned package's full
-notice audit. No candidate was cross-compiled or timed for this proposal.
+Unported candidates retain survey-only licence and dependency estimates; their
+full notice audit, cross-build and timing checks remain outstanding. Packaged
+programs link to their pinned profiles and notices.
 
 ## Decisions (accepted, chronium, 2026-10-23)
 
