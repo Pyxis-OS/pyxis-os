@@ -42,7 +42,7 @@ static uint32_t inherited_control, inherited_color, inherited_stride, inherited_
 static uint32_t inherited_trans, inherited_ddi, inherited_misc, inherited_misc2;
 static uint32_t inherited_timing[6], inherited_source, inherited_context_latency;
 static uint32_t front, back = 1, pending, sequence;
-static uint32_t submit_frame, submit_flip, submit_done_time;
+static uint32_t submit_frame, submit_flip, submit_done_time, submit_clock;
 static uint64_t deadline;
 static unsigned vtotal, vblank_start, keepout_lines;
 static uint64_t submitted, confirmed, deferred, timeouts;
@@ -350,6 +350,7 @@ static enum intel_flip_state arm_pending(void)
     return state;
   }
   cpu_store_fence();
+  submit_clock = intel_display_read(DISPLAY_TIMESTAMP);
   intel_display_write_surface(gpu_surfaces[pending]);
   state = INTEL_FLIP_PENDING;
   ++submitted;
@@ -387,11 +388,11 @@ enum intel_flip_state intel_flip_poll(void)
     }
     return state;
   }
-  if (arch_monotonic_ns() >= deadline) {
-    ++timeouts;
-    return fail("flip/queued arm timed out");
-  }
   if (state == INTEL_FLIP_DEFERRED) {
+    if (arch_monotonic_ns() >= deadline) {
+      ++timeouts;
+      return fail("queued arm timed out");
+    }
     return state;
   }
   uint32_t event = intel_display_read(PIPE_A_IIR);
@@ -402,6 +403,10 @@ enum intel_flip_state intel_flip_poll(void)
   if ((event & PLANE1_DONE) && live == gpu_surfaces[pending] &&
       done_time != submit_done_time && frame != submit_frame && flip - submit_flip == 1 &&
       intel_display_read(PLANE1 + PLANE_SURFACE) == gpu_surfaces[pending]) {
+    if ((uint32_t)(done_time - submit_clock) > FLIP_TIMEOUT_NS / 1000) {
+      ++timeouts;
+      return fail("hardware latch exceeded transaction deadline");
+    }
     front = pending;
     /* The first owned-front completion retires GOP, allowing one ordinary
      * full-frame copy and confirmed return before continuous alternation. */
@@ -416,6 +421,9 @@ enum intel_flip_state intel_flip_poll(void)
       kinfo("intel-flip-metrics: submitted=%lu confirmed=%lu deferred=%lu timeouts=%lu front=%x seq=%u; event/latch/live/frame correlated\n",
           submitted, confirmed, deferred, timeouts, gpu_surfaces[front], sequence);
     }
+  } else if (arch_monotonic_ns() >= deadline) {
+    ++timeouts;
+    return fail("flip completion timed out");
   }
   return state;
 }
