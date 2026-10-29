@@ -790,6 +790,9 @@ Each CPU also keeps busy and idle totals.
   loop work between two tasks (on the BSP, including reaping) is charged to the
   next task. An idle CPU reads the TSC once more when it wakes and charges the
   wait to idle.
+- A task that runs alone on its CPU may never switch out, so the local timer
+  tick also closes its current interval. That keeps listed totals current
+  within one tick.
 - `task_syscall_enter` and `task_syscall_leave` read it again to move the
   boundary between user and kernel time. A task that switches out inside a
   syscall, and every kernel worker, is charged as kernel time. Interrupts and
@@ -801,8 +804,10 @@ Each CPU also keeps busy and idle totals.
   line on the wake and dispatch paths.
 - Every interval starts and ends on one CPU, so no cross-CPU TSC agreement is
   needed. The read is unordered: an edge can be off by a few tens of cycles.
-- The BSP reaper adds a retiring thread's cycles to its process. Cycles are not
-  converted to time here; the process listing that reads them does that.
+- The BSP reaper adds a retiring thread's cycles to its process when it
+  detaches the thread, under the process lifetime lock, so a
+  [listing](../interfaces/process-listing.md) never counts it twice. Listings
+  convert cycles to time with the calibrated TSC rate or kvmclock's scale.
 
 ## Remaining serial services and limits
 

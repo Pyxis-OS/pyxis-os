@@ -228,4 +228,12 @@ void task_timer_service(void);
  * May switch stacks; never allocates, cleans up or logs in interrupt entry. */
 void task_preempt(bool user_mode);
 
+struct process_task_member;
+struct task_list_sample {
+  uint64_t user_cycles, kernel_cycles;
+  bool runnable; /* Some thread is running or queued, not blocked. */
+};
+/* IF=0, the members' process lifetime lock held: adds each task's totals. */
+void task_list_sample(struct process_task_member *members, struct task_list_sample *sample);
+
 #endif

@@ -40,6 +40,8 @@ struct execution_group {
   size_t cleanup_pending;
   struct execution_group_member *first_member;
   struct task_wait_link *waiters;
+  uint64_t list_key; /* Process listing key, fixed at creation. */
+  struct execution_group *root_next; /* Tree guard: the space's root groups. */
 };
 
 /* BSP, IF=0. Returns one storage reference, no controlling authority. */
@@ -73,6 +75,14 @@ void execution_group_thread_end(struct execution_group *group);
  * Failure leaves all tasks unpublished and owned by the preparer. */
 enum call_status execution_group_publish(struct execution_group *group,
     struct task **tasks, size_t count);
+/* IF=0, retirement owner, before cleanup releases the address space: the
+ * process leaves its space's listing. */
+void execution_group_unlist(struct process *process);
+struct process_list_record;
+/* IF=0, no locks held: one pass over SPACE under its tree guard. Fills at most
+ * CAPACITY records and returns how many; *TOTAL counts every record. */
+size_t execution_group_list(struct space *space, struct process_list_record *records,
+    size_t capacity, uint64_t *total);
 /* IF=0, retained retirement owner, after process, kernel stack and task storage
  * have been reclaimed. Removes one published member and consumes its storage reference. */
 void execution_group_member_complete(struct execution_group *group);

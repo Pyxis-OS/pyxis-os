@@ -53,7 +53,8 @@ struct task {
   struct bsp_request *deferred_request; /* Published only after the safe handoff. */
   struct task_profile *profile;
   /* On-CPU TSC cycles, split at syscall entry/leave. cpu_mark is this task's
-   * last accounting boundary on its current CPU; only that CPU updates them. */
+   * last accounting boundary on its current CPU; only that CPU updates them,
+   * with relaxed atomic stores, because process listings read the totals. */
   uint64_t cpu_user_cycles, cpu_kernel_cycles, cpu_mark;
   enum task_kind kind;
   struct process *process; /* Borrowed submitted/prepared lifetime; NULL for workers. */
@@ -359,12 +360,22 @@ static uint64_t account_task(struct task *task, bool kernel)
   uint64_t now = arch_tsc_read();
   uint64_t cycles = now > task->cpu_mark ? now - task->cpu_mark : 0;
   task->cpu_mark = now;
-  if (kernel) {
-    task->cpu_kernel_cycles += cycles;
-  } else {
-    task->cpu_user_cycles += cycles;
-  }
+  uint64_t *total = kernel ? &task->cpu_kernel_cycles : &task->cpu_user_cycles;
+  __atomic_store_n(total, *total + cycles, __ATOMIC_RELAXED);
   return now;
+}
+
+void task_list_sample(struct process_task_member *members, struct task_list_sample *sample)
+{
+  KASSERT(!cpu_interrupts_enabled());
+  lock_queues();
+  for (; members; members = members->next) {
+    struct task *task = members->task;
+    sample->user_cycles += __atomic_load_n(&task->cpu_user_cycles, __ATOMIC_RELAXED);
+    sample->kernel_cycles += __atomic_load_n(&task->cpu_kernel_cycles, __ATOMIC_RELAXED);
+    sample->runnable |= !task->parked && !task->vm_parked;
+  }
+  unlock_queues();
 }
 
 void task_syscall_enter(void)
@@ -1519,7 +1530,9 @@ enum mm_result user_task_create(struct process *process, uintptr_t entry,
   enum mm_result status = user_task_prepare(process, entry, stack_top, SIZE_MAX, &task);
   if (status == MM_OK) {
     /* Publication transfers prepared process lifetime and task storage. */
-    user_task_publish_group(&task, 1);
+    uint64_t flags = cpu_save_interrupts();
+    KASSERT(execution_group_publish(NULL, &task, 1) == CALL_OK);
+    cpu_restore_interrupts(flags);
   }
   return status;
 }
@@ -1554,9 +1567,8 @@ static void reap_completed(void)
     return;
   }
   if (task->kind == TASK_USER) {
-    task->process->cpu_user_cycles += task->cpu_user_cycles;
-    task->process->cpu_kernel_cycles += task->cpu_kernel_cycles;
-    process_task_detach(task->process, &task->process_member);
+    process_task_detach(task->process, &task->process_member,
+        task->cpu_user_cycles, task->cpu_kernel_cycles);
     if (process_result_committed(task->process)) {
       process_request_stop(task->process);
     }
@@ -1865,6 +1877,9 @@ void task_preempt(bool user_mode)
   if (task->kind == TASK_USER && !user_mode) {
     return;
   }
+  /* A task alone on its CPU may never switch out; the timer keeps its totals
+   * current for listings. */
+  account_task(task, task->kind != TASK_USER);
 
   if (task->kind == TASK_USER && user_mode && task_stop_requested()) {
     terminate_task();

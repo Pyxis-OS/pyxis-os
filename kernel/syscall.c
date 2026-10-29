@@ -27,6 +27,7 @@
 #include <kernel/object/retention.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
+#include <kernel/object/process_view.h>
 #include <kernel/object/input_policy.h>
 #include <kernel/object/log.h>
 #include <abi/message.h>
@@ -473,6 +474,12 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
     }
     return system_info_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
+  case OBJECT_PROCESS_VIEW:
+    if (header.protocol != PROTOCOL_PROCESS_VIEW) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return process_view_call(rights, header.operation, request_size,
+        reply_address, reply_capacity);
   case OBJECT_CLOCK:
     if (header.protocol != PROTOCOL_CLOCK) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -631,6 +638,8 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
     return forwarder_create_call(arg1, arg2, arg3);
   case SYSCALL_DESCRIBE:
     return describe_call(arg1, arg2, arg3, arg4);
+  case SYSCALL_SPACE_PROCESSES:
+    return space_processes_call(arg1, arg2);
   case SYSCALL_LOG_PUTCHAR:
     log_putchar(process_current()->space, (char)arg1);
     return (struct syscall_result){0, arg3};

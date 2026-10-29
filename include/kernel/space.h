@@ -28,6 +28,10 @@ struct space
   /* IF=0; execution tree guard precedes process lifetime/table/ready queues. */
   atomic_bool execution_groups_locked;
   size_t execution_group_count; /* Includes completed and retiring storage. */
+  /* Execution tree guard: groups without a parent until destroyed, and
+   * processes from publication until retirement, for process listings. */
+  struct execution_group *root_groups;
+  struct process *processes;
   struct framebuffer *fb;
   struct tty *tty;
   struct keyboard_object *keyboard; /* Space retains the initial reference. */

@@ -15,6 +15,8 @@
 #define SYSCALL_HANDLE_INFO UINT64_C(9)
 #define SYSCALL_READINESS_SET_CREATE UINT64_C(10)
 #define SYSCALL_PROCESS_INTERRUPT_CREATE UINT64_C(11)
+/* (reply address, capacity): the caller's own space, abi/process_view.h. */
+#define SYSCALL_SPACE_PROCESSES UINT64_C(12)
 #define SYSCALL_EXIT UINT64_C(-1)
 #define SYSCALL_START_FAILED UINT64_C(-2)
 

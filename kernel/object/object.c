@@ -30,6 +30,7 @@
 #include <abi/terminal_pointer.h>
 #include <abi/clock.h>
 #include <abi/system_info.h>
+#include <abi/process_view.h>
 #include <abi/input_policy.h>
 #include <abi/log.h>
 #include <abi/display.h>
@@ -136,6 +137,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_INPUT_POLICY;
   case OBJECT_SYSTEM_INFO:
     return PROTOCOL_SYSTEM_INFO;
+  case OBJECT_PROCESS_VIEW:
+    return PROTOCOL_PROCESS_VIEW;
   case OBJECT_LOG:
     return PROTOCOL_LOG;
   case OBJECT_CLOCK:
@@ -385,6 +388,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~INPUT_POLICY_RIGHT_INSTALL_ONCE);
   case OBJECT_SYSTEM_INFO:
     return !(rights & ~(SYSTEM_INFO_RIGHT_READ | SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE));
+  case OBJECT_PROCESS_VIEW:
+    return !(rights & ~PROCESS_VIEW_RIGHT_LIST);
   case OBJECT_LOG:
     return !(rights & ~(LOG_RIGHT_READ | LOG_RIGHT_WRITE));
   case OBJECT_LOG_STREAM:

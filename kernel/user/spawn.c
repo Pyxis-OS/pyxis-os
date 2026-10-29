@@ -340,6 +340,10 @@ static enum call_status prepare_child(struct launch_preparation *group,
     return loaded == MM_BUSY ? CALL_BUSY :
         loaded == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
   }
+  child->launched_by = parent->list_key;
+  if (capture->startup.argc) {
+    process_set_label(child, capture->startup.argv[0]);
+  }
 
   if (execution_group) {
     if (!object_retain(&execution_group->object)) {
