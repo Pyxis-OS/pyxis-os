@@ -1142,10 +1142,10 @@ No fixed period guarantees reception of every AP or beacon interval. The matched
 
 ### Ordered delivery
 
-Task 1 is qualified. Task 2 is assigned (chronium, 2026-10-29): the full
-admitted 1–13 passive sweep, period 232 and unchanged 15-second deadline, with
-first-startup and retained-scan timings reported separately. Further tasks
-need their own go; native windows are scheduled by the orchestrator.
+Tasks 1 and 2 are qualified (chronium, 2026-10-29): channel attribution and
+the full admitted 1–13 passive sweep, with period 232 and unchanged 15-second
+deadline. Further tasks need their own go; native windows are scheduled by
+the orchestrator.
 
 1. [x] **Status facts and channel-6 bug investigation.** Capture the
    current baseline before changes, add the observational startup facts and
@@ -1160,7 +1160,7 @@ need their own go; native windows are scheduled by the orchestrator.
    filter fix was needed. See the [capture interpretation](../development/experiments/rtl8922ae-attribution.md#native-and-linux-controls-vela-2026-10-29).
    **After this task chronium can:** tell whether startup normalized an active
    MAC, and inspect evidence for a genuinely second-channel BSS.
-2. [ ] **Admitted 1–13 sweep.** Generalize common-image construction and the bounded
+2. [x] **Admitted 1–13 sweep.** Generalize common-image construction and the bounded
    BE list, implement the default-mask semantics and retain existing 512-candidate/
    128-result bounds, successful TRUNCATED handling and immutable publication
    after END/RX retirement. Follow Linux's receive-only tuning and passive/listen
@@ -1193,8 +1193,18 @@ retirement remain the publication boundary; no ENTER-notification gate is added.
 The 15-second end-to-end deadline and existing cleanup contract are unchanged.
 
 [Full-sweep record](../development/experiments/rtl8922ae-full-sweep.md).
-CPU wire/power checks and builds are separate from native RF qualification.
-Native admitted-set/NO_IR behavior and elapsed timings remain pending.
+Native qualification passed on vela (2026-10-29): interleaved old/new 1+6
+controls plus two full scans, first default zero then explicit `0x1fff`, all
+completed. The full pair returned 9/9 records without truncation; ordered
+ENTER/LEAVE reports covered all 13 channels at period 232. Known channel-6
+attribution, held independent immutable FILEs, common-power checks, unchanged
+RFK, wired controls and byte-exact PXE restoration passed. Full-sweep profiled
+request-to-terminal time was 3339 ms with startup and 3107 ms retained, within
+the existing deadline. Matched 1+6 startup ranges overlap; retained samples
+were about 481 ms for both images. These include temporary observer overhead;
+they are not uninstrumented production timing or radiated-power measurements.
+No independently identified AP on 12–13, forced deadline/cancellation, physical
+rfkill, recovery or association is qualified by these visits.
 
 ### Route from discovery to association
 
