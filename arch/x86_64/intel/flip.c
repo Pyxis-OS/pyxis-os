@@ -23,6 +23,14 @@
 #define PIPE_A_IER 0x4440cu
 #define DISPLAY_TIMESTAMP 0x44070u
 #define TRANS_A_VRR 0x60420u
+#define TRANS_A_VRR_VMAX 0x60424u
+#define TRANS_A_VRR_VMIN 0x60434u
+#define TRANS_A_VRR_FLIPLINE 0x60438u
+#define VRR_TIMING_ENABLE (1u << 31)
+#define VRR_FLIPLINE_ENABLE (1u << 29)
+#define VRR_CMRR_ENABLE (1u << 27)
+#define VRR_GUARDBAND_MASK 0xffffu
+#define VRR_TIMING_MASK (VRR_TIMING_ENABLE | VRR_FLIPLINE_ENABLE | VRR_CMRR_ENABLE | VRR_GUARDBAND_MASK)
 #define TRANS_A_CONTEXT_LATENCY 0x6007cu
 #define PLANE1_DONE (1u << 3)
 #define PIPE_FAULTS ((1u << 31) | (1u << 18) | (1u << 7))
@@ -41,6 +49,7 @@ static uint32_t gpu_surfaces[3];
 static uint32_t inherited_control, inherited_color, inherited_stride, inherited_size;
 static uint32_t inherited_trans, inherited_ddi, inherited_misc, inherited_misc2;
 static uint32_t inherited_timing[6], inherited_source, inherited_context_latency;
+static uint32_t inherited_vrr, inherited_vmin, inherited_vmax, inherited_flipline;
 static uint32_t front, back = 1, pending, sequence;
 static uint32_t submit_frame, submit_flip, submit_done_time, submit_clock;
 static uint64_t deadline;
@@ -70,7 +79,7 @@ static bool fixed_layout(void)
       (intel_display_read(PSR_CONTROL(0)) & TRANS_ENABLE) ||
       (intel_display_read(PSR2_CONTROL(0)) & TRANS_ENABLE) ||
       (intel_display_read(TRANS_DP2(0)) & (1u << 30)) ||
-      (intel_display_read(TRANS_A_VRR) & TRANS_ENABLE) ||
+      ((intel_display_read(TRANS_A_VRR) ^ inherited_vrr) & VRR_TIMING_MASK) ||
       intel_display_read(PLANE1 + PLANE_CONTROL) != inherited_control ||
       intel_display_read(PLANE1 + PLANE_COLOR) != inherited_color ||
       intel_display_read(PLANE1 + PLANE_STRIDE) != inherited_stride ||
@@ -83,6 +92,12 @@ static bool fixed_layout(void)
       (intel_display_read(PIPE_A_IIR) & PIPE_FAULTS)) {
     return false;
   }
+  if ((inherited_vrr & VRR_TIMING_ENABLE) &&
+      (intel_display_read(TRANS_A_VRR_VMIN) != inherited_vmin ||
+       intel_display_read(TRANS_A_VRR_VMAX) != inherited_vmax ||
+       intel_display_read(TRANS_A_VRR_FLIPLINE) != inherited_flipline)) {
+    return false;
+  }
   for (unsigned i = 0; i < 6; ++i) {
     if (intel_display_read(TRANS_BASE(0) + i * 4) != inherited_timing[i]) {
       return false;
@@ -92,6 +107,41 @@ static bool fixed_layout(void)
     if (intel_display_read(PLANE_BASE(0, p)) & PLANE_ENABLE) {
       return false;
     }
+  }
+  return true;
+}
+
+static bool read_fixed_timing(void)
+{
+  inherited_context_latency = intel_display_read(TRANS_A_CONTEXT_LATENCY);
+  inherited_vrr = intel_display_read(TRANS_A_VRR);
+  inherited_vmin = intel_display_read(TRANS_A_VRR_VMIN);
+  inherited_vmax = intel_display_read(TRANS_A_VRR_VMAX);
+  inherited_flipline = intel_display_read(TRANS_A_VRR_FLIPLINE);
+  kinfo("intel-flip: timing CTL=%x VMIN=%x VMAX=%x FLIPLINE=%x VTOTAL=%x SCL=%x\n",
+      inherited_vrr, inherited_vmin, inherited_vmax, inherited_flipline,
+      inherited_timing[3], inherited_context_latency);
+  if (inherited_vrr & VRR_TIMING_ENABLE) {
+    /* Display30 uses this timing generator even for fixed refresh. Linux's
+     * intel_vrr_get_config() identifies fixed RR by equal min/max/flipline,
+     * derives vtotal from VMIN and vblank start from its guardband. */
+    if (!(inherited_vrr & VRR_FLIPLINE_ENABLE) ||
+        (inherited_vrr & VRR_CMRR_ENABLE) ||
+        inherited_vmin != inherited_vmax || inherited_vmin != inherited_flipline) {
+      kinfo("intel-flip: unavailable: timing generator is not fixed refresh\n");
+      return false;
+    }
+    vtotal = inherited_vmin + 1;
+    unsigned guardband = inherited_vrr & VRR_GUARDBAND_MASK;
+    if (!vtotal || vtotal > SCANLINE_MASK + 1 || guardband >= vtotal) {
+      kinfo("intel-flip: unavailable: fixed timing exceeds scanline/guardband range\n");
+      return false;
+    }
+    vblank_start = vtotal - guardband;
+  } else {
+    vtotal = (inherited_timing[3] >> 16) + 1;
+    /* Display13+ ignores VBLANK_START; non-VRR timing uses active + SCL. */
+    vblank_start = (inherited_timing[3] & 0xffff) + 1 + inherited_context_latency;
   }
   return true;
 }
@@ -199,15 +249,12 @@ bool intel_flip_prepare_inherited(const struct boot_info *boot, struct pci_devic
   for (unsigned i = 0; i < 6; ++i) {
     inherited_timing[i] = intel_display_read(TRANS_BASE(0) + i * 4);
   }
-  vtotal = (inherited_timing[3] >> 16) + 1;
-  inherited_context_latency = intel_display_read(TRANS_A_CONTEXT_LATENCY);
-  /* Display13+ ignores VBLANK_START. The update point follows active height
-   * plus the inherited set-context latency, as in Linux timing readout. */
-  vblank_start = (inherited_timing[3] & 0xffff) + 1 +
-      (inherited_context_latency & 0xffff);
   kinfo("intel-flip: admission conf=%x control=%x color=%x misc2=%x IIR=%x VRR=%x\n",
       inherited_trans, inherited_control, inherited_color, inherited_misc2,
       intel_display_read(PIPE_A_IIR), intel_display_read(TRANS_A_VRR));
+  if (!read_fixed_timing()) {
+    return false;
+  }
   bool linear = !(inherited_control & (PLANE_TILING_MASK | PLANE_COMPRESSION_MASK |
       PLANE_ROTATION_MASK | PLANE_FLIP_HORIZONTAL | PLANE_RGBX | PLANE_ASYNC_FLIP)) &&
       (inherited_control & PLANE_FORMAT_MASK) == PLANE_FORMAT_8888;

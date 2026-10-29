@@ -433,6 +433,7 @@ not a claim of identical initialization to observed Fedora 7.2.10-200.fc44.
 - [Plane readout](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/skl_universal_plane.c) and [Xe initial plane](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/display/xe_plane_initial.c): power-guarded layout and bounded early timestamp wait.
 - [Stolen device-memory layout](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_ttm_stolen_mgr.c): `detect_bar2_integrated()` GSM-relative DM PTEs and BAR2 CPU access.
 - [PSR register definitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_psr_regs.h): enable, idle and link-state fields.
+- [VRR timing readout](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_vrr.c): display30 fixed-refresh timing generator, VMIN/VMAX/FLIPLINE and guardband-derived vblank.
 - [Plane register definitions](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/skl_universal_plane_regs.h): 8888/channel order, alpha and display-30 SURF async selection.
 - [CRTC update](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_crtc.c) and [vblank timing](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/i915/display/intel_vblank.c): safe update window and completion arming.
 - [Xe GGTT](https://github.com/torvalds/linux/blob/05f7e89ab9731565d8a62e3b5d1ec206485eeb0b/drivers/gpu/drm/xe/xe_ggtt.c): table extent/location and raw inherited-PTE reader.
@@ -450,7 +451,8 @@ Additional pinned-source references for setup/completion:
 `CONFIG_INTEL_INHERITED_FLIP=y` enables preparation in a development image;
 its default is off. `display.flip=0` retains copying. The matched Intel route
 must have a sole enabled pipe A/plane 1, disabled hardware cursor/other planes,
-unchanged linear XRGB8888 geometry and disabled PSR/replay/VRR. Admission proves
+unchanged linear XRGB8888 geometry, disabled PSR/replay and fixed refresh
+(including display30's fixed-refresh VRR timing-generator mode). Admission proves
 the full GOP alias, relevant VT-d translation disabled and inherited PAT3
 UC/noncoherent under the bounded reference GT access protocol. Refusal leaves
 copy presentation when ownership is confirmed; uncertainty fences access.
@@ -491,3 +493,30 @@ initial owned flip/GOP return, repeated correlated completions and zero timeouts
 an ordinary fallback is a reported refusal. Packet:
 `/shared/present/vela-tearing/flips-native-20261029/`. Native execution remains
 with the orchestrator; this record does not claim that its checks have run.
+
+### First flip A/B admission correction (2026-10-29)
+
+The orchestrator's common-image A completed terminal output/scrolling and both
+1803-frame demos: 360×221 at 47.1 fps (38.3 s), native canvas at 15.6 fps
+(115.6 s). B refused before any GGTT/plane programming. Its inherited values
+were CONF `c0000000`, plane CTL `84000008`, COLOR `2000`, MISC2 `8000`,
+IIR `1`, VRR_CTL `a40007f7`. MISC2's plane selector (bits 2:0) is zero;
+IIR bit 0 is outside the selected fault mask; the format matches the earlier
+inventory. The bit-31 VRR-generator rejection was incorrect for display30.
+
+Pinned Linux `intel_vrr_always_use_vrr_tg()` uses the VRR timing generator for
+fixed refresh on display30+. `intel_vrr_get_config()` distinguishes fixed
+refresh through equal nonzero decoded VMIN/VMAX/FLIPLINE, uses VMIN for VTOTAL
+and subtracts the guardband for vblank start. A set VRR_CTL enable bit alone
+does not imply variable refresh. The earlier “VRR off” observation described
+Fedora's post-modeset CRTC property; the Pyxis inventory did not capture these
+firmware timing-generator registers. Their range is not inferred from the
+control word and must be measured on the next admission.
+
+The corrected backend reads and reports those inherited registers, admits
+fixed refresh using the same Linux readout, retains them unchanged, and uses
+the derived update boundary for keepout. Unequal timing limits or CMRR retain
+the copy path because the fixed-cadence proof does not cover them. No timing,
+VRR, push or mode register is written. Evidence remains under
+`/shared/present/vela-tearing/flips-native-20261029/results-vela-A/` and
+`results-vela-B/`; the refused B is not a completed flip qualification.
