@@ -33,3 +33,12 @@ scratch. The bounded cache does not guarantee that a metadata working set stays
 resident. Mounted pools exclude raw writes, and concurrent external disk changes
 remain unsupported under the
 [kernel adapter contract](filesystem-native-adapter.md).
+
+Directory name lookup, cursor validation/enumeration, empty checks and free-slot
+scans map and fetch each visited page once per uninterrupted walk. The serial
+worker reuses its existing scratch page only until the walk ends or starts a
+nested inode read or mutation; decoded entries own their name bytes. Transaction
+images retain precedence, and complete name scans still reject duplicate matches.
+This avoids repeated full-page copies for records on the same page; it adds no
+retained name index, allocation or ABI. Linear name comparisons and wide-tree
+removal scaling remain tracked by [#1495](https://git.internal/PyxisOS/pyxis-os/issues/1495).
