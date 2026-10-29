@@ -84,9 +84,9 @@ no provider; ordinary session invocation does not republish existing services.
 Trusted startup supplies an explicitly private RAM or npfs backing leaf, then
 consumes the backing source before entering the interactive shell. Without that
 backing, snapshot GET and POST are unavailable. `--staging-cap BYTES` configures
-the RAM POST body cap, default 16 MiB; `--storage-cap BYTES` configures aggregate
-RAM logical storage, default 64 MiB. Private npfs is the explicit large-transfer
-option. See [backing and limits](../interfaces/http-transactions.md#private-backing-and-limits).
+the RAM POST body cap, default 16 MiB. GET snapshots have no provider byte
+quota: private RAM and npfs backing grow until actual capacity or file
+representability is exhausted. See [backing and limits](../interfaces/http-transactions.md#private-backing-and-limits).
 
 `--https` selects HTTPS for the default role. `--ca-bundle URI` also selects
 HTTPS for that role and loads an explicit custom augmentation of public trust;
@@ -255,14 +255,14 @@ transfer refreshes them.
 | Each chunk size/extension line | 8 KiB |
 | Request wire headers / fields per hop | 32 KiB / 256 |
 | RAM staged POST body | 16 MiB by default |
-| Aggregate RAM logical backing, including holes | 64 MiB per provider by default |
+| GET snapshot backing | Actual RAM/filesystem capacity and representable file size |
 | Operation deadline | 30 seconds by default; explicit longer absolute deadline allowed |
 
-The RAM account includes staged uploads and retained snapshots. Reserve before
-growth; exactly at the budget succeeds. Overflow reports TOO_LARGE with no
-published prefix, eviction or alternate-storage fallback. Private npfs is bounded
-by real storage and representability, without a transport body cap. Copy buffers,
-parser scratch, TLS and bounded native error bodies are additional charges.
+GET bodies spool in bounded chunks to private native files without an aggregate
+provider byte budget. Actual allocation or filesystem exhaustion fails without
+publishing a prefix, eviction or alternate-storage fallback. Integer overflow
+and complete framing checks remain. Copy buffers, parser scratch, TLS and
+bounded native error bodies also consume actual memory.
 Snapshots are frozen, unlinked private native files exported with READ only;
 clients receive no backing-directory or backing-WRITE authority.
 
@@ -270,7 +270,7 @@ clients receive no backing-directory or backing-WRITE authority.
 
 OPEN and COMMIT publish only after framing, spooling and cleanup finish. Copies
 retain the same backing; positioned reads and SIZE are stable, while distinct
-opens fetch independently. Backing charges remain until final result retirement.
+opens fetch independently. Backing remains allocated until final result retirement.
 Removing or replacing a name leaves held results attached to their original
 instance. Provider exit/cut fails later operations; independently captured native
 error-body bytes retain their separate survival contract.

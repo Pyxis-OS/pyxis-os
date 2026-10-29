@@ -94,19 +94,17 @@ READ only and are frozen after framing. Unlink/close does not promise disk erase
 Missing backing makes snapshot GET/POST unavailable; there is no streamed or
 alternate-storage fallback.
 
-RAM defaults to a configurable **64 MiB aggregate logical-byte budget per
-provider**, shared by staged uploads and retained snapshots, including holes.
-Reserve before growth; exactly at the budget succeeds. Overflow is TOO_LARGE
-without a published prefix, eviction or fallback. POST retains its separate
-16 MiB RAM body cap. Metadata, copy buffers, TLS and bounded native error bodies
-are additional charges; the configured numbers are tuning, not ABI constants.
-Private npfs is the explicit large-transfer option, bounded by actual storage and
-representability rather than a transport body cap.
+GET snapshots have no provider-imposed byte budget for either RAM or npfs.
+Their private native files grow until actual backing capacity or representable
+file size is exhausted. Memory and storage failures are reported with their
+native cause; integer overflow still refuses without publishing a prefix,
+eviction or fallback. RAM POST bodies retain their separate 16 MiB upload policy.
+Metadata, copy buffers, TLS and bounded native error bodies use actual memory.
 
 Data spools in bounded chunks into the private backing. OPEN/COMMIT publishes only
 after complete framing and cleanup; a truncated body or deadline is a failure,
 not partial successful content. Capturing the re-readable result holds it without
-another A5 byte-retention charge. Provider storage stays reserved until the last
+another A5 byte-retention charge. Backing remains allocated until the last
 result retires. Copies share backing, while distinct opens are independent.
 
 One active exchange includes preparation/staging through framing or drained abort.
