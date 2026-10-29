@@ -200,7 +200,7 @@ font-assets: sdk
 # doom, quake, minesweeper and openarena; duke3d and diablo use private GAME_RECIPES.
 GAMES ?= doom quake
 GAME_RECIPES ?= packages
-GAME_NAMES := doom quake minesweeper openarena duke3d diablo
+GAME_NAMES := doom quake minesweeper raylib-games openarena duke3d diablo
 .PHONY: game-packages
 ifneq ($(filter game-packages,$(MAKECMDGOALS)),)
 ifeq ($(REPOSITORY),)

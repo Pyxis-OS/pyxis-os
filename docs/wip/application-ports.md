@@ -162,10 +162,10 @@ media-type aliases such as `json+http://` remains future work.
   personal-use bundle: single player with sound, without networking.
 - **Chocolate Doom, Chocolate Quake and EDuke32:**
   [implemented](../development/sdl-game-ports.md); Chocolate Quake plays sound
-  effects and EDuke32 effects and its default OPL-emulated music as bundles;
-  Chocolate Doom is silent. EDuke32 is an opt-in personal build. Deferred:
-  - **sound for Chocolate Doom (an SDL_mixer port), and music** for Chocolate
-    Doom (built-in OPL synthesis) and Chocolate Quake (CD tracks), or none;
+  effects, Chocolate Doom effects and its own OPL music through SDL2_mixer,
+  and EDuke32 effects and default OPL music. SDL2_mixer has no MIDI decoder;
+  Doom's SDL MIDI/TiMidity backend is omitted. EDuke32 is an opt-in personal build. Deferred:
+  - **music for Chocolate Quake** (CD tracks), or none;
   - **network play;**
   - **EDuke32's OpenGL renderers** and the other Chocolate Doom games;
   - **whether a Chocolate port replaces its native port,** an owner decision
@@ -183,7 +183,7 @@ media-type aliases such as `json+http://` remains future work.
   | Candidate | Expected to stress | Build and likely dependencies | Licence in its repository |
   | --- | --- | --- | --- |
   | [mGBA](https://github.com/mgba-emu/mgba) (Game Boy Advance) | Audio callback timing and latency (the GBA sample rate resampled to the output), frame pacing against the display, input latency, CPU | CMake. No hard dependencies; the SDL frontend needs SDL (SDL2 recommended); zlib and libpng are optional and bundled; the Qt frontend is not a candidate. Built-in BIOS | Mozilla Public License 2.0 (`LICENSE`) |
-  | [LakeSnes](https://github.com/angelo-wf/lakesnes) (SNES) | Audio callback timing (SPC/DSP samples into an SDL audio buffer), frame pacing, CPU | Makefile. SDL2 for window, rendering, audio and input; the README names a bundled zip library (kuba--/zip, with Miniz) for zipped ROMs | MIT (`LICENSE.txt`) |
+  | [LakeSnes](https://github.com/angelo-wf/lakesnes) (SNES) | Audio callback timing (SPC/DSP samples into an SDL audio buffer), frame pacing, CPU | Makefile. SDL2 for window, rendering, audio and input; the bundled ZIP code still needs `utime.h`/`utime` and `st_mtime`; optional 0.0.10 port deferred rather than disabling timestamp handling | MIT (`LICENSE.txt`) |
   | [SameBoy](https://github.com/LIJI32/SameBoy) (Game Boy, Game Boy Color) | Input latency, audio latency, frame pacing, CPU | Makefile, C. The SDL frontend needs SDL2, plus libpng off Windows and macOS; the boot ROMs need rgbds unless `BOOTROMS_DIR` supplies built ones. Ships open DMG/CGB boot ROMs | Expat (MIT) for the project. Its `iOS` and `HexFiend` directories are excluded, and `iOS` adds a condition on app-store distribution; neither would be used |
   | [NESEmu](https://github.com/johnmph/NESEmu) (NES) | CPU and the [C++ runtime in userspace](../development/cxx-userspace.md); frame pacing and audio through its sound-manager buffer | C++14, CMake. The core has no dependency; SDL2 is needed only by its `main.cpp` example frontend | MIT (`LICENSE`) |
 
@@ -222,14 +222,17 @@ parallel tracks or to port every dependency speculatively.
 program and QEMU-qualified, including gameplay and output resizing. It uses
 the raylib/SDL integration and needs no runtime development package.
 
-The remaining candidates await selection; the implemented
+The twelve raylib-games classics are packaged together; install `raylib-games`
+and launch their original command names, such as `tetris`, `snake` or `arkanoid`.
+Build with `make game-packages GAMES=raylib-games REPOSITORY=DIR`. Other
+candidates await selection; the implemented
 [raylib profile](../development/raylib.md) defines the available APIs.
 Candidates collected by chronium (2026-10-22). "To verify" marks a licence that
 has not been checked yet.
 
 | Candidate | Language | Licence | Source |
 | --- | --- | --- | --- |
-| raylib-games (Tetris, Snake, Asteroids, Arkanoid, …) | C | zlib | <https://github.com/raysan5/raylib-games> |
+| [raylib-games classics](../../ports/raylib-games/README.md): twelve games, one `raylib-games` package | C, unchanged upstream sources | zlib | [pin and recipe](../../ports/raylib-games/metadata.lua) |
 | Jump Prince (Jump King-inspired platformer) | C/C++ | zlib | <https://github.com/jakubtomsu/raylib-jump-prince> |
 | AstroJumps (space platformer) | C | MIT | <https://github.com/braniik/astrojumps> |
 | Tuxmino (moddable Tetris-style) | C + Lua | MIT | <https://github.com/masonarmand/tuxmino> |

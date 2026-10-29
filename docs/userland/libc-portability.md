@@ -56,6 +56,9 @@ contract if npfs gains a read-only bit; it does not introduce Unix permissions
 or successful ignored modes. The wider permission model remains deferred in
 [debt #1369](https://git.internal/PyxisOS/pyxis-os/issues/1369).
 
+`stdio.h` defines `FILENAME_MAX` as the existing `PATH_MAX` bound.
+`sys/param.h` supplies the conventional `MIN` and `MAX` macros for ports.
+
 ## Ownership and stdio integration
 
 Userland's private `libc/descriptor.c` stores the native handle, backend kind,

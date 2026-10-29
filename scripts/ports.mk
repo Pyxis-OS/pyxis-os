@@ -36,6 +36,12 @@ space := $(empty) $(empty)
 LIBULTRASHIP_PREFIXES := $(subst $(space),;,$(foreach dep,$(LIBULTRASHIP_DEPS),$(abspath build/ports/$(dep)/stage/dev)));$(abspath build/ports/imgui/stage/sdl2-gl-dev);$(abspath build/ports/sdl2/stage/gl-dev)
 
 HEXCURSE_INPUTS := $(wildcard ports/hexcurse/* ports/hexcurse/patches/*.patch) ports/ports.lua ports/build.lua
+CMATRIX_INPUTS := $(wildcard ports/cmatrix/* ports/cmatrix/patches/*.patch) ports/ports.lua ports/build.lua
+NUDOKU_INPUTS := $(wildcard ports/nudoku/*) ports/ports.lua ports/build.lua
+VITETRIS_INPUTS := $(wildcard ports/vitetris/* ports/vitetris/patches/*.patch) ports/ports.lua ports/build.lua
+DFROTZ_INPUTS := $(wildcard ports/dfrotz/*) ports/ports.lua ports/build.lua
+SDL2_MIXER_INPUTS := $(wildcard ports/sdl2-mixer/*) ports/ports.lua ports/build.lua
+RAYLIB_GAMES_INPUTS := $(wildcard ports/raylib-games/* ports/raylib-games/manifests/*.json) ports/ports.lua ports/build.lua
 
 NCURSESW_INPUTS := $(wildcard ports/ncursesw/* ports/ncursesw/patches/*.patch) ports/ports.lua ports/build.lua
 
@@ -236,6 +242,12 @@ LUA_OUTPUTS := $(call port_outputs,lua)
 JQ_OUTPUTS := $(call port_outputs,jq)
 NCURSESW_OUTPUTS := $(call port_outputs,ncursesw)
 HEXCURSE_OUTPUTS := $(call port_outputs,hexcurse)
+CMATRIX_OUTPUTS := $(call port_outputs,cmatrix)
+NUDOKU_OUTPUTS := $(call port_outputs,nudoku)
+VITETRIS_OUTPUTS := $(call port_outputs,vitetris)
+DFROTZ_OUTPUTS := $(call port_outputs,dfrotz)
+SDL2_MIXER_OUTPUTS := $(call port_outputs,sdl2-mixer)
+RAYLIB_GAMES_OUTPUTS := $(call port_outputs,raylib-games)
 PKGCONF_OUTPUTS := $(call port_outputs,pkgconf)
 FASTFETCH_OUTPUTS := $(call port_outputs,fastfetch)
 TZDATA_OUTPUTS := $(call port_outputs,tzdata)
@@ -300,6 +312,7 @@ all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTP
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 all: $(IMGUI_OUTPUTS) $(LIBULTRASHIP_OUTPUTS)
 all: $(NCURSESW_OUTPUTS) $(HEXCURSE_OUTPUTS)
+all: $(CMATRIX_OUTPUTS) $(NUDOKU_OUTPUTS) $(VITETRIS_OUTPUTS) $(DFROTZ_OUTPUTS) $(SDL2_MIXER_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
 all: $(LUA_LANGUAGE_SERVER_OUTPUTS)
 
@@ -337,10 +350,11 @@ $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 fonts: $(FONTS_OUTPUTS)
 
 # The port outputs each game package packs; only make game-packages asks for them.
-.PHONY: game-ports-doom game-ports-quake game-ports-minesweeper game-ports-openarena game-ports-duke3d game-ports-diablo
+.PHONY: game-ports-doom game-ports-quake game-ports-minesweeper game-ports-raylib-games game-ports-openarena game-ports-duke3d game-ports-diablo
 game-ports-doom: $(DOOM_OUTPUTS) $(CHOCOLATE_DOOM_OUTPUTS)
 game-ports-quake: $(QUAKE_OUTPUTS) $(CHOCOLATE_QUAKE_OUTPUTS)
 game-ports-minesweeper: $(MINESWEEPER_OUTPUTS)
+game-ports-raylib-games: $(RAYLIB_GAMES_OUTPUTS)
 game-ports-openarena: $(IOQUAKE3_OUTPUTS) $(OPENARENA_OUTPUTS)
 game-ports-duke3d: $(EDUKE32_OUTPUTS)
 game-ports-diablo: $(DEVILUTIONX_OUTPUTS)
@@ -491,10 +505,11 @@ $(DEVILUTIONX_OUTPUTS) &: $(DEVILUTIONX_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) $(
 	  --zlib $(abspath build/ports/zlib/stage/dev) --libpng $(abspath build/ports/libpng/stage/dev) \
 	  --fmt $(abspath build/ports/fmt/stage/dev) --sdl2 $(abspath build/ports/sdl2/stage/dev)
 
-$(CHOCOLATE_DOOM_OUTPUTS) &: $(CHOCOLATE_DOOM_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
+$(CHOCOLATE_DOOM_OUTPUTS) &: $(CHOCOLATE_DOOM_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) $(SDL2_MIXER_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/chocolate-doom
 	$(LUA) ports/build.lua chocolate-doom --sdk $(abspath build/sdk) \
-	  --work $(abspath build/ports/chocolate-doom) --sdl2 $(abspath build/ports/sdl2/stage/dev)
+	  --work $(abspath build/ports/chocolate-doom) --sdl2 $(abspath build/ports/sdl2/stage/dev) \
+	  --sdl2-mixer $(abspath build/ports/sdl2-mixer/stage/dev)
 
 $(EDUKE32_OUTPUTS) &: $(EDUKE32_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/eduke32
@@ -557,6 +572,35 @@ $(HEXCURSE_OUTPUTS) &: $(HEXCURSE_INPUTS) $(SDK_INPUTS) $(NCURSESW_OUTPUTS) scri
 	rm -rf build/ports/hexcurse
 	$(LUA) ports/build.lua hexcurse --sdk $(abspath build/sdk) --work $(abspath build/ports/hexcurse) \
 	  --ncursesw $(abspath build/ports/ncursesw/stage/dev)
+
+$(CMATRIX_OUTPUTS) &: $(CMATRIX_INPUTS) $(SDK_INPUTS) $(NCURSESW_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/cmatrix
+	$(LUA) ports/build.lua cmatrix --sdk $(abspath build/sdk) --work $(abspath build/ports/cmatrix) \
+	  --ncursesw $(abspath build/ports/ncursesw/stage/dev)
+
+$(NUDOKU_OUTPUTS) &: $(NUDOKU_INPUTS) $(SDK_INPUTS) $(NCURSESW_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/nudoku
+	$(LUA) ports/build.lua nudoku --sdk $(abspath build/sdk) --work $(abspath build/ports/nudoku) \
+	  --ncursesw $(abspath build/ports/ncursesw/stage/dev)
+
+$(VITETRIS_OUTPUTS) &: $(VITETRIS_INPUTS) $(SDK_INPUTS) $(NCURSESW_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/vitetris
+	$(LUA) ports/build.lua vitetris --sdk $(abspath build/sdk) --work $(abspath build/ports/vitetris) \
+	  --ncursesw $(abspath build/ports/ncursesw/stage/dev)
+
+$(DFROTZ_OUTPUTS) &: $(DFROTZ_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/dfrotz
+	$(LUA) ports/build.lua dfrotz --sdk $(abspath build/sdk) --work $(abspath build/ports/dfrotz)
+
+$(SDL2_MIXER_OUTPUTS) &: $(SDL2_MIXER_INPUTS) $(SDK_INPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/sdl2-mixer
+	$(LUA) ports/build.lua sdl2-mixer --sdk $(abspath build/sdk) --work $(abspath build/ports/sdl2-mixer) \
+	  --sdl2 $(abspath build/ports/sdl2/stage/dev)
+
+$(RAYLIB_GAMES_OUTPUTS) &: $(RAYLIB_GAMES_INPUTS) $(SDK_INPUTS) $(RAYLIB_OUTPUTS) $(SDL2_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/raylib-games
+	$(LUA) ports/build.lua raylib-games --sdk $(abspath build/sdk) --work $(abspath build/ports/raylib-games) \
+	  --raylib $(abspath build/ports/raylib/stage/dev) --sdl2 $(abspath build/ports/sdl2/stage/dev)
 
 # SDL's two build profiles share the Mesa development prefix; ordinary SDL
 # consumers still link only the independent software archive.

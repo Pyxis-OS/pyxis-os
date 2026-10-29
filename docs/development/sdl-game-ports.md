@@ -3,7 +3,8 @@
 Three games run through the [SDL2 port](sdl2.md), each compared with what
 Pyxis already had. Chocolate Quake and EDuke32 ship as program bundles with sound through the
 SDL2 port's [audio output](sdl2.md#audio): Chocolate Quake's effects, and EDuke32's effects and
-OPL-emulated music. Chocolate Doom, built without SDL_mixer, is silent.
+OPL-emulated music. Chocolate Doom uses SDL2_mixer for digital effects and its
+own OPL music; the selected mixer has no SDL MIDI decoder.
 
 | Game | Image | Pin | Licence | Reference | Measurements |
 | --- | --- | --- | --- | --- | --- |
@@ -68,14 +69,13 @@ lists what was observed and what is still unchecked.
 ## Limits
 
 Remaining work is in technical debt:
-- [SDL2 port limits](https://git.internal/PyxisOS/pyxis-os/issues/1396): Chocolate Doom
-  is silent, and no refresh rate;
+- [SDL2 port limits](https://git.internal/PyxisOS/pyxis-os/issues/1396): no native refresh-rate query;
 - [EDuke32 port limits](https://git.internal/PyxisOS/pyxis-os/issues/1400): the
   port-side libc gaps;
 - [libc compatibility gaps](https://git.internal/PyxisOS/pyxis-os/issues/1368): short
   reads from files;
 - [Quake port limits](https://git.internal/PyxisOS/pyxis-os/issues/1402).
 
-Sound and music, network play, EDuke32's OpenGL renderers and whether a
+Additional music formats, network play, EDuke32's OpenGL renderers and whether a
 Chocolate port replaces a native one are deferred in
 [application ports](../wip/application-ports.md).
