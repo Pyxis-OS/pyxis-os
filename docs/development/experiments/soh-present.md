@@ -99,5 +99,24 @@ before); no semantic failure occurred, and no native improvement or uniform
 condition speedup is claimed. These are two repeats in a nested VM, not native
 SoH costs. Evidence is in
 `/shared/present/soh-frame-limiter/mutex-native-20261030/`.
-Native candidate and SoH remeasurement remain pending. Measurement hooks stay
-on a never-merged diagnostic branch.
+Native Vela qualification (2026-10-30) passed all seven semantic/parking modes,
+all four before/after probe processes and normal Remote closure. The kernel was
+unchanged at 8529730a6; userland 38eadc43 (before) versus 7d8d45f (after), 16 usable CPUs,
+HWP applied 16/16 and XSAVE 0x7/832 bytes. AC and loaded frequency were not
+independently captured. Two 65,536-claim repeats with 16 workers measured:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Shared mutex, summed CPU/claim | 14.82–14.97us | 2.83–3.29us |
+| Shared mutex, elapsed/claim (wall-only build) | 1.205–1.267us | 0.205–0.207us |
+| Private mutex, 1 worker, CPU/claim | 34.3–34.8ns | 18.6–18.7ns |
+| Condition ping-pong, CPU/endpoint | 1.63–1.85us | 1.70–1.80us |
+
+Elapsed/claim is inverse throughput, not an individual lock latency. The native
+condition samples overlap, and the large nested outlier did not recur here;
+these two repeats do not establish a universal speedup or a thermal series.
+New mutex kernel share is still about 90% of its much smaller CPU total. Exact
+counts, raw wait controls and typed retirement records are in
+`mutex-native-20261030/results-vela-20261030T111033Z/` under the evidence path.
+SoH remeasurement remains pending. Measurement hooks stay on a never-merged
+diagnostic branch.
