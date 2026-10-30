@@ -112,7 +112,9 @@ within a chosen repository, installing an ID without a version prefers the
 rightmost eligible ABI in the system's list, then the last build for that ABI.
 Data packages have no ABI rank and retain last-publication selection. Explicit
 eligible versions are honored. Published archives are
-never replaced. Only the files above and the packer's `.lock` belong in a
+never replaced. Superseded data-package builds stay indexed and available for
+explicit requests and exact dependency references; default listing hides their
+history. No automatic data pruning occurs. Only the files above and the packer's `.lock` belong in a
 repository.
 
 ## Signed indexes
@@ -521,7 +523,7 @@ automatic fallback to an older set.
 
 ```text
 pkg status
-pkg list [--available]
+pkg list [--available [--all-versions]]
 pkg [--timeout SECONDS] install [REPO/]ID[@VERSION]...
 pkg remove ID...
 pkg verify
@@ -535,16 +537,23 @@ pkg repository remove NAME
 
 `status` and plain `list` print the sampled active set and its entries; `verify`
 also checks stored metadata, inventories, file hashes and exact dependencies.
-These commands sample `current` once and take no writer lock. `list --available`
-reads every configured repository index and prints each offer as
-`REPO/ID@VERSION`. Install takes, from each repository, the last build its
-index lists for this system, at VERSION when given, adds exact dependencies, and refuses conflicting
+These commands sample `current` once and take no writer lock. Install uses the
+same eligible-build selection as available listing within the chosen source,
+or the explicit VERSION when given, adds exact dependencies, and refuses conflicting
 versions or absent dependencies. A dependency by ID alone keeps the installed
 version, or takes the last build offered for this system when the ID is absent,
 so installing or upgrading one member never conflicts with it. Remove refuses a
 set that breaks a remaining package's dependencies, naming both packages: while
 `base` is installed its members stay, and removing `base` first lets them go.
 No package code or install scripts execute.
+
+**Available builds.** `pkg list --available` prints one row per eligible package
+ID, using the same repository-local build selection as install. When several
+repositories offer it, the row shows the source alternatives; listing never
+chooses a source. `pkg list --available --all-versions` shows every eligible
+published build, including older data-package versions. `pkg check
+[REPO/]ID@VERSION` checks a particular build. ABI-ineligible builds remain hidden.
+`pkg list` without flags still lists the active installed set.
 
 **Choosing a repository.** `REPO/ID` and `REPO/ID@VERSION` look only in the
 named repository. A plain ID offered for this system by one repository is taken

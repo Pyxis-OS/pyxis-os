@@ -22,7 +22,9 @@ set of packages, and the number goes up each time.
 ## See what is available
 
 `pkg list --available` reads configured package repositories and prints one
-line per package built for your system; the `releases` repository is reserved
+line per package ID, showing the build installation would select for your
+system. Multiple sources appear as alternatives on that line; listing does not
+choose one. The `releases` repository is reserved
 for `pkg upgrade`:
 
 ```text
@@ -34,6 +36,10 @@ public/libpng-dev@1.6.59+BUILD dev abi BUILD 1306112 bytes
 
 Each line is the repository, the package name and version, its kind, the
 build it was made for and its size. Add `| grep NAME` to find one package.
+
+To see older eligible builds, use `pkg list --available --all-versions`.
+Add `| grep fonts` to narrow that output. Exact published versions remain
+available with `pkg check fonts@VERSION` or `pkg install public/fonts@VERSION`.
 
 To check one package without installing it:
 
