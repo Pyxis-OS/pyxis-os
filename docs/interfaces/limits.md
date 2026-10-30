@@ -50,3 +50,11 @@ memory, the table depth of 32 (recursion), and a 1 MiB limit on small documents
 read into a fixed buffer. The details and the compatibility consequence for older
 clients are in [package formats](packages.md#literal-data) and the
 [release process](../development/release-process.md).
+
+**Open follow-up (not in this change).** `pkg` parses a repository index before it
+verifies the signature, because the parsed header names the signer. With no
+parser cap, a hostile or broken server can make the client allocate for an
+index of any size. Signature verification over the raw bytes should come before
+parsing; the signer would then have to be named outside the signed text (for
+example by the signature file) or checked after a first verification against the
+pinned CA. This needs a design decision before any code.
