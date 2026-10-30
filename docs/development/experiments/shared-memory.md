@@ -308,3 +308,51 @@ performance. No native/PXE action.
 Frozen app/source/header hashes, preparation logs, exact commands and all raw
 records: `/home/chronium/build/shared-memory-task4/baseline/`. Preserve these
 inputs for matched after-controls. Both owned guests stopped.
+
+### Refreshed common base and SDK wrapper checks
+
+After the unrelated package-versioning merge, the task-4 comparison base is
+clean main `7aa17eb61` / userland `84b01f5`, same compiler/effective config.
+Fresh kernel/C runtime/selected apps and Lua are rebuilt. Other narrow static
+port prefixes/timezone bytes are reused read-only after checking their consumed
+SDK headers and recorded content; no LLVM/Mesa/all-ports build. Kernel SHA-256
+`fc2e1a1c7b356b6a7e369aa0486d7ef0a1e32e3c363dc6d6dcf26978ca53b917`.
+The original captures above remain unchanged, not relabelled. This refresh
+separates incoming main changes from the task's declared-grant delivery.
+
+Same existing commands/configuration, one fresh nested boot per CPU count; all
+counts/drains pass. IPC entries are within-boot median [min,max], milliseconds.
+Another agent's guest also overlaps both refreshed captures; its command and
+host context are retained. These results are observed concurrent-load samples,
+not a clean matched performance baseline or an attribution of the variation.
+Arrange a quiet matched window before drawing a before/after verdict. No
+boot-variance, native performance or speedup claim.
+
+| Guest interval, ms | 1 CPU | 4 CPUs |
+| --- | --- | --- |
+| 1,024 launches | 1059.296 | 1897.364 |
+| Private pages | 18.382 | 20.805 |
+| CALL64 completion | 1.285 [1.263, 1.902] | 2.521 [1.614, 3.312] |
+| CALL4096 completion | 1.458 [1.406, 2.618] | 2.128 [1.669, 10.533] |
+| SEND64 completion | 0.657 [0.635, 1.119] | 1.406 [0.849, 7.447] |
+| SEND4096 completion | 0.758 [0.698, 1.652] | 2.593 [1.115, 8.448] |
+
+Focused SDK-wrapper 1/4-CPU boots use the real kernel `8ff1658c0` and userland
+helpers `a331e7d90`: native and libc create/map/unmap pass zeroed rounded padding,
+READ/RW alias coherence, handle-close survival, rights/argument errno refusals
+and stale-identity errors. A local qualifier replaces only the selected boot-init
+image and receives the kernel's ordinary explicit trusted-root creation grant;
+helpers add no authority. These cases are root-only, not a child-transfer or
+normal bundle-declaration qualification. C++23 header/link checks pass without
+C++ standard libraries; the SDK build here is C-only.
+
+The wrapper branch rebases to `2301286e44` on dependency main `84b01f5` without
+changing any of its six source files; the refreshed C-only SDK/runtime build
+passes. Prior QEMU/SDK receipts retain their original source/manifests. The
+new native-job grant cases are source-reviewed; worker transfer remains with
+the declared-source/example slice. No injected malformed native replies, native
+run or compiler rebuild is claimed.
+
+Local provenance/results: `shared-memory-task4/{baseline-current,
+sdk-wrappers,sdk-qualification}/` under `/home/chronium/build/`. All owned
+QEMU/debugger/build jobs stopped after these checks.

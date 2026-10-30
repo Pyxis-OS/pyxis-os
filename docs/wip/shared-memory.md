@@ -271,6 +271,24 @@ parent integration pins their published heads. The parent updates interface and
 usage docs and task 4's checkbox; no compiler-container change is expected.
 Stop for any further material choice when reached.
 
+### Bundled-interpreter source clarification — proposed
+
+The two decisions above are accepted. Integration found that the stock shell
+and Lua bundles request MANAGE only; exact held interpreter identity does not
+bypass a bundle manifest. The native interpreter inventory route already
+retains held sources.
+
+**Default:** keep each launcher's required ordinary `memory/manage` and add an
+optional private `memory_create_shared` source declaration requesting
+`memory/manage,create_shared`. Use that held alias only for declared creation
+requests; it is not an implicit bundle exception. Only trusted interpreter
+launcher manifests gain this explicit source declaration, while other default
+application manifests and ordinary child grants remain unchanged. This clarifies
+“no default application manifest gains creation” for the trusted launcher source.
+The alternative is to leave these bundled interpreters MANAGE-only, unable to
+offer creation to declaring children. No dependent declaration/manifest code is
+written before chronium decides; independent SDK helpers are in userland #441.
+
 ## You should know
 
 Shared views can outlive creator/handle close. Read-only does not mean immutable.
