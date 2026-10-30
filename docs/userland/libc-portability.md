@@ -210,6 +210,14 @@ normalizes the full unsigned microsecond range and delegates to `nanosleep`,
 requiring READ|PRECISE|SLEEP authority. A caught cooperative signal returns EINTR
 without automatic restart; it does not turn a wall-clock read into a delay.
 
+`time.h` adds POSIX `clock_nanosleep` for `CLOCK_MONOTONIC` and
+`CLOCK_REALTIME`, sharing `nanosleep`'s sleep and interruption. It returns an
+error number and leaves errno unchanged. With `TIMER_ABSTIME` it sleeps until
+that clock's absolute time; a past time returns at once, and remaining time is
+never stored. The wall clock is never resynchronized, so a realtime deadline
+converts once to a monotonic one. The coarse clocks fail with ENOTSUP, and
+other clocks or flags with EINVAL.
+
 `MB_CUR_MAX` and `MB_LEN_MAX` are 4.
 The decoder accepts Unicode scalar values, returns bytes consumed (zero for
 NUL), and rejects incomplete, overlong, surrogate and out-of-range sequences
@@ -797,3 +805,11 @@ from the pinned musl math sources, using the existing math error contract.
 `strtok` uses the existing `strtok_r` scanner with one shared saved position;
 it modifies the input and is not reentrant or thread-safe. Use `strtok_r` when
 independent parsing state is required. These functions add no kernel interface.
+
+## Private game port closure
+
+ISO C `sinl`, `tanl` and `sqrtl` come from the pinned musl math sources, unmodified:
+80-bit long double sine and tangent with full argument reduction, and x87
+`fsqrt`. They follow the existing math error contract. Before them, libc's long
+double math covered only `frexpl`, `ldexpl`, `scalbnl`, `fmodl`, `fabsl` and
+`copysignl`.
