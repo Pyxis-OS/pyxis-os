@@ -6,12 +6,13 @@ connections, closing them after the guest's FIN, and sending a UDP burst). Singl
 counts that follow from the budget, not timings.
 
 Revisions: baseline = main `d1c409a8`; after = the same plus the network storage budget, listener backlog and UDP
-receive-queue changes.
+receive-queue changes; the D5 row adds the TIME_WAIT commit on top.
 
 | Check | Before (64 MiB budget) | After, 4 GiB guest | After, 16 GiB guest |
 |---|---|---|---|
 | Streams held open until the first refusal (`NO_MEMORY`) | 31 | 123 | 507 |
 | Connect, half-close, read EOF, close (guest closes first), until refusal | 62 of 300 | 246 of 300 | not run |
+| Same, with the TIME_WAIT reservation released at TIME_WAIT (D5, separate commit) | | 2,200 of 2,200 in three runs, no refusal | not run |
 | UDP burst of 200 datagrams, reader asleep, then drained | 4 received | 200 received, 0 dropped | not run |
 | UDP burst of 20,000 (about 11,100 reached the guest) | not run | 11,026 queued, 69 dropped (reported by INSPECT), first drop logged | not run |
 | `LISTEN` backlog 4 / 300 / 0 | not applicable (fixed 4) | not run | clamped: capacity 4 / 30 (request 300, first clamp logged) / `BAD_REQUEST` |

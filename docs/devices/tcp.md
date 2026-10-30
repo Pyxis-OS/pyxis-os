@@ -46,14 +46,14 @@ acceptance. New records and transmit data cannot spend those ingress credits.
 A separate 64 KiB allowance covers transient control/handshake work. The current
 16-pbuf out-of-order bound (1,500-byte ingress packets plus metadata) fits within
 each window reservation. Listener conversion releases its unused stream backing;
-stream reservations survive TIME_WAIT and release after actual PCB teardown.
+stream reservations release when the connection enters TIME_WAIT or at PCB teardown.
 Unread ring data remains available independently until drained or closed.
 Each listener retains the `backlog` its LISTEN asked for, across
 SYN handshakes and established-but-unaccepted streams. New SYNs receive no answer
 when pending capacity or allocation is full; peers can retry normally. A handshake
 expires ten seconds after admission; retransmissions do not extend it. Accepting
 releases the pending slot, not transport storage. Closing, terminal-held and
-TIME_WAIT records remain charged until actual release; no record is evicted to
+Closing and terminal-held records, and the small TIME_WAIT record, remain charged until actual release; no record is evicted to
 make room. Ready streams have no idle timeout and retain the bounded receive
 window.
 
@@ -173,15 +173,15 @@ can cancel them without confusing a reused tuple or slot.
 
 Idle owned streams do not expire merely for being idle. Caller deadlines and
 transport timers are distinct. Repeated shutdown does not restart progress
-timers. Admission can fail while TIME_WAIT retains its charged storage.
+timers. TIME_WAIT retains only its small PCB record.
 
 The budget is a chosen admission quota derived from installed RAM, not a physical or protocol
 capacity; actual heap allocation can fail separately. A stream claims about
 2 MiB for its ring and equal ingress reservation before other metadata or send
 data. The ring is freed after peer FIN and consumption of its last byte, or on
-failure/final release; the ingress reservation survives until PCB teardown,
-including TIME_WAIT. Thus many recently closed connections can also exhaust
-admission. A refusal is `NO_MEMORY` and the kernel log reports, at most once a second, how
+failure/final release; the ingress reservation is released when the connection
+enters TIME_WAIT, which accepts no stream data, or at PCB teardown. A TIME_WAIT
+record keeps only its PCB metadata charged. A refusal is `NO_MEMORY` and the kernel log reports, at most once a second, how
 many admissions were refused and how much of the budget was in use.
 
 Metadata, retained payloads, reassembly and pending replies are accounted; see

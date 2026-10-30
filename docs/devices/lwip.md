@@ -179,7 +179,8 @@ four; without a peer scale option lwIP limits it to 65,535 bytes. The send paylo
 budget remains 65,535 bytes. Transmit payload is allocated as needed. Before
 SYN/passive acceptance, each stream preallocates its receive ring and reserves an ingress
 window. Listener conversion releases unused stream backing; other reservations
-survive TIME_WAIT and release after PCB/pbuf teardown has returned. These are
+release when the connection enters TIME_WAIT (the PCB holds no segments there) or after
+PCB/pbuf teardown has returned. These are
 payload limits, not total heap limits; metadata is accounted separately.
 
 `net_tcp_release` consumes the sole external ownership reference. Handle copies

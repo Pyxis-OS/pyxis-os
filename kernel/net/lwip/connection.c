@@ -406,6 +406,9 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
     connection->setup_deadline = 0;
     connection->progress_deadline = 0;
     connection->orphan_deadline = 0;
+    /* lwIP purges the PCB's segments and out-of-order data before TIME_WAIT and
+     * accepts no stream data there, so no packet storage backs the reservation. */
+    tcp_connection_release_receive_reservation(connection);
     return;
   }
   if (!connection->owned && !connection->listener && !connection->orphan_deadline) {
