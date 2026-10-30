@@ -615,7 +615,6 @@ def command_targets_check(commands, files, read_file):
                                                  prefix=read_file(member, len(pxa.P1F_MAGIC)))
                 manifest_path = prefix + "manifest.json"
                 require(manifest_path in sizes, f"missing bundle manifest: {path!r}")
-                require(sizes[manifest_path] <= pxa.MAX_MANIFEST, "bundle manifest byte limit")
                 data = read_file(manifest_path, sizes[manifest_path])
                 bundles[path] = pxa.manifest_check(data, entries, tree)
             except (pxa.ProfileError, ValueError, RecursionError) as error:

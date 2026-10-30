@@ -18,6 +18,8 @@
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/pmm.h>
+#include <kernel/mm/types.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user/wait.h>
@@ -80,6 +82,10 @@ static struct clipboard_space *spaces;
 static struct clipboard_receiver *receivers;
 static atomic_bool locked;
 static size_t retained_bytes;
+/* Bytes of stored text allowed, one NN-th of installed RAM; set by clipboard_init. */
+#define CLIPBOARD_BUDGET_MIN_BYTES (8u * 1024u * 1024u)
+#define CLIPBOARD_BUDGET_RAM_DIVISOR 512u
+static size_t storage_budget = CLIPBOARD_BUDGET_MIN_BYTES;
 static uint64_t next_action, next_epoch, next_transaction;
 static struct task_wait *worker_wait;
 static bool worker_notified, worker_started;
@@ -162,11 +168,8 @@ static void destroy_item(struct kernel_object *object)
 static struct clipboard_item *allocate_item(size_t length)
 {
   KASSERT(arch_cpu_index() == 0);
-  if (length > CLIPBOARD_TEXT_MAX) {
-    return NULL;
-  }
   lock_clipboard();
-  bool fits = length <= CLIPBOARD_STORAGE_MAX - retained_bytes;
+  bool fits = length <= storage_budget - retained_bytes;
   if (fits) {
     retained_bytes += length;
   }
@@ -750,7 +753,9 @@ static void graphics_request_execute(struct clipboard_request *request)
   } else if (request->operation == CLIPBOARD_GRAPHICS_READ) {
     lock_clipboard();
     struct clipboard_item *item = store->item;
-    if (item && !object_retain(&item->object)) {
+    if (item && item->length > request->reply_capacity) {
+      request->status = CALL_LIMIT;
+    } else if (item && !object_retain(&item->object)) {
       request->status = CALL_LIMIT;
     } else {
       request->item = item;
@@ -759,7 +764,7 @@ static void graphics_request_execute(struct clipboard_request *request)
     unlock_clipboard();
   } else if (request->operation == CLIPBOARD_GRAPHICS_HAS) {
     lock_clipboard();
-    request->length = store->item && store->item->length;
+    request->length = store->item ? store->item->length : 0;
     unlock_clipboard();
   }
 }
@@ -1107,13 +1112,10 @@ static void local_copy(struct space *space, struct clipboard_store *store)
   }
   tty_unlock(tty);
   cpu_restore_interrupts(flags);
-  if (length > CLIPBOARD_TEXT_MAX) {
-    ktrace("clipboard copy: unsupported selection or text limit\n");
-    return;
-  }
   struct clipboard_item *item = allocate_item(length);
   if (!item) {
-    ktrace("clipboard copy: storage unavailable\n");
+    kwarn("clipboard: a selection of %zu bytes does not fit the %zu byte store\n", length,
+        storage_budget);
     return;
   }
   flags = cpu_save_interrupts();
@@ -1433,6 +1435,9 @@ static void clipboard_worker(void *argument)
 
 void clipboard_init(void)
 {
+  uint64_t ram = (uint64_t)pmm_get_stats().total_frames * PAGE_SIZE;
+  uint64_t share = ram / CLIPBOARD_BUDGET_RAM_DIVISOR;
+  storage_budget = share > CLIPBOARD_BUDGET_MIN_BYTES ? (size_t)share : CLIPBOARD_BUDGET_MIN_BYTES;
   worker_started = true;
   if (kernel_task_create(clipboard_worker, NULL) != MM_OK) {
     panic("cannot create clipboard worker");
@@ -1663,13 +1668,13 @@ static struct syscall_result graphics_call(struct kernel_object *object, uint64_
   uint64_t required = command == CLIPBOARD_PUBLISH ? CLIPBOARD_RIGHT_PUBLISH : CLIPBOARD_RIGHT_PASTE;
   enum call_status precheck = (rights & required) ? CALL_OK : CALL_DENIED;
   if (operation == CLIPBOARD_GRAPHICS_PUBLISH) {
-    if (payload[2] > CLIPBOARD_TEXT_MAX) {
-      precheck = CALL_LIMIT;
-    } else if (!user_buffer_check(payload[1], payload[2], USER_BUFFER_READ)) {
+    if (!user_buffer_check(payload[1], payload[2], USER_BUFFER_READ)) {
       precheck = CALL_BAD_BUFFER;
     }
   } else if (operation == CLIPBOARD_GRAPHICS_READ || operation == CLIPBOARD_GRAPHICS_HAS) {
-    size_t capacity = operation == CLIPBOARD_GRAPHICS_READ ? CLIPBOARD_TEXT_MAX :
+    /* A READ fits whatever the caller supplies; the item's length is known only
+     * when it is read, so the BSP step compares it with this capacity. */
+    size_t capacity = operation == CLIPBOARD_GRAPHICS_READ ? reply_capacity :
         sizeof(struct clipboard_graphics_has_reply);
     if (reply_capacity < capacity) {
       precheck = CALL_BAD_REQUEST;
@@ -1686,6 +1691,7 @@ static struct syscall_result graphics_call(struct kernel_object *object, uint64_
   request->operation = operation == CLIPBOARD_GRAPHICS_PUBLISH ? CLIPBOARD_GRAPHICS_ALLOCATE : operation;
   request->action_id = payload[0];
   request->length = operation == CLIPBOARD_GRAPHICS_REFUSE ? payload[1] : payload[2];
+  request->reply_capacity = reply_capacity;
   request->refusal = precheck;
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->status;
@@ -1717,7 +1723,7 @@ static struct syscall_result graphics_call(struct kernel_object *object, uint64_
       status = CALL_BAD_BUFFER;
     }
   } else if (status == CALL_OK && operation == CLIPBOARD_GRAPHICS_HAS) {
-    struct clipboard_graphics_has_reply reply = {.has_text = length};
+    struct clipboard_graphics_has_reply reply = {.has_text = length != 0, .length = length};
     if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
       status = CALL_BAD_BUFFER;
     }
@@ -1735,6 +1741,19 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == CLIPBOARD_INFO) {
+    if (!(rights & CLIPBOARD_RIGHTS)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    struct clipboard_info info = {.budget = storage_budget};
+    if (request_size != 0 || reply_capacity < sizeof(info)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_to_user(reply_address, &info, sizeof(info))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    return (struct syscall_result){CALL_OK, sizeof(info)};
+  }
   if (operation >= CLIPBOARD_GRAPHICS_PUBLISH && operation <= CLIPBOARD_GRAPHICS_REFUSE) {
     return graphics_call(object, rights, operation, request_address, request_size,
         reply_address, reply_capacity);
@@ -1782,9 +1801,8 @@ struct syscall_result clipboard_call(struct kernel_object *object, uint64_t righ
       precheck = result == CAP_LIMIT ? CALL_LIMIT : result == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
     }
   }
-  if (operation == CLIPBOARD_PUBLISH && (payload[4] > CLIPBOARD_TEXT_MAX ||
-      !user_buffer_check(payload[3], payload[4], USER_BUFFER_READ))) {
-    precheck = payload[4] > CLIPBOARD_TEXT_MAX ? CALL_LIMIT : CALL_BAD_BUFFER;
+  if (operation == CLIPBOARD_PUBLISH && !user_buffer_check(payload[3], payload[4], USER_BUFFER_READ)) {
+    precheck = CALL_BAD_BUFFER;
   }
   struct clipboard_request *request = (void *)bsp_request_prepare(BSP_SERVICE_CLIPBOARD);
   request->process = process;

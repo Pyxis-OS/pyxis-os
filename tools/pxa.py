@@ -14,12 +14,13 @@ import sys
 import tempfile
 
 
-# Host admission settings, not ZIP encoding limits or native allocation budgets.
-MAX_ARCHIVE = 512 * 1024 * 1024
-MAX_ENTRIES = 16384
-MAX_METADATA = 4 * 1024 * 1024
-# The native manifest limits and grant table are read from their only
-# authorities, userland/lib/bundle.c and include/abi/launcher.h, below.
+# The bounds are the ZIP32 format's own: a 16-bit entry count and 32-bit sizes
+# and offsets. No native reader exists for a ZIP bundle, so no host budget
+# stands in for one (docs/interfaces/limits.md). The stack-size limits and the
+# grant table are read from their only authorities, userland/lib/bundle.c and
+# include/abi/launcher.h, below.
+ZIP32_ENTRIES = 0xFFFF
+ZIP32_BYTES = 0xFFFFFFFF
 CHUNK = 1024 * 1024
 UTF8 = 0x0800
 LOCAL = struct.Struct("<4s5H3I2H")
@@ -64,10 +65,6 @@ def native_rights(text):
 
 BUNDLE_SOURCE = native_source("userspace/lib/bundle.c")
 LAUNCHER_ABI = native_source("include/abi/launcher.h")
-MAX_MANIFEST = native_size(BUNDLE_SOURCE, "BUNDLE_JSON_MAX_SIZE")
-MAX_COMMANDS = native_size(BUNDLE_SOURCE, "BUNDLE_COMMAND_LIMIT")
-MAX_RESOURCES = native_size(BUNDLE_SOURCE, "BUNDLE_RESOURCE_LIMIT")
-MAX_GRANTS = native_size(BUNDLE_SOURCE, "BUNDLE_GRANT_LIMIT")
 STACK_MIN = native_size(LAUNCHER_ABI, "LAUNCH_INITIAL_STACK_MIN_SIZE")
 STACK_MAX = native_size(LAUNCHER_ABI, "LAUNCH_INITIAL_STACK_MAX_SIZE")
 RIGHTS = native_rights(BUNDLE_SOURCE)
@@ -159,7 +156,7 @@ def json_depth(value, depth=0):
 
 
 def manifest_check(data, entries, tree):
-    require(0 < len(data) <= MAX_MANIFEST, "manifest byte limit")
+    require(len(data) > 0, "empty manifest")
     value = json.loads(data.decode("utf-8", errors="strict"),
                        object_pairs_hook=unique_object, parse_int=unsigned_integer,
                        parse_float=invalid_number, parse_constant=invalid_number)
@@ -174,9 +171,9 @@ def manifest_check(data, entries, tree):
         require(type(size) is int and STACK_MIN <= size <= STACK_MAX
                 and size % 4096 == 0, "invalid stack_bytes")
     commands, roots, grants = value["commands"], value["resource_dirs"], value["grants"]
-    require(type(commands) is dict and len(commands) <= MAX_COMMANDS, "invalid command map")
-    require(type(roots) is dict and len(roots) <= MAX_RESOURCES, "invalid resource map")
-    require(type(grants) is list and len(grants) <= MAX_GRANTS, "invalid grant list")
+    require(type(commands) is dict, "invalid command map")
+    require(type(roots) is dict, "invalid resource map")
+    require(type(grants) is list, "invalid grant list")
     for name in commands:
         manifest_name(name)
     for name, path in roots.items():
@@ -203,7 +200,6 @@ def manifest_check(data, entries, tree):
         require(type(value["sdk"]) is bool or value["sdk"] == "optional",
                 'sdk must be true, false or "optional"')
         implied += value["sdk"] is not False
-    require(len(grants) + implied <= MAX_GRANTS, "invalid grant list")
     for grant in grants:
         fields(grant, ("name", "resource", "rights", "required"), ("source", "root"))
         name, resource, rights = grant["name"], grant["resource"], grant["rights"]
@@ -266,8 +262,6 @@ class NameTree:
                 require(self.nodes[path] == kind, f"file/directory collision: {path!r}")
             else:
                 self.name_bytes += len(utf8(path))
-                require(self.name_bytes <= MAX_METADATA and len(self.nodes) < MAX_ENTRIES,
-                        "inferred name-tree budget")
                 self.nodes[path] = kind
         self.actual.add(name)
         return name, raw
@@ -326,15 +320,14 @@ def check_archive(path):
     with open_regular(path) as source:
         initial = signature(os.fstat(source.fileno()))
         size = initial[2]
-        require(END.size <= size <= MAX_ARCHIVE, "archive byte limit")
+        require(END.size <= size <= ZIP32_BYTES, "archive larger than ZIP32 holds")
         source.seek(size - END.size)
         end = END.unpack(read_exact(source, END.size))
         magic, disk, cd_disk, disk_count, count, cd_size, cd_offset, comment = end
         require(magic == b"PK\x05\x06" and disk == cd_disk == 0 and disk_count == count,
                 "invalid, split or ZIP64 end record")
-        require(0 < count <= MAX_ENTRIES and comment == 0, "entry count or ZIP comment")
-        require(cd_offset + cd_size == size - END.size and cd_size <= MAX_METADATA,
-                "invalid central-directory extent")
+        require(0 < count and comment == 0, "entry count or ZIP comment")
+        require(cd_offset + cd_size == size - END.size, "invalid central-directory extent")
         source.seek(cd_offset)
         entries = {}
         tree = NameTree()
@@ -360,8 +353,6 @@ def check_archive(path):
             require(not directory or expanded == crc == 0, "directory contains data")
             metadata += LOCAL.size + len(raw)
             total += expanded
-            require(total <= MAX_ARCHIVE and metadata + tree.name_bytes <= MAX_METADATA,
-                    "expanded or host metadata budget")
             entries[key] = Entry(key, checked_raw, directory, expanded, crc, offset)
             # Retain only fields needed for the independent local-record comparison.
             entries[key].local_fields = (needed, flags, method, time, date, crc,
@@ -369,7 +360,6 @@ def check_archive(path):
         require(source.tell() == cd_offset + cd_size, "central-directory count/size mismatch")
         require("manifest.json" in entries and not entries["manifest.json"].directory
                 and tree.nodes.get("app") is True, "missing manifest.json or app/")
-        require(entries["manifest.json"].size <= MAX_MANIFEST, "manifest byte limit")
         cursor = 0
         manifest = None
         for entry in sorted(entries.values(), key=lambda e: e.offset):
@@ -454,8 +444,8 @@ def inventory(root):
             entries.append(entry)
             total += file_size
             metadata += LOCAL.size + CENTRAL.size + len(raw) * 2
-            require(len(entries) <= MAX_ENTRIES and total + metadata <= MAX_ARCHIVE
-                    and metadata + tree.name_bytes <= MAX_METADATA, "source archive budget")
+            require(len(entries) <= ZIP32_ENTRIES and total + metadata <= ZIP32_BYTES,
+                    "source tree larger than ZIP32 holds")
             if directory:
                 fd = open_beneath(root, name, directory=True)
                 try:
@@ -506,7 +496,7 @@ def write_archive(output, root, entries):
     cd_size = output.tell() - cd_offset
     output.write(END.pack(b"PK\x05\x06", 0, 0, len(entries), len(entries),
                          cd_size, cd_offset, 0))
-    require(output.tell() <= MAX_ARCHIVE, "archive byte limit")
+    require(output.tell() <= ZIP32_BYTES, "archive larger than ZIP32 holds")
 
 
 def pack_archive(source_path, destination):

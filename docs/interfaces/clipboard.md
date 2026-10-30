@@ -29,8 +29,9 @@ already admitted operation. Paste from a history view refuses without changing
 view or focus. Caelum's log can be copied but has no application paste receiver.
 
 Export encodes retained terminal scalars as UTF-8, including U+FFFD replacement
-cells, under the existing 64 KiB byte limit. Over-limit Copy refuses the whole
-operation. Unicode Copy does not broaden safe terminal Paste: it still refuses
+cells, with no per-item limit. A selection larger than the store, whose size
+`CLIPBOARD_INFO` reports, refuses the whole operation, and the multiplexer names both
+sizes. Unicode Copy does not broaden safe terminal Paste: it still refuses
 non-ASCII items. Physical rows are joined with
 LF and each selected row loses trailing spaces, including intentional ones.
 There is no inferred soft wrap or reconstruction of original tabs. A real
@@ -98,16 +99,21 @@ incomplete scan boundary refuses busy before exposing text or availability.
 [clipboard.h](../../include/abi/clipboard.h) adds graphics PUBLISH, READ, HAS and
 REFUSE requests using the action ID from the 40-byte native keyboard event.
 PUBLISH copies and validates complete scalar UTF-8, excluding NUL, before atomic
-replacement; it preserves bytes and line endings. READ supplies a 64 KiB reply
-buffer and receives raw bytes from one retained immutable snapshot, with length
-in `reply_size`; authorized empty/missing data returns zero. HAS returns only
-an eight-byte boolean under a live Paste action, without extending it or reading
-contents. REFUSE spends a matching preflight failure. An acquired keyboard owner
+replacement; it preserves bytes and line endings. READ supplies a reply buffer
+that holds the whole item and receives raw bytes from one retained immutable
+snapshot, with length in `reply_size`; a smaller buffer is `CALL_LIMIT`, nothing is
+read, and the attempt is spent. Authorized empty/missing data returns zero. HAS
+returns a sixteen-byte reply under a live Paste action, whether there is text and
+its length in bytes, without extending the action or reading contents, so a caller
+sizes its buffer first (a copy that replaced the item with a longer one in between
+makes READ refuse). `CLIPBOARD_INFO`, on any grant with PUBLISH or PASTE, returns the
+store's budget and consumes nothing. REFUSE spends a matching preflight failure. An acquired keyboard owner
 may also use `KEYBOARD_CLIPBOARD_REFUSE` / `keyboard_clipboard_refuse()` to
 decline its matching action when the store grant is absent; this grants no
 read, publication or store metadata. Libpyxis supplies
-`clipboard_graphics_publish/read/has/refuse()` helpers. The existing 64 KiB text
-and 8 MiB aggregate payload bounds apply. Terminal Paste converts a separate
+`clipboard_graphics_publish/read/has/refuse()` and `clipboard_info()` helpers. No
+constant limits an item: one budget bounds all stored text (see
+[Bounds](#bounds-and-qualification)). Terminal Paste converts a separate
 charged snapshot under its ASCII/control/CR-normalization rules; richer text
 refuses before any insertion.
 
@@ -201,8 +207,11 @@ planned.
 
 ## Bounds and qualification
 
-Text is at most 64 KiB. Store-owned current, staging and active-snapshot payload
-allocations share an 8 MiB global admission budget. Replacement may temporarily
+No constant limits an item. Store-owned current, staging and active-snapshot payload
+allocations share one admission budget: one 512th of installed RAM and at least 8 MiB
+(the share the package views and the multiplexer's scrollback also take; see
+[limits](limits.md)), reported by `CLIPBOARD_INFO`. A terminal Copy that does not fit
+is logged with both sizes, and an API Copy is `CALL_LIMIT` or `CALL_NO_SPACE`. Replacement may temporarily
 retain both old and new items; failure preserves the old one. One active Paste
 per space is permitted. Its separate five-second total deadline runs from
 admission through completion and never restarts after progress. The 4 KiB native

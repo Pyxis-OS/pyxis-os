@@ -77,3 +77,24 @@ index of any size. Signature verification over the raw bytes should come before
 parsing; the signer would then have to be named outside the signed text (for
 example by the signature file) or checked after a first verification against the
 pinned CA. This needs a design decision before any code.
+
+## Bundles, tar, clipboard and scrollback
+
+The third package (work package 9).
+
+- **Bundle manifests.** The reader has no limit on the manifest size or on the number of
+  commands, resource directories or grants; tables grow with what the manifest declares and
+  duplicate keys are found by sorting. A path component stays at 255 bytes (NAME_MAX), the JSON depth at 16
+  (recursion). What the launcher can carry in one request is the launch path's bound.
+  `tools/pxa.py` enforces only the ZIP32 format's own bounds.
+- **tar.** The BusyBox port writes and reads GNU long-name records, so no name length drops a
+  member (see `ports/busybox/TAR.md`).
+- **Clipboard.** No constant limits an item. Stored text shares one budget, one 512th of installed
+  RAM and at least 8 MiB, reported by `CLIPBOARD_INFO`; a copy that does not fit says so with both
+  sizes. A graphics read is size-first (`HAS` reports the length, `READ` must fit).
+- **Multiplexer scrollback.** A pane's history is limited by memory, not by a row count: one 512th
+  of the allocator's capacity per pane, at least 8 MiB, or `terminal.scrollback_bytes`. The
+  history view reports rows dropped and the limit.
+
+The share, one 512th of RAM with an 8 MiB floor, is the one the package views (4 MiB floor) and
+the clipboard take.

@@ -41,6 +41,8 @@ struct clipboard_request {
   struct kernel_object *object, *output, *attachment;
   struct clipboard_item *item;
   uint64_t operation, action_id, generation, mapping_identity, length, epoch, transaction_id;
+  /* A graphics READ's reply capacity: an item longer than this is not read. */
+  uint64_t reply_capacity;
   enum call_status status, refusal;
 };
 
