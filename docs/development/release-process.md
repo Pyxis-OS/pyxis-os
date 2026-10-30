@@ -96,10 +96,12 @@ independent rescue/PXE; one native pass is not power-cut qualification.
 ## Release-tied packages
 
 Before the owner's native update, pack the release-tied packages (the game
-packages and `clang-hosted`) from the tagged checkout into horse's trees and
-prune other revisions, following
+packages and `clang-hosted`) from the tagged checkout into horse's trees,
+following
 [packing a revision](../../tools/package-repository/README.md#packing-a-revision).
-A package built at another revision refuses to install or launch on the release.
+Retain the builds needed by every supported origin and required ABI hop;
+pruning must not strand a checkpoint. A package built for an incompatible ABI
+refuses to install or launch on the release.
 A build deployed to the owner's stick between releases is packed the same way,
 from that build's checkout, before the owner updates. The owner's stick then
 gets the update natively. The stick usually carries a personal build with opt-in

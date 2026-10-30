@@ -760,7 +760,7 @@ without `package_upgrade` cannot upgrade. Under the writer lock it then:
    boot ESP once through `UPGRADE_BOOT_ESP`, checks that its boot
    record is still the one this boot read, and publishes the new attempt with
    the shared boot publisher, the boot entry's `mount.pool` from the evidence;
-   the current selection is replaced; the static rescue entry remains independent;
+   the normal boot selection is replaced; the static rescue entry remains independent;
 5. removes temporary release staging and prints `Upgrade staged; type reboot
    to finish`. First boot verifies the target and switches the package set
    before installed consumers; a later invocation resolves the remaining hops.
