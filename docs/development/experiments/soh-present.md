@@ -318,10 +318,10 @@ park; WAKE retains it through final checked reply copy, then releases before
 outer authority cleanup. All failures release exactly once. A mapping lease
 does not freeze sibling-written data.
 
-Successful direct calls would use4 VM guards instead of8/12: syscall admission,
+Successful direct calls use4 VM guards instead of8/12: syscall admission,
 one borrow acquire/release pair and syscall leave. Admission and borrower proofs
 remain distinct. Other protocols and non-wait THREAD operations keep their
-existing handling. No spin, scheduler, worker or Mesa policy change is proposed.
+existing handling. No spin, scheduler, worker or Mesa policy change is included.
 VM-range indexing remains a separate possible follow-up after remeasurement.
 Implementation is authorized with all failures releasing exactly once. QEMU
 primitive qualification precedes native work; each screen-on native window needs
@@ -346,5 +346,49 @@ No private observer operations are present in the production implementation.
 
 Enrollment readiness plus grace is not an exact enrollment observer. Final
 reply-delivery races, process-stop/CUT races and address reuse are source-reviewed
-but not qualified by these added protocol controls. No native performance gain
-is claimed; remeasurement and any visible native window go through chronium.
+but not qualified by these added protocol controls. The native repeat below
+uses a separately approved visible window.
+
+
+### Native packet-lease repeat (2026-10-30)
+
+The single approved B run retained all twelve FPS captures, passed both primitive
+controls and completed two foreground waits; Remote exited0/draincomplete. Overall
+counter qualification is UNCONFIRMED: counters-on gameplay sample1 read15/16 rows
+at its end (one busy row). Its counter deltas are excluded; its FPS remains valid.
+The other five enabled captures are SAMPLED, with zero incomplete timing/latency
+events. No retry. Ordinary-pair restoration was requested immediately.
+
+Never-merge B7204697f applies the same production packet-lease change to exact
+Aa3298342. Archive, game/helper/library objects, observers, settings/save/assets,
+dependency closure and default16Mesa workers are byte-identical. Same live RAM,
+2880x1768 content, original scene rates, HWP16/16, XSAVE0x7/832 and admitted Intel
+flips before/after; no reported fence/timeout. AC/core frequencies unrecorded.
+This is matched frozen native evidence; current-main integration has separate
+QEMU/CI qualification. The approved900/840s visible/collection window with audio
+used234.85s host collection. No unattended audio/optical quality claim.
+
+| Scene | Target | A counters off fps | B counters off fps | B counters on fps |
+| --- | --- | --- | --- | --- |
+| Gameplay |20|19.99|19.97–19.99|19.99 (one counter snapshot unconfirmed)|
+| Pause |30|23.85–23.92|29.99–30.02|29.96–29.99|
+| File select |60|36.47–37.19|37.21–37.51|37.38–37.64|
+
+Pause counters-off mean rises25.6% and reaches the30Hz target, censoring further
+headroom. Menu off mean +1.4% and on -0.6% do not establish a menu gain; it remains
+below60. Fixed off->on order, separate visits/two repeats and observer overhead
+limit causal precision; no corrected or universal speedup is claimed.
+
+Valid pause captures count3,150,916/3,131,547 VM-guard acquisitions per256frames,
+versus6,329,230/6,361,263 before; borrows749,041/744,731 versus2,440,678/2,454,971.
+Call counts also change. Sampled VM-acquisition share falls78.13–78.29% to
+60.80–62.38%; WAKE averages25.30–27.08us versus93.86–95.17us per complete sampled
+call, not per lock. Menu token validation becomes53.81–54.02% of sampled spans,
+with VM acquisition23.08–24.66%. These are partial sampled exclusive costs, not
+whole-frame CPU. Range scans remain outside the VM guard; no indexing or further
+runtime policy change is included. Existing endpoint/observer limits above apply.
+
+Reports: `/shared/present/soh-frame-limiter/thread-packet-lease/NATIVE-LEASE-RESULTS.md`
+and `NATIVE-LEASE-COMPARISON.json`; raw results remain horse-private under
+`results-vela-thread-packet-lease-20261030/`. User-visible results, failures and ABI
+are unchanged; packet mapping stability does not freeze mutable contents.
