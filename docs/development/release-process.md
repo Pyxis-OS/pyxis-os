@@ -89,6 +89,11 @@ replace published bytes. An explicit `pkg upgrade VERSION` on a route-aware
 client still takes required checkpoints first. The shipped 0.0.10 client uses
 plain `pkg upgrade` to reach its bootstrap; it cannot name the newer IDs.
 
+Keep repository index syntax readable by every supported starting client;
+a checkpoint cannot repair an index the old client cannot parse. Qualify
+against the final catalog with the checkpoint and newest release offered
+together, using the unchanged shipped starting updater.
+
 Before a native upgrade, every retained personal program also needs a build
 for each required ABI hop. Keep the native gate separate from QEMU and retain
 independent rescue/PXE; one native pass is not power-cut qualification.
