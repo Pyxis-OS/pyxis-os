@@ -365,7 +365,7 @@ const struct boot_options *boot_options_parse(const char *command_line)
     options.pool_malformed = true;
   }
   options.install = flag_option("boot.install", install, false);
-  options.nvme_write = flag_option("nvme.write", nvme_write, false);
+  options.nvme_write = flag_option("nvme.write", nvme_write, true);
   options.wifi_ax200 = flag_option("wifi.ax200", wifi_ax200, false);
   options.wifi_rtl8922ae = flag_option("wifi.rtl8922ae", wifi_rtl8922ae, false);
   options.default_config = flag_option("boot.default_config", default_config, false);

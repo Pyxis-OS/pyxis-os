@@ -1495,6 +1495,6 @@ void nvme_prepare(const struct boot_info *boot)
     kinfo("nvme PCI %x:%x.%u: namespace %u prepared, queues admin=%u I/O=%u, %s; NVMe data writes %s\n",
         device->address.bus, device->address.device, device->address.function,
         disk->namespace, disk->admin.depth, disk->io.depth, disk->msi_only ? "MSI" : "MSI-X",
-        disk->info.writable ? "enabled by nvme.write=1" : "disabled");
+        disk->info.writable ? "enabled" : "disabled");
   }
 }

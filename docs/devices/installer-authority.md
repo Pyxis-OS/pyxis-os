@@ -60,8 +60,8 @@ Installer disk authority covers retained VirtIO, USB BOT/SCSI and NVMe candidate
 USB write claims require the same per-device C.1 qualification as writable native
 mounts: known write-protection-clear media and a successful real blocking cache
 synchronization. Configured native mounting uses its separate GUID authority.
-NVMe writes are disabled by default and require the explicit `nvme.write=1` boot
-option. This gate does not itself grant a raw claim.
+NVMe writes are enabled by default; `nvme.write=0` disables them independently
+of these grants. Enabling the driver path does not itself grant a raw claim.
 
 [`include/abi/disk.h`](../../include/abi/disk.h) defines two native protocols.
 DISKS ENUMERATE requires ENUMERATE and takes a zero-based inventory index; it

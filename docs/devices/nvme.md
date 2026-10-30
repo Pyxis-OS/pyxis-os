@@ -78,9 +78,10 @@ in the meantime send a fresh message. MSI-X needs neither register.
 
 ## Write authority
 
-Absent `nvme.write=1`, kernel WRITE and FLUSH admission returns READ_ONLY. This
-boot gate applies independently of userspace grants. With it, filesystem writes
-still require the existing trusted native-mount authority. A write captures its
+NVMe WRITE and FLUSH admission is enabled by default. `nvme.write=0` makes
+both return READ_ONLY independently of userspace grants; use it for read-only
+development/PXE boots. Enabling the driver path does not grant write authority:
+filesystem writes still require the existing trusted native-mount authority. A write captures its
 bytes at admission; a later successful NVMe Flush supplies the durability fence.
 Tickets, abandonment and write-failure latching follow the existing block
 contract; caller timeouts never recall device-owned DMA.

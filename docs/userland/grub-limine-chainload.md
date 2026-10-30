@@ -66,13 +66,15 @@ configuration/menu activation; manual activation is not that contract.
 
 The accepted [Coexist install without a foreign OS direction](../wip/release-ideas.md#10-coexist-install-without-a-foreign-os)
 (chronium, 2026-10-21) moves loader provisioning, ESP bootstrap configuration,
-boot-entry creation and activation, including `nvme.write=1`, into Pyxis, its
+boot-entry creation and activation into Pyxis, its
 installer or the shared publisher. A firmware boot entry is favoured; the route
 is not decided and this direction is not implemented.
 
-Installed normal boot in the native qualification explicitly enables
-`nvme.write=1` for the selected pool. Rescue keeps writes disabled and uses
-`boot.default_config=1`. The first read-only bootstrap mounts no pool: selecting
+Installed normal boot in the native qualification explicitly enabled
+`nvme.write=1` for the selected pool. Current kernels enable writes by default;
+use `nvme.write=0` explicitly for a read-only NVMe boot. Rescue uses
+`boot.default_config=1` to bypass configured spaces; that option does not disable
+NVMe writes. The first read-only bootstrap mounts no pool: selecting
 an as-yet-uncreated pool would enter local-only recovery rather than the live
 Remote profile. A power grant authorizes power requests only, not disk, ESP or
 firmware mutation.

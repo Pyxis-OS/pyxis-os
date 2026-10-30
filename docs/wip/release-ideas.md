@@ -49,8 +49,8 @@ Implemented behavior is in the [native installer](../userland/installer.md) and
 - Nothing can be installed beside another OS, for example vela's Fedora on half
   of the NVMe. The Coexist profile exists and appends a pool in a reviewed gap of a
   disk that keeps its partitions ([NVMe coexistence](nvme-coexistence.md)), but
-  nothing makes that gap, and native NVMe writes are still disabled
-  (`nvme.write=0`).
+  nothing makes that gap. Read-only native checks must explicitly use
+  `nvme.write=0`; the kernel now enables writes by default.
 - Installer and updater output is hard for a human to parse. GPT names appear as
   raw UTF-16 with `\0000` runs, and each step prints long lists of lines. The
   [TUI plan](installer-tui.md) already requires a progress bar rather than a log
@@ -109,8 +109,9 @@ Readable-output rule for all three:
      installer does today.
    - Anything in use is refused: the booted medium's mounted partitions and the
      running pool's partition.
-   - `nvme.write=0` stays the default on live images until this is natively
-     qualified, then retires.
+   - NVMe writes default on (owner, 2026-10-29); read-only live/PXE checks
+     explicitly use `nvme.write=0`. Write grants and reviewed confirmation
+     remain required.
 3. **Order.**
    - The partition manager first.
    - Then pool and volume management.
@@ -386,9 +387,9 @@ Not decided.
 
 ### Also
 
-`nvme.write=1` is added to the activated entry by hand today. Native NVMe writes
-stay disabled by default until qualified (entry 1, decision 2); this entry should
-say how the activation step carries that setting once it is a Pyxis action.
+The historical activation added `nvme.write=1` by hand. Current kernels enable
+NVMe writes by default; explicitly use `nvme.write=0` for a read-only boot.
+The owned normal-entry format retains the explicit enable.
 
 ## 11. Carried from the 0.0.9 direction
 
