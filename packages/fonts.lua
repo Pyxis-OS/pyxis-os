@@ -2,7 +2,7 @@
 -- Run make font-assets before packing this recipe.
 return {
   id = "fonts",
-  version = "2026.10.24-blurgtext",
+  version = "2026.10.30.1",
   kind = "data",
   depends = {},
   entries = {

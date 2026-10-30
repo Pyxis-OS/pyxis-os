@@ -4,6 +4,13 @@ Run the host packer from the Pyxis checkout. Recipes are trusted literal Lua
 input; paths resolve relative to the recipe file. Use a fresh version for changed
 bytes: the packer never replaces an already published ID/version.
 
+Fonts use the authored collection version `YYYY.MM.DD.N`; increment N for
+another publication on the same date. Component releases remain in the existing
+per-family `source.txt` metadata and upstream notices. Published versions and
+archives are immutable; older data versions stay indexed for explicit requests.
+The client lists only the build it would install unless `--all-versions` is
+requested with `list --available`.
+
 Fonts reuse the existing cache-only, SHA-256-checked data recipe and retain all
 nineteen unchanged fonts (Caskaydia Cove, IBM Plex and Noto), original notices
 and provenance:

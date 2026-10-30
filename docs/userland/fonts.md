@@ -130,6 +130,19 @@ font_size_destroy(size);
 
 ## Installed collection
 
+New collection publications use `YYYY.MM.DD.N` (for example, `2026.10.30.1`),
+with a positive packaging revision incremented for another publication on the
+same date. This is an authored collection version, not a per-build timestamp.
+Versions remain opaque to pkg: the last publication in the selected repository
+is the default. Existing published names and archives are retained unchanged.
+
+Component releases, upstream URLs, checksums and notices are already recorded
+in each family's `source.txt`, for example
+`pkg://fonts/caskaydia-cove/source.txt` and `pkg://fonts/roboto/source.txt`.
+These payload metadata files are covered by the package inventory; their
+component versions are not repeated in the collection's version string.
+
+
 The `fonts` data package supplies these unchanged TrueType/OpenType files.
 Configure a network repository and run `pkg install fonts` on live or installed
 systems; live installations last until reboot. Each path is chosen explicitly by the
