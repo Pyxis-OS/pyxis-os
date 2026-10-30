@@ -318,7 +318,7 @@ still in the [bundle direction](../wip/program-bundles.md#future-consent-policy)
 | JSON nesting | 16 (parser recursion) |
 | Name/path component | 255 bytes (NAME_MAX of the native filesystems) |
 | Relative entry/resource path | none beyond the component bound |
-| Final userspace launch roots | 16 total |
+| Final named capabilities/text | Native environment entry/byte admission policy; no separate root-count quota |
 | Launch capture / child startup | Request-sized, checked arithmetic and actual allocation; native environment policy is separate |
 
 Final capture/startup validation occurs before child publication. The manifest
@@ -331,9 +331,9 @@ bounds. Capture copies only the selected executable, never the whole bundle.
 
 ## Selected-image admission
 
-The development manifest budget includes one extra request for a separately
-scoped resolver path (`dns_udp`), preserving ordinary UDP delegation. This is
-an implementation budget, not an archive or kernel launch-format limit.
+The development manifest declares a separately scoped resolver path (`dns_udp`),
+preserving ordinary UDP delegation. It consumes an ordinary grant request;
+there is no separate manifest request-count budget.
 
 Chronium accepted removal of the selected-image policy ceilings on 2026-10-30:
 
