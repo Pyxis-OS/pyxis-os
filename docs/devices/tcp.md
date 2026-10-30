@@ -180,7 +180,7 @@ capacity; actual heap allocation can fail separately. A stream claims about
 data. The ring is freed after peer FIN and consumption of its last byte, or on
 failure/final release; the ingress reservation survives until PCB teardown,
 including TIME_WAIT. Thus many recently closed connections can also exhaust
-admission. The quota remains unchanged pending the limits audit.
+admission. The quota remains unchanged for the separate limits audit.
 
 Metadata, retained payloads, reassembly and pending replies are accounted; see
 [lwIP ownership and allocation](lwip.md) for the implementation details.

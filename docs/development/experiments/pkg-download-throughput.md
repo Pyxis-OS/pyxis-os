@@ -79,7 +79,24 @@ service times are not additive wall phases. Final directory sync remains a small
 nested fraction; no durability barrier change is justified. These are nested-VM
 host-filesystem results, not native NVMe measurements.
 
-## Aggregate quota and remaining qualification
+## Native vela qualification (2026-10-30)
+
+Chronium ran the RAM PXE packet built from `3e9b62c13d1b`. The retained UDP log
+records USB CDC-NCM networking and a TSC clock on 16 CPUs at 3686.400 MHz.
+Each run fetched the same 281,421,824-byte public clang-hosted archive:
+
+| Run | Fetch | Fetch rate | Whole SHA | Inventory/payload verification |
+| --- | --- | --- | --- | --- |
+| 1 | 12.943 s | 20.735 MiB/s | 0.406 s | 0.498 s |
+| 2 | 8.322 s | 32.250 MiB/s | 0.423 s | 0.499 s |
+| 3 | 13.142 s | 20.423 MiB/s | 0.378 s | 0.501 s |
+
+All whole-file, inventory and payload checks passed. The owner confirmed that
+installed disks were untouched and the temporary PXE entry was removed/restored.
+The previous owner-observed rate on 0.0.10 was about 5 MiB/s; these runs establish
+native improvement, not a matched same-build baseline or a native RTT/loss trace.
+
+## Aggregate quota and remaining limits
 
 The 64 MiB TCP/UDP allowance in `kernel/net/storage.c` is a chosen admission quota,
 not physical capacity or a protocol constraint. It is checked before separate
@@ -89,9 +106,8 @@ Roughly 30 active streams fit after the larger ring/ingress claim, before other
 charges reduce capacity. This is an estimate, not a concurrency qualification.
 Rings may be freed after peer FIN and draining; ingress reservations stay through
 TIME_WAIT until PCB teardown. Recently closed streams also consume admission.
-Revisit this artificial quota in the limits audit.
+This artificial quota is handed to the separate limits audit; it is unchanged here.
 
-Native benefit remains pending one orchestrator-scheduled RAM-only vela check.
-The owner has not authorized direct native access. The remaining loss recovery,
+Native qualification is complete. The remaining loss recovery,
 SACK and PMTU limitations in [debt #1437](https://git.internal/PyxisOS/pyxis-os/issues/1437)
 remain open; this change addresses only window scaling.
