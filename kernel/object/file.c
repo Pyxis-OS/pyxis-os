@@ -535,14 +535,15 @@ void file_end_operation(struct file_object *file)
   unlock_file(file);
 }
 
-enum call_status file_ram_capture(struct file_object *file, struct image_capture *capture)
+enum call_status file_ram_capture(struct file_object *file, struct image_capture *capture,
+    struct call_limit *detail)
 {
   KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && file->busy);
   enum call_status failure = file_failure_status(file);
   if (failure != CALL_OK) {
     return failure;
   }
-  enum call_status status = image_capture_allocate(file->size, capture);
+  enum call_status status = image_capture_allocate(file->size, capture, detail);
   if (status != CALL_OK) {
     return status;
   }

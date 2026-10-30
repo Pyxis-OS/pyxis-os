@@ -54,6 +54,7 @@ struct hostfs_request {
    * No capture retry or coherent-host-snapshot guarantee. The caller moves the
    * descriptor to launch storage and clears it before releasing this request. */
   struct image_capture captured;
+  struct call_limit limit;
   struct directory_cursor cursor;
   char name[VIRTIO_FS_NAME_MAX + 1];
   /* RENAME borrows both parent nodes from the parked caller's capabilities. */

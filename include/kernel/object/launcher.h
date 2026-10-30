@@ -2,6 +2,7 @@
 #define KERNEL_LAUNCHER_H
 
 #include <abi/launcher.h>
+#include <abi/limit.h>
 #include <abi/syscall.h>
 #include <kernel/service/request.h>
 #include <kernel/object/capability.h>
@@ -29,6 +30,7 @@ struct launcher_request {
   struct process *parent;
   struct execution_group *execution_group; /* Borrowed from caller's launcher. */
   enum call_status result;
+  struct call_limit limit;
   struct execution_group_create_reply execution_reply;
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[2];
@@ -50,6 +52,6 @@ bool launcher_grant_allowed(struct execution_group *group, struct kernel_object 
  * owners. May sleep, with no held spinlocks. */
 struct syscall_result launcher_call(struct kernel_object *object, uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity);
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail);
 
 #endif

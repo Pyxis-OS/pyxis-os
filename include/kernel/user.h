@@ -30,7 +30,10 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
 void user_task_discard_prepared(struct task *task);
 /* Exclusive prepared-task access only, before publication. */
 struct process *user_task_process(struct task *task);
-void user_task_publish_group(struct task **tasks, size_t count);
+/* Destination scratch covers the boot CPU count and exists before publication.
+ * No task/process pointer may be read after the queue lock is released. */
+void user_task_publish_group(struct task **tasks, size_t count,
+    size_t *destinations, size_t destination_capacity);
 
 /* Abandon the current task's kernel-entry stack. The scheduler switches to
  * its own stack and the kernel space before transferring ownership through fixed device hooks to its CPU RAM reaper. */

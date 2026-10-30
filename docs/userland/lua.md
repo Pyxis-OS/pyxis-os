@@ -135,11 +135,15 @@ local close_status = job:close()
 ```
 
 `pyxis.pipeline({argv1, argv2, ...}, options)` uses the same record and options
-for one to eight stages. Stages are native images, resolved through caller-held
+for a nonempty request-sized stage array. Stages are native images, resolved through caller-held
 content; bundle/catalog/shebang expansion is excluded from this captured path.
 Both entry points capture final stdout and combined stderr, with every stage's
 native result. A nonzero exit is data. Native admission may return an owned job
-with a nonzero status; never replay it.
+with a nonzero status; never replay it. On CALL_LIMIT, admission also returns a
+third detail table with numeric `reason`/`flags`, optional `requested`/`limit`,
+and a formatted `message` when known. Values above LUA_MAXINTEGER use exact
+decimal strings rather than signed wrap. The first two return values retain
+their job/status meanings.
 
 Options select a required positive `timeout_ms`, binary finite `input` (nil is
 absent; an empty string supplies EOF), `stdout_limit`/`stderr_limit`, exact

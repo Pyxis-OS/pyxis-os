@@ -3,6 +3,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
+#include <kernel/limit.h>
 #include <kernel/memory.h>
 #include <kernel/object/environment.h>
 #include <kernel/object/command_search.h>
@@ -91,6 +92,43 @@ static bool padded_name_valid(const char name[ENVIRONMENT_NAME_MAX + 1])
     }
   }
   return true;
+}
+
+enum call_status environment_seed_measure(const char *name, uint64_t kind,
+    uint64_t flags, size_t length, size_t *bytes, struct call_limit *detail)
+{
+  if (!name || !name_valid(name) || (flags & ~ENVIRONMENT_EXPORTED) ||
+      (kind != ENVIRONMENT_CAP && kind != ENVIRONMENT_TEXT) ||
+      (kind == ENVIRONMENT_CAP && length)) {
+    return CALL_BAD_REQUEST;
+  }
+  size_t names = strlen(name) + 1;
+  size_t text = 0;
+  if (kind == ENVIRONMENT_TEXT) {
+    if (length == SIZE_MAX) {
+      return call_limit_encoding(detail);
+    }
+    text = length + 1;
+  }
+  if (names > SIZE_MAX - text || *bytes > SIZE_MAX - names - text) {
+    return call_limit_encoding(detail);
+  }
+  *bytes += names + text;
+  return CALL_OK;
+}
+
+enum call_status environment_seed_admit(size_t entries, size_t bytes,
+    struct call_limit *detail)
+{
+  if (entries > ENVIRONMENT_ENTRIES_LIMIT) {
+    return call_limit_set(detail, CALL_LIMIT_ENVIRONMENT_ENTRIES, entries,
+        ENVIRONMENT_ENTRIES_LIMIT, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
+  }
+  if (bytes > ENVIRONMENT_BYTES_LIMIT) {
+    return call_limit_set(detail, CALL_LIMIT_ENVIRONMENT_TEXT, bytes,
+        ENVIRONMENT_BYTES_LIMIT, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
+  }
+  return CALL_OK;
 }
 
 static size_t cell_bytes(const struct environment_cell *cell)
@@ -230,7 +268,7 @@ static void staging_destroy(struct environment_staging *staging)
 /* The actor retains the table. Every candidate cell already owns its logical grant.
  * Preflight the entire batch under the guard, then publish without failure. */
 static enum call_status commit_set(struct environment_table *table,
-    struct environment_staging *staging)
+    struct environment_staging *staging, struct call_limit *detail)
 {
   KASSERT(!cpu_interrupts_enabled());
   size_t indices[ENVIRONMENT_MUTATIONS_LIMIT];
@@ -257,10 +295,12 @@ static enum call_status commit_set(struct environment_table *table,
     bytes += cell_bytes(cell);
     ++changes;
   }
-  if (status == CALL_OK && (count > ENVIRONMENT_ENTRIES_LIMIT ||
-      bytes > ENVIRONMENT_BYTES_LIMIT || (changes &&
-      (table->generation == UINT64_MAX || changes > UINT64_MAX - table->next_identity)))) {
-    status = CALL_LIMIT;
+  if (status == CALL_OK) {
+    status = environment_seed_admit(count, bytes, detail);
+  }
+  if (status == CALL_OK && changes &&
+      (table->generation == UINT64_MAX || changes > UINT64_MAX - table->next_identity)) {
+    status = call_limit_encoding(detail);
   }
   if (status == CALL_OK && changes) {
     for (size_t i = 0; i < staging->count; ++i) {
@@ -293,10 +333,10 @@ static enum call_status commit_set(struct environment_table *table,
 }
 
 static enum call_status seed_cell_owned(struct environment_table *table,
-    struct environment_cell *cell)
+    struct environment_cell *cell, struct call_limit *detail)
 {
   struct environment_staging staging = {.count = 1, .cells = {cell}};
-  enum call_status status = commit_set(table, &staging);
+  enum call_status status = commit_set(table, &staging, detail);
   if (staging.cells[0]) {
     cell_release(staging.cells[0]);
   }
@@ -304,7 +344,7 @@ static enum call_status seed_cell_owned(struct environment_table *table,
 }
 
 enum call_status environment_table_seed_owned(struct environment_table *table,
-    const char *name, uint64_t flags, struct capability_grant *grant)
+    const char *name, uint64_t flags, struct capability_grant *grant, struct call_limit *detail)
 {
   if (!name_valid(name) || (flags & ~ENVIRONMENT_EXPORTED) || !grant->object) {
     return CALL_BAD_REQUEST;
@@ -315,7 +355,7 @@ enum call_status environment_table_seed_owned(struct environment_table *table,
   }
   cell->grant = *grant;
   struct environment_staging staging = {.count = 1, .cells = {cell}};
-  enum call_status status = commit_set(table, &staging);
+  enum call_status status = commit_set(table, &staging, detail);
   if (status == CALL_OK) {
     *grant = (struct capability_grant){0};
   } else {
@@ -326,14 +366,20 @@ enum call_status environment_table_seed_owned(struct environment_table *table,
 }
 
 enum call_status environment_table_seed_text(struct environment_table *table,
-    const char *name, uint64_t flags, const char *text, size_t length)
+    const char *name, uint64_t flags, const char *text, size_t length, struct call_limit *detail)
 {
   if (!name_valid(name) || (flags & ~ENVIRONMENT_EXPORTED) ||
       (length && !text)) {
     return CALL_BAD_REQUEST;
   }
-  if (length > ENVIRONMENT_BYTES_LIMIT) {
-    return CALL_LIMIT;
+  size_t bytes = 0;
+  enum call_status measured = environment_seed_measure(name, ENVIRONMENT_TEXT,
+      flags, length, &bytes, detail);
+  if (measured == CALL_OK) {
+    measured = environment_seed_admit(1, bytes, detail);
+  }
+  if (measured != CALL_OK) {
+    return measured;
   }
   struct environment_cell *cell = cell_create(name, ENVIRONMENT_TEXT, flags, length);
   if (!cell) {
@@ -348,7 +394,7 @@ enum call_status environment_table_seed_text(struct environment_table *table,
   if (length) {
     memcpy(cell->text, text, length);
   }
-  return seed_cell_owned(table, cell);
+  return seed_cell_owned(table, cell, detail);
 }
 
 bool environment_snapshot_grant_retain(struct kernel_object *object)
@@ -500,7 +546,7 @@ enum call_status environment_table_seed_cell(struct environment_table *table,
 {
   if (cell->kind == ENVIRONMENT_TEXT) {
     return environment_table_seed_text(table, cell->name, cell->flags,
-        cell->text, cell->length);
+        cell->text, cell->length, NULL);
   }
   struct capability_grant grant;
   enum capability_result result = environment_cell_grant(cell, &grant);
@@ -508,7 +554,7 @@ enum call_status environment_table_seed_cell(struct environment_table *table,
     return grant_status(result);
   }
   enum call_status status = environment_table_seed_owned(table, cell->name,
-      cell->flags, &grant);
+      cell->flags, &grant, NULL);
   capability_grant_release(&grant);
   return status;
 }
@@ -604,7 +650,7 @@ void environment_execute(struct environment_request *request)
       if (!forwarder_operation_start(request->request.operation)) {
         request->result = CALL_DENIED;
       } else {
-        request->result = commit_set(request->table, request->staging);
+        request->result = commit_set(request->table, request->staging, NULL);
       }
     }
     staging_destroy(request->staging);

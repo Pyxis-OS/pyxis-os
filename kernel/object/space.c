@@ -176,7 +176,7 @@ static bool reserved_resource(const char *name)
 
 /* Launch path: captures the request and the ceiling into CAPTURE's storage. */
 static enum call_status capture_launch(uint64_t launch_address, uint64_t cpus,
-    uint64_t cpu_count, struct launch_capture **result)
+    uint64_t cpu_count, struct launch_capture **result, struct call_limit *detail)
 {
   *result = NULL;
   if (!cpu_count || cpu_count > arch_cpu_count()) {
@@ -187,7 +187,7 @@ static enum call_status capture_launch(uint64_t launch_address, uint64_t cpus,
     return CALL_BAD_BUFFER;
   }
   struct launch_capture *capture;
-  enum call_status status = launcher_capture_request(&launch, &capture);
+  enum call_status status = launcher_capture_metadata(&launch, &capture, detail);
   if (status != CALL_OK) {
     return status;
   }
@@ -220,7 +220,7 @@ static enum call_status capture_launch(uint64_t launch_address, uint64_t cpus,
 
 struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
   if (operation != SPACE_FACTORY_CREATE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -281,7 +281,7 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
     if (!user_buffer_check(reply_address, sizeof(handle_t), USER_BUFFER_WRITE)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    status = capture_launch(request.launch, request.cpus, request.cpu_count, &capture);
+    status = capture_launch(request.launch, request.cpus, request.cpu_count, &capture, detail);
     if (status != CALL_OK) {
       return (struct syscall_result){status, 0};
     }
@@ -295,8 +295,21 @@ struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
   memcpy(capture->space.name, name, request.name_length + 1);
   memcpy(capture->space.title, title, request.title_length + 1);
 
+  if (!unstarted) {
+    status = launcher_preflight_space(capture, detail);
+    if (status == CALL_OK) {
+      status = launcher_capture_image(capture);
+      if (status == CALL_LIMIT && detail) {
+        *detail = capture->limit;
+      }
+    }
+    if (status != CALL_OK) {
+      launcher_capture_discard(capture);
+      return (struct syscall_result){status, 0};
+    }
+  }
   handle_t child;
-  status = launcher_submit_space(capture, &child);
+  status = launcher_submit_space(capture, &child, detail);
   if (status != CALL_OK || unstarted) {
     return (struct syscall_result){status, 0};
   }

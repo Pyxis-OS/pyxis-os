@@ -1,5 +1,6 @@
 #include <abi/readiness_set.h>
 #include <arch/clock.h>
+#include <kernel/limit.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/object.h>
 #include <kernel/panic.h>
@@ -8,7 +9,8 @@
 #include <kernel/user/readiness_set.h>
 #include <kernel/user_memory.h>
 
-static enum call_status capability_status(enum capability_result result)
+static enum call_status capability_status(enum capability_result result,
+    struct call_limit *detail)
 {
   switch (result) {
   case CAP_OK:
@@ -22,8 +24,10 @@ static enum call_status capability_status(enum capability_result result)
   case CAP_NO_MEMORY:
     return CALL_NO_MEMORY;
   case CAP_LIMIT:
+    return detail && detail->reason ? CALL_LIMIT : call_limit_reference(detail);
   case CAP_FULL:
-    return CALL_LIMIT;
+    return call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING, 0,
+        UINT64_C(1) << 32, CALL_LIMIT_HAS_LIMIT);
   case CAP_NOT_FOUND:
     return CALL_NOT_FOUND;
   }
@@ -31,7 +35,8 @@ static enum call_status capability_status(enum capability_result result)
 }
 
 struct syscall_result
-readiness_set_create_call(uintptr_t reply_address, uint64_t reply_capacity)
+readiness_set_create_call(uintptr_t reply_address, uint64_t reply_capacity,
+    struct call_limit *detail)
 {
   if (reply_capacity < sizeof(struct readiness_set_create_reply)) {
     return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
@@ -44,7 +49,9 @@ readiness_set_create_call(uintptr_t reply_address, uint64_t reply_capacity)
   struct capability_reserved_slot slot;
   enum capability_result acquired = capability_request_reservation(1, &reservation, &slot);
   if (acquired != CAP_OK) {
-    return (struct syscall_result){capability_status(acquired), 0};
+    return (struct syscall_result){acquired == CAP_LIMIT ?
+        call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING, 0, UINT64_C(1) << 32,
+            CALL_LIMIT_HAS_LIMIT) : capability_status(acquired, detail), 0};
   }
   if (task_stop_requested()) {
     capability_reservation_release(&reservation, &slot);
@@ -57,6 +64,9 @@ readiness_set_create_call(uintptr_t reply_address, uint64_t reply_capacity)
   request->operation = READINESS_CREATE;
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->status;
+  if (status == CALL_LIMIT && detail) {
+    *detail = request->limit;
+  }
   struct kernel_object *created = request->created;
   request->created = NULL;
   bsp_request_release(&request->request);
@@ -70,7 +80,7 @@ readiness_set_create_call(uintptr_t reply_address, uint64_t reply_capacity)
     if (acquired == CAP_OK) {
       acquired = capability_validate_grants(reservation.table, &grant, 1);
     }
-    status = capability_status(acquired);
+    status = capability_status(acquired, detail);
     if (status == CALL_OK) {
       capability_install_reserved(&reservation, &slot, &grant, 1, &reply.handle);
       installed = true;
@@ -111,7 +121,7 @@ static void finish_request(struct process *caller, struct readiness_set *set,
 struct syscall_result
 readiness_set_call(struct kernel_object *object, uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
   union {
     struct message_header header;
@@ -202,10 +212,10 @@ readiness_set_call(struct kernel_object *object, uint64_t rights, uint64_t opera
 
   struct capability_reference target = {0};
   if (operation == READINESS_SET_REGISTER) {
-    enum capability_result acquired = capability_acquire(&caller->capabilities,
-        input.registration.target, 0, 0, &target);
+    enum capability_result acquired = capability_acquire_with_limit(&caller->capabilities,
+        input.registration.target, 0, 0, &target, detail);
     if (acquired != CAP_OK) {
-      return (struct syscall_result){capability_status(acquired), 0};
+      return (struct syscall_result){capability_status(acquired, detail), 0};
     }
   }
   struct readiness_set_request *request =
@@ -232,6 +242,9 @@ readiness_set_call(struct kernel_object *object, uint64_t rights, uint64_t opera
   }
   bsp_request_submit_and_wait(&request->request);
   enum call_status status = request->status;
+  if (status == CALL_LIMIT && detail) {
+    *detail = request->limit;
+  }
   capability_release(&request->target);
   bool staged = status == CALL_OK && (operation == READINESS_SET_REGISTER ||
       operation == READINESS_SET_UPDATE || operation == READINESS_SET_WAIT);

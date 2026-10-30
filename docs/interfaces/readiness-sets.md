@@ -31,7 +31,11 @@ observer exists. Retarget does not move a registration; CUT queues one terminal
 DENIED result and independently schedules source detachment, even without WAIT.
 
 Sources are native pipes, console and terminal input/output, TCP streams/listeners,
-and [process interrupt receivers](processes.md#cooperative-process-interruption).
+[process interrupt receivers](processes.md#cooperative-process-interruption),
+process-control handles and execution groups. Completion sources accept only
+`WAIT_COMPLETE` under their existing WAIT right. They report the same completion
+boundary as native WAIT: process execution resources have retired, or the sealed
+group has no members, child groups, launches or attributed cleanup remaining.
 Their event, rights, transport and owner checks are the same
 as wait_many. Unsupported sources, exported protocols and sets themselves are
 refused. Ordinary half-close and buffered EOF remain level conditions, preserving
@@ -58,7 +62,7 @@ an observed geometry generation where applicable, and an opaque tag. REGISTER
 returns a non-reused set-local identity and generation. UPDATE cannot expand
 the allowed mask; it changes the active mask/observed generation, returns a new
 generation and performs a fresh level check. Stale keys return NOT_FOUND;
-identity/generation exhaustion returns LIMIT instead of wrapping. Each copied
+identity/generation exhaustion returns LIMIT with its named counter detail instead of wrapping. Each copied
 source can have an independent registration.
 
 Admission reserves storage and attaches hooks before its first level check.
@@ -100,7 +104,8 @@ All sets of a process share a 16 MiB readiness-metadata budget. INFO reports
 its ceiling, charged bytes and this set's registration count. Set/registration
 headers, embedded lineage and queue nodes, indices and peak index growth are
 charged before publication. Allocation can return NO_MEMORY independently of
-budget LIMIT. Existing registrations survive refusal. Target backing and global
+budget LIMIT with the requested account bytes and readiness-metadata admission ceiling.
+Existing registrations survive refusal. Target backing and global
 allocator overhead remain subject to their own limits; this budget is not a
 physical-memory reservation or a bound on retained target resources.
 

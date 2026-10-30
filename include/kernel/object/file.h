@@ -14,6 +14,7 @@ struct hostfs_node;
 struct npfs_node;
 struct fat32_node;
 struct image_capture;
+struct call_limit;
 struct native_completion;
 struct retention_account;
 struct file_failure;
@@ -111,7 +112,8 @@ bool file_cached_length(struct file_object *file, uint64_t *length);
 /* BSP, RAM only, IF=0, with operation ownership lent by the parked caller.
  * Copies the selected file into bounded reclaimable capture pages. Caller ends
  * the operation on every result. Failure leaves the capture empty. */
-enum call_status file_ram_capture(struct file_object *file, struct image_capture *capture);
+enum call_status file_ram_capture(struct file_object *file, struct image_capture *capture,
+    struct call_limit *detail);
 
 /* Current process, IF=0. Caller holds a live reference and supplies its granted
  * rights and operation from a checked protocol tag. request_address/size

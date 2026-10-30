@@ -12,6 +12,7 @@
 #include <kernel/object/forwarder.h>
 #include <kernel/task.h>
 #include <kernel/panic.h>
+#include <kernel/limit.h>
 #include <kernel/process.h>
 
 #define INITIAL_CAPACITY 8
@@ -35,6 +36,17 @@ static size_t capacity_limit(void)
     limit = HANDLE_SLOT_COUNT;
   }
   return limit;
+}
+
+enum capability_result capability_count_admit(size_t count, struct call_limit *detail)
+{
+  size_t limit = capacity_limit();
+  if (count > limit) {
+    call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING, count, limit,
+        CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
+    return CAP_LIMIT;
+  }
+  return CAP_OK;
 }
 
 enum capability_result capability_grow(struct capability_table *table)
@@ -319,22 +331,36 @@ enum capability_result capability_insert_batch(struct capability_table *table,
   return CAP_OK;
 }
 
-enum capability_result capability_install(struct capability_table *table,
+enum capability_result capability_install_with_limit(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, uint64_t transport,
-    handle_t *handle)
+    handle_t *handle, struct call_limit *detail)
 {
   KASSERT(!cpu_interrupts_enabled());
   for (;;) {
     enum capability_result result = capability_insert(table, object, rights,
         transport, handle);
     if (result != CAP_FULL) {
+      if (result == CAP_LIMIT) {
+        call_limit_reference(detail);
+      }
       return result;
     }
     result = capability_grow(table);
     if (result != CAP_OK) {
+      if (result == CAP_LIMIT) {
+        call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING, 0, capacity_limit(),
+            CALL_LIMIT_HAS_LIMIT);
+      }
       return result;
     }
   }
+}
+
+enum capability_result capability_install(struct capability_table *table,
+    struct kernel_object *object, uint64_t rights, uint64_t transport,
+    handle_t *handle)
+{
+  return capability_install_with_limit(table, object, rights, transport, handle, NULL);
 }
 
 static struct capability_entry *find_entry(struct capability_table *table,
@@ -407,15 +433,15 @@ enum capability_result capability_grant_take(struct capability_table *table,
 
 static enum capability_result acquire_grant(struct capability_table *source,
     handle_t handle, uint64_t rights, uint64_t transport, bool same_authority,
-    struct capability_grant *grant)
+    struct capability_grant *grant, struct call_limit *detail)
 {
   if (!grant) {
     return CAP_INVALID;
   }
   *grant = (struct capability_grant){0};
   struct capability_reference reference;
-  enum capability_result result = capability_acquire(source, handle, rights,
-      transport, &reference);
+  enum capability_result result = capability_acquire_with_limit(source, handle, rights,
+      transport, &reference, detail);
   if (result != CAP_OK) {
     return result;
   }
@@ -436,6 +462,9 @@ static enum capability_result acquire_grant(struct capability_table *source,
   }
   result = capability_grant_derive(reference.object, rights, transport,
       reference.restrictions, grant);
+  if (result == CAP_LIMIT) {
+    call_limit_reference(detail);
+  }
   if (result == CAP_OK) {
     spin_lock(&source->lock);
     struct capability_entry *entry = find_entry(source, handle);
@@ -456,18 +485,31 @@ enum capability_result capability_grant_acquire(struct capability_table *source,
     handle_t handle, uint64_t rights, uint64_t transport,
     struct capability_grant *grant)
 {
-  return acquire_grant(source, handle, rights, transport, false, grant);
+  return acquire_grant(source, handle, rights, transport, false, grant, NULL);
 }
 
 enum capability_result capability_grant_acquire_same(struct capability_table *source,
     handle_t handle, struct capability_grant *grant)
 {
-  return acquire_grant(source, handle, 0, 0, true, grant);
+  return acquire_grant(source, handle, 0, 0, true, grant, NULL);
+}
+
+enum capability_result capability_grant_acquire_with_limit(struct capability_table *source,
+    handle_t handle, uint64_t rights, uint64_t transport,
+    struct capability_grant *grant, struct call_limit *detail)
+{
+  return acquire_grant(source, handle, rights, transport, false, grant, detail);
+}
+
+enum capability_result capability_grant_acquire_same_with_limit(struct capability_table *source,
+    handle_t handle, struct capability_grant *grant, struct call_limit *detail)
+{
+  return acquire_grant(source, handle, 0, 0, true, grant, detail);
 }
 
 static enum capability_result acquire_reference(struct capability_table *table,
     handle_t handle, uint64_t required_rights, uint64_t required_transport,
-    bool metadata_only, struct capability_reference *reference)
+    bool metadata_only, struct capability_reference *reference, struct call_limit *detail)
 {
   if (!reference) {
     return CAP_INVALID;
@@ -485,13 +527,14 @@ static enum capability_result acquire_reference(struct capability_table *table,
       (entry->transport & required_transport) != required_transport) {
     result = CAP_DENIED;
   } else if (!object_retain(entry->object)) {
+    call_limit_reference(detail);
     result = CAP_LIMIT;
   } else {
     *reference = (struct capability_reference){.object = entry->object,
       .rights = entry->rights, .transport = entry->transport,
       .restrictions = entry->restrictions};
     if (!metadata_only && entry->object->type == OBJECT_FORWARDER) {
-      result = forwarder_snapshot(entry->object, &reference->admitted, NULL);
+      result = forwarder_snapshot_with_limit(entry->object, &reference->admitted, NULL, detail);
     }
   }
   spin_unlock(&table->lock);
@@ -506,13 +549,21 @@ enum capability_result capability_acquire(struct capability_table *table,
     struct capability_reference *reference)
 {
   return acquire_reference(table, handle, required_rights, required_transport,
-      false, reference);
+      false, reference, NULL);
 }
 
 enum capability_result capability_acquire_metadata(struct capability_table *table,
     handle_t handle, struct capability_reference *reference)
 {
-  return acquire_reference(table, handle, 0, 0, true, reference);
+  return acquire_reference(table, handle, 0, 0, true, reference, NULL);
+}
+
+enum capability_result capability_acquire_with_limit(struct capability_table *table,
+    handle_t handle, uint64_t required_rights, uint64_t required_transport,
+    struct capability_reference *reference, struct call_limit *detail)
+{
+  return acquire_reference(table, handle, required_rights, required_transport,
+      false, reference, detail);
 }
 
 void capability_release(struct capability_reference *reference)
@@ -533,14 +584,14 @@ void capability_release(struct capability_reference *reference)
 }
 
 static enum capability_result resolve_reference(struct capability_reference *reference,
-    struct forwarder_operation *operation)
+    struct forwarder_operation *operation, struct call_limit *detail)
 {
   if (reference->object->type != OBJECT_FORWARDER) {
     return CAP_OK;
   }
   struct capability_reference target;
-  enum call_status status = forwarder_resolve(reference->object,
-      reference->rights, reference->transport, operation, &target);
+  enum call_status status = forwarder_resolve_with_limit(reference->object,
+      reference->rights, reference->transport, operation, &target, detail);
   if (status != CALL_OK) {
     return status == CALL_LIMIT ? CAP_LIMIT : status == CALL_NOT_FOUND ? CAP_NOT_FOUND : CAP_DENIED;
   }
@@ -556,7 +607,7 @@ enum capability_result capability_reference_resolve(struct capability_reference 
   if (reference->object->type != OBJECT_FORWARDER) {
     return CAP_OK;
   }
-  return resolve_reference(reference, task_forwarder_ensure());
+  return resolve_reference(reference, task_forwarder_ensure(), NULL);
 }
 
 enum capability_result capability_reference_resolve_for(struct capability_reference *reference,
@@ -565,13 +616,32 @@ enum capability_result capability_reference_resolve_for(struct capability_refere
   KASSERT(operation && !operation->count && !operation->previous &&
       operation->state == FORWARDER_PENDING && !operation->wait &&
       !operation->notification_owner && !operation->readiness_observer);
-  return resolve_reference(reference, operation);
+  return resolve_reference(reference, operation, NULL);
 }
 
 static void release_closed_grant(struct kernel_object *object, uint64_t rights)
 {
   endpoint_handle_close(object);
   object_grant_release(object, rights);
+}
+
+enum capability_result capability_reference_resolve_with_limit(
+    struct capability_reference *reference, struct call_limit *detail)
+{
+  if (reference->object->type != OBJECT_FORWARDER) {
+    return CAP_OK;
+  }
+  return resolve_reference(reference, task_forwarder_ensure(), detail);
+}
+
+enum capability_result capability_reference_resolve_for_with_limit(
+    struct capability_reference *reference, struct forwarder_operation *operation,
+    struct call_limit *detail)
+{
+  KASSERT(operation && !operation->count && !operation->previous &&
+      operation->state == FORWARDER_PENDING && !operation->wait &&
+      !operation->notification_owner && !operation->readiness_observer);
+  return resolve_reference(reference, operation, detail);
 }
 
 enum capability_result capability_close(struct capability_table *table,

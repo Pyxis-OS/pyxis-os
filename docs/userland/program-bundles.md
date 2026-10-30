@@ -71,7 +71,7 @@ no arguments, executable code or arbitrary handle numbers.
 | `id` | Stable registration identifier; a self-asserted ID does not authenticate an application or grant trust. |
 | `entry` | Default native P1F path relative to `app/`. |
 | `commands` | Flat command-name to relative native-entry map; several aliases may select the same entry. |
-| `stack_bytes` | Optional integer, page-aligned, 1-8 MiB inclusive. Omission leaves the API parameter zero, which selects the kernel's 1 MiB default. Invalid requests reject without clamping. |
+| `stack_bytes` | Optional positive page-aligned integer fitting the kernel stack/guard address layout. Omission leaves the API parameter zero, which selects the kernel's 1 MiB default. Invalid requests reject without clamping. |
 | `resource_dirs` | Additional startup root-name to relative directory map, with read-only grants. Names must not collide with `app` or other manifest roots/grants. Lookup uses the caller's path context; final child preparation rejects collisions with explicitly selected child roots/resources, so a bundle may privately name roots also present in its parent. |
 | `grants` | Named ordinary resource requests with recognized rights and explicit required/optional status. |
 
@@ -319,7 +319,7 @@ still in the [bundle direction](../wip/program-bundles.md#future-consent-policy)
 | Name/path component | 255 bytes (NAME_MAX of the native filesystems) |
 | Relative entry/resource path | none beyond the component bound |
 | Final userspace launch roots | 16 total |
-| Launch capture / child startup | 64 KiB each, independently enforced by the kernel |
+| Launch capture / child startup | Request-sized, checked arithmetic and actual allocation; native environment policy is separate |
 
 Final capture/startup validation occurs before child publication. The manifest
 reader has no size or count limit (see [limits](../interfaces/limits.md)): its node
@@ -335,16 +335,16 @@ The development manifest budget includes one extra request for a separately
 scoped resolver path (`dns_udp`), preserving ordinary UDP delegation. This is
 an implementation budget, not an archive or kernel launch-format limit.
 
-Accepted 2026-10-09 and implemented in #629:
+Chronium accepted removal of the selected-image policy ceilings on 2026-10-30:
 
-- **128 MiB per selected executable**, uniformly for HOST, NPFS and RAM capture
-  (serialized image). This is one admission policy, not a global concurrent
-  budget; concurrent launches may consume more in aggregate and physical-memory
-  exhaustion still rejects. The 256 MiB mapped-image span is independent.
+- HOST, NPFS, FAT32 and RAM snapshots are sized from the actual selected file,
+  with no 128 MiB ceiling. There is no 256 MiB total mapped-span ceiling either;
+  segment layout, stack/guard exclusion and actual backing allocation remain.
 - Capture backing uses reclaimable, BSP-owned whole pages, released after loading
   or on every failure, including partial allocation; it does not remain resident
   as reusable kernel heap pools.
-- Over-ceiling capture returns `CALL_LIMIT`, allocation failure `CALL_NO_MEMORY`,
+- Encoding/address capacity returns `CALL_LIMIT` with structured detail; actual
+  allocation failure returns `CALL_NO_MEMORY`,
   and I/O errors keep their status. A failed batch publishes no children and
   discards earlier prepared children and provisional observers. Boot archive
   bytes stay uncopied and eager segment loading remains.

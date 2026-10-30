@@ -1,121 +1,108 @@
 # Program images and initial stacks
 
-The owner accepted a high initial stack with a reserved guard, a 256 MiB
-image-span ceiling and unchanged 16 MiB installed-executable capture in
-[#613](https://git.internal/PyxisOS/pyxis-os/pulls/613) on 2026-10-09. After
-reviewing the 8 MiB default's costs, the owner retained the plain executable's
-1 MiB eager stack in [#617](https://git.internal/PyxisOS/pyxis-os/pulls/617)
-on the same date. Boot and ordinary launches use the same loader policy. The
-[qualification report](../development/experiments/program-capacity/README.md)
-records native boundary checks, cleanup, matched launch costs and session memory.
+Chronium accepted request-sized launch storage, file-sized immutable image
+capture, variable-size atomic batches and explicit stack sizes bounded by the
+address layout on 2026-10-30
+([limits audit WP3](../interfaces/limits.md#launcher-capacity)). Boot, ordinary
+launches and space creation share the loader policy. Allocation failure remains a real
+capacity refusal; no guessed RAM fraction replaces the removed size ceilings.
 
 ## Image admission
 
 [P1F loading](../../kernel/image.c) accepts fixed, page-aligned segment addresses
-in the canonical lower half, starting at `0x1000`. The
-[SDK linker](../../userspace/linker.ld) convention remains `0x400000`; it is not
-a required minimum. Segments must be ordered and disjoint after page rounding,
-readable, and never writable and executable together. The entry must be inside
-an executable segment's unrounded memory extent. Existing payload-size,
-overflow and canonical-address checks still apply.
+in the canonical lower half, starting at `0x1000`. The SDK linker convention
+remains `0x400000`; it is not a required minimum. Segments must be ordered and
+disjoint after page rounding, readable, and never writable and executable
+together. The entry must lie inside an executable segment's unrounded extent.
+Payload bounds, arithmetic overflow and canonical-address checks remain.
 
-The maximum **image span** is 256 MiB: the last page-rounded segment memory end
-minus the first segment start. This includes BSS, trailing page padding and gaps
-between segments, bounding sparse layouts as well as backed bytes. An SDK image
-beginning at `0x400000` may end at `0x10400000` after rounding. The ceiling is
-loader admission policy, separate from serialized file size and P1F's encoding
-capacity; it does not guarantee that physical allocation succeeds.
-
-Span and stack/guard overlap checks cover every segment before any VM or image
-backing is allocated. Other valid fixed placements remain available, including
-the final user page above the stack. An inactive private VM owns the eagerly
-zeroed destination frames, including BSS and page padding. Payload copying uses
-a borrowed kernel scratch alias; final segment permissions apply before launch.
-The caller's active address space does not change during loading.
+There is no 256 MiB total-span policy. Gaps between segments consume no physical
+backing. Every segment must still fit the user address space and avoid the
+selected stack and guard; these layout checks precede destination backing.
+An inactive private VM owns eagerly zeroed frames, including BSS and page
+padding. Payload copying uses the preparation CPU's scratch alias; final
+permissions apply before publication. No process executes from a writable
+loader alias or a live source-file mapping.
 
 ## Initial stack and ownership
 
-[Common process loading](../../kernel/user/load.c) owns the stack placement and
-size. An omitted `launch_request.initial_stack_bytes` (zero) selects 1 MiB,
-including boot init and ordinary small commands. An explicit request must be
-page-aligned and between 1 and 8 MiB inclusive; invalid requests fail before
-image capture, without clamping. The default layout is:
+[Common process loading](../../kernel/user/load.c) owns placement and size.
+A zero `launch_request.initial_stack_bytes` selects the unchanged 1 MiB default.
+An explicit request is positive, page-aligned and must leave room for the lower
+guard within the user address layout. No 1 MiB minimum or 8 MiB maximum remains.
+Malformed alignment returns BAD_REQUEST; an unrepresentable stack/guard span
+returns CALL_LIMIT with stack-address detail. There is no clamping.
 
-| Region | Addresses and backing |
+| Region | Default addresses and backing |
 | --- | --- |
-| Initial stack | `[0x7fffffeff000, 0x7ffffffff000)`, 1 MiB eager zeroed backing, user RW, non-executable |
+| Initial stack | `[0x7fffffeff000, 0x7ffffffff000)`, 1 MiB eager zeroed user RW/NX |
 | Lower guard | `[0x7fffffefe000, 0x7fffffeff000)`, one reserved unmapped page |
 
-A bundle may request larger eager backing through its validated manifest; the
-base becomes `0x7ffffffff000 - initial_stack_bytes`, with the reserved guard one
-page below it. The top stays fixed. Single, batch and space-creation launches
-use the same admission and common loader; boot passes zero.
+Bundles select larger or smaller eager backing through their manifest. The base
+is `0x7ffffffff000 - initial_stack_bytes`; the reserved guard is one page below.
+Single, batch, space-creation and boot launches use the same common loader.
+The top is canonical and 16-byte aligned. Stack and guard reservations prevent
+later startup or private allocations from occupying those ranges.
 
-The initial one-past stack top, `0x7ffffffff000`, is canonical and 16-byte
-aligned. The common loader returns that actual top with the process and entry;
-[boot](../../kernel/user/launch.c) and [ordinary/batch](../../kernel/user/spawn.c)
-launch consume it. There is no duplicate layout calculation in those paths.
-Both ranges participate in VM allocation, so startup/private allocations cannot
-consume the guard or stack. Image segments overlapping either range reject.
+**Automatic stack growth is deferred.** Plain programs still receive 1 MiB and
+can fault when they exhaust it. A large stack adjustment can skip the one-page
+guard. MEMORY_RESERVE/COMMIT does not authorize VM mutation from fault handlers;
+no demand paging, stack-fault recovery or new thread-stack policy is introduced.
 
-The loader clears outputs before work. Image-loading failures destroy the
-inactive VM and release scratch reservations and any partial backing. Guard,
-stack or process-creation failures also destroy the inactive VM. Subsequent
-startup/grant/task-preparation failures destroy the unpublished process; a failed
-batch discards its earlier prepared children before publication. Normal retirement
-reclaims task storage on its departure CPU's fixed RAM actor, then destroys
-process-owned backing and reservations on the recorded RAM owner before
-publishing the final process-control result. Device/session hooks retain their
-fixed owners. See [process lifetime](../interfaces/processes.md) and
-[preparation and retirement](vm-ownership.md#preparation-and-ram-reclamation).
-
-The guard catches accesses into its page, but a large stack adjustment can skip
-it. There is no stack growth or demand paging. P1F contains no stack-size field.
-Later [threads](../interfaces/threads.md) need their own disjoint guarded stack ranges;
-this layout reserves no thread stack arena and adds no public thread or TLS API.
+Failures destroy the unpublished process and its backing through the existing
+preparation/retirement owners. Normal retirement reclaims task storage on its
+departure CPU's fixed RAM actor, then process-owned backing on the recorded RAM
+owner before publishing completion. Device/session hooks retain their owners.
+See [process lifetime](../interfaces/processes.md) and
+[VM ownership](vm-ownership.md#preparation-and-ram-reclamation).
 
 ## File capture and costs
 
-[Selected executable capture](../../include/abi/launcher.h) limits HOST, NPFS
-and RAM files uniformly to 128 MiB of serialized bytes per image. There is no
-global concurrent-capture budget; physical exhaustion still rejects. Immutable
-boot archive bytes are loaded in place, without a new copy. The independent
-256 MiB mapped-span and stack collision checks apply to every backend. A small
-serialized file with large BSS can use much more destination backing. Captured
-bytes coexist with eager image backing and stacks, and a batch retains earlier
-prepared children while capturing its next image.
+HOST, NPFS, FAT32 and RAM executable capture allocates page-rounded backing from
+the actual selected file size. There is no 128 MiB per-image ceiling or aggregate
+capture quota. Immutable boot archive images load in place without a copy.
+Physical allocation or VM storage can still fail with CALL_NO_MEMORY. A large
+BSS needs destination backing beyond the serialized bytes. Snapshot and child
+backing coexist; a batch retains earlier prepared children during later capture.
+Removing the policy ceilings does not eliminate those memory costs.
 
-[Capture ownership](../../include/kernel/user/image_capture.h) is an address,
-serialized size and page-rounded backing size. The file/I/O producer prepares
-RW/NX kernel backing under bounded shared-owner admission, releases that owner
-before storage reads and transfers one immutable owned read phase to the
-caller-CPU image preparation. RAM capture keeps its source FILE busy through
-copy and ends the operation exactly once; no producer refill follows handoff.
-Partial allocation unwinds the mapped prefix; an empty descriptor owns nothing.
-AP-read captures, or captures retired away from their producer CPU, require
-confirmed shared-range retirement before VA/backing reuse. Unconfirmed retirement
-retains the capture and joined cleanup until reboot; a late ACK cannot reclaim
-it. Shared kernel page-table ancestors keep their ordinary retained lifetime.
+[Capture ownership](../../include/kernel/user/image_capture.h) retains one owned
+snapshot through every loader read. The file/I/O producer prepares RW/NX kernel
+backing under bounded shared-owner admission, releases that owner before I/O,
+and transfers one immutable read phase to caller-CPU preparation. RAM and native
+filesystem capture serialize their source operation through copying; ownership
+ends exactly once. HOST accepts positive short reads and rejects observed size
+changes or premature EOF, but equal before/after lengths do not prove that a
+concurrently modified host file was coherent. Do not modify it in place while
+loading. Source errors are not retried.
 
-Over-ceiling requests return `CALL_LIMIT`, allocation failures `CALL_NO_MEMORY`,
-and I/O errors retain their existing status. A failed batch publishes no children
-and discards earlier prepared children and provisional observers. The
-[capture qualification](../development/experiments/program-bundles-capture/README.md)
-records matched launch/session costs, 128 MiB native images, simultaneous backing
-and debugger inspection of real allocation failure. Hosted Clang remains unported.
+Partial allocation unwinds its mapped prefix. AP-read captures, or captures
+retired away from their producer CPU, require confirmed shared-range retirement
+before VA/backing reuse. Unconfirmed retirement retains backing and cleanup
+attribution until reboot; late ACKs cannot reclaim it. Existing shared kernel
+page-table ancestors retain their ordinary lifetime.
 
-The experimental 8 MiB eager stack added 7 MiB per live process relative to
-1 MiB, plus page-table costs. Matched nested-KVM qualification measured an exact
-28 MiB increase in owned backing for mux plus three shells, and 42 MiB with two
-pipeline children. Complete 1,024-launch sessions increased from median 3.06 to
-10.53 seconds at one CPU and 3.50 to 11.30 seconds at four CPUs. These intervals
-include session startup, transport and final drain, not isolated loader latency.
-Those costs prompted the owner's return to the implemented 1 MiB default.
+## Capture, startup and refusal
 
-The [unpacked bundle path](../userland/program-bundles.md) now carries a bounded
-initial-stack parameter in the launch ABI. Kernel, SDK and in-tree launchers
-must use the coordinated layout; this changes no P1F field, SDK link address
-or compiler container. Plain programs keep 1 MiB. An 8 MiB bundle stack meets
-that capacity request only; it does not port Clang.
-The [bundle qualification](../development/experiments/program-bundles-task1/README.md)
-records the matched plain-launch comparison and manual admission/cleanup checks.
+Launch capture owns request-sized arrays/strings; startup metadata and writable
+argv use measured, page-rounded mappings. The native environment has its own
+[admission policy](../interfaces/environment.md); its names/text are not charged
+a second time against an artificial startup budget. Metadata validation and
+known policy/encoding refusal precede image payload capture. Every batch stage's
+metadata is preflighted first; images prepare sequentially before one publication.
+
+CALL_LIMIT includes structured reason and known requested/maximum quantities.
+CALL_NO_MEMORY reports actual allocation failure; malformed inputs retain
+BAD_REQUEST and invalid user ranges BAD_BUFFER. No available-RAM estimate is
+promised as a reservation. Failed preparation publishes no runnable child and
+preserves source grants. Shell redirects, stdio flushes and provider effects are
+not rolled back; an untrustworthy publication reply is OUTCOME_UNKNOWN and must
+not be retried automatically. See [batch launch](../interfaces/processes.md#batch-launch)
+and the [limit diagnostic ABI](../interfaces/abi.md#limit-diagnostics).
+
+The [WP3 comparison](../development/experiments/launcher-capacity/README.md)
+records matched QEMU launch, pipeline and executable-copy costs. Historical
+[stack](../development/experiments/program-capacity/README.md) and
+[capture](../development/experiments/program-bundles-capture/README.md)
+qualification describe the earlier chosen ceilings and why the default stack
+returned to 1 MiB. Their timings are historical, not qualification of WP3.

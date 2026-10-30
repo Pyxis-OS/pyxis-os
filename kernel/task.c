@@ -1495,12 +1495,12 @@ struct process *user_task_process(struct task *task)
   return task->process;
 }
 
-void user_task_publish_group(struct task **tasks, size_t count)
+void user_task_publish_group(struct task **tasks, size_t count,
+    size_t *destinations, size_t destination_capacity)
 {
-  KASSERT(count && count <= LAUNCH_BATCH_MAX);
+  KASSERT(count && destinations && destination_capacity >= arch_cpu_count());
   /* Published tasks may run and retire as soon as the lock drops, so keep
    * only their destination indices for notification. */
-  size_t destinations[LAUNCH_BATCH_MAX];
   size_t destination_count = 0;
   for (size_t i = 0; i < count; ++i) {
     process_publish(user_task_process(tasks[i]));
@@ -1529,14 +1529,19 @@ void user_task_publish_group(struct task **tasks, size_t count)
 enum mm_result user_task_create(struct process *process, uintptr_t entry,
                                 uintptr_t stack_top)
 {
+  size_t *destinations = kmalloc(arch_cpu_count() * sizeof(*destinations));
+  if (!destinations) {
+    return MM_NO_MEMORY;
+  }
   struct task *task;
   enum mm_result status = user_task_prepare(process, entry, stack_top, SIZE_MAX, &task);
   if (status == MM_OK) {
     /* Publication transfers prepared process lifetime and task storage. */
     uint64_t flags = cpu_save_interrupts();
-    KASSERT(execution_group_publish(NULL, &task, 1) == CALL_OK);
+    KASSERT(execution_group_publish(NULL, &task, 1, destinations, arch_cpu_count(), NULL) == CALL_OK);
     cpu_restore_interrupts(flags);
   }
+  kfree(destinations);
   return status;
 }
 

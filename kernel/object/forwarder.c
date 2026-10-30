@@ -13,6 +13,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
+#include <kernel/limit.h>
 #include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
@@ -534,18 +535,28 @@ void forwarder_operation_init(struct forwarder_operation *operation)
   operation->readiness_observer = false;
 }
 
-static enum call_status add_node(struct forwarder_operation *operation, struct forwarder *node)
+static enum call_status add_node_with_limit(struct forwarder_operation *operation,
+    struct forwarder *node, struct call_limit *detail)
 {
   for (size_t i = 0; i < operation->count; ++i) {
     if (operation->nodes[i] == node) {
       return CALL_OK;
     }
   }
-  if (operation->count == FORWARDER_LINEAGE_MAX || !object_retain(&node->object)) {
-    return CALL_LIMIT;
+  if (operation->count == FORWARDER_LINEAGE_MAX) {
+    return call_limit_set(detail, CALL_LIMIT_FORWARDER_LINEAGE, operation->count + 1,
+        FORWARDER_LINEAGE_MAX, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
+  }
+  if (!object_retain(&node->object)) {
+    return call_limit_reference(detail);
   }
   operation->nodes[operation->count++] = node;
   return CALL_OK;
+}
+
+static enum call_status add_node(struct forwarder_operation *operation, struct forwarder *node)
+{
+  return add_node_with_limit(operation, node, NULL);
 }
 
 static void register_operation(struct forwarder_operation *operation)
@@ -561,8 +572,9 @@ static void register_operation(struct forwarder_operation *operation)
   operations = operation;
 }
 
-enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights,
-    uint64_t transport, struct forwarder_operation *operation, struct capability_reference *target)
+enum call_status forwarder_resolve_with_limit(struct kernel_object *object, uint64_t rights,
+    uint64_t transport, struct forwarder_operation *operation, struct capability_reference *target,
+    struct call_limit *detail)
 {
   *target = (struct capability_reference){0};
   KASSERT(operation);
@@ -573,16 +585,17 @@ enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights
   while (object && object->type == OBJECT_FORWARDER) {
     struct forwarder *forwarder = (struct forwarder *)object;
     if (++hops > FORWARDER_LINEAGE_MAX) {
-      status = CALL_LIMIT;
+      status = call_limit_set(detail, CALL_LIMIT_FORWARDER_LINEAGE, hops,
+          FORWARDER_LINEAGE_MAX, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
       break;
     }
     if (lineage_cut(forwarder)) {
       status = CALL_DENIED;
       break;
     }
-    status = add_node(operation, forwarder);
+    status = add_node_with_limit(operation, forwarder, detail);
     for (size_t i = 0; status == CALL_OK && i < forwarder->ancestor_count; ++i) {
-      status = add_node(operation, forwarder->ancestors[i]);
+      status = add_node_with_limit(operation, forwarder->ancestors[i], detail);
     }
     if (status != CALL_OK) {
       break;
@@ -597,7 +610,7 @@ enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights
     if (!object) {
       status = CALL_NOT_FOUND;
     } else if (!object_retain(object)) {
-      status = CALL_LIMIT;
+      status = call_limit_reference(detail);
     } else {
       *target = (struct capability_reference){.object = object, .rights = rights,
         .transport = transport, .restrictions = restrictions};
@@ -607,8 +620,14 @@ enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights
   return status;
 }
 
-enum capability_result forwarder_snapshot(struct kernel_object *object,
-    struct kernel_object **target, uint64_t *restrictions)
+enum call_status forwarder_resolve(struct kernel_object *object, uint64_t rights,
+    uint64_t transport, struct forwarder_operation *operation, struct capability_reference *target)
+{
+  return forwarder_resolve_with_limit(object, rights, transport, operation, target, NULL);
+}
+
+enum capability_result forwarder_snapshot_with_limit(struct kernel_object *object,
+    struct kernel_object **target, uint64_t *restrictions, struct call_limit *detail)
 {
   *target = NULL;
   uint64_t lineage = 0;
@@ -618,6 +637,8 @@ enum capability_result forwarder_snapshot(struct kernel_object *object,
   while (object && object->type == OBJECT_FORWARDER) {
     struct forwarder *forwarder = (struct forwarder *)object;
     if (++depth > FORWARDER_LINEAGE_MAX) {
+      call_limit_set(detail, CALL_LIMIT_FORWARDER_LINEAGE, depth,
+          FORWARDER_LINEAGE_MAX, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
       result = CAP_LIMIT;
       break;
     }
@@ -632,6 +653,7 @@ enum capability_result forwarder_snapshot(struct kernel_object *object,
     if (object_retain(object)) {
       *target = object;
     } else {
+      call_limit_reference(detail);
       result = CAP_LIMIT;
     }
   }
@@ -640,6 +662,12 @@ enum capability_result forwarder_snapshot(struct kernel_object *object,
     *restrictions = lineage;
   }
   return result;
+}
+
+enum capability_result forwarder_snapshot(struct kernel_object *object,
+    struct kernel_object **target, uint64_t *restrictions)
+{
+  return forwarder_snapshot_with_limit(object, target, restrictions, NULL);
 }
 
 enum call_status forwarder_operation_clone(struct forwarder_operation *destination,
@@ -1037,7 +1065,8 @@ static enum call_status target_admission_status(struct forwarder *root,
 }
 
 static enum call_status allocate_forwarder(struct capability_grant *target,
-    uint64_t kind, const struct forwarder_operation *lineage, struct forwarder **out)
+    uint64_t kind, const struct forwarder_operation *lineage, struct forwarder **out,
+    struct call_limit *detail)
 {
   KASSERT(!cpu_interrupts_enabled() && target->object);
   if (!wifi_grant_delegatable(target->object, target->rights)) {
@@ -1056,7 +1085,7 @@ static enum call_status allocate_forwarder(struct capability_grant *target,
   object_init(&forwarder->object, OBJECT_FORWARDER, destroy_forwarder);
   if (!object_caretaker_retain(target->object)) {
     kfree(forwarder);
-    return CALL_LIMIT;
+    return call_limit_reference(detail);
   }
   enum call_status status = CALL_OK;
   struct forwarder_operation ancestry;
@@ -1066,7 +1095,7 @@ static enum call_status allocate_forwarder(struct capability_grant *target,
   if (lineage) {
     already_cut = operation_cut(lineage);
     for (size_t i = 0; status == CALL_OK && i < lineage->count; ++i) {
-      status = add_node(&ancestry, lineage->nodes[i]);
+      status = add_node_with_limit(&ancestry, lineage->nodes[i], detail);
     }
   }
   if (target->object->type == OBJECT_FORWARDER) {
@@ -1075,11 +1104,11 @@ static enum call_status allocate_forwarder(struct capability_grant *target,
       status = CALL_DENIED;
     }
     if (status == CALL_OK && kind != FORWARDER_SLOT) {
-      status = add_node(&ancestry, parent);
+      status = add_node_with_limit(&ancestry, parent, detail);
     }
     for (size_t i = 0; kind != FORWARDER_SLOT && status == CALL_OK &&
         i < parent->ancestor_count; ++i) {
-      status = add_node(&ancestry, parent->ancestors[i]);
+      status = add_node_with_limit(&ancestry, parent->ancestors[i], detail);
     }
   }
   spin_unlock(&forwarders_lock);
@@ -1087,7 +1116,7 @@ static enum call_status allocate_forwarder(struct capability_grant *target,
   for (; status == CALL_OK && logical_count < ancestry.count; ++logical_count) {
     struct kernel_object *ancestor = &ancestry.nodes[logical_count]->object;
     if (!object_grant_retain(ancestor, 0)) {
-      status = CALL_LIMIT;
+      status = call_limit_reference(detail);
       break;
     }
     object_release(ancestor);
@@ -1102,7 +1131,8 @@ static enum call_status allocate_forwarder(struct capability_grant *target,
     status = target_admission_status(NULL, target->object);
   }
   if (status == CALL_OK && !target_depth_valid(forwarder, target->object, &forwarder->object)) {
-    status = CALL_LIMIT;
+    status = call_limit_set(detail, CALL_LIMIT_FORWARDER_LINEAGE, 0, FORWARDER_LINEAGE_MAX,
+        CALL_LIMIT_HAS_LIMIT);
   }
   if (status == CALL_OK) {
     /* Descendants keep the provider's logical client alive across namespace
@@ -1158,7 +1188,7 @@ enum call_status forwarder_create_owned(struct capability_grant *target, uint64_
   }
   uint64_t restrictions = target->restrictions;
   struct forwarder *forwarder;
-  status = allocate_forwarder(target, kind, NULL, &forwarder);
+  status = allocate_forwarder(target, kind, NULL, &forwarder, NULL);
   if (status != CALL_OK) {
     kfree(controller);
     return status;
@@ -1186,22 +1216,31 @@ size_t forwarder_derived_storage_size(const struct forwarder_operation *lineage)
   return lineage && lineage->count ? sizeof(struct forwarder) : 0;
 }
 
-enum capability_result forwarder_derive_grant(struct capability_grant *grant,
-    const struct forwarder_operation *lineage)
+enum capability_result forwarder_derive_grant_with_limit(struct capability_grant *grant,
+    const struct forwarder_operation *lineage, struct call_limit *detail)
 {
   if (!lineage || !lineage->count) {
     return CAP_OK;
   }
   uint64_t restrictions = grant->restrictions;
   struct forwarder *forwarder;
-  enum call_status status = allocate_forwarder(grant, 0, lineage, &forwarder);
+  enum call_status status = allocate_forwarder(grant, 0, lineage, &forwarder, detail);
   if (status != CALL_OK) {
     return cap_status(status);
   }
   enum capability_result result = capability_grant_derive(&forwarder->object,
       forwarder->rights, forwarder->transport, restrictions, grant);
   object_release(&forwarder->object);
+  if (result == CAP_LIMIT) {
+    call_limit_reference(detail);
+  }
   return result;
+}
+
+enum capability_result forwarder_derive_grant(struct capability_grant *grant,
+    const struct forwarder_operation *lineage)
+{
+  return forwarder_derive_grant_with_limit(grant, lineage, NULL);
 }
 
 enum capability_result forwarder_request_derivation(struct capability_grant *grant)

@@ -4,7 +4,9 @@
 #include <abi/execution_group.h>
 #include <abi/handle.h>
 #include <abi/syscall.h>
+#include <abi/limit.h>
 #include <kernel/object/object.h>
+#include <kernel/user/readiness_source.h>
 
 struct space;
 struct task;
@@ -33,6 +35,8 @@ struct execution_group {
   bool sealed;
   bool stopping;
   bool complete;
+  struct readiness_source readiness;
+  struct execution_group *notification_next; /* Transferred completed active edge. */
   atomic_uint_fast64_t result_flags;
   size_t controllers;
   size_t members;
@@ -46,7 +50,7 @@ struct execution_group {
 
 /* BSP, IF=0. Returns one storage reference, no controlling authority. */
 enum call_status execution_group_create(struct space *space,
-    struct execution_group *parent, struct execution_group **result);
+    struct execution_group *parent, struct execution_group **result, struct call_limit *detail);
 /* BSP, IF=0. Publish the owned pair under final tree admission exclusion.
  * All grants/slots exist and are validated; no allocation or user access. */
 enum call_status execution_group_install(struct execution_group *group,
@@ -74,7 +78,8 @@ void execution_group_thread_end(struct execution_group *group);
  * Serialize final admission/enrollment with sealing, then transfer every task.
  * Failure leaves all tasks unpublished and owned by the preparer. */
 enum call_status execution_group_publish(struct execution_group *group,
-    struct task **tasks, size_t count);
+    struct task **tasks, size_t count, size_t *destinations, size_t destination_capacity,
+    struct call_limit *detail);
 /* IF=0, retirement owner, before cleanup releases the address space: the
  * process leaves its space's listing. */
 void execution_group_unlist(struct process *process);
@@ -89,7 +94,7 @@ void execution_group_member_complete(struct execution_group *group);
 
 /* Admitted preparation owns storage until all staging has been disposed. */
 enum call_status execution_group_launch_begin(struct execution_group *group,
-    struct space *space);
+    struct space *space, struct call_limit *detail);
 void execution_group_launch_end(struct execution_group *group);
 void execution_group_member_detach(struct execution_group *group,
     struct execution_group_member *member);

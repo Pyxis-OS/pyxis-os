@@ -183,16 +183,17 @@ it. Early memory lookup uses allocation-free environment helpers before TLS and
 heap initialization.
 
 [Startup preparation](../../include/kernel/user/startup.h) accepts stable borrowed
-kernel inputs under exclusive ownership of an inactive process on the BSP. It
+kernel inputs under exclusive ownership of an inactive process on its preparation CPU. It
 validates names, grants, cwd and size, seeds the environment with owned CAP/TEXT
 cells, and copies startup mappings before publishing the address. Initial named
 source handles are closed once after seeding unless they also own cwd positions;
 there is no hidden original named-handle copy. Failure keeps the process
 unpublished for cleanup. Inputs may be released after preparation.
 
-The combined startup admission budget is 64 KiB including mapping padding and
-selected environment entry metadata/names/text, even though values reside in the
-native table. Only the actual startup mapping pages are allocated. The shared
+Startup mappings are sized from their actual metadata and argv, with page
+padding and checked arithmetic. Environment names/text remain in their native
+table and obey its independent admission policy; no combined 64 KiB budget
+remains. The 88-byte startup record uses 64-bit version and size fields. The shared
 assembly entry calls native C startup, which validates the record and initializes
 [accessors](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/startup.h)
 before `main(argc, argv)`; its return value goes to exit. Boot preparation stages
@@ -271,7 +272,7 @@ without a capacity, stays unassigned, so a program built for it gets the
 unknown-call status rather than an overrun. DESCRIBE and FORWARDER_CREATE take
 their reply capacity in RDX the same way
 ([syscall.h](../../include/abi/syscall.h)); how a reply grows is in
-[ABI](abi.md#keeping-a-releases-abi). Forwarded
+[ABI](abi.md#keeping-a-released-abi). Forwarded
 holders expose the target's attested interface and attenuated masks. Querying a cut grant or its
 descendants returns DENIED; querying a live export whose receiver has closed
 returns ENDPOINT_CLOSED. A successful query does not reserve a future operation.
@@ -572,7 +573,7 @@ disabled, with no BSP request:
 - Readers cannot observe an intermediate state.
 
 **Executables.** BSP copies selected RAM file bytes into reclaimable whole pages,
-under the same 128 MiB per-image ceiling as host and native files. Boot-archive
+sized from the selected file, as for host and native files. Boot-archive
 executables are read in place. See [image capture](../kernel/program-loading.md#file-capture-and-costs).
 
 Request metadata and write payloads are captured before waiting or committing,
@@ -780,9 +781,9 @@ staging only. A supplied capability/text name overrides that child's selection
 without temporarily mutating the parent's table. There are no protocol-tagged
 stream slots or namespace/root selectors in the request.
 
-All nested addresses belong to the caller. Arrays, strings and alignment share
-a 64 KiB capture budget. Startup admission separately charges its 64 KiB budget,
-including selected environment names/text and mapping padding. Counts and address
+All nested addresses belong to the caller. Arrays and strings use owned storage
+sized from the request; startup mappings are measured and page-rounded. There
+is no 64 KiB capture/startup ceiling. Environment admission remains separate. Counts and address
 arithmetic are checked before copying; exact names, duplicate entries, CAP
 indices, TEXT lengths and directory types are validated before submission.
 Empty arrays are ignored; working_path is optional and requires a nonempty cwd
@@ -804,10 +805,9 @@ A caller still needs its existing LAUNCH-authorized launcher capability. A READ
 file handle is sufficient as the source for a host-backed binary or interpreter;
 the launcher creates the process in the caller's space on its assigned CPU and
 applies the caller's explicit grants. This uses the existing launcher request,
-with no new syscall, rights or image-format version. The host executable file
-limit is 128 MiB and reports CALL_LIMIT; it is not a process runtime memory
-limit. The host worker reads into owned BSP-backed whole pages, then the existing
-BSP loader validates and maps that image. It accepts positive short reads. An empty
+with no new syscall number, rights or image-format version. The host snapshot
+is sized from the actual file; allocation failure reports CALL_NO_MEMORY. The host worker reads into owned BSP-backed whole pages, then the existing
+caller-CPU loader validates and maps that image. It accepts positive short reads. An empty
 or invalid image reports BAD_REQUEST. Premature EOF or a detected difference
 between file sizes before and after capture reports CALL_IO. Transport and
 other backend errors retain their status, and failed capture is not retried.
@@ -821,8 +821,8 @@ checks cannot prove that captured contents form a coherent snapshot. Script
 files retain their existing live READ-handle behavior; this capture path applies
 only to binary executables and interpreters.
 
-Native filesystem and RAM binaries and interpreters use the same 128 MiB
-selected-image limit (`LAUNCH_CAPTURED_IMAGE_MAX_SIZE`). The native worker reads
+Native filesystem and RAM binaries and interpreters use the same actual-file
+sizing and immutable selected-image capture. The native worker reads
 length and bytes through the held policy view, requiring the caller's READ grant and both
 core read/metadata rights. It publishes a complete owned copy only on success;
 errors or an unexpected short read publish no staging bytes. The immutable view
@@ -873,16 +873,19 @@ work.
 
 ## Batch launch
 
-`LAUNCHER_LAUNCH_BATCH` accepts an array of one through eight ordinary launch
+`LAUNCHER_LAUNCH_BATCH` accepts a nonempty, checked-size array of ordinary launch
 requests under the same LAUNCH authority (ordinary or group-bound). It prepares every image,
 child grant table, startup region, kernel task stack and WAIT observer before
-publishing any child. Each request retains the existing image and startup limits;
+publishing any child. All stage metadata is preflighted before any image payload
+is captured; each image operation ends before the next one starts. There is no
+fixed stage-count or image/startup byte ceiling;
 there is no implicit inheritance or new target-space/CPU selection.
 
 The full reply range is validated before side effects. The kernel installs all
-observers and prepares their ordered result array before publication. Caller
-mappings remain stable throughout the operation, so delivery of that prepared
-result cannot introduce an error after children become runnable. For an [execution group](execution-groups.md), publication rechecks admission under
+observers and prepares their ordered result array before publication. A precheck does not hold a user mapping lease across preparation waits. Reply
+copy-out revalidates the output; failure after publication releases unreported
+observer handles but cannot undo running children, so the SDK reports
+OUTCOME_UNKNOWN and callers must not retry. For an [execution group](execution-groups.md), publication rechecks admission under
 the group lock: sealing can reject the entire prepared batch with ENDPOINT_CLOSED.
 After admission succeeds, publication contains no allocation, validation or other
 fallible work. It makes every child
@@ -900,16 +903,20 @@ endpoint references are released through normal deferred destruction, without
 retaining unused copies in staging. As with single launch, grown capability-table
 storage may remain available for reuse.
 
-The fixed `launch_batch_reply` holds `failed_index` and eight child-handle slots.
-Success fills the first requested slots in request order, zeroes unused slots,
-and sets the index to `LAUNCH_NO_STAGE`. Failure zeroes all child slots. The index
+The variable `launch_batch_reply` has a 16-byte `failed_index`/`child_count`
+header followed by one child-handle slot per requested stage. Capacity is checked
+before capture. Success fills slots in request order, sets child_count to the
+request count and the index to LAUNCH_NO_STAGE. An operation failure returns
+child_count zero and invalid handles throughout the admitted slot array. The index
 is the zero-based request responsible for an image, grant, startup, task-setup or
 observer-installation failure; batch-wide failures use `LAUNCH_NO_STAGE`.
 
 This operation has a narrow exception to ordinary CALL error replies: after
 validating output storage it can return the complete reply alongside a nonzero
 native error status. Dispatch failures and unusable reply storage return no
-reply bytes. The userspace helper initializes outputs to invalid handles and
+reply bytes. Count/size refusal can return the validated header only. Structured
+limit detail uses the separate [diagnostic ABI](abi.md#limit-diagnostics), not the
+child-handle slots. The userspace helper initializes outputs to invalid handles and
 `LAUNCH_NO_STAGE`, so a failure without metadata cannot leave a stale stage index.
 
 `launcher_launch_batch` submits native PXE requests. `program_launch_batch`

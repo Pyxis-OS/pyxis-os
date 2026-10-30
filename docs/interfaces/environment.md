@@ -32,8 +32,10 @@ bytes and 16 mutations per request. The byte charge includes each name's NUL and
 for TEXT, its final NUL; CAP values add only their name bytes. These limits are
 [tunable implementation policy](../../include/kernel/object/environment.h), not ABI
 constants. Policy exhaustion reports `CALL_LIMIT`. Environment text uses an explicit
-caller buffer and has no endpoint payload limit of 4 KiB. Launch retains its own
-64 KiB capture and startup admission budgets.
+caller buffer and has no endpoint payload limit of 4 KiB. Launch capture and
+startup mappings are request-sized. The environment owner preflights these same
+admission policies before executable capture; launch refusal preserves structured
+CALL_LIMIT detail instead of converting it to BAD_REQUEST.
 
 An immutable [command-directory list](command-search.md) is an ordinary CAP
 value, exported under `path` for ordinary child inheritance. Its constructor

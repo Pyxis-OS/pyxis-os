@@ -618,7 +618,7 @@ static enum call_status capture_file(struct hostfs_request *request)
     return status;
   }
   struct image_capture captured = {0};
-  status = image_capture_allocate_wait(attributes.size, &captured);
+  status = image_capture_allocate_wait(attributes.size, &captured, &request->limit);
   if (status != CALL_OK) {
     return status;
   }

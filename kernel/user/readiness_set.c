@@ -5,6 +5,7 @@
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/limit.h>
 #include <kernel/net/interface.h>
 #include <kernel/net/tcp.h>
 #include <kernel/object/console.h>
@@ -275,6 +276,10 @@ static void source_detach(struct readiness_registration *entry)
 static struct readiness_source *object_source(struct kernel_object *object)
 {
   switch (object->type) {
+  case OBJECT_PROCESS_CONTROL:
+    return &((struct process_control *)object)->readiness;
+  case OBJECT_EXECUTION_GROUP:
+    return &((struct execution_group *)object)->readiness;
   case OBJECT_PROCESS_INTERRUPT:
     return process_interrupt_readiness_source(object);
   case OBJECT_ENDPOINT_RECEIVER:
@@ -304,6 +309,12 @@ static uint64_t source_events(struct readiness_registration *entry)
   uint64_t events = entry->active ? entry->active : entry->allowed;
   uint64_t ready;
   switch (target->type) {
+  case OBJECT_PROCESS_CONTROL:
+    ready = process_control_ready((struct process_control *)target);
+    break;
+  case OBJECT_EXECUTION_GROUP:
+    ready = execution_group_ready((struct execution_group *)target);
+    break;
   case OBJECT_PROCESS_INTERRUPT:
     ready = process_interrupt_ready(target);
     break;
@@ -343,12 +354,14 @@ static void account_uncharge(struct readiness_account *account, size_t bytes)
 }
 
 static void *account_alloc(struct readiness_account *account, size_t bytes,
-    enum call_status *status)
+    enum call_status *status, struct call_limit *detail)
 {
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = lock_sets();
   if (bytes > READINESS_BUDGET - account->bytes) {
-    *status = CALL_LIMIT;
+    *status = call_limit_set(detail, CALL_LIMIT_READINESS_BYTES,
+        account->bytes + bytes, READINESS_BUDGET,
+        CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
     unlock_sets(flags);
     return NULL;
   }
@@ -446,7 +459,7 @@ static enum call_status create_set(struct readiness_set_request *request)
     return CALL_ENDPOINT_CLOSED;
   }
   enum call_status status = CALL_OK;
-  struct readiness_set *set = account_alloc(account, sizeof(*set), &status);
+  struct readiness_set *set = account_alloc(account, sizeof(*set), &status, &request->limit);
   if (!set) {
     return status;
   }
@@ -578,7 +591,7 @@ static void clear_index(struct readiness_registration **index, size_t count)
   }
 }
 
-static enum call_status grow_index(struct readiness_set *set)
+static enum call_status grow_index(struct readiness_set *set, struct call_limit *detail)
 {
   if (set->bucket_count && set->count < set->bucket_count * 2) {
     return CALL_OK;
@@ -587,7 +600,7 @@ static enum call_status grow_index(struct readiness_set *set)
   size_t count = set->bucket_count ? set->bucket_count * 2 : READINESS_INITIAL_BUCKETS;
   enum call_status status = CALL_OK;
   struct readiness_registration **buckets = account_alloc(set->account,
-      count * sizeof(*buckets), &status);
+      count * sizeof(*buckets), &status, detail);
   if (!buckets) {
     return status;
   }
@@ -774,10 +787,12 @@ static enum call_status prepare_registration(struct readiness_set_request *reque
 {
   struct readiness_set *set = request->set;
   if (!set->next_identity) {
-    return CALL_LIMIT;
+    return call_limit_set(&request->limit, CALL_LIMIT_READINESS_IDENTITY,
+        UINT64_MAX, UINT64_MAX, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT |
+        CALL_LIMIT_REQUESTED_SATURATED);
   }
   enum call_status status = CALL_OK;
-  struct readiness_registration *entry = account_alloc(set->account, sizeof(*entry), &status);
+  struct readiness_registration *entry = account_alloc(set->account, sizeof(*entry), &status, &request->limit);
   if (!entry) {
     return status;
   }
@@ -787,8 +802,8 @@ static enum call_status prepare_registration(struct readiness_set_request *reque
       .pending_observed = request->observed_generation, .provisional = true, .loaned = true};
   forwarder_operation_init(&entry->lineage);
   uint64_t flags = cpu_save_interrupts();
-  enum capability_result result = capability_reference_resolve_for(&request->target,
-      &entry->lineage);
+  enum capability_result result = capability_reference_resolve_for_with_limit(&request->target,
+      &entry->lineage, &request->limit);
   cpu_restore_interrupts(flags);
   if (result != CAP_OK) {
     status = result == CAP_DENIED ? CALL_DENIED : result == CAP_NO_MEMORY ?
@@ -806,7 +821,7 @@ static enum call_status prepare_registration(struct readiness_set_request *reque
     status = CALL_UNAVAILABLE;
   }
   if (status == CALL_OK) {
-    status = grow_index(set);
+    status = grow_index(set, &request->limit);
   }
   if (status != CALL_OK) {
     flags = cpu_save_interrupts();
@@ -1024,7 +1039,9 @@ static bool handle_command(struct readiness_set_request *request)
     } else if ((request->active_events & ~entry->allowed) || entry->status != CALL_OK) {
       status = entry->status != CALL_OK ? entry->status : CALL_BAD_REQUEST;
     } else if (entry->generation == UINT64_MAX) {
-      status = CALL_LIMIT;
+      status = call_limit_set(&request->limit, CALL_LIMIT_READINESS_GENERATION,
+          UINT64_MAX, UINT64_MAX, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT |
+          CALL_LIMIT_REQUESTED_SATURATED);
     } else {
       flags = lock_sets();
       entry->loaned = true;

@@ -1,5 +1,5 @@
 #include <kernel/mm/kernel_owner.h>
-#include <abi/launcher.h>
+#include <kernel/limit.h>
 #include <arch/cpu.h>
 #include <arch/paging.h>
 #include <arch/smp.h>
@@ -8,15 +8,16 @@
 #include <kernel/task.h>
 #include <kernel/user/image_capture.h>
 
-enum call_status image_capture_allocate(uint64_t size, struct image_capture *capture)
+enum call_status image_capture_allocate(uint64_t size, struct image_capture *capture,
+    struct call_limit *detail)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(capture && !capture->address && !capture->size && !capture->backing_bytes);
   if (!size) {
     return CALL_BAD_REQUEST;
   }
-  if (size > LAUNCH_CAPTURED_IMAGE_MAX_SIZE) {
-    return CALL_LIMIT;
+  if (size > SIZE_MAX - PAGE_SIZE + 1) {
+    return call_limit_encoding(detail);
   }
   size_t backing_bytes = (size + PAGE_SIZE - 1) & ~(size_t)(PAGE_SIZE - 1);
   uintptr_t address;
@@ -44,7 +45,8 @@ enum call_status image_capture_allocate(uint64_t size, struct image_capture *cap
   return CALL_OK;
 }
 
-enum call_status image_capture_allocate_wait(uint64_t size, struct image_capture *capture)
+enum call_status image_capture_allocate_wait(uint64_t size, struct image_capture *capture,
+    struct call_limit *detail)
 {
   KASSERT(arch_cpu_index() == 0 && cpu_interrupts_enabled());
   struct vm_kernel_owner owner = {0};
@@ -52,7 +54,7 @@ enum call_status image_capture_allocate_wait(uint64_t size, struct image_capture
     return CALL_BUSY;
   }
   uint64_t flags = cpu_save_interrupts();
-  enum call_status status = image_capture_allocate(size, capture);
+  enum call_status status = image_capture_allocate(size, capture, detail);
   vm_kernel_owner_release(&owner);
   cpu_restore_interrupts(flags);
   return status;
