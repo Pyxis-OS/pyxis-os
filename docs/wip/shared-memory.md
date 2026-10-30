@@ -197,11 +197,14 @@ without its connected withdrawal implementation.
   Native consumer qualification remains task 5.
   After this task chronium can use shared buffers through normal native program
   grants, IPC and launch inheritance.
-- [ ] **5. Qualification and close-out.** Ordinary builds; 1/4-CPU QEMU shared
+- [x] **5. Qualification and close-out.** Ordinary builds; 1/4-CPU QEMU shared
   contents/rights/lifetime/revocation checks, matched controls and shared-buffer
   costs, then a quick hands-free native vela packet through the orchestrator.
   Record exact-head CI, measured variation and any accepted limits as debt.
-  Rewrite this WIP into the implemented interface when the milestone completes.
+  The [native vela run](../development/experiments/shared-memory.md#task-5-native-consumer--vela-2026-10-30)
+  passes all shared-min counts and existing controls on merged main `67f8957cd`;
+  PXE is restored. Native revocation and exceptional-path coverage remain explicit
+  limits. The close-out folds this completed plan into the implemented references.
   After this task chronium can rely on the qualified first shared-memory profile
   and see its performance and remaining limits explicitly.
 
