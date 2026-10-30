@@ -105,6 +105,10 @@ LIBPNG_INPUTS := $(wildcard ports/libpng/*.lua ports/libpng/Makefile ports/libpn
                           ports/libpng/*.dfa ports/libpng/PORT-NOTICE) \
                  ports/ports.lua ports/build.lua
 
+FREETYPE_INPUTS := $(wildcard ports/freetype/*.lua ports/freetype/Makefile ports/freetype/*.pc \
+                           ports/freetype/README.md ports/freetype/PORT-NOTICE) \
+                  ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
+
 TINYXML2_INPUTS := $(wildcard ports/tinyxml2/*.lua ports/tinyxml2/Makefile ports/tinyxml2/*.pc ports/tinyxml2/*.h ports/tinyxml2/patches/*.patch) \
                    ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 TINYXML2_INPUTS += $(wildcard ports/tinyxml2/README.md ports/tinyxml2/PORT-NOTICE \
@@ -265,6 +269,7 @@ TREE_SITTER_OUTPUTS := $(call port_outputs,tree-sitter)
 NEOVIM_OUTPUTS := $(call port_outputs,neovim)
 LUA_LANGUAGE_SERVER_OUTPUTS := $(call port_outputs,lua-language-server)
 LIBPNG_OUTPUTS := $(call port_outputs,libpng)
+FREETYPE_OUTPUTS := $(call port_outputs,freetype)
 TINYXML2_OUTPUTS := $(call port_outputs,tinyxml2)
 THREAD_POOL_OUTPUTS := $(call port_outputs,thread-pool)
 DR_LIBS_OUTPUTS := $(call port_outputs,dr_libs)
@@ -293,6 +298,7 @@ CHOCOLATE_QUAKE_OUTPUTS := $(call port_outputs,chocolate-quake)
 EDUKE32_OUTPUTS := $(call port_outputs,eduke32)
 
 .PHONY: all
+all: $(FREETYPE_OUTPUTS)
 all: $(TINYXML2_OUTPUTS)
 all: $(THREAD_POOL_OUTPUTS)
 all: $(DR_LIBS_OUTPUTS)
@@ -436,6 +442,10 @@ $(LUA_LANGUAGE_SERVER_OUTPUTS) &: $(LUA_LANGUAGE_SERVER_INPUTS) $(SDK_INPUTS) sc
 $(LIBPNG_OUTPUTS) &: $(LIBPNG_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/libpng
 	$(LUA) ports/build.lua libpng --sdk $(abspath build/sdk) --work $(abspath build/ports/libpng) --zlib $(abspath build/ports/zlib/stage/dev)
+
+$(FREETYPE_OUTPUTS) &: $(FREETYPE_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/freetype
+	$(LUA) ports/build.lua freetype --sdk $(abspath build/sdk) --work $(abspath build/ports/freetype)
 
 $(TINYXML2_OUTPUTS) &: $(TINYXML2_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/tinyxml2

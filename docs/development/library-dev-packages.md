@@ -32,6 +32,7 @@ not full upstream API qualification.
 | `imgui-sdl2-opengl3-dev` 1.91.9b-docking | `libimgui-sdl2.a`, `libimgui-opengl3.a`; `imgui-sdl2-opengl3` | Same ImGui notices | `imgui-dev`, `sdl2-osmesa-dev` | ImGui demo |
 | `libultraship-dev` `0.git.da6daf1a50a5` | `libultraship.a`; `libultraship` | MIT/Fast3D MIT, embedded Font Awesome OFL-1.1; native MPL source | ImGui SDL2/GL3, libzip, JSON/XML, spdlog/thread-pool, prism/Monocypher, stb/dr_libs, Vorbis/Opusfile | Public `lus-demo`; SoH native resource prerequisite |
 | `fmt-dev` 12.2.0 | `libfmt.a`; `fmt` | MIT | `libcxx-dev` | DevilutionX (personal build) |
+| `freetype-dev` 2.15.0 | `libfreetype.a`; `freetype2` | FTL (or GPL-2.0-or-later), bundled zlib; covered Pyxis source/MPL | — | private game port; independent consumer |
 | `tinyxml2-dev` 10.0.0 | libtinyxml2.a; tinyxml2 | zlib; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
 | `thread-pool-dev` 4.1.0 | header-only; thread-pool | MIT; covered Pyxis source/MPL | `libcxx-dev` | SoH shared closure; independent consumer |
 | `dr-libs-dev` 0.git.da35f9d6c737 | header-only; dr_libs | MIT-0 or Unlicense; minimp3 dedication; covered Pyxis source/MPL | `pyxis-dev` | SoH shared closure; independent consumer |
