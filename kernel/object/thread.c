@@ -220,12 +220,69 @@ done:
   request->caller = NULL;
 }
 
+struct syscall_result thread_address_packet_call(uint64_t rights, uint64_t operation,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity, struct user_buffer_lease *lease)
+{
+  struct syscall_result result = {CALL_BAD_OPERATION, 0};
+  if (operation != THREAD_ADDRESS_WAIT && operation != THREAD_ADDRESS_WAKE) {
+    goto done;
+  }
+  if (!(rights & THREAD_RIGHT_MANAGE)) {
+    result.status = CALL_DENIED;
+    goto done;
+  }
+  struct thread_message input = {0};
+  if (request_size != sizeof(input.body)) {
+    result.status = CALL_BAD_REQUEST;
+    goto done;
+  }
+  if (!copy_from_user_leased(lease, &input.body, request_address, request_size)) {
+    result.status = CALL_BAD_BUFFER;
+    goto done;
+  }
+  uint64_t words[sizeof(input.body) / sizeof(uint64_t)];
+  memcpy(words, &input.body, sizeof(words));
+  size_t used = operation == THREAD_ADDRESS_WAIT ? 4 : 3;
+  for (size_t i = used; i < sizeof(words) / sizeof(words[0]); ++i) {
+    if (words[i]) {
+      result.status = CALL_BAD_REQUEST;
+      goto done;
+    }
+  }
+  if (operation == THREAD_ADDRESS_WAIT) {
+    /* Enrollment consumes the lease and drops it before any possible sleep. */
+    return (struct syscall_result){address_wait_leased(&input.body.address_wait, lease), 0};
+  }
+  if (reply_capacity < sizeof(struct thread_address_wake_reply)) {
+    result.status = CALL_BAD_REQUEST;
+    goto done;
+  }
+  if (!user_buffer_check_leased(lease, reply_address, sizeof(struct thread_address_wake_reply),
+      USER_BUFFER_WRITE)) {
+    result.status = CALL_BAD_BUFFER;
+    goto done;
+  }
+  struct thread_address_wake_reply reply;
+  result.status = address_wake_leased(&input.body.address_wake, &reply.woken, lease);
+  if (result.status != CALL_OK) {
+    goto done;
+  }
+  if (!copy_reply_to_user_leased(lease, reply_address, &reply, sizeof(reply), 0, NULL, 0)) {
+    result.status = CALL_BAD_BUFFER;
+    goto done;
+  }
+  result.reply_size = sizeof(reply);
+done:
+  user_buffer_lease_release(lease);
+  return result;
+}
+
 struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != THREAD_CREATE && operation != THREAD_EXIT && operation != THREAD_SET_FS &&
-      operation != THREAD_ADDRESS_WAIT && operation != THREAD_ADDRESS_WAKE) {
+  if (operation != THREAD_CREATE && operation != THREAD_EXIT && operation != THREAD_SET_FS) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & THREAD_RIGHT_MANAGE) &&
@@ -241,32 +298,11 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
   }
   uint64_t words[sizeof(input.body) / sizeof(uint64_t)];
   memcpy(words, &input.body, sizeof(words));
-  size_t used = operation == THREAD_EXIT ? 1 : operation == THREAD_SET_FS ? 2 :
-      operation == THREAD_ADDRESS_WAIT ? 4 : operation == THREAD_ADDRESS_WAKE ? 3 : 5;
+  size_t used = operation == THREAD_EXIT ? 1 : operation == THREAD_SET_FS ? 2 : 5;
   for (size_t i = used; i < sizeof(words) / sizeof(words[0]); ++i) {
     if (words[i]) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
-  }
-  if (operation == THREAD_ADDRESS_WAIT) {
-    return (struct syscall_result){address_wait(&input.body.address_wait), 0};
-  }
-  if (operation == THREAD_ADDRESS_WAKE) {
-    if (reply_capacity < sizeof(struct thread_address_wake_reply)) {
-      return (struct syscall_result){CALL_BAD_REQUEST, 0};
-    }
-    if (!user_buffer_check(reply_address, sizeof(struct thread_address_wake_reply), USER_BUFFER_WRITE)) {
-      return (struct syscall_result){CALL_BAD_BUFFER, 0};
-    }
-    struct thread_address_wake_reply reply;
-    enum call_status status = address_wake(&input.body.address_wake, &reply.woken);
-    if (status != CALL_OK) {
-      return (struct syscall_result){status, 0};
-    }
-    if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
-      return (struct syscall_result){CALL_BAD_BUFFER, 0};
-    }
-    return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (operation == THREAD_EXIT) {
     /* Dispatch releases its admitted object references before syscall leave. */

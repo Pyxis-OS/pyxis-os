@@ -9,6 +9,7 @@
 struct task_wait;
 struct process;
 struct vm_space;
+struct user_buffer_lease;
 
 enum address_wait_result {
   ADDRESS_WAIT_PENDING,
@@ -34,8 +35,15 @@ struct address_wait_record {
   bool linked;
 };
 
-enum call_status address_wait(const struct thread_address_wait *request);
-enum call_status address_wake(const struct thread_address_wake *request, uint64_t *woken);
+/* IF=0, kernel-staged request, live packet lease. Takes ownership and releases
+ * on every result; an enrolled wait releases after bucket unlock, before sleep. */
+enum call_status address_wait_leased(const struct thread_address_wait *request,
+    struct user_buffer_lease *lease);
+
+/* IF=0, kernel-staged request. Borrows the live packet lease without releasing it;
+ * the caller retains it through any checked reply copy. Never sleeps. */
+enum call_status address_wake_leased(const struct thread_address_wake *request, uint64_t *woken,
+    const struct user_buffer_lease *lease);
 
 /* IF=0, no scheduler queue guard, outside interrupt/fault entry. Timeout callers
  * run on the waiter's scheduler stack before it can execute/reuse the record;

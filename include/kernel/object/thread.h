@@ -10,6 +10,7 @@
 
 struct process;
 struct task;
+struct user_buffer_lease;
 
 struct thread_control {
   struct kernel_object object;
@@ -45,6 +46,11 @@ struct syscall_result thread_control_call(struct thread_control *control,
 struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
+/* Consumes the current-process packet lease on every path. WAIT releases it
+ * before sleeping; WAKE keeps it through the final checked reply copy. */
+struct syscall_result thread_address_packet_call(uint64_t rights, uint64_t operation,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity, struct user_buffer_lease *lease);
 void thread_request_execute(struct thread_request *request);
 
 #endif

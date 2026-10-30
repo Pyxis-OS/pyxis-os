@@ -167,13 +167,36 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
   if (message_size < sizeof(header)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&header, message_address, sizeof(header))) {
+  struct user_buffer_lease thread_lease = {0};
+  bool thread_service = object->type == OBJECT_THREAD_SERVICE;
+  bool copied;
+  if (thread_service) {
+    if (!user_buffer_lease_acquire(&thread_lease)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    copied = copy_from_user_leased(&thread_lease, &header, message_address, sizeof(header));
+  } else {
+    copied = copy_from_user(&header, message_address, sizeof(header));
+  }
+  if (!copied) {
+    if (thread_service) {
+      user_buffer_lease_release(&thread_lease);
+    }
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   /* Reading the header checked this addition. The selected handler captures
    * its fixed payload before any side effect; private mappings stay stable. */
   uintptr_t request_address = message_address + sizeof(header);
   size_t request_size = message_size - sizeof(header);
+  if (thread_service) {
+    if (header.protocol == PROTOCOL_THREAD_SERVICE &&
+        (header.operation == THREAD_ADDRESS_WAIT || header.operation == THREAD_ADDRESS_WAKE)) {
+      /* The fixed packet handler consumes the lease, including before a park. */
+      return thread_address_packet_call(rights, header.operation,
+          request_address, request_size, reply_address, reply_capacity, &thread_lease);
+    }
+    user_buffer_lease_release(&thread_lease);
+  }
   if (header.protocol == PROTOCOL_COMPLETION) {
     return native_completion_call(object, rights, transport, header.operation,
         request_address, request_size, reply_address, reply_capacity);
