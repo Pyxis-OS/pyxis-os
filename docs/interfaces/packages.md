@@ -716,6 +716,16 @@ absent because older running consumers may still hold earlier trees.
 
 ### Release upgrade
 
+The signed index's release entries also declare checkpoint routing through
+their existing IDs: `pyxis` for history and the permanent 0.0.10 bootstrap,
+`pyxis-checkpoint` for later required hops, and `pyxis-release` for ordinary
+releases. Publication order is route order; versions are unique across those
+IDs. The package schema and archive verification are unchanged. See
+[release upgrades](../userland/package-upgrades.md#upgrading-the-release) for
+selection, review and reboot semantics and
+[checkpoint publication](../development/release-process.md#declaring-release-checkpoints)
+for the author's declaration and preservation rules.
+
 A `release` entry ([decision 73](../wip/pkg-upgrade.md#decided)) carries no
 `abi` and is the only kind with `provides`, the non-empty list of ABIs that
 release runs:
@@ -737,24 +747,28 @@ always verified ([decision 74](../wip/pkg-upgrade.md#decided)).
 evidence ([init](../userland/init.md)), so live media, rescue boots and spaces
 without `package_upgrade` cannot upgrade. Under the writer lock it then:
 
-1. reads `releases` and takes its last `pyxis` entry, or VERSION, refusing the
-   release already running;
-2. reviews the running and new release, the archive size, `provides`, and the
-   installed packages whose `abi` the new release does not provide, then asks
-   `[y/N]` (`--yes` skips the question);
+1. reads the signed release route and resolves its next required checkpoint
+   toward VERSION or the latest release, refusing the running release, a
+   downgrade or an unindexed origin;
+2. resolves and verifies the complete package set for that hop's `provides`,
+   reviews the selected hop, final destination and package changes, then asks
+   `[y/N]` (`--yes` cannot approve removals or ambiguous repository choices);
 3. fetches and verifies the archive into `packages/.upgrade/`, checks that its
    `os-release` names the release, and copies the kernel and archive into a
    RAM workspace in `tmp://`, since the ESP takes RAM transfer sources only;
-4. admits the boot ESP once through `UPGRADE_BOOT_ESP`, checks that its boot
+4. durably stages the complete set and its pending boot proof, admits the
+   boot ESP once through `UPGRADE_BOOT_ESP`, checks that its boot
    record is still the one this boot read, and publishes the new attempt with
    the shared boot publisher, the boot entry's `mount.pool` from the evidence;
-   the current selection is replaced; the static rescue entry remains independent;
-5. removes the staging and prints `upgrade staged: reboot to run VERSION`.
+   the normal boot selection is replaced; the static rescue entry remains independent;
+5. removes temporary release staging and prints `Upgrade staged; type reboot
+   to finish`. First boot verifies the target and switches the package set
+   before installed consumers; a later invocation resolves the remaining hops.
 
-Nothing is written before step 4. The admission is single-use per boot, so a
-failure from step 4 on needs a reboot before the next attempt; inspect the
-reported publication phase and boot selection before rebooting. Packages upgrade separately, as
-ordinary packages.
+Preparation may populate the package store but leaves the old set active.
+The ESP admission is single-use per boot, so an admission/publication failure
+needs a reboot before the next attempt; inspect the reported phase and boot
+selection before rebooting. Independent package changes use `pkg update`.
 
 ## Verification order
 

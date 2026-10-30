@@ -162,9 +162,12 @@ local repository.
    python3 tools/pxpkg.py check "$repo_root/personal" --abi R
    ```
 
-   `prune DIR --keep-abi R TAGGED...` then removes builds for every other
-   revision, keeping the tagged releases' revisions. It writes the new index
-   before deleting archives.
+   `prune DIR --keep-abi R TAGGED...` then removes other ABI builds. The keep
+   list must include every supported origin and required checkpoint ABI, not
+   only the newest destination; otherwise an older installed system can no
+   longer complete its route. Keep published release/checkpoint artifacts and
+   their required builds intact. Prune writes the new index before deleting
+   archives.
 
 6. **Publish.** Clients read `current` and the `index/N.lua` it names, not the
    working `index.lua` ([repository](../../docs/interfaces/packages.md#repository)),

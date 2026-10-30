@@ -21,6 +21,12 @@ runbook, and never sign or tag.
 - **A tagged fix release** is used only for a blocker in a major release feature
   (chronium, 2026-10-20). A letter release such as 0.0.8a keeps its base
   release's ABI name.
+- **Supported releases must reach the newest release with `pkg upgrade`, even
+  across ABI breaks or multiple releases.** Required checkpoints may divide the
+  route into reviewed/rebooted hops. Preserve their artifacts and package builds;
+  an ABI break is not a reason to substitute installer Update for this gate.
+  The historical 0.0.9 client predates complete-set staging; the supported
+  forward route starts at 0.0.10.
 
 ## Preparing the pull request
 
@@ -51,13 +57,56 @@ spawn with extra resources, which the 0.0.6 check missed. A fresh install of the
 candidate ISO is checked as well, from the ISO exactly as the
 [manual](../manual/install.md) describes.
 
+Also qualify every retained supported origin's path to the candidate, using
+its shipped updater, including any required checkpoint hops. Preserve data and
+an administrator configuration override, verify that staging leaves the old
+set active, and verify each first-boot switch before installed consumers. Run
+representative target programs and make another clean boot after the final
+hop. Include disjoint ABI names and rebuilt bound packages; a same-ABI upgrade
+or a patched starting updater does not prove cross-ABI reachability. Each hop
+has its own review; no whole-route consent survives a reboot.
+
+## Declaring release checkpoints
+
+`packages/release.lua` declares the role through its existing `id`. It remains
+an ordinary signed `kind = "release"` package, without new index fields:
+
+- `pyxis` is the historical ID and the one permanent bootstrap after 0.0.10.
+  The first release containing checkpoint routing must ship under this ID.
+- After that bootstrap is published, use `pyxis-release` for ordinary releases
+  and `pyxis-checkpoint` for required checkpoints. Never append another `pyxis`.
+
+A checkpoint is required when later releases need updater behavior or a
+transition that older supported clients cannot perform directly. Document its
+concrete reason in the release notes. The ABI list remains a runtime binary
+compatibility declaration; it does not declare upgrade reachability.
+
+Append release entries in publication order. `pxpkg` checks that versions are
+unique across the three IDs, that the legacy bootstrap cannot advance, and
+that each published release prefix remains unchanged and ordered at the next
+publish. Do not remove a supported origin or checkpoint, reorder releases or
+replace published bytes. An explicit `pkg upgrade VERSION` on a route-aware
+client still takes required checkpoints first. The shipped 0.0.10 client uses
+plain `pkg upgrade` to reach its bootstrap; it cannot name the newer IDs.
+
+Keep repository index syntax readable by every supported starting client;
+a checkpoint cannot repair an index the old client cannot parse. Qualify
+against the final catalog with the checkpoint and newest release offered
+together, using the unchanged shipped starting updater.
+
+Before a native upgrade, every retained personal program also needs a build
+for each required ABI hop. Keep the native gate separate from QEMU and retain
+independent rescue/PXE; one native pass is not power-cut qualification.
+
 ## Release-tied packages
 
 Before the owner's native update, pack the release-tied packages (the game
-packages and `clang-hosted`) from the tagged checkout into horse's trees and
-prune other revisions, following
+packages and `clang-hosted`) from the tagged checkout into horse's trees,
+following
 [packing a revision](../../tools/package-repository/README.md#packing-a-revision).
-A package built at another revision refuses to install or launch on the release.
+Retain the builds needed by every supported origin and required ABI hop;
+pruning must not strand a checkpoint. A package built for an incompatible ABI
+refuses to install or launch on the release.
 A build deployed to the owner's stick between releases is packed the same way,
 from that build's checkout, before the owner updates. The owner's stick then
 gets the update natively. The stick usually carries a personal build with opt-in
