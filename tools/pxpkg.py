@@ -41,6 +41,10 @@ KINDS = ("data", "program", "toolchain", "dev", "release")
 # os-release. Its version is the release tag and its index entry says which
 # ABIs the release provides; pkg upgrade alone reads it.
 RELEASE_FILES = ("caelum.elf", "initrd.cpio", "os-release")
+# The shipped 0.0.10 selector knows only pyxis. Exactly one later release
+# remains its permanent bootstrap; new clients follow the other two IDs.
+RELEASE_IDS = ("pyxis", "pyxis-release", "pyxis-checkpoint")
+LEGACY_ROUTE_RELEASE = "0.0.10"
 ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
 # IDs that name roots and views a package must not be confused with: today's
 # fixed roots and the pkg:// and sdk:// views (docs/wip/sdk-view.md, decision 53).
@@ -717,7 +721,44 @@ def entries_check(packages):
         require(key not in seen, f"duplicate index entry {key[0]} {key[1]}")
         seen.add(key)
         entries.append(entry)
+    release_route_check(entries)
     return entries
+
+
+def release_entries(entries):
+    return [entry for entry in entries
+            if entry["kind"] == "release" and entry["id"] in RELEASE_IDS]
+
+
+def release_route_check(entries):
+    route = release_entries(entries)
+    versions = [entry["version"] for entry in route]
+    require(len(set(versions)) == len(versions), "the release route repeats a version")
+    modern = False
+    bootstrap = 0
+    anchor = False
+    for entry in route:
+        legacy = entry["id"] == "pyxis"
+        require(not legacy or not modern,
+                "the release route changes the permanent legacy checkpoint")
+        if legacy:
+            if anchor:
+                bootstrap += 1
+                require(bootstrap == 1,
+                        "only one bootstrap checkpoint may follow the shipped 0.0.10 selector")
+            if entry["version"] == LEGACY_ROUTE_RELEASE:
+                anchor = True
+        else:
+            require(anchor and bootstrap == 1,
+                    "publish the permanent pyxis bootstrap checkpoint after 0.0.10 first")
+            modern = True
+
+
+def release_order_preserved(entries, published):
+    old = release_entries(published)
+    new = release_entries(entries)
+    require(new[:len(old)] == old,
+            "published releases/checkpoints must remain unchanged and in publication order")
 
 
 def abi_list(value, label):
@@ -1469,7 +1510,8 @@ def publish(repository, name, signed_at=None, signer=None):
         entries = load_index(root)
         previous = read_current(root)
         if previous:
-            header, _ = load_snapshot(root, previous)
+            header, published = load_snapshot(root, previous)
+            release_order_preserved(entries, published)
             require(header["repository"] == name,
                     f"{repository} publishes {header['repository']}, not {name}")
             # pkg refuses an index signed before the last one it accepted.
@@ -1572,6 +1614,7 @@ def check(repository, abi=None):
         if serial:
             # The published snapshot must list only archives that exist as indexed.
             header, published = load_snapshot(root, serial)
+            release_order_preserved(entries, published)
             if "signer" in header:
                 require((root / header["signer"]).is_file(), f"{header['signer']} is missing")
             for entry in published:

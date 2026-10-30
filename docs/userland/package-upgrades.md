@@ -47,6 +47,43 @@ restart the machine or give `pkg` a general power grant. The running system
 continues to read its old `packages/current`. Package mutations refuse while
 the transition is pending.
 
+An ABI change alone must never prevent an upgrade from a supported release to
+the newest release. A supported origin is a retained release on the published
+upgrade route, starting with 0.0.10. The route may require checkpoint releases
+that supply a newer updater or an on-disk transition. Every hop resolves the
+complete installed set against that hop's `provides`, rather than the running
+ABI. Trust, dependency, ownership and actual-capacity failures still refuse;
+incompatible old programs are never kept by pretending their ABI is supported.
+
+The signed `releases` index declares the route in publication order. Its
+`kind = "release"` entries use these IDs:
+
+| ID | Meaning |
+| --- | --- |
+| `pyxis` | Historical releases and the permanent bootstrap checkpoint for the shipped 0.0.10 updater |
+| `pyxis-checkpoint` | A required checkpoint after that bootstrap |
+| `pyxis-release` | An ordinary release |
+
+The next hop is the first checkpoint after the running release and before the
+requested destination, or the destination when none intervenes. Without a
+version, the destination is the final release in the index. With a version,
+the same checkpoint rules apply; an earlier release is refused. Versions are
+identities, not strings sorted as numbers. Duplicate versions across these IDs
+and an unknown running release refuse before staging.
+
+Each invocation reviews and stages one hop. Reboot to verify and activate it,
+then run `pkg upgrade` again for the newest destination, or repeat the version
+printed by Review to retain that destination. There is no unattended reboot or
+persisted whole-route authorization. Each hop uses the actual boot proof,
+current repositories, package availability and consent at that time.
+
+The shipped 0.0.10 client understands only `pyxis` and selects its last entry.
+Exactly one later release retains that ID permanently: the bootstrap containing
+the route-aware updater. All subsequent releases use the other two IDs. This
+keeps old clients landing on the bootstrap even after more checkpoints ship.
+On 0.0.10 use plain `pkg upgrade` for that first hop; explicit requests for
+later releases under the newer IDs are unavailable to that older selector.
+
 On the first boot of the new release, boot-init checks the retained boot and
 package-set proof, then switches `packages/current` before installed package
 views or consumers start. Missing or ambiguous proof enters the core rescue
@@ -56,7 +93,7 @@ interrupted-publication recovery copies help recover a failed publication;
 neither selects an earlier release. There is no `pkg rollback`, predecessor
 set binding or `Pyxis OS (previous)` menu entry.
 
-**0.0.9 to 0.0.10:** boot the 0.0.10 installer and choose **Update**. The 0.0.9
+**Historical 0.0.9 to 0.0.10:** boot the 0.0.10 installer and choose **Update**. The 0.0.9
 `pkg` cannot stage this transition; no bridge client is supplied. Installer
 Update prepares a compatible complete package set before changing boot
 selection, and preserves administrator-owned pool configuration and volumes.
