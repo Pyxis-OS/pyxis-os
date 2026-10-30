@@ -90,6 +90,21 @@ destructors in reverse registration order, then at most four key-destructor pass
 outside registry exclusion. FS survives `atexit`, `.fini_array` and stdio
 shutdown. Forced stop or fault runs no user destructors.
 
+## Libc synchronization
+
+C11, pthread and C++ mutexes use one atomic ownership/waiter word with native
+64-bit ADDRESS_WAIT/WAKE. Destruction succeeds only while unowned and without
+registered contenders. Ownership identities retain their full generation;
+recursive depth, try/timed errors and condition reacquisition remain checked.
+There is no adaptive spinning or new scheduler fairness promise. As with other
+process-private synchronization objects, callers exclude new operations before
+destruction and retain storage until admitted calls return.
+
+Condition stack-waiter queues and rwlock reader/writer accounting retain their
+guards. Completed once reads use acquire publication; initialization, abort and
+waiter bookkeeping still use the existing guard. See the
+[qualification record](../development/experiments/soh-present.md).
+
 ## Shared capability and VM ownership
 
 Sibling threads share one capability table and address space, which needed four

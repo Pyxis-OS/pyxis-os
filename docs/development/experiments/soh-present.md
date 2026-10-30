@@ -57,3 +57,66 @@ For the extracted pixel function alone, three 16-frame runs at 2880×1768 measur
 7.65–7.68 ms/frame before and 1.61–1.67 ms/frame after on that nested guest.
 This is not native SoH throughput. Native remeasurement remains pending.
 Evidence: `/shared/present/soh-frame-limiter/sdl-present/`.
+
+## Mutex isolation and accepted change (chronium, 2026-10-30)
+
+Vela's silent RAM-only primitive run used kernel 8529730a6 (63a044fa plus the
+caller-only CPU snapshot), userland 36d9bce5, 16 usable CPUs and HWP 16/16. Two
+repeats of 65,536 aggregate claims at 16 workers measured private mutexes 51–55ns
+summed CPU/claim, shared atomic counter 0.816–1.095us, and shared mutex
+15.06–15.65us (90.5–90.7% kernel). A separate wall/count build reproduced
+shared-mutex elapsed cost 1.139–1.349us/claim. Both processes and Remote retired
+normally. Exact raw counts/controls and limits:
+`/shared/present/soh-frame-limiter/sync-cost-native-20261030/RESULTS-AND-PROPOSAL.md`.
+No independent AC/frequency sample or per-operation hidden libc wait count was
+recorded. This confirms contention cost without claiming a particular SoH gain.
+
+Accepted: remove the mutex's separate sleeping metadata guard, with one atomic
+ownership/waiter word using existing ADDRESS_WAIT/WAKE. Retain ownership,
+recursion, try/timed and destruction checks. No spinning policy, kernel change
+or new grant. Caller-owned storage must remain alive through admitted calls,
+as before. The implementation uses existing 64-bit waits; size/alignment and
+normal/recursive static initializer bytes are unchanged, so no compiler-container
+change is needed. Static programs need relinking with the updated libc.
+
+The condition guard remains necessary for its stack-waiter queue and notification
+lifetime. Rwlock's reader/writer accounting guard and reader admission policy stay
+unchanged. Once retains its initialization/waiter guard; its already-published
+completed state now returns through an acquire load without that metadata lock.
+
+QEMU qualification at userland 7d8d45f uses the same diagnostic kernel for both
+38eadc43 (before) and the candidate, with 4GiB RAM and invariant TSC passed through.
+One- and four-vCPU runs pass runtime, timeouts, once abort/retry, C++ publication
+and exit notification, the focused runtime-mutex checks and raw 32/64-bit parking.
+All four wall/count and CPU-sampled benchmark processes pass and retire normally.
+The corrected runtime-time assertions match existing detach support; this PR
+changes no detach behavior.
+
+On four vCPUs (16 workers oversubscribed), the no-payload shared-mutex case
+measured 4.77–4.98→2.41–2.49us summed CPU/completed claim and 1.22–1.26→0.61–0.63us
+elapsed. The condition case had an after outlier (1.49/6.04us CPU versus 1.50–1.54us
+before); no semantic failure occurred, and no native improvement or uniform
+condition speedup is claimed. These are two repeats in a nested VM, not native
+SoH costs. Evidence is in
+`/shared/present/soh-frame-limiter/mutex-native-20261030/`.
+Native Vela qualification (2026-10-30) passed all seven semantic/parking modes,
+all four before/after probe processes and normal Remote closure. The kernel was
+unchanged at 8529730a6; userland 38eadc43 (before) versus 7d8d45f (after), 16 usable CPUs,
+HWP applied 16/16 and XSAVE 0x7/832 bytes. AC and loaded frequency were not
+independently captured. Two 65,536-claim repeats with 16 workers measured:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Shared mutex, summed CPU/claim | 14.82–14.97us | 2.83–3.29us |
+| Shared mutex, elapsed/claim (wall-only build) | 1.205–1.267us | 0.205–0.207us |
+| Private mutex, 1 worker, CPU/claim | 34.3–34.8ns | 18.6–18.7ns |
+| Condition ping-pong, CPU/endpoint | 1.63–1.85us | 1.70–1.80us |
+
+Elapsed/claim is inverse throughput, not an individual lock latency. The native
+condition samples overlap, and the large nested outlier did not recur here;
+these two repeats do not establish a universal speedup or a thermal series.
+New mutex kernel share is still about 90% of its much smaller CPU total. Exact
+counts, raw wait controls and typed retirement records are in
+`mutex-native-20261030/results-vela-20261030T111033Z/` under the evidence path.
+SoH remeasurement remains pending. Measurement hooks stay on a never-merged
+diagnostic branch.
