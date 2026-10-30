@@ -122,6 +122,10 @@ No write failure was latched by abandoning that read.
 
 ## First native boot: read-only
 
+The commands below record the original driver-default-off qualification.
+With current kernels, explicitly add `nvme.write=0` for a read-only boot;
+omitting it now enables the driver write path.
+
 The orchestrator asks Luna to stage the PR head; Codex does not stage or boot the
 ThinkPad. Build with the existing compiler and unchanged dependency pins:
 

@@ -52,6 +52,12 @@ HPET period, but interrupt delays must also remain within the sampling bound.
 Choose an interval well below wrap time; timer deliveries are triggers, not
 elapsed-time accounting. See the [clock contract](../kernel/timekeeping.md).
 
+**Intel inherited-mode synchronized flips** defaults to enabled
+(`CONFIG_INTEL_INHERITED_FLIP=y`). The qualified inherited Intel profile still
+controls admission; refusal retains copying when ownership is confirmed.
+`display.flip=0` forces copying. No modesetting is added. See
+[the inherited flip backend](../wip/intel-inherited-scanout.md#development-flip-backend).
+
 **XHCI** controls native USB and defaults to enabled (`CONFIG_XHCI=y`).
 `CONFIG_XHCI=n` disables
 native controller preparation and worker startup; `CONFIG_XHCI=y` enables them.
@@ -79,7 +85,7 @@ with the fallback below. Boolean options accept `0` and `1`.
 | `mount.disk` | No disk mount authority; GUID must be canonical and nonzero. |
 | `mount.pool` | Absent: no pool, and boot init reads `boot://config/live.lua`. Needs `mount.disk`; a malformed or zero value with `mount.disk` starts the rescue space. |
 | `boot.install` | Off; no raw installer grants. |
-| `nvme.write` | Off; no NVMe write authority. |
+| `nvme.write` | On; `0` refuses NVMe WRITE and FLUSH independently of userspace grants. |
 | `boot.default_config` | Off; the configuration is read, not the built-in rescue space. |
 | `remote.beacon` | Absent; no reverse-beacon selection. |
 | `log.udp` | Off. |
@@ -88,7 +94,7 @@ with the fallback below. Boolean options accept `0` and `1`.
 | `display.size` | No requested size; firmware geometry retained. Backend geometry/capacity checks remain authoritative. |
 | `display.timing` | `observe`, unsynchronized copying; `off`, `observe` and `blank` are valid. |
 | `display.idle_blank` | 300 seconds; a decimal seconds count or `off` is valid. |
-| `display.flip` | On only where the existing Renoir backend qualifies; `0` forces off. |
+| `display.flip` | On where the Renoir or build-enabled Intel backend qualifies; `0` forces copying. |
 | `ps2.synaptics` | On only for a matching calibrated profile; other pads remain relative. |
 | `display.timing.metrics`, `display.flip.metrics`, `display.inventory`, `display.cursor.probe` | Off. |
 | `ps2.synaptics.diagnose`, `usb.hid.describe`, `usb.xhci.diagnose` | Off. |
@@ -152,14 +158,15 @@ screenshots and panic output.
 make -j16 image DISPLAY_IDLE_BLANK=0
 ```
 
-Renoir flips default on for qualifying hardware; other display drivers are
-unchanged. Omit `DISPLAY_FLIP` to use the kernel default. `DISPLAY_FLIP=0` adds
+Renoir and build-enabled Intel inherited flips default on for qualifying
+hardware. Omit `DISPLAY_FLIP` to use the kernel default. `DISPLAY_FLIP=0` adds
 `display.flip=0` to normal, rescue and installer command lines and forces ordinary
 GOP copies; `DISPLAY_FLIP=1` adds an explicit request without bypassing any
 qualification check. For hand-authored PXE entries, remove the old
 `display.flip=1` token to exercise the default, or append `display.flip=0` for
 rollback. `DISPLAY_FLIP_METRICS=1` independently enables info-level metrics;
-metrics stay off by default. See [Renoir flips](../kernel/renoir-flip.md).
+metrics stay off by default. See [Renoir flips](../kernel/renoir-flip.md) and
+[Intel inherited flips](../wip/intel-inherited-scanout.md#development-flip-backend).
 
 For [Renoir flip inventory](experiments/renoir-flip-inventory/README.md),
 `DISPLAY_INVENTORY=1` adds `display.inventory=1`. It emits one read-only numeric

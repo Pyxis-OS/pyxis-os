@@ -440,11 +440,13 @@ fallbacks, modified legacy bytes and partial migration artifacts refuse instead
 of being overwritten. Existing new-style recovery is never replaced. Fedora
 files and the selected firmware-order policy remain unchanged.
 
-Newly published normal entries include `nvme.write=1` so an installed NVMe pool
-can finish package activation and provide writable home/configuration volumes.
-Rescue entries remain read-only. Exact released normal entries without that
-opt-in still verify against their existing boot binding until Update replaces
-the pair; a verified legacy entry's existing write intent is not lost.
+NVMe writes default on; append `nvme.write=0` for an explicitly read-only
+NVMe boot. Normal entries retain `nvme.write=1` as part of the owned entry
+format, including recognition of older kernels/menus; it is redundant with the
+current kernel default. Exact released entries without it still verify against
+their existing boot binding until Update replaces the pair. Rescue bypasses
+configured spaces but can repair the selected system/package volumes: its
+`boot.default_config=1` does not disable the NVMe write path.
 
 For this legacy adoption, selecting keep existing firmware order issues no UEFI
 registration or variable write: the existing firmware/GRUB route continues to

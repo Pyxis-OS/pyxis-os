@@ -35,11 +35,12 @@ config HPET_MAINTENANCE_TICKS
     requirement; elapsed time always comes from HPET, not timer ticks.
 
 config INTEL_INHERITED_FLIP
-  bool "Development Intel inherited-mode synchronized flips"
-  default n
+  bool "Intel inherited-mode synchronized flips"
+  default y
   help
     Prepare fixed owned UMA/GGTT backs for the qualified inherited Intel pipe.
-    Keeps DC0 while active; no modesetting or normal default activation yet.
+    Keeps DC0 while active; no modesetting. display.flip=0 forces copying;
+    refused admission falls back to copying when ownership is confirmed.
 
 config XHCI
   bool "XHCI"

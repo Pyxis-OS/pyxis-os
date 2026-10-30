@@ -94,8 +94,8 @@ writes disabled. It qualifies no write or coexistence operation.
    the installer prints the entry, including the pool's disk GUID, for the owner to paste; that fallback stays. Firmware-variable
    edits remain excluded.
 3. **Write authority and the internal disk (accepted).** **The kernel, not the
-   installer, enforces the boundary.** NVMe writes are off until an explicit boot
-   option enables them for qualification. When enabled:
+   installer, enforces the boundary.** NVMe writes default on; `nvme.write=0`
+   explicitly disables the driver write path for read-only qualification. When enabled:
    - the installer gets writes only through partition-confined claims on the new pool and on the ESP (the
      interfaces exist on other transports; NVMe admission is still task 3);
    - the GPT is changed by one new kernel operation that only appends one entry
@@ -245,7 +245,7 @@ ahead task by task.
 ### 1. NVMe driver — implemented ([#710](https://git.internal/PyxisOS/pyxis-os/pulls/710))
 
 - [x] Driver implemented and QEMU-qualified (assigned and delivered 2026-10-11).
-  Behavior, the `nvme.write=1` gate, raw-claim refusals and the clean-shutdown and
+  Behavior, the `nvme.write` boot switch, raw-claim refusals and the clean-shutdown and
   force-off path are in the [NVMe reference](../devices/nvme.md); measurements and
   exact native staging steps are in the
   [qualification record](../development/experiments/nvme-task1/README.md).
@@ -502,7 +502,8 @@ copied-tree geometry fixture alone cannot establish a Fedora boot. A separate
 read-only Limine test loader may select staged Pyxis files while leaving Fedora's
 boot manager and firmware unchanged. Native step 0 remains owner-run per target.
 QEMU qualifies geometry/software, not SN7100S firmware/NVMe-2.0 write behaviour.
-`nvme.write=1` is confined to disposable QEMU media; no native task 4 or
+This task qualifies disposable QEMU media only; use `nvme.write=0` explicitly
+for read-only native checks now that writes default on. No native task 4 or
 limine-entry-tool setup is assigned.
 
 **After this task the owner can:** rehearse coexistence Install/Update and boot

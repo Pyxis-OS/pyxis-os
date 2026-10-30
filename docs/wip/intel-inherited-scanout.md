@@ -451,8 +451,8 @@ Additional pinned-source references for setup/completion:
 
 ## Development flip backend
 
-`CONFIG_INTEL_INHERITED_FLIP=y` enables preparation in a development image;
-its default is off. `display.flip=0` retains copying. The matched Intel route
+`CONFIG_INTEL_INHERITED_FLIP=y` enables preparation and is the default.
+`display.flip=0` forces copying. The matched Intel route
 must have a sole enabled pipe A/plane 1, disabled hardware cursor/other planes,
 unchanged linear XRGB8888 geometry, disabled PSR/replay and fixed refresh
 (including display30's fixed-refresh VRR timing-generator mode). Admission proves
