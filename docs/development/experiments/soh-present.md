@@ -162,3 +162,39 @@ Reports and per-thread/stage detail:
 `/shared/present/soh-frame-limiter/NATIVE-AFTER-FIXES-RESULTS.md` and
 `NATIVE-AFTER-FIXES-COMPARISON.json`. Raw captures remain private on horse at
 `~/.local/share/pyxis-private/soh-profile-20261030/results-vela-after-fixes-20261030/`.
+
+
+## Native flip-on and FPS-only control (2026-10-30)
+
+All sixteen captures and six normal foreground retirements passed; Remote closed
+normally. Initial and final kernel evidence confirms continuous Intel flip
+admission, with no reported fencing or timeout. HWP applied 16/16 and XSAVE
+0x7/832; AC/core frequency were not independently recorded. Source 51e50e63
+keeps the previous fb4c1dae/userland7d8d45f/ports46b9242b closure and effective
+configuration except flip=y. Game source, fixtures, viewport, interpolation40
+and upstream default workers match the copy repeat. The profiled helper only
+adds an accounting-mode label outside measurement.
+
+| Case | Copy, profiled fps | Flip, profiled fps | Flip, FPS-only fps |
+| --- | --- | --- | --- |
+| Native gameplay | 36.45–36.58 | 36.86–37.53 | 39.45–39.89 |
+| Pause | 22.80–23.04 | 23.41–23.63 | 26.26–26.41 |
+| Advanced 320x240 | 39.18–39.42 | 39.32–39.41 | 39.94–39.95 |
+| Advanced 1920x1080 | 30.48 | 30.20–30.35 | 33.09–33.32 |
+
+Flips show modest differences in these profiled samples, not a large general
+throughput improvement. Removing hot observer calls changes observed performance
+substantially in pause and 1080p. FPS-only compiles stage/count/scope macros out
+of every injected library/game unit and matching helper; frame clock, context
+and controller I/O remain. Its missing thread/stage counters are unobserved,
+never zero CPU usage. This is a minimally instrumented control, not an entirely
+uninstrumented release. The fixed profiled-then-FPS order permits thermal/cache
+variation; two repeats do not isolate a precise observer penalty, and the 40fps
+cap censors overhead/headroom when reached. Audio/optical quality is unqualified.
+
+The separate accepted original-rate check uses existing interpolation20 to select
+scene rates20/30/60, without changing shipped settings. Render FPS above a scene's
+logic rate at interpolation40 still does not establish full-speed updates.
+Reports: `/shared/present/soh-frame-limiter/NATIVE-FLIP-CONTROL-RESULTS.md` and
+`NATIVE-FLIP-CONTROL-COMPARISON.json`. Raw captures remain private on horse at
+`~/.local/share/pyxis-private/soh-profile-20261030/results-vela-flip-control-20261030/`.
