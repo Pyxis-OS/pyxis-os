@@ -148,9 +148,10 @@ backing sizes. Exported CMake cache metadata is sorted key/value configuration,
 without comments or cache-editing types, with compiler/archive tool names resolved
 to their actual paths. Raw caches stay in WORKDIR; the payload records tool hashes
 separately. This keeps a no-op reconfigure from changing the payload identity.
-The build refuses changed SDK/source inputs, images over the
-existing 128 MiB ceiling, spans over 256 MiB and existing published revision
-paths with different contents. Repeating identical output verifies and reuses its
+The build refuses changed SDK/source inputs, invalid P1F encoding/address
+layouts and existing published revision paths with different contents. There
+is no separate 128 MiB image or 256 MiB span ceiling; native loading can still
+fail to allocate the actual snapshot and eager backing. Repeating identical output verifies and reuses its
 immutable revision; incomplete private staging is recreated on the next run.
 These sizes do not establish a native working-memory peak or budget.
 

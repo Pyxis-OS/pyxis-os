@@ -177,18 +177,20 @@ roots/cwd/environment, its own manifest runtime grants and 8 MiB stack, and no
 launcher. An uncertain admission is never retried. Multiple-source/external-cc1
 execution and unsupported statistics/timeouts are outside this profile.
 
-## Qualified capacity
+## Capacity and historical measurements
 
-The bundles retain the existing 128 MiB selected-image and 256 MiB mapped-span
-ceilings. Current driver-profile artifacts and the separately identified task5
-native baseline give:
+The [WP3 loader](../kernel/program-loading.md) removes the 128 MiB selected-image
+and 256 MiB mapped-span ceilings. Actual snapshot and eager image/stack backing
+must still allocate. The table records earlier driver-profile artifacts and
+the separately identified task5 native baseline; these are historical inputs,
+not native qualification of a later rebuild:
 
 | Per tool | Clang | LLD |
 | --- | ---: | ---: |
-| Current serialized image bytes | 90,385,074 | 55,776,366 |
-| Current page-rounded image backing/span bytes | 90,976,256 | 56,389,632 |
+| Recorded serialized image bytes | 90,385,074 | 55,776,366 |
+| Recorded page-rounded image backing/span bytes | 90,976,256 | 56,389,632 |
 | Eager guarded stack | 8 MiB | 8 MiB |
-| Current image-capture backing bytes | 90,386,432 | 55,779,328 |
+| Recorded image-capture backing bytes | 90,386,432 | 55,779,328 |
 | Task5 native peak owned VM backing, historical decimal MB | 101.85 | 70.23 |
 | Provisional owned-data planning allowance | 128 MiB | 96 MiB |
 

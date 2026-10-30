@@ -28,7 +28,7 @@ compiler_bin=$(dirname -- "$compiler")
 provenance=$compiler_bin/../share/pyxis-toolchain
 # Hosted-only changes need not change the installed cross compiler or runtimes.
 repository=https://git.internal/PyxisOS/pyxis-llvm.git
-revision=8bdf1360b8c47640c92eeeb515ee4a08814987e6
+revision=b33ad74495b9fd4f273b8aaa78954d8000ecfcc1
 host_cc=${HOSTCC:-cc}
 host_cxx=${HOSTCXX:-c++}
 jobs=${JOBS:-16}
