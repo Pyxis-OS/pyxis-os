@@ -277,3 +277,34 @@ receipts: `/home/chronium/build/shared-memory/task3/` (`qualification/final/`,
 `controls/{A,B,B-final}/`). Small handoff summary is under
 `/shared/present/shared-memory/task3/`. All owned QEMU/debugger jobs stopped;
 no native/PXE action or new compiler container.
+
+## Task 4 before-code controls — 2026-10-30
+
+Clean main `8ff1658c0f58`, userland `c21fe9412fc4`, ports `90ed9e60f6bf`;
+fresh C runtime/SDK and the selected control programs built with the same
+published `8bdf136` compiler. This replaces the older frozen application bytes
+for task 4; it is not a performance comparison against them. Kernel SHA-256
+`91f0bca02169343bf54623c46a5950d734443886ee7b83379d37ab468f318ece`;
+effective config remains `524590b0d7a5`. No C++/LLVM/Mesa rebuild. Eight existing
+C-runtime warnings are recorded; builds exit successfully.
+
+Same existing launch/pages/CALL/SEND workload arguments, nested KVM/q35, UEFI,
+4 GiB, CPU0 Development and CPU0/1 Remote ceiling as above. One fresh boot per
+1/4-vCPU configuration, all counts and FINAL drains pass. IPC cells are
+within-boot median [min,max] ms, not boot variation. Another agent's QEMU
+guest was active on this VM during capture; host load/affinity and other-guest
+commands are retained. These numbers do not establish idle-host or native
+performance. No native/PXE action.
+
+| Guest interval, ms | 1 CPU | 4 CPUs |
+| --- | --- | --- |
+| 1,024 launches | 1565.356 | 839.561 |
+| Private pages | 22.616 | 17.747 |
+| CALL64 completion | 2.006 [1.600, 2.598] | 1.231 [1.212, 1.702] |
+| CALL4096 completion | 1.651 [1.526, 3.176] | 1.391 [1.356, 1.978] |
+| SEND64 completion | 0.705 [0.646, 1.444] | 0.645 [0.631, 1.149] |
+| SEND4096 completion | 1.147 [0.991, 1.334] | 0.712 [0.680, 1.259] |
+
+Frozen app/source/header hashes, preparation logs, exact commands and all raw
+records: `/home/chronium/build/shared-memory-task4/baseline/`. Preserve these
+inputs for matched after-controls. Both owned guests stopped.
