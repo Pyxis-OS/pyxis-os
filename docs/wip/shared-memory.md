@@ -230,8 +230,14 @@ Both choices are accepted; implementation is authorized after the fresh baseline
    current rights; undeclared creation is not installed. Exact held interpreters
    preserve the source under the existing launch-inventory rules, not by
    granting it to arbitrary children. No helper mints authority, no new
-   `shared_memory = true` space policy, and no default application manifest
+   `shared_memory = true` space policy, and no unrelated application manifest
    gains creation. Missing required authority refuses bundle preparation.
+   **Clarification accepted (chronium, 2026-10-30):** stock trusted shell/Lua
+   bundles explicitly request an OPTIONAL private `memory_create_shared`
+   launch-source grant with `memory/manage,create_shared`, separately from
+   their required ordinary `memory/manage`. Only declared child creation
+   requests select this held source; manifests are never bypassed. Other
+   application grants and ordinary child defaults remain unchanged.
 2. **The first consumer is an opt-in `shared-min` SDK example bundle.** A
    parent reads stdin in bounded reusable chunks into one fixed region. Its
    worker maps a READ-only grant, counts bytes/newlines, and returns counts via
