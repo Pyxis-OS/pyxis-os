@@ -5,8 +5,8 @@ map R/NX or RW/NX. The public kernel interface is in
 [shared_memory.h](../../include/abi/shared_memory.h) and
 [memory.h](../../include/abi/memory.h). The SDK provides explicit-handle helpers,
 bundle declarations select held creation authority, and an opt-in shared-buffer
-example supplies the first application consumer. Task 4 qualification remains
-pending in the [milestone](../wip/shared-memory.md#delivery-tasks).
+example supplies the first application consumer. Qualification and remaining
+native checks are recorded in the [milestone](../wip/shared-memory.md#delivery-tasks).
 
 ## Authority and operations
 
@@ -83,8 +83,8 @@ buffer reuse and actual contained-worker retirement before final release.
 `make SDK=/path/to/sdk shared-min` builds its bundle explicitly. Normal userland
 installation ships `share/examples/shared-min.c` and
 `share/examples/shared-min-manifest.json`; the compiled bundle is excluded from
-the default build and installation. The example and declaration paths still
-await task 4 runtime qualification.
+the default build and installation. See the
+[qualification record](../development/experiments/shared-memory.md#task-4-sdk-declared-grants-and-shared-min--2026-10-30).
 
 ## Source lineage and lifetime
 

@@ -305,8 +305,17 @@ files are unchanged. The fresh full kernel/SDK build, including libunwind,
 libc++abi and libc++, and ordinary userland `all shared-min` pass. Lua 5.5 and
 Lua 5.1/libuv builds pass. The existing compiler container is used unchanged.
 Other narrow static prefixes/data are reused read-only with consumed-header and
-content provenance checks; this is not a rebuild of every port. An initial
-container permission failure happened before compilation and remains a failed
+content provenance checks; this is not a rebuild of every port. Main then moved
+through #1650 to `0e4ac12545a3`, adding the environment staging exclusion helper.
+The stack rebases to code `6c770afef329`, userland `8076305cfb42` (SDK ancestor
+`f0f9685eeb11`), ports unchanged. Full kernel/SDK and ordinary userland builds
+pass again; the complete four-CPU functional list also passes on this rebased
+source. Source review confirms the new staging helper preserves private source
+exclusion. The creator fixture is rebuilt against the updated header; Lua stage
+binaries retain their explicitly recorded older-compatible-SDK link, with public
+ABI headers unchanged. No prior receipt is relabelled as this run.
+
+An initial container permission failure happened before compilation and remains a failed
 receipt, followed by the successful ordinary build with the documented container
 user/mount flags.
 
@@ -315,8 +324,10 @@ user/mount flags.
 Root-only SDK checks at kernel `8ff1658c0` / helpers `a331e7d90` pass native and
 libc create/map/unmap, zeroed padding, READ/RW coherence, handle-close survival,
 rights/argument errno refusals and stale identities at one/four vCPUs. C++23
-header/link checks pass. Subsequent rebases change none of the six SDK files;
-these older receipts keep their original source labels.
+header/link checks pass. The SDK patch is unchanged across rebases (identical stable patch IDs). The
+five helper/grant files remain byte-identical; `runtime.mk` also inherits
+unrelated math-source additions from main. Older receipts keep their original
+source labels.
 
 Normal trusted-startup functional boots use nested KVM/q35, UEFI, 4 GiB and
 one/four vCPUs, with explicit `nvme.write=0 display.timing=off`. Exact commands,
@@ -376,7 +387,8 @@ remain alongside the quiet-window results. No repeats select favorable timings.
 
 Local receipts are under `/home/chronium/build/shared-memory-task4/`:
 `baseline/`, `baseline-current/`, `baseline-final/`, `after-final/`,
-`sdk-wrappers/`, `sdk-qualification/`, and `integration/functional/`.
+`sdk-wrappers/`, `sdk-qualification/`, `integration/functional/`,
+`integration/functional-final/` and `integration/functional-environment/`.
 The failed fixture inputs are preserved under the latter's `previous-inputs/`.
 Small handoff reports live under `/shared/present/shared-memory/task4/`.
 Native consumer/shared-buffer costs remain milestone task 5.

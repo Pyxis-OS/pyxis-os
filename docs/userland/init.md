@@ -62,8 +62,9 @@ present, and, on the install entry, the raw installer resources. Arguments add `
 `--pool N` for its `mount.pool` or `--pool-malformed` when that value is
 malformed, and `--default-config` for the rescue entry.
 
-The stock trusted boot-init entry holds private MEMORY MANAGE and CREATE_SHARED
-authority. This does not widen ordinary initial MANAGE grants; see
+The normal stock trusted boot-init entry holds private MEMORY MANAGE and
+CREATE_SHARED authority. Installer and custom-init entries retain their existing
+MANAGE-only grant; see
 [shared memory](../interfaces/shared-memory.md).
 
 `remote.beacon` adds `--remote-beacon NAME`. The name is 1–63 printable ASCII

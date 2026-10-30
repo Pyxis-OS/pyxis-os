@@ -186,10 +186,15 @@ without its connected withdrawal implementation.
   After this task chronium can exchange a region and withdraw a branch across
   processes through the kernel ABI, with real unmap completion rather than
   future-call denial.
-- [ ] **4. SDK/libc and declared grants.** Native libpyxis and libc Pyxis-extension
+- [x] **4. SDK/libc and declared grants.** Native libpyxis and libc Pyxis-extension
   wrappers; startup/bundle creation-right declarations and one small real shared
   buffer consumer. No POSIX emulation or malloc backing change. Deliver userland
   PRs before their parent pins, with linked ABI dependencies and merge order.
+  Delivered: explicit-handle helpers, private declared constructor sources, stock
+  interpreter declarations and the opt-in `shared-min` bundle. Builds, one/four-CPU
+  functional checks and matched nested controls are recorded in the
+  [task-4 qualification](../development/experiments/shared-memory.md#task-4-sdk-declared-grants-and-shared-min--2026-10-30).
+  Native consumer qualification remains task 5.
   After this task chronium can use shared buffers through normal native program
   grants, IPC and launch inheritance.
 - [ ] **5. Qualification and close-out.** Ordinary builds; 1/4-CPU QEMU shared

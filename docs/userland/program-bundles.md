@@ -193,7 +193,7 @@ can still delegate held creation or region authority without changing a default
 profile. Missing optional authority is omitted; missing required authority
 refuses preparation. See
 [shared memory](../interfaces/shared-memory.md) for SDK helpers and the opt-in
-`shared-min` example; task 4 runtime qualification remains pending.
+`shared-min` example and qualification record.
 
 Generated-code consumers separately declare `jit/manage`. Trusted launchers have
 a private source only when their space opts into `jit = true`; the live image's
