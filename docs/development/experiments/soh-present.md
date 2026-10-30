@@ -118,5 +118,47 @@ these two repeats do not establish a universal speedup or a thermal series.
 New mutex kernel share is still about 90% of its much smaller CPU total. Exact
 counts, raw wait controls and typed retirement records are in
 `mutex-native-20261030/results-vela-20261030T111033Z/` under the evidence path.
-SoH remeasurement remains pending. Measurement hooks stay on a never-merged
-diagnostic branch.
+Measurement hooks stay on a never-merged diagnostic branch.
+
+
+## Native SoH after both fixes (2026-10-30)
+
+The repeat passed all eight captures and three normal foreground retirements;
+Remote exited normally with complete drain. It uses diagnostic cdb1e8d58 on
+main fb4c1dae, userland 7d8d45f and ports 46b9242b, versus the morning's
+9bae87a8/7481526a, userland 3a8a398 and ports 90ed9e60. Private source, save,
+fixtures and instrumentation are unchanged. Both use the same effective ordinary
+copy configuration, 2880x1800 scanout/2880x1768 content, default 16 Mesa workers,
+40fps request, MSAA/vsync off and two 256-frame captures per case. HWP applied
+16/16; XSAVE 0x7/832. AC and loaded frequency were not independently captured.
+
+| Case | Morning fps | After SDL + mutex fixes |
+| --- | --- | --- |
+| Native gameplay | 27.07–27.42 | 36.45–36.58 |
+| Native pause | 16.28–16.35 | 22.80–23.04 |
+| Advanced 320x240 | 22.62–22.71 | 39.18–39.42 |
+| Advanced 1920x1080 | 19.50 | 30.48 |
+
+SDL pixel-copy wall/CPU falls from 11.42–12.04 to 1.88–2.06ms/frame. Raster-work
+summed kernel CPU/frame falls from 257–258 to 119–120ms in advanced 240p,
+264–265 to 131ms in advanced 1080p, and 270 to 144–150ms in pause. Native gameplay
+raster-work kernel CPU instead rises from 6.9–7.0 to 9.5–9.7ms/frame; its observed
+thread CPU/frame is 305 before and 309ms after. Do not claim universal CPU savings.
+Advanced GUI-end wall time remains 12.3ms at 240p and 18.7–18.8ms at 1080p.
+These nested spans and concurrent worker times must not be added as frame time.
+
+Observed-thread CPU utilization increases while more frames complete; advanced
+observed CPU/frame nevertheless falls from 408 to 270ms (240p), 524 to 389ms
+(1080p), and 659 to 540–547ms (pause). This is sampled partial thread coverage,
+not whole-process accounting. Pause1's end-context interpolation count differs
+1 versus 2: this is the instantaneous render-count accumulator for 40fps over
+30Hz pause, not a changed target setting. Other scene/geometry/target fields match.
+
+The new main includes changes besides these fixes, and two repeats are not a
+thermal series. This unattended capture does not qualify optical/audio quality.
+Main defaults to Intel flips for 0.0.11; this deliberately flip-disabled repeat
+matches the morning copy baseline. A later flip-on run represents normal 0.0.11.
+Reports and per-thread/stage detail:
+`/shared/present/soh-frame-limiter/NATIVE-AFTER-FIXES-RESULTS.md` and
+`NATIVE-AFTER-FIXES-COMPARISON.json`. Raw captures remain private on horse at
+`~/.local/share/pyxis-private/soh-profile-20261030/results-vela-after-fixes-20261030/`.
