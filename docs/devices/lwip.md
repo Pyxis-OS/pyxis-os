@@ -174,9 +174,10 @@ until the handshake completes; failure synchronously aborts it before reporting.
 No small global record/listener count remains: actual storage shares the 64 MiB
 allowance and exhaustion does not evict another connection.
 
-The configured receive window and send payload budget are each
-65,535 bytes. Transmit payload is allocated as needed. Before SYN/passive
-acceptance, each stream preallocates its receive ring and reserves an ingress
+The configured receive window is 1,048,560 bytes, negotiated with receive scale
+four; without a peer scale option lwIP limits it to 65,535 bytes. The send payload
+budget remains 65,535 bytes. Transmit payload is allocated as needed. Before
+SYN/passive acceptance, each stream preallocates its receive ring and reserves an ingress
 window. Listener conversion releases unused stream backing; other reservations
 survive TIME_WAIT and release after PCB/pbuf teardown has returned. These are
 payload limits, not total heap limits; metadata is accounted separately.
@@ -311,11 +312,11 @@ data is copied out after wake, so a sibling that unmapped the output buffer mean
 makes the read return BAD_BUFFER; the consumed bytes are not restored.
 
 lwIP validates sequence space and trims duplicates/overlaps. The receive callback
-copies ordered data into its already admitted 65,535-byte ring and frees the
+copies ordered data into its already admitted 1,048,560-byte ring and frees the
 incoming pbuf. Ring storage remains until failure/final release or until peer FIN
 and the last buffered byte have been consumed, independently of reservation
-teardown. Reassembly uses lwIP's out-of-order queue, capped at 65,535 bytes and
-sixteen pbufs; excess is dropped for retransmission. The current sixteen full
+teardown. Reassembly uses lwIP's out-of-order queue, capped at the configured
+receive window and sixteen pbufs; excess is dropped for retransmission. The current sixteen full
 1,500-byte packet allocations plus segment/header/alignment overhead fit within
 one reserved receive window; the current packet and control work have the
 separate transient allowance. The receive window covers ordered unread bytes, successful
@@ -323,7 +324,7 @@ read replies not yet collected, and out-of-order sequence space together. READ
 moves bytes from the ring to a slot without calling `tcp_recved`; only after the
 caller resumes and collects the result does the worker return that credit.
 
-The 65,535-byte window bounds retained payload, not total allocated memory. The
+The receive window bounds retained payload, not total allocated memory. The
 preallocated ring and ordinary read slots can coexist with reserved reassembly pbufs. Ring allocations,
 pbuf storage/headers, segment records and allocator headers are all included in
 the shared TCP/UDP allowance; common packet/DMA budgets remain separate. Packet
@@ -392,8 +393,9 @@ congestion window lwIP computed for 1460, 4380 bytes, is left as is; it is
 within RFC 6928's initial window for 536. The MSS/window settings are unchanged
 by the multiple-interface projection cut.
 The same function disables Nagle on every connection.
-This is not path-MTU discovery. No window scaling, timestamps, SACK,
-fragmentation or new ICMP error/PMTU handling is added.
+Receive scaling is enabled through lwIP configuration, with its ordinary
+unscaled fallback. This is not path-MTU discovery. Timestamps, SACK, fragmentation
+and ICMP error/PMTU handling remain unsupported.
 
 ## Readiness and nonblocking attempts
 

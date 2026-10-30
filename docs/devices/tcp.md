@@ -39,7 +39,7 @@ Timeout leaves the listener usable and does not remove a connection from its que
 The caller's stream object and handle slot are reserved before waiting.
 
 Listener and connection records are dynamically owned under the shared 64 MiB
-TCP/UDP storage allowance. Each admitted stream has an allocated 65,535-byte
+TCP/UDP storage allowance. Each admitted stream has an allocated 1,048,560-byte
 receive ring and a separate receive-window reservation before SYN/passive
 acceptance. New records and transmit data cannot spend those ingress credits.
 A separate 64 KiB allowance covers transient control/handshake work. The current
@@ -161,7 +161,7 @@ can cancel them without confusing a reused tuple or slot.
 | --- | --- |
 | Transport records | Dynamic; actual metadata/retained buffers share the 64 MiB native TCP/UDP allowance |
 | Listeners / pending connections | Dynamic listeners; four combined half-open/ready connections each |
-| Payload storage | 65,535-byte receive window and send budget per connection; allocated as needed |
+| Payload storage | 1,048,560-byte backed receive window; 65,535-byte send budget allocated as needed |
 | Out-of-order receive | Shares the receive window; at most 16 pbufs |
 | READ/WRITE extent | At most 4 KiB per call; helpers validate returned counts |
 | Pending calls | Dynamic charged records, including completed replies; one call per direction per object |
@@ -173,6 +173,15 @@ can cancel them without confusing a reused tuple or slot.
 Idle owned streams do not expire merely for being idle. Caller deadlines and
 transport timers are distinct. Repeated shutdown does not restart progress
 timers. Admission can fail while TIME_WAIT retains its charged storage.
+
+The 64 MiB allowance is a chosen admission quota, not a physical or protocol
+capacity; actual heap allocation can fail separately. A stream claims about
+2 MiB for its ring and equal ingress reservation before other metadata or send
+data. The ring is freed after peer FIN and consumption of its last byte, or on
+failure/final release; the ingress reservation survives until PCB teardown,
+including TIME_WAIT. Thus many recently closed connections can also exhaust
+admission. The quota remains unchanged pending the limits audit.
+
 Metadata, retained payloads, reassembly and pending replies are accounted; see
 [lwIP ownership and allocation](lwip.md) for the implementation details.
 
@@ -189,9 +198,12 @@ bytes for the 1500-byte interface MTU and send at most that to on-link peers,
 further reduced by the peer's MSS. Without path-MTU discovery, a connection
 whose peer is reached through a gateway sends at most 536 bytes per segment,
 IPv4's minimum reassembly size minus headers. The clamp is applied once the
-connection is established, before the application can send. Windows are
-65,535 bytes, the largest without window scaling. Window scaling, SACK,
-timestamps, ECN, IPv4 fragmentation and ICMP-error/PMTU handling are not
+connection is established, before the application can send. Connections offer
+receive window scale 4: when the peer also negotiates scaling, the window is
+1,048,560 bytes (65,535 shifted by four). SYN windows remain unscaled; peers
+without scaling use at most 65,535 bytes. Both cases use the same preallocated
+backing and consumption-based credit. The send budget remains 65,535 bytes.
+SACK, timestamps, ECN, IPv4 fragmentation and ICMP-error/PMTU handling are not
 implemented; see [network throughput](../development/network-throughput.md).
 
 ## Request/response utility
