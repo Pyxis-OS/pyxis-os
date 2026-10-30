@@ -1,5 +1,6 @@
 #include <kernel/object/forwarder.h>
 #include <arch/clock.h>
+#include <arch/paging.h>
 #include <arch/smp.h>
 #include <kernel/object/display.h>
 #include <kernel/object/memory.h>
@@ -60,6 +61,18 @@ static bool access_allowed(struct process *process, struct task *task)
     (process->vm.phase == PROCESS_VM_REPLY && process->vm.mutator == task);
 }
 
+static void external_ready(struct process *process)
+{
+  struct process_vm_external *external = process->vm.external;
+  if (external && external->state == PROCESS_VM_EXTERNAL_QUEUED &&
+      !process->vm.mutator && !process->vm.pending && !process->vm.roots &&
+      !process->vm.borrowers && residency_empty(process)) {
+    KASSERT(process->vm.phase == PROCESS_VM_DRAINING ||
+        process->vm.phase == PROCESS_VM_RETIRED);
+    shared_process_vm_ready(external);
+  }
+}
+
 bool process_vm_dispatch(struct process *process, struct task *task,
                           struct process_vm_root_epoch *epoch)
 {
@@ -97,6 +110,7 @@ void process_vm_root_depart(struct process *process, struct process_vm_root_epoc
     /* VM guard joins this access with timeout detachment before record reuse. */
     task_wait_wake(wait);
   }
+  external_ready(process);
   spin_unlock(&process->vm.lock);
 }
 
@@ -259,12 +273,127 @@ void process_vm_reply_finish(struct process *process)
   KASSERT(process->vm.phase == PROCESS_VM_REPLY && process->vm.mutator == task &&
       !process->vm.pending && !process->vm.borrowers);
   process->vm.mutator = NULL;
-  process->vm.phase = PROCESS_VM_OPEN;
+  process->vm.phase = process->vm.external ? PROCESS_VM_DRAINING : PROCESS_VM_OPEN;
   task_vm_set_continuation(task, true);
-  struct process_vm_held *held = process->vm.held;
-  process->vm.held = NULL;
+  struct process_vm_held *held = NULL;
+  if (!process->vm.external) {
+    held = process->vm.held;
+    process->vm.held = NULL;
+  }
+  /* The reply's dispatched root still owns its captured generation. External
+   * acquisition waits for its real permanent-stack departure, not just reply. */
+  external_ready(process);
   spin_unlock(&process->vm.lock);
   resume_held(held);
+}
+
+void process_vm_external_request(struct process *process,
+    struct process_vm_external *external, size_t cpu)
+{
+  KASSERT(!cpu_interrupts_enabled() && arch_space_active(arch_kernel_space()));
+  KASSERT(process && external && cpu < arch_cpu_count());
+  spin_lock(&process->vm.lock);
+  KASSERT(!process->vm.external && !external->process && !external->actor &&
+      external->state == PROCESS_VM_EXTERNAL_IDLE);
+  *external = (struct process_vm_external){
+    .process = process, .cpu = cpu, .state = PROCESS_VM_EXTERNAL_QUEUED,
+  };
+  process->vm.external = external;
+  if (process->vm.phase == PROCESS_VM_OPEN) {
+    KASSERT(!process->vm.pending && !process->vm.mutator && !process->vm.local_wait);
+    process->vm.phase = PROCESS_VM_DRAINING;
+  }
+  external_ready(process);
+  spin_unlock(&process->vm.lock);
+}
+
+enum process_vm_external_progress
+process_vm_external_acquire(struct process_vm_external *external)
+{
+  KASSERT(!cpu_interrupts_enabled() && arch_space_active(arch_kernel_space()));
+  struct task *actor = task_current_actor();
+  KASSERT(external && external->process && actor && !task_current_user());
+  struct process *process = external->process;
+  spin_lock(&process->vm.lock);
+  KASSERT(process->vm.external == external && external->cpu == arch_cpu_index());
+  if (external->state == PROCESS_VM_EXTERNAL_OWNED ||
+      external->state == PROCESS_VM_EXTERNAL_OWNED_FINAL) {
+    KASSERT(external->actor == actor);
+    enum process_vm_external_progress progress =
+        external->state == PROCESS_VM_EXTERNAL_OWNED_FINAL ?
+        PROCESS_VM_EXTERNAL_FINAL : PROCESS_VM_EXTERNAL_READY;
+    spin_unlock(&process->vm.lock);
+    return progress;
+  }
+  KASSERT(external->state == PROCESS_VM_EXTERNAL_QUEUED && !external->actor);
+  if (process->vm.mutator || process->vm.pending || process->vm.roots ||
+      process->vm.borrowers || !residency_empty(process)) {
+    spin_unlock(&process->vm.lock);
+    return PROCESS_VM_EXTERNAL_WAIT;
+  }
+  KASSERT(!process->vm.local_wait);
+  bool retired = process->vm.phase == PROCESS_VM_RETIRED;
+  KASSERT(retired || process->vm.phase == PROCESS_VM_DRAINING);
+  if (!retired && process->vm.generation == UINT64_MAX) {
+    spin_unlock(&process->vm.lock);
+    return PROCESS_VM_EXTERNAL_EXHAUSTED;
+  }
+  if (!retired) {
+    ++process->vm.generation;
+    process->vm.phase = PROCESS_VM_MUTATING;
+  }
+  external->actor = actor;
+  external->state = retired ? PROCESS_VM_EXTERNAL_OWNED_FINAL : PROCESS_VM_EXTERNAL_OWNED;
+  process->vm.mutation_cpu = arch_cpu_index();
+  spin_unlock(&process->vm.lock);
+  return retired ? PROCESS_VM_EXTERNAL_FINAL : PROCESS_VM_EXTERNAL_READY;
+}
+
+static void require_external_locked(struct process_vm_external *external)
+{
+  struct process *process = external->process;
+  KASSERT(process->vm.external == external && external->actor == task_current_actor() &&
+      !task_current_user() && external->cpu == arch_cpu_index() &&
+      process->vm.mutation_cpu == arch_cpu_index());
+  KASSERT(!process->vm.mutator && !process->vm.pending && !process->vm.local_wait &&
+      !process->vm.roots && !process->vm.borrowers && residency_empty(process));
+  KASSERT((external->state == PROCESS_VM_EXTERNAL_OWNED &&
+      process->vm.phase == PROCESS_VM_MUTATING) ||
+      (external->state == PROCESS_VM_EXTERNAL_OWNED_FINAL &&
+      process->vm.phase == PROCESS_VM_RETIRED));
+}
+
+void process_vm_require_external(struct process_vm_external *external)
+{
+  KASSERT(!cpu_interrupts_enabled() && arch_space_active(arch_kernel_space()));
+  KASSERT(external && external->process);
+  struct process *process = external->process;
+  spin_lock(&process->vm.lock);
+  require_external_locked(external);
+  spin_unlock(&process->vm.lock);
+}
+
+bool process_vm_external_finish(struct process_vm_external *external, bool reopen)
+{
+  KASSERT(!cpu_interrupts_enabled() && arch_space_active(arch_kernel_space()));
+  KASSERT(external && external->process);
+  struct process *process = external->process;
+  spin_lock(&process->vm.lock);
+  require_external_locked(external);
+  process->vm.external = NULL;
+  bool retired = process->vm.phase == PROCESS_VM_RETIRED;
+  struct process_vm_held *held = NULL;
+  if (!retired) {
+    process->vm.phase = reopen ? PROCESS_VM_OPEN : PROCESS_VM_DRAINING;
+    /* A stopped continuation may have been held again after stop fanout while
+     * this owner was mutating. Let it drain cleanup without reopening user entry. */
+    held = process->vm.held;
+    process->vm.held = NULL;
+  }
+  *external = (struct process_vm_external){0};
+  spin_unlock(&process->vm.lock);
+  resume_held(held);
+  return retired;
 }
 
 void process_vm_retire(struct process *process)
@@ -272,10 +401,18 @@ void process_vm_retire(struct process *process)
   KASSERT(!cpu_interrupts_enabled());
   spin_lock(&process->vm.lock);
   KASSERT((process->vm.phase == PROCESS_VM_OPEN ||
-      process->vm.phase == PROCESS_VM_DRAINING) && !process->vm.roots &&
+      process->vm.phase == PROCESS_VM_DRAINING ||
+      process->vm.phase == PROCESS_VM_RETIRED ||
+      (process->vm.phase == PROCESS_VM_MUTATING && process->vm.external &&
+      process->vm.external->state == PROCESS_VM_EXTERNAL_OWNED)) && !process->vm.roots &&
       !process->vm.borrowers && !process->vm.pending && !process->vm.mutator &&
       !process->vm.held && residency_empty(process));
-  process->vm.phase = PROCESS_VM_DRAINING;
+  process->vm.phase = PROCESS_VM_RETIRED;
+  if (process->vm.external &&
+      process->vm.external->state == PROCESS_VM_EXTERNAL_OWNED) {
+    process->vm.external->state = PROCESS_VM_EXTERNAL_OWNED_FINAL;
+  }
+  external_ready(process);
   spin_unlock(&process->vm.lock);
 }
 
@@ -324,11 +461,14 @@ static void finish_mutation(struct process *process, bool expired)
   process->vm.deadline = 0;
   struct process_vm_held *held = NULL;
   if (refused) {
-    process->vm.phase = PROCESS_VM_OPEN;
+    process->vm.phase = process->vm.external ? PROCESS_VM_DRAINING : PROCESS_VM_OPEN;
     task_vm_set_continuation(process->vm.mutator, true);
     process->vm.mutator = NULL;
-    held = process->vm.held;
-    process->vm.held = NULL;
+    if (!process->vm.external) {
+      held = process->vm.held;
+      process->vm.held = NULL;
+    }
+    external_ready(process);
   } else {
     KASSERT(!process->vm.roots && !process->vm.borrowers);
     process->vm.phase = PROCESS_VM_REPLY;

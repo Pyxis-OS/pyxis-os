@@ -1294,6 +1294,9 @@ static struct vm_stats space_stats(const struct vm_space *space)
   }
   stats.total_pages = space->total_pages;
   stats.metadata_bytes = sizeof(*space);
+  if (space != &kernel_space) {
+    stats.private_page_table_bytes = space->arch.private_table_pages * PAGE_SIZE;
+  }
 
   for (struct vm_range *range = space->head; range; range = range->next) {
     ++stats.range_records;

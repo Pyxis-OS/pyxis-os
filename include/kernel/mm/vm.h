@@ -55,6 +55,8 @@ struct vm_stats {
   size_t range_records;
   /* Retained VM records/tokens, excluding heap headers and page tables. */
   size_t extent_records, metadata_bytes;
+  /* Owned private root/lower tables; zero for kernel space, not its total tables. */
+  size_t private_page_table_bytes;
 };
 
 void vm_init(void);
@@ -266,6 +268,7 @@ bool vm_address_wait_token(struct vm_space *space, uintptr_t address,
 void vm_wait_enroll(struct vm_space *space);
 void vm_wait_detach(struct vm_space *space);
 
+/* Private spaces require the caller's exclusive/stable-root ownership. */
 struct vm_stats vm_get_stats(const struct vm_space *space);
 /* Any CPU while SPACE exists, without its ownership: owned backing pages, a
  * gauge that may lag a concurrent change. */

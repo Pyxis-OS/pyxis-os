@@ -335,7 +335,10 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group)
   struct task *task = scheduler->current_task;
   KASSERT(task && task->kind == TASK_USER && !task->exited);
   KASSERT(!task->bsp_request && !task->deferred_request && !task->wait);
-  KASSERT(!task->vm_borrowers && !task->vm_kernel);
+  KASSERT(!task->vm_borrowers);
+  /* A self-revoker may finish stopped syscall cleanup on the kernel root;
+   * reactivating its uncertain private aliases solely to exit is forbidden. */
+  KASSERT(!task->vm_kernel || task_stop_requested());
   if (task_vm_continuation(task)) {
     process_vm_syscall_leave(task->process, task);
   }

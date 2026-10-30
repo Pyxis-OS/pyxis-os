@@ -9,6 +9,9 @@
 struct process;
 struct private_allocation;
 
+/* Non-reused reservation identity shared with native shared views. */
+uint64_t private_memory_identity(void);
+
 struct private_context {
   struct private_allocation *allocation;
   uint64_t identity;

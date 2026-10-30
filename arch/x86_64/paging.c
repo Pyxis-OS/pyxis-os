@@ -1561,10 +1561,13 @@ static bool affects_active_space(const struct arch_address_space *space,
 }
 
 /* Scratch mappings reach either root without changing the executing address
- * space. No scratch pointer survives a helper call or a descent to a child. */
+ * space. No scratch pointer survives a helper call or a descent to a child.
+ * Private creation counts installed ancestors, including prefixes retained
+ * after a later failure; other callers pass no owned-table counter. */
 static enum mm_result walk_to_leaf(const struct arch_address_space *space,
                                    uintptr_t virtual, bool create,
-                                   phys_addr_t *leaf_table, unsigned *allowed)
+                                   phys_addr_t *leaf_table, unsigned *allowed,
+                                   size_t *owned_tables)
 {
   phys_addr_t physical = space->root;
   *allowed = PAGE_WRITE | PAGE_EXEC | PAGE_USER;
@@ -1595,6 +1598,9 @@ static enum mm_result walk_to_leaf(const struct arch_address_space *space,
           value |= PTE_USER;
         }
         write_table_entry(physical, index, value);
+        if (owned_tables) {
+          ++*owned_tables;
+        }
         /* New ancestors also change recursive aliases. Flush the actual root. */
         if (affects_active_space(space, virtual)) {
           write_cr3(cpu_current()->active_space->root);
@@ -1631,7 +1637,8 @@ static enum mm_result map_page(struct arch_address_space *space,
 
   phys_addr_t table;
   unsigned allowed;
-  enum mm_result result = walk_to_leaf(space, virtual, create, &table, &allowed);
+  enum mm_result result = walk_to_leaf(space, virtual, create, &table, &allowed,
+      space == &kernel_space ? NULL : &space->private_table_pages);
   if (result != MM_OK) {
     return result;
   }
@@ -1685,7 +1692,8 @@ static enum mm_result map_run(struct arch_address_space *space, uintptr_t virtua
 
   phys_addr_t table;
   unsigned allowed;
-  enum mm_result result = walk_to_leaf(space, virtual, true, &table, &allowed);
+  enum mm_result result = walk_to_leaf(space, virtual, true, &table, &allowed,
+      space == &kernel_space ? NULL : &space->private_table_pages);
   if (result != MM_OK) {
     return result;
   }
@@ -1747,7 +1755,7 @@ enum mm_result arch_kernel_prepare_range(uintptr_t virtual, size_t bytes)
   while (remaining) {
     phys_addr_t table;
     unsigned allowed;
-    enum mm_result result = walk_to_leaf(&kernel_space, virtual, true, &table, &allowed);
+    enum mm_result result = walk_to_leaf(&kernel_space, virtual, true, &table, &allowed, NULL);
     if (result != MM_OK) {
       return result;
     }
@@ -1849,7 +1857,7 @@ enum mm_result paging_display_aperture(phys_addr_t physical, size_t bytes,
     phys_addr_t table;
     unsigned allowed;
     uintptr_t virtual = FRAMEBUFFER_BASE + offset;
-    enum mm_result result = walk_to_leaf(&kernel_space, virtual, false, &table, &allowed);
+    enum mm_result result = walk_to_leaf(&kernel_space, virtual, false, &table, &allowed, NULL);
     uint64_t value = result == MM_OK ? read_table_entry(table, index_at(virtual, LEVEL_PT)) : 0;
     if (result != MM_OK && result != MM_NOT_MAPPED) {
       return result;
@@ -1870,7 +1878,7 @@ enum mm_result paging_display_aperture(phys_addr_t physical, size_t bytes,
     phys_addr_t table;
     unsigned allowed;
     uintptr_t virtual = FRAMEBUFFER_BASE + mapped;
-    result = walk_to_leaf(&kernel_space, virtual, true, &table, &allowed);
+    result = walk_to_leaf(&kernel_space, virtual, true, &table, &allowed, NULL);
     if (result != MM_OK) {
       break;
     }
@@ -1887,7 +1895,7 @@ enum mm_result paging_display_aperture(phys_addr_t physical, size_t bytes,
       phys_addr_t table;
       unsigned allowed;
       uintptr_t virtual = FRAMEBUFFER_BASE + mapped;
-      KASSERT(walk_to_leaf(&kernel_space, virtual, false, &table, &allowed) == MM_OK);
+      KASSERT(walk_to_leaf(&kernel_space, virtual, false, &table, &allowed, NULL) == MM_OK);
       write_table_entry(table, index_at(virtual, LEVEL_PT), 0);
       invlpg(virtual);
     }
@@ -1923,7 +1931,7 @@ static enum mm_result unmap_page(struct arch_address_space *space,
 
   phys_addr_t table;
   unsigned allowed;
-  enum mm_result result = walk_to_leaf(space, virtual, false, &table, &allowed);
+  enum mm_result result = walk_to_leaf(space, virtual, false, &table, &allowed, NULL);
   if (result != MM_OK) {
     return result;
   }
@@ -1979,7 +1987,7 @@ static size_t unmap_run(struct arch_address_space *space, uintptr_t virtual,
 
   phys_addr_t table;
   unsigned allowed;
-  if (walk_to_leaf(space, virtual, false, &table, &allowed) != MM_OK) {
+  if (walk_to_leaf(space, virtual, false, &table, &allowed, NULL) != MM_OK) {
     return 0;
   }
   volatile uint64_t *entries = map_scratch(table, SCRATCH_TABLE);
@@ -2136,7 +2144,7 @@ static enum mm_result protect_page(struct arch_address_space *space,
 
   phys_addr_t table;
   unsigned allowed;
-  enum mm_result result = walk_to_leaf(space, virtual, false, &table, &allowed);
+  enum mm_result result = walk_to_leaf(space, virtual, false, &table, &allowed, NULL);
   if (result != MM_OK) {
     return result;
   }
@@ -2180,7 +2188,7 @@ static enum mm_result query_page(const struct arch_address_space *space,
 
   phys_addr_t table;
   unsigned allowed;
-  enum mm_result status = walk_to_leaf(space, virtual, false, &table, &allowed);
+  enum mm_result status = walk_to_leaf(space, virtual, false, &table, &allowed, NULL);
   if (status != MM_OK) {
     return status;
   }
@@ -2294,6 +2302,7 @@ enum mm_result arch_space_create(struct arch_address_space *space)
   unmap_scratch(SCRATCH_TABLE);
 
   space->root = root;
+  space->private_table_pages = 1;
   return MM_OK;
 }
 
@@ -2349,6 +2358,7 @@ bool arch_space_release_step(struct arch_address_space *space, size_t *budget)
     uint64_t entry;
     unsigned index = next_present(space->root, index_at(cursor, LEVEL_PML4), root_end, &entry);
     if (index == root_end) {
+      KASSERT(space->private_table_pages == 1);
       pmm_free(space->root, 1);
       *space = (struct arch_address_space){0};
       return true;
@@ -2361,6 +2371,7 @@ bool arch_space_release_step(struct arch_address_space *space, size_t *budget)
     index = next_present(pdpt, index_at(cursor, LEVEL_PDPT), table_end, &entry);
     if (index == table_end) {
       pmm_free(pdpt, 1);
+      --space->private_table_pages;
       space->release_cursor = next_boundary(cursor, PML4_INDEX_SHIFT);
       continue;
     }
@@ -2377,6 +2388,7 @@ bool arch_space_release_step(struct arch_address_space *space, size_t *budget)
       if (entries[index] & PTE_PRESENT) {
         KASSERT(!(entries[index] & PTE_LARGE));
         pmm_free(entries[index] & PTE_ADDRESS_MASK, 1);
+        --space->private_table_pages;
         --*budget;
       }
     }
@@ -2387,6 +2399,12 @@ bool arch_space_release_step(struct arch_address_space *space, size_t *budget)
       return false;
     }
     pmm_free(pd, 1);
+    --space->private_table_pages;
+    if (index_at(cursor, LEVEL_PDPT) == TABLE_INDEX_MASK) {
+      /* Crossing this PML4 boundary skips the exhausted parent's next visit. */
+      pmm_free(pdpt, 1);
+      --space->private_table_pages;
+    }
     space->release_cursor = next_boundary(cursor, PDPT_INDEX_SHIFT);
   }
   return false;

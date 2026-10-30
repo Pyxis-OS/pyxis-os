@@ -191,9 +191,12 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   handle_t standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
   uint64_t system_info_rights = SYSTEM_INFO_RIGHT_READ;
+  uint64_t memory_rights = MEMORY_RIGHT_MANAGE;
   if (!install && strlen(image_uri) == sizeof(stock_boot_init_uri) - 1 &&
       !memcmp(image_uri, stock_boot_init_uri, sizeof(stock_boot_init_uri))) {
     system_info_rights |= SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE;
+    /* Explicit trusted bootstrap authority; ordinary MANAGE grants stay private. */
+    memory_rights |= MEMORY_RIGHT_CREATE_SHARED;
     input_policy = input_policy_create();
     if (!input_policy || capability_install(&process->capabilities, input_policy,
         INPUT_POLICY_RIGHT_INSTALL_ONCE, 0, &input_policy_handle) != CAP_OK) {
@@ -210,7 +213,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, pipe, PIPE_SERVICE_RIGHT_CREATE, 0, &pipe_handle) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_output) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_error) != CAP_OK ||
-      capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, 0, &memory_handle) != CAP_OK ||
+      capability_install(&process->capabilities, memory, memory_rights, 0, &memory_handle) != CAP_OK ||
       capability_install(&process->capabilities, threads, THREAD_RIGHT_MANAGE, 0, &threads_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_registry, NET_REGISTRY_RIGHT_READ, 0, &net_registry_handle) != CAP_OK ||
       capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||

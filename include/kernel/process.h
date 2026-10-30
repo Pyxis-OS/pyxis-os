@@ -12,6 +12,7 @@
 
 struct space;
 struct shared_origin;
+struct shared_process;
 struct environment_table;
 struct vm_space;
 struct private_allocation;
@@ -102,6 +103,8 @@ struct process {
   struct process *space_next;
   bool listed;
   struct shared_origin *shared_origin; /* Owned; no back-reference to this process. */
+  struct shared_process *shared_views; /* Private VM owner; exit joins alias removal. */
+  size_t shared_view_bytes, shared_view_count, shared_view_metadata_bytes;
 };
 
 /* Borrow the executing user task's process; NULL for scheduler/kernel tasks.

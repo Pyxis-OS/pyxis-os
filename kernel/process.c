@@ -1,3 +1,4 @@
+#include <kernel/mm/shared_view.h>
 #include <kernel/object/wifi.h>
 #include <kernel/object/wifi_connection.h>
 #include <kernel/object/clipboard.h>
@@ -251,6 +252,7 @@ static void release_sessions(struct process *process)
 /* After the address space is gone; frees the process. */
 static void release_records(struct process *process)
 {
+  shared_process_discard(process);
   private_memory_discard_records(process);
   environment_table_destroy(process->environment);
   capability_table_destroy(&process->capabilities);
@@ -504,6 +506,7 @@ void process_task_detach(struct process *process, struct process_task_member *me
     /* No remaining task can hold a root, continuation or pending request. */
     readiness_set_process_stop(process);
     process_vm_retire(process);
+    shared_process_exit(process);
     wifi_process_exit(process);
     wifi_connection_process_exit(process);
   }
@@ -666,11 +669,21 @@ static void ram_reaper(void *argument)
     reaper->notified = false;
     if (!process && !notified && !task_ram_retire_pending() &&
         !vm_kernel_ram_retire_pending() && !launcher_ram_retire_pending() &&
-        !display_ram_pending() && !shared_memory_pending()) {
+        !display_ram_pending() && !shared_memory_pending() && !shared_views_pending()) {
       struct task_wait *wait = task_wait_prepare();
       reaper->wait = wait;
       spin_unlock(&reaper->guard);
-      task_wait_sleep(wait);
+      uint64_t deadline = shared_views_deadline();
+      if (deadline == UINT64_MAX) {
+        task_wait_sleep(wait);
+      } else {
+        task_wait_sleep_until(wait, deadline);
+        spin_lock(&reaper->guard);
+        if (reaper->wait == wait) {
+          reaper->wait = NULL;
+        }
+        spin_unlock(&reaper->guard);
+      }
       cpu_restore_interrupts(flags);
       continue;
     }
@@ -679,6 +692,7 @@ static void ram_reaper(void *argument)
     task_reap_ram();
     display_ram_reap();
     shared_memory_reap();
+    shared_views_reap();
     if (process) {
       reclaim_ram(process);
     }
@@ -736,6 +750,7 @@ void process_reaper_init(void)
   launcher_ram_reapers_init();
   display_ram_init();
   shared_memory_init();
+  shared_views_init();
   for (size_t cpu = 0; cpu < count; ++cpu) {
     enum mm_result result = kernel_ram_reaper_create(cpu, ram_reaper, &ram_reapers[cpu]);
     if (result != MM_OK) {

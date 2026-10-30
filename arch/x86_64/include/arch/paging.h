@@ -7,6 +7,7 @@
  * Do not copy a live space or change its root outside the paging code. */
 struct arch_address_space {
   phys_addr_t root;
+  size_t private_table_pages; /* Owned root/lower tables, including retained empty tables. */
   uintptr_t release_cursor; /* Paging-owned progress of arch_space_release_step(). */
 };
 

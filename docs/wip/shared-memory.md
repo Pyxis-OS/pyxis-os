@@ -172,13 +172,20 @@ without its connected withdrawal implementation.
   storage must be reserved before those tasks expose views.
   After this task chronium can inspect real backing/ownership and allocation
   failure handling without an unrevocable public mapping escape.
-- [ ] **3. Mapping and external withdrawal.** Process-owned view identities and
-  RELEASE_RESERVATION/exit removal, persistent lineage enrollment, external VM
-  admission, explicit CUT joins, auto-close withdrawal and uncertain-process
-  termination with backing quarantine. Implement the safe target/root/cleanup
-  handoff before exposing views. No unrelated scheduler or IPC rewrite.
+- [x] **3. Mapping and external withdrawal.** Public native CREATE/MAP and
+  shared RELEASE_RESERVATION are connected to process-owned views, persistent
+  lineage enrollment, external VM admission and fixed RAM-actor cleanup.
+  Explicit CUT joins actual unmapping; automatic close queues withdrawal;
+  uncertainty terminates affected processes and retains independently charged
+  quarantine. The stock trusted boot-init declaration explicitly receives the
+  new creation bit; ordinary application grants do not widen. SDK and general
+  declaration support remain task 4. Ordinary builds, 1/4-CPU QEMU behavior,
+  read-only accounting/retirement observations and matched existing-path
+  controls are in the [qualification record](../development/experiments/shared-memory.md#task-3-mapping-and-withdrawal--2026-10-30).
+  No native new-region or injected lost-CPU/ACK qualification is claimed.
   After this task chronium can exchange a region and withdraw a branch across
-  processes, with real unmap completion rather than future-call denial.
+  processes through the kernel ABI, with real unmap completion rather than
+  future-call denial.
 - [ ] **4. SDK/libc and declared grants.** Native libpyxis and libc Pyxis-extension
   wrappers; startup/bundle creation-right declarations and one small real shared
   buffer consumer. No POSIX emulation or malloc backing change. Deliver userland

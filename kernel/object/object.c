@@ -338,7 +338,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_DIRECTORY:
     return !(rights & ~DIRECTORY_RIGHTS);
   case OBJECT_MEMORY:
-    return !(rights & ~MEMORY_RIGHT_MANAGE);
+    return !(rights & ~(MEMORY_RIGHT_MANAGE | MEMORY_RIGHT_CREATE_SHARED));
   case OBJECT_SHARED_REGION:
     return !(rights & ~SHARED_MEMORY_RIGHTS);
   case OBJECT_JIT:

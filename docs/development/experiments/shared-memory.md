@@ -175,3 +175,105 @@ records these results and changes documentation only; the tested B kernel is
 identified above. Packet, hashes, per-pass samples and comparison:
 `/shared/present/shared-memory/task2/native-controls/` (`comparison-native.json`,
 `results/A1-20261029T172044/`, `results/B1-20261029T172217/`).
+
+
+## Task 3 mapping and withdrawal — 2026-10-30
+
+Before-code source is task 2 native B above; its documentation-only successor
+`7085662e7ac6` was the task-3 branch base. The refreshed matched control A is
+main `f7ec0f7d4b20`. Final code was exercised at `7516edb48090`, then rebased
+linearly onto main `fd2e66e407` and built at `c8820a7e7504`; that rebase changes
+no kernel/arch/ABI implementation. Later MEMORY-header changes preserve the
+released comment lines for the textual ABI gate and change no layout or code.
+Same published `8bdf136` compiler; ordinary kernel builds pass. No compiler
+rebuild or dependency pin change is needed.
+
+### Functional and ownership checks
+
+Local native-ABI consumers use the existing SDK/runtime with current public
+header declarations. Relevant existing ABI inputs are checked against the
+frozen runtime; this is not a full current-userland build. The qualification
+archive substitutes its own boot-init executable, whose ordinary trusted-root
+MEMORY declaration explicitly grants CREATE_SHARED. It gains no authority from
+a wrapper. Ordinary installed programs receive no new creation grant.
+
+Uninstrumented 1/4-vCPU KVM/q35 boots, 4 GiB RAM, pass zeroed rounded padding,
+R/RW attenuation, malformed-request refusals, distinct aliases with real
+release/acquire communication, IPC/launch transfer, handle-close and creator-exit
+lifetime, creation-source lineage, RETARGET preserving the old mapping, and
+private-memory/guarded-stack refusal. Actual RO and withdrawn loads fault in
+disposable children. Explicit/self CUT, automatic controller close/exit,
+independent branches and natural MAP/CUT overlap pass. Four-CPU source/target
+execution is observed on APIC 0/1 under a CPU1-only target-space ceiling.
+A real C11 worker's finite 256 MiB private allocation also completes across CUT;
+that result alone does not identify its kernel VM phase at CUT entry.
+
+A focused finite 3 GiB private allocation exercises real OUTCOME_UNKNOWN with
+the ordinary one-second CUT budget. Read-only GDB attaches only after that
+result: it observes CPU1 still completing the preceding private MEMORY operation,
+external withdrawal queued and termination requested. Actual process WAIT then
+reports TERMINATED. A later snapshot, after process completion, retains exactly
+one quarantined 8 KiB region and its 8 KiB origin/space charge, without a process
+or group cleanup join. Late private-operation progress does not release it.
+No lost CPU, ACK suppression, register write or kernel fault hook is used.
+
+Separate read-and-continue accounting observations at clean `1646bf41c5bb`
+record 20 view disposals, 11 actual region/frame releases (22 pages), and two
+origin destructions. Aliases retain one physical charge; creator retirement can
+precede recipient MAP; normal final alias/physical/record gauges reach zero.
+A 2 MiB+1 variant at `7516edb48` observes private table pages 8→9→10 as two
+aliases map. Both unmaps leave those empty tables counted at 10; teardown
+reaches the root-only count 1 immediately before actual root free. Counters
+exposed a pre-existing PDPT leak at the slot-511/PML4 boundary, fixed in this
+change; the original genuine panic frame and failed receipt are retained.
+
+### Matched existing-path controls
+
+Same frozen control applications/1- and 4-CPU archives and workloads as above;
+effective config SHA-256
+`524590b0d7a5e81e739a9de9517a9784839d0dd499e2f7291b18f0ddeec81ba9`
+on both variants. An inherited disabled config line accounts for the change
+from the older baseline config. Uninstrumented final B kernel at `c8820a7e7504`
+is compared with saved clean A `f7ec0f7d4b20`; A was captured before B, not
+interleaved. All message/byte/launch counts and FINAL drains pass. One boot per
+variant/configuration; IPC values are within-boot median [min,max], not
+independent boot variation.
+
+| Guest interval, ms | 1 CPU A | 1 CPU B | 4 CPUs A | 4 CPUs B |
+| --- | --- | --- | --- | --- |
+| 1,024 launches | 896.925 | 796.759 | 859.623 | 787.083 |
+| Private pages | 19.207 | 18.475 | 17.778 | 18.708 |
+| CALL64 completion | 1.280 [1.262, 2.420] | 1.274 [1.256, 1.332] | 1.232 [1.216, 1.659] | 1.240 [1.211, 2.281] |
+| CALL4096 completion | 1.627 [1.437, 2.358] | 1.433 [1.394, 1.554] | 1.399 [1.363, 2.238] | 1.445 [1.352, 2.046] |
+| SEND64 completion | 0.727 [0.637, 1.144] | 0.656 [0.637, 0.714] | 0.648 [0.630, 1.243] | 0.651 [0.633, 1.128] |
+| SEND4096 completion | 0.733 [0.682, 1.265] | 0.738 [0.701, 0.834] | 0.719 [0.685, 1.215] | 0.717 [0.679, 0.803] |
+
+Final IPC medians change −11.9% to +3.25%, with overlapping ranges in every
+cell. Private pages change −3.8%/+5.2% (one elapsed sample each); launch changes
+−11.2%/−8.4%. These nested differences do not establish a stable speedup or
+native parity. The preceding B `1646bf41c5bb` controls, before private-table
+accounting and the PDPT fix, remain separate: four-CPU IPC changes −0.9% to
++1.0%, launch +2.5% and pages +4.0%. No speculative IPC hot-path change was made.
+Task 5 retains matched native controls with the declared consumer.
+
+### Results and limits
+
+After actual uncertain-target WAIT completes, an uninstrumented final-code
+check repeats CUT and still receives OUTCOME_UNKNOWN. MAP through the cut holder
+is DENIED; a fresh MAP through the independent original grant succeeds and its
+bytes remain readable. Quarantine does not globally revoke independent branches.
+
+No injected lost CPU/ACK, allocator failure, generation exhaustion or complete
+stale-physical-frame-reuse proof is claimed. Native new-region behavior, SDK/
+general grant integration and the application shared-buffer cost remain later
+tasks. Earlier archive-format and observer setup failures remain failed receipts;
+the fixed PDPT assertion is not relabelled as a passing run. A post-destruction
+GDB print attempted to read an already-cleared address-space pointer and detached;
+preceding table/free observations and the functional result completed normally.
+
+Local provenance, immutable consumers, exact kernel/config/ISO hashes and raw
+receipts: `/home/chronium/build/shared-memory/task3/` (`qualification/final/`,
+`accounting/`, `table-observation/`, `q3g-observe-4cpu-{2,3}/`, `sticky/` and
+`controls/{A,B,B-final}/`). Small handoff summary is under
+`/shared/present/shared-memory/task3/`. All owned QEMU/debugger jobs stopped;
+no native/PXE action or new compiler container.
