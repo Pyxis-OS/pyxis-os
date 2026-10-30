@@ -573,9 +573,10 @@ reinstalling an ID offered by several repositories asks again.
 `boot://os-release`: its release ABI list and its own build revision
 ([ABI](abi.md)). A
 `program`, `toolchain` or `dev` entry whose `abi` the system does not provide
-is not offered: `list --available` omits it and ends with
-`N builds for other systems hidden`, and installing it refuses as not available
-for this system, counting that ID's hidden builds. Before verifying anything,
+is not offered: `list --available` omits it without comment, and installing it
+refuses as not available for this system, counting that ID's hidden builds. When
+`boot://os-release` cannot be read, every bound build is hidden and the listing
+ends with `N builds hidden: this system's ABI is unreadable`. Before verifying anything,
 `pkg` reads every stored manifest in the set it would keep, so `install`,
 `remove` and `verify` refuse a set with stale builds once, naming
 all of them and one command of each kind that clears them together:
