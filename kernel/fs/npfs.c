@@ -8,7 +8,9 @@
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/pmm.h>
 #include <kernel/mm/pressure.h>
+#include <kernel/mm/types.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/process.h>
 #include <kernel/object/object.h>
@@ -50,6 +52,7 @@ static struct task_wait *worker_wait;
 static bool available;
 static atomic_size_t admitted;
 static size_t wrapper_count, adapter_used, package_used;
+static size_t package_budget = NPFS_PACKAGE_BUDGET_MIN_BYTES;
 
 /* Power-off flush. The requesting worker and this worker both run on the BSP,
  * so IF=0 serializes the handoff. Once sealed, pools take no further changes
@@ -121,11 +124,16 @@ void npfs_adapter_free(void *data, size_t bytes)
   cpu_restore_interrupts(flags);
 }
 
-/* Zeroed memory from the package view budget, NPFS_PACKAGE_INDEX_BYTES. */
+size_t npfs_package_budget(void)
+{
+  return package_budget;
+}
+
+/* Zeroed memory from the package view budget. */
 enum call_status npfs_package_allocate(size_t bytes, void **out)
 {
   npfs_require_worker();
-  if (bytes > NPFS_PACKAGE_INDEX_BYTES - package_used) {
+  if (bytes > package_budget - package_used) {
     return CALL_LIMIT;
   }
   uint64_t flags = cpu_save_interrupts();
@@ -1415,6 +1423,9 @@ void npfs_start(void)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(!available);
+  uint64_t ram = (uint64_t)pmm_get_stats().total_frames * PAGE_SIZE;
+  uint64_t share = ram / NPFS_PACKAGE_BUDGET_RAM_DIVISOR;
+  package_budget = share > NPFS_PACKAGE_BUDGET_MIN_BYTES ? (size_t)share : NPFS_PACKAGE_BUDGET_MIN_BYTES;
   enum mm_result result = kernel_task_create(npfs_worker, NULL);
   if (result != MM_OK) {
     kerror("npfs: cannot create worker (error %u)\n", (unsigned)result);

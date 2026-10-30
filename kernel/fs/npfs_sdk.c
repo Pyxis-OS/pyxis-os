@@ -21,8 +21,7 @@ struct package_sdk_index {
  * or under the directory and the length of its path, which together name one
  * directory of that index. */
 static_assert(PACKAGE_SDK_PATH_MAX < (1u << 8), "sdk path length fits its field");
-static_assert(PACKAGE_SDK_INDEX_MAX_BYTES / sizeof(struct package_sdk_file) <= (1u << 24),
-    "sdk file position fits its field");
+#define SDK_FILES_MAX (1u << 24) /* the file position field of an object ID */
 #define SDK_SERIAL_MAX ((UINT32_C(1) << 31) - 1)
 static uint32_t next_serial = 1;
 
@@ -128,7 +127,7 @@ static bool index_valid(struct package_sdk_index *index, uint64_t set)
   uint64_t expected = sizeof(header) + (uint64_t)header.packages * sizeof(struct package_sdk_package) +
       (uint64_t)header.files * sizeof(struct package_sdk_file) + header.strings;
   if (memcmp(header.magic, PACKAGE_SDK_INDEX_MAGIC, sizeof(header.magic)) || header.set != set ||
-      header.reserved || expected != index->size) return false;
+      header.reserved || header.files > SDK_FILES_MAX || expected != index->size) return false;
   index->set = set;
   index->package_count = header.packages;
   index->file_count = header.files;
@@ -176,8 +175,9 @@ static enum call_status index_read(struct npfs_store_context *context,
   enum call_status status = npfs_package_set_file(context, root, set, ".sdk", &file);
   if (status != CALL_OK) return status;
   uint64_t size = npfs_store_size(file);
-  if (size > PACKAGE_SDK_INDEX_MAX_BYTES) status = CALL_LIMIT;
-  else if (size < sizeof(struct package_sdk_index_header)) status = CALL_IO;
+  /* Only the package-view budget limits the index, at the allocation below. */
+  if (size < sizeof(struct package_sdk_index_header)) status = CALL_IO;
+  else if (size > SIZE_MAX - sizeof(struct package_sdk_index)) status = CALL_LIMIT;
   struct package_sdk_index *index = NULL;
   if (status == CALL_OK) {
     status = npfs_package_allocate(sizeof(*index) + (size_t)size, (void **)&index);

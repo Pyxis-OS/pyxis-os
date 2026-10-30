@@ -18,10 +18,12 @@
 #define NPFS_REQUEST_LIMIT 32u
 #define NPFS_ADAPTER_BYTES (1024u * 1024u)
 #define NPFS_WRAPPER_LIMIT 1024u
-/* Package views and the indexes they capture, apart from the wrapper payload.
- * Each index file is at most a quarter of this (docs/wip/sdk-view.md,
- * decision 58), so a set's indexes and a pinned older capture fit together. */
-#define NPFS_PACKAGE_INDEX_BYTES (4u * 1024u * 1024u)
+/* Package views and the indexes they capture, apart from the wrapper payload:
+ * one NPFS_PACKAGE_BUDGET_RAM_DIVISOR-th of installed RAM, at least
+ * NPFS_PACKAGE_BUDGET_MIN_BYTES. The memory is real; no count or file size is
+ * limited by a constant (docs/interfaces/limits.md). */
+#define NPFS_PACKAGE_BUDGET_MIN_BYTES (4u * 1024u * 1024u)
+#define NPFS_PACKAGE_BUDGET_RAM_DIVISOR 512u
 #define NPFS_TIMEOUT_MS 30000u
 #define NPFS_DIRECTORY_RIGHTS DIRECTORY_RIGHTS
 
