@@ -96,9 +96,9 @@ record what those functions cannot report.
     including the empty-body rule for 205;
   - GET forms work as URLs with a query string; there is no POST, and no
     cookies or request headers;
-  - private RAM backing defaults to a shared 64 MiB logical-byte budget for
-    staged uploads and retained snapshots; exhaustion fails OPEN without a
-    prefix or eviction. Explicit private npfs is the large-response option;
+  - private RAM or npfs snapshots have no provider byte quota; actual backing
+    capacity and file representability bound responses. Exhaustion fails OPEN
+    without a prefix or eviction;
   - supplied Content-Type is preferred; absent metadata falls back to sniffing
     and the final URL extension.
 - **Local files:**
