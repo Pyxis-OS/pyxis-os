@@ -2400,6 +2400,11 @@ bool arch_space_release_step(struct arch_address_space *space, size_t *budget)
     }
     pmm_free(pd, 1);
     --space->private_table_pages;
+    if (index_at(cursor, LEVEL_PDPT) == TABLE_INDEX_MASK) {
+      /* Crossing this PML4 boundary skips the exhausted parent's next visit. */
+      pmm_free(pdpt, 1);
+      --space->private_table_pages;
+    }
     space->release_cursor = next_boundary(cursor, PDPT_INDEX_SHIFT);
   }
   return false;
