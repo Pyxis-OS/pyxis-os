@@ -1,7 +1,7 @@
 -- Writes the archive's config/packages.lua (docs/wip/pkg-upgrade.md, decisions
--- 65, 68, 72 and 74): a repository named public at PACKAGE_REPOSITORY and one
+-- 65, 68, 72 and 74): PACKAGE_REPOSITORY_NAME at PACKAGE_REPOSITORY and one
 -- named releases at RELEASE_REPOSITORY, each left out when its URL is empty.
--- Unless PACKAGE_REPOSITORY_SIGNED is 1 the public entry says signed = false,
+-- Unless PACKAGE_REPOSITORY_SIGNED is 1 that entry says signed = false,
 -- as only development images do; releases is always signed. pkg validates the
 -- URLs when it reads the file.
 local signed = os.getenv("PACKAGE_REPOSITORY_SIGNED") or "0"
@@ -21,10 +21,13 @@ local function base_url(variable)
 end
 
 local entries = {}
-local public = base_url("PACKAGE_REPOSITORY")
-if public then
-  entries[#entries + 1] = string.format("    { name = \"public\", url = %q%s },\n",
-    public, signed == "1" and "" or ", signed = false")
+local repository = base_url("PACKAGE_REPOSITORY")
+if repository then
+  local name = os.getenv("PACKAGE_REPOSITORY_NAME") or "public"
+  assert(name:match("^[a-z0-9][a-z0-9.-]*$") and #name <= 64 and name ~= "releases",
+    "PACKAGE_REPOSITORY_NAME must be a package repository name other than releases")
+  entries[#entries + 1] = string.format("    { name = %q, url = %q%s },\n",
+    name, repository, signed == "1" and "" or ", signed = false")
 end
 local releases = base_url("RELEASE_REPOSITORY")
 if releases then

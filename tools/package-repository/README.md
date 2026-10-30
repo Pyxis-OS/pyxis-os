@@ -119,7 +119,8 @@ is published to the Internet.
 ## Packing a revision
 
 Release and deployment pack for one revision R: the tag at a release, or the
-build explicitly being deployed to a real machine, such as chronium's stick.
+full `BASE+REV` version explicitly being deployed to a real machine, such as
+chronium's stick. The raw Git revision is provenance, not an ABI alias.
 Nothing else packs into these trees; QEMU checks of a branch use a temporary
 local repository.
 
@@ -139,7 +140,11 @@ local repository.
      GAMES="doom quake duke3d diablo" GAME_RECIPES="$HOME/.local/share/pyxis-private/games"
    ```
 
-4. **Public packages.** Pack `fonts` when its pinned inputs change; the packer
+4. **Additional packages.** For a tagged release use `public`. For an untagged
+   build use a separately named sparse tree such as `dev`, containing only the
+   packages needed for this install or test. Set `REPOSITORY_NAME=dev` on make
+   package targets and replace `public` with `dev` in the commands below; stock
+   `public`/`releases` catalogs refuse development ABI names. Pack `fonts` when its pinned inputs change; the packer
    refuses an ID/version already published. Build the hosted toolchain from the
    same clone ([native hosted payloads](../../toolchain/README.md#native-hosted-payloads)).
    Keep the SDK path and the hosted WORKDIR stable across revisions and reuse the
@@ -155,7 +160,8 @@ local repository.
    python3 tools/pxpkg.py pack --build build HOSTED/out/clang-hosted.lua "$repo_root/public"
    ```
 
-5. **Check, then prune.** Every bound package must cover R:
+5. **Check, then prune.** Every bound package must cover R (canonical release
+   ABI or full development `BASE+REV`, as generated in `build/os-release`):
 
    ```sh
    python3 tools/pxpkg.py check "$repo_root/public" --abi R
@@ -179,7 +185,11 @@ local repository.
    python3 tools/pxpkg.py publish --repository personal "$repo_root/personal"
    ```
 
-   The `make` package targets already end with a publish; publish again after
+   For a development tree publish with `--repository dev`, never `public`.
+   Add that separate name on the target, select overlapping packages with the
+   chooser or `pkg install dev/ID`, and let updates follow the recorded origin.
+   A new REV needs matching newly packed development packages. The `make`
+   package targets already end with a publish; publish again after
    `pxpkg pack` or `prune`.
 
 The format reference describes [prune and check](../../docs/interfaces/packages.md#host-tool).

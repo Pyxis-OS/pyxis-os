@@ -50,7 +50,7 @@ the author's 34 cases and the reviewer's 111 cases plus the work-limit tables
 | Package ID | `[a-z0-9][a-z0-9.-]*`, at most 64 bytes |
 | Version | `[0-9A-Za-z][0-9A-Za-z.+-]*`, at most 64 bytes; opaque, never compared |
 | Kind | `data`, `program`, `toolchain`, `dev` or `release` |
-| ABI | `[0-9a-z][0-9a-z.-]*`, at most 64 bytes; a release name, or a development build's 12-hex revision ([ABI](abi.md)) |
+| ABI | `[0-9a-z][0-9a-z.+-]*`, at most 64 bytes; a release ABI or an exact `BASE+REV` development identity ([ABI](abi.md)) |
 | File path | relative UTF-8 without NUL or backslash; components not empty, `.` or `..`, at most 255 bytes each and 250 in total; the path and each of its directories must have a USTAR split (below) |
 
 IDs and versions become store directory names, so both start with a letter or
@@ -101,14 +101,17 @@ certificate file beside `current`. pxpkg's working `index.lua` holds only
 In an entry, every field shown is required and the only other field allowed is `abi`.
 `abi` names the one ABI the build requires: it is required on `program`,
 `toolchain` and `dev` and refused on `data`. It is the release the package was built for,
-or, for a package built from a development tree, that build's revision
+or, for a package built from a development tree, its full `BASE+REV` identity
 ([ABI](abi.md)). Two entries for one ID
 may name different ABIs. A client accepts an entry whose `abi` is in the list
 the running system provides, by exact string equality, and never parses the
 version or compares a release name. `archive` must be exactly
 `packages/ID/VERSION.tar`, `size` and `sha256` describe that file, and an ID and
 version appear once. Versions of one ID are listed in publication order;
-installing an ID without a version takes the last one. Published archives are
+within a chosen repository, installing an ID without a version prefers the
+rightmost eligible ABI in the system's list, then the last build for that ABI.
+Data packages have no ABI rank and retain last-publication selection. Explicit
+eligible versions are honored. Published archives are
 never replaced. Only the files above and the packer's `.lock` belong in a
 repository.
 
@@ -566,12 +569,13 @@ when it is reached, as `pkg: dependency ID@VERSION is offered by N
 repositories`; cancelling there leaves the trees fetched so far inactive and
 the active set unchanged. The review names the repository of every
 package the operation fetches, for example `add notes@2.0 (beta)`. Which
-repository a package came from is not yet recorded in the set; until it is,
-reinstalling an ID offered by several repositories asks again.
+repository an installed package came from is recorded with its canonical URL
+and signed/unsigned policy. Updates follow that origin rather than selecting
+another repository's offer. An explicit install/source choice can change it.
 
 **ABI.** `pkg` reads the ABIs the running system provides from
-`boot://os-release`: its release ABI list and its own build revision
-([ABI](abi.md)). A
+`boot://os-release`: only its explicit ordered list; raw revision is provenance,
+not an implicit ABI ([ABI](abi.md)). A
 `program`, `toolchain` or `dev` entry whose `abi` the system does not provide
 is not offered: `list --available` omits it without comment, and installing it
 refuses as not available for this system, counting that ID's hidden builds. When
@@ -582,7 +586,7 @@ ends with `N builds hidden: this system's ABI is unreadable`. Before verifying a
 all of them and one command of each kind that clears them together:
 
 ```text
-pkg: 2 installed packages are not built for this system, which provides f107a7adc816: doom (needs ABI 05fc52104a2c), quake (needs ABI 05fc52104a2c). Replace with: pkg install doom quake. Or drop with: pkg remove doom quake
+pkg: 2 installed packages are not built for this system, which provides 0.0.11, 0.0.11+abcdef012345: doom (needs ABI 0.0.11+012345abcdef), quake (needs ABI 0.0.11+012345abcdef). Replace with: pkg install doom quake. Or drop with: pkg remove doom quake
 ```
 
 IDs the same install fetches anew are not counted. Without a readable
@@ -837,16 +841,18 @@ return {
 
 - **ABI:** taken from `DIR/os-release` ([ABI](abi.md)): for a tagged release
   build, the release's ABI name, which must be in its own `abi` list (0.0.8a
-  names 0.0.8); otherwise the build revision. A build outside Git has no
-  revision and is refused.
+  names 0.0.8); otherwise the full development version `BASE+REV`. A build
+  without the required Git release history is refused.
 - **Checkout:** the Git checkout containing `DIR` must be at that revision and
   have no local changes, untracked files or changed submodules, so that `abi`
   names the commit the bytes came from. A toolchain payload is packed from the
   checkout that produced it; the packer does not read the payload's own
-  provenance record.
+  provenance record. The packer regenerates `os-release` from that checkout
+  and refuses an edited or stale identity record.
 - **Version:** a program's is `VARIANT+LABEL`. The label is the release tag,
-  such as `0.0.8a`, or the revision. HEAD must have at most one tag, an ABI
-  name, matching `os-release`'s `release`, or the build is refused. A
+  such as `0.0.8a`, or the full development version, such as
+  `0.0.11+0123456789ab`. Only actual first-parent release tags establish
+  releases; the generated identity must match the clean checkout. A
   variant has no `+`. Packing the same build again refuses as an already
   published version. A toolchain keeps its recipe's `version`; a `dev` recipe
   names either, as `pyxis-dev` and `libcxx-dev` name `variant = "1"`.
@@ -856,6 +862,22 @@ return {
   ([program packages](#program-packages)).
 - `--build` with a data recipe that names a version, and `build` entries without
   `--build`, are refused. A toolchain names its version.
+
+### Sparse development repositories
+
+A development repository carries only packages needed for that install or test,
+not a mirror of `public`. Add it under a separate name, such as `dev`. The
+existing install chooser resolves overlapping IDs, or `pkg install dev/ID`
+selects explicitly; no repository preference is implied. The installed record
+retains that origin and `pkg update` follows it. Within the selected repository,
+the rightmost eligible ABI wins unless a version was requested explicitly.
+
+A new source revision stops admitting the preceding exact development ABI.
+After an ABI break only packages for the new exact development version qualify
+until the release. Publish `+` ABI names only in separately named development
+catalogs: supported old clients parse the entire stock index before filtering.
+See [development installs and upgrades](../userland/package-upgrades.md#sparse-development-repositories)
+for the commands and release fallback boundary.
 
 ### Program packages
 
@@ -871,6 +893,12 @@ make development-packages REPOSITORY=DIR  # every other program
 make release-package REPOSITORY=DIR       # this tagged build's release
 make release-image IMAGES=DIR             # this tagged build's install ISO
 ```
+
+For an untagged build, use `REPOSITORY_NAME=dev` and a separately named sparse
+repository. The bulk targets above pack all selected base/development recipes;
+a particular test normally packs only its needed recipes with `pxpkg pack`.
+Build its image with `PACKAGE_REPOSITORY_NAME=dev PACKAGE_REPOSITORY=URL`, so
+the configured name matches the published dev snapshot.
 
 `release-package` packs `packages/release.lua` from a clean build of a release
 tag: version the tag, `provides` the build's `os-release` ABI list. It does not
