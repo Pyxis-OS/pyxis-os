@@ -173,5 +173,7 @@ reuse and device cache protocols remain outside this interface.
 
 The [qualification record](../development/experiments/shared-memory.md) separates
 source inspection, ordinary builds, QEMU behavior, debugger observations and
-native existing-path controls. No lost-CPU/ACK or allocator fault injection is
-claimed.
+native shared-buffer behavior and existing-path controls. The native vela run
+checks shared-min counts through joined cleanup; it does not exercise native
+CUT/races or isolate CREATE/MAP cost. No lost-CPU/ACK or allocator fault injection
+is claimed.

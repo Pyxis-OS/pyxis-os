@@ -392,3 +392,58 @@ Local receipts are under `/home/chronium/build/shared-memory-task4/`:
 The failed fixture inputs are preserved under the latter's `previous-inputs/`.
 Small handoff reports live under `/shared/present/shared-memory/task4/`.
 Native consumer/shared-buffer costs remain milestone task 5.
+
+## Task 5 native consumer — vela, 2026-10-30
+
+The orchestrator reports `SHARED-TASK5 PASS schedule=CURRENT1 environment=native`
+and restored PXE. One fresh boot of merged main `67f8957cd0b974583c911988b703766ee8aea0e6`,
+userland `8076305cfb42`, ports `7695ecbacf86`, compiler `8bdf136`; effective config
+`524590b0d7a5`. The sealed RAM packet requests `nvme.write=0`, `display.timing=off`, `display.idle_blank=0`, `log.udp=1`
+and `remote.beacon=vela`.
+There is no audio workload or persistent-write qualification. OLED blanking is
+confirmed in the log; firmware/early boot precedes presentation blanking.
+
+Before/after identity reports the expected runtime prefix `67f8957cd0b9`,
+16 online CPUs, AC connected, full HWP, XSAVE `0x7`/832 bytes, and unchanged
+CPUID-0x15 TSC at 3686.4 MHz using RDTSCP/LFENCE. Development/network allows
+CPU0 and Remote/children CPU1; this is an allowance, not proof of AP placement.
+All 17 command receipts and output hashes verify; command success and complete
+Remote FINAL/drain are checked independently.
+
+The existing launch/pages/CALL/SEND arguments above are unchanged. These are
+current native measurements, not a fresh A/B comparison. IPC entries are median
+[min,max] across 100 passes within this boot; launch/pages have one sample:
+
+| Guest interval | Native ms |
+| --- | --- |
+| 1,024 launches after 16 warmups | 889.632 |
+| Private pages, 800 attempts/releases | 24.903 |
+| CALL64 completion | 1.217 [1.130, 1.349] |
+| CALL4096 completion | 1.414 [1.330, 1.556] |
+| SEND64 completion | 0.6365 [0.594, 0.807] |
+| SEND4096 completion | 0.7455 [0.664, 0.897] |
+
+SEND admission medians [min,max] are 0.0755 [0.070,0.096] ms at 64 bytes and
+0.138 [0.098,0.160] ms at 4,096 bytes. Shared-min passes empty, six-byte,
+262,400-byte and 20 MiB inputs with byte/newline counts 0/0, 6/2,
+262400/1025 and 20971520/81920. The last command's host-observed interval is
+19.446459 ms, including Remote dispatch, launch and joined cleanup. It is not
+a target-clock interval, isolated CREATE/MAP cost or native throughput contract.
+No independent boot range, native revocation/race coverage or new native
+regression ratio follows from this one run. Earlier native A/B remains historical.
+
+Sealed packet and original results:
+`/shared/present/shared-memory/task5/native/`,
+`results/CURRENT1-20261030T162042-805071027/result.json`.
+Packet manifest SHA-256:
+`a36d8079f55ed7951ef0632358982cb53d597f7fc584bdc5d946cf7d0ccc88d8`.
+Result SHA-256:
+`d482a43d70bbdf43ab9cac363f7ec68d3f203721d84a86b9c6d259eb33be220f`.
+
+Task-4 merged worktrees/builds/images have been removed; small receipts retain
+their relative layout under `/home/chronium/reports/shared-memory-task4/`.
+The old local build paths above describe provenance, not remaining build trees.
+Task-5 local checks and build records remain under
+`/home/chronium/build/shared-memory-task5/`; the final four-CPU QEMU packet check
+uses the same reverse-beacon transport and passes all 17 commands. Its native
+AC/HWP/TSC gates are explicitly skipped, not counted as native evidence.
