@@ -3,9 +3,10 @@
 A native region owns fixed normal-RAM backing that independent processes can
 map R/NX or RW/NX. The public kernel interface is in
 [shared_memory.h](../../include/abi/shared_memory.h) and
-[memory.h](../../include/abi/memory.h). SDK wrappers, general bundle/configuration
-delegation and the first application consumer remain the next
-[milestone task](../wip/shared-memory.md#delivery-tasks).
+[memory.h](../../include/abi/memory.h). The SDK provides explicit-handle helpers,
+bundle declarations select held creation authority, and an opt-in shared-buffer
+example supplies the first application consumer. Qualification and remaining
+native checks are recorded in the [milestone](../wip/shared-memory.md#delivery-tasks).
 
 ## Authority and operations
 
@@ -21,6 +22,14 @@ explicitly holds both; existing application MANAGE grants gain no creation
 right. Receiving or mapping a region requires no creation authority. Explicit
 unmap requires the caller's own MEMORY MANAGE, including after the region handle
 has closed. Raw addresses and view identities grant no cross-process authority.
+
+Trusted boot-init/session/mux/Remote handoffs retain creation privately, without
+a per-space switch. Stock shell and Lua bundles keep their required
+`memory/manage` and explicitly request an optional private `memory_create_shared`
+source with `memory/manage` plus `memory/create_shared`. A bundle receives
+creation only when it declares it; ordinary native children and MANAGE-only
+manifests keep their existing rights. Missing required authority refuses preparation. See
+[bundle declarations](../userland/program-bundles.md) for source selection.
 
 CREATE rounds up to whole pages and publishes nothing until the entire backing
 is zeroed, including padding. Frames need not be contiguous. MAP chooses a
@@ -44,6 +53,38 @@ DESCRIBE reports the normal kernel-attested type/rights and known fixed length.
 It reports neither physical addresses nor a global object identity, and claims
 neither immutable bytes nor mapping authority. A stale or cut grant retains the
 ordinary capability refusal behavior.
+
+## SDK helpers
+
+[libpyxis](../../userspace/include/shared_memory.h) provides
+`shared_memory_create(memory, size, created)` and
+`shared_memory_map(region, rights, view)`. They borrow explicit held grants and
+return native statuses, clearing the output on failure. Success transfers an
+owned region handle or process-owned view descriptor to the caller. Use native
+`memory_release_reservation(memory, identity)` to unmap.
+
+The [libc extension](../../userspace/libc/include/pyxis/shared_memory.h) provides
+`pyxis_shared_memory_create`, `pyxis_shared_memory_map` and
+`pyxis_shared_memory_unmap`, with the same explicit handles/descriptors and
+0/-1 plus the existing errno mapping. No ambient lookup, POSIX mapping facade,
+malloc change or implicit close/unmap is added. Explicit native job grant
+selection accepts the new creation bit and native shared-region READ/WRITE;
+it does not add them to ordinary child grants.
+
+An untrustworthy post-effect reply is OUTCOME_UNKNOWN (libc EIO), not proof that
+creation/mapping did nothing. Helpers never retry or discard a possibly
+published result. Native callers retain the precise status; libc callers must
+not automatically replay EIO. Ordinary definite native errors retain their
+existing errno mapping.
+
+The opt-in [shared-min example](../../userspace/examples/shared-min/README.md)
+uses a fixed buffer and a READ-only worker, with endpoint acknowledgments before
+buffer reuse and actual contained-worker retirement before final release.
+`make SDK=/path/to/sdk shared-min` builds its bundle explicitly. Normal userland
+installation ships `share/examples/shared-min.c` and
+`share/examples/shared-min-manifest.json`; the compiled bundle is excluded from
+the default build and installation. See the
+[qualification record](../development/experiments/shared-memory.md#task-4-sdk-declared-grants-and-shared-min--2026-10-30).
 
 ## Source lineage and lifetime
 
