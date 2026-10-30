@@ -1,10 +1,9 @@
 # SDL3
 
 Pyxis carries upstream SDL 3.2.28 with a native backend adapted from the
-[SDL2 port](sdl2.md), as a development library for new graphical ports. This
-first part covers the core, video, OpenGL through OSMesa, keyboard, pointer,
-timers and threads. Audio follows separately; clipboard and joysticks come
-later. Building SDL2 programs on SDL3 through sdl2-compat is a possible later
+[SDL2 port](sdl2.md), as a development library for new graphical ports. It
+covers the core, video, OpenGL through OSMesa, keyboard, pointer, timers,
+threads and audio playback; clipboard and joysticks come later. Building SDL2 programs on SDL3 through sdl2-compat is a possible later
 milestone, not part of this port.
 
 The [recipe README](../../ports/sdl3/README.md) documents the backend file by
@@ -27,7 +26,8 @@ Mesa and C++.
 A program needs the `display`, `keyboard` and `clock` grants; `pointer` is
 optional. Threads and callback timers need a [bundle](../userland/program-bundles.md)
 declaring `threads/manage`, and a threaded program that blocks in
-`SDL_WaitEvent` also needs `pipe/create`.
+`SDL_WaitEvent` also needs `pipe/create`. Audio needs the `audio` grant and
+`threads/manage` for SDL's device thread.
 
 ## Behavior
 
@@ -44,6 +44,27 @@ The window, input and OpenGL models are the SDL2 port's:
 - Condition timeouts use the monotonic clock, and SDL's environment is read
   from the native environment table.
 - `SDL_GetPrefPath` creates `home://APP/`; `SDL_GetBasePath` is unsupported.
+
+## Audio
+
+Audio follows the SDL2 port's [audio model](sdl2.md#audio), mapped onto SDL3's
+devices and streams:
+
+- **Ownership.** There is one default playback device. Opening a logical device
+  or device stream acquires the space's native PCM session. SDL closes the
+  physical device when the last logical device closes, which releases the
+  session and discards PCM still queued. Another owner in the space makes the
+  open fail.
+- **Authority.** `SDL_INIT_AUDIO` needs the `audio` and `clock` grants. Opening
+  also needs `threads/manage` for SDL's device thread. Without it, the open
+  fails with "Couldn't create audio thread" and the session is released.
+- **Format and queue.** The device runs at the native 48 kHz S16LE stereo with
+  1,024-frame (21.3 ms) buffers. SDL streams convert other formats. The device
+  thread keeps the native 80 ms queue near full. A late buffer becomes native
+  silence, and engine failure disconnects the device.
+- **Streams.** As upstream, SDL3's resampler keeps its last few input frames
+  until `SDL_FlushAudioStream`, so a program waiting for a queued stream to
+  empty must flush it first.
 
 ## Validation
 
@@ -70,11 +91,24 @@ a bundle.
   because libc cannot park a thread without the threads service.
   `SDL_Delay(20)` still slept 20 ms.
 
-These are nested-VM numbers. A native run has not been made.
+- Audio, in a bundle granting `audio`, `clock` and `threads/manage`. QEMU had
+  `intel-hda` and `hda-output` writing a 44.1 kHz WAV file, and the image
+  booted as USB storage. A queued 22,050 Hz mono S16 stream of 2 s of 440 Hz
+  drained in 1,923 ms and was captured as 440.0 Hz on both channels. A
+  pull-callback 44.1 kHz float stereo stream played 660.0 Hz for its 1.5 s.
+  The device closed and reopened between the two streams. With the guest's
+  master volume at 50%, captured RMS was 0.022 of the source amplitude, against
+  0.018 for the native `pcm` tool; the difference was not investigated.
+  Without `threads/manage`, the open failed as described. These programs were
+  built against the SDK from main `63a044fa` and ran on the same image.
+
+These are nested-VM numbers. A native run has not been made. QEMU 10.2.2 on the
+test host intermittently segfaulted in its AHCI ATAPI emulation while the
+firmware read the boot ISO; booting the same image as USB storage avoided it.
 
 ## Limits
 
-- No audio, clipboard, joysticks, haptics, sensors, camera, GPU API or
+- No audio recording, clipboard, joysticks, haptics, sensors, camera, GPU API or
   Vulkan yet.
 - OpenGL supports only swap interval 0.
 - Thread priorities other than normal are refused.
