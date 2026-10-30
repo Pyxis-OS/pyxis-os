@@ -432,8 +432,9 @@ entry; enter install mode through live media.
 
 Caelum starts active and stays the pinned first tab. The shipped live configuration
 sets `focus = true` on Development; the installed configuration sets it on `pyxis`.
-The Install entry's built-in install space always requests it, so the installer
-replaces Caelum's log once it draws *(chronium, 2026-10-23)*.
+The built-in Install and Rescue spaces also request it, so their prompt or
+menu replaces Caelum's log once it draws. This applies to both unmounted and
+pool-backed Rescue, including fallback from a rejected configuration.
 After successful initial launch, the presenter selects that space once it has
 nonblank terminal content or a validated submitted graphics frame. A silent
 startup stays on Caelum. Creation or initial-launch failure leaves Caelum active
@@ -447,8 +448,10 @@ or after lost continuity is not a fresh press. Manual tab/layer choices win and
 there is no retry. This boot policy grants no focus right to ordinary children.
 
 The shared `libconfig` schema and plan validation admit `focus` for boot init
-and `config validate`. More than one `focus = true` is a configuration error: the configuration is rejected and the rescue space starts,
-without focus. Omitting focus keeps Caelum active.
+and `config validate`. More than one `focus = true` is a configuration error:
+the configuration is rejected and the built-in Rescue starts with its own
+boot-focus request. Omitting focus from valid configured spaces keeps Caelum
+active.
 
 ## Native disk configuration and mounting
 
