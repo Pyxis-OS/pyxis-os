@@ -209,6 +209,64 @@ of status. Existing launch/pages/IPC controls must not materially regress withou
 attribution and chronium's decision; #1588 is not a waiver for new regressions.
 No new benchmark framework or implicit fault-injection/native interruption scope.
 
+## Task 4 scope — awaiting decisions
+
+Inspected main `8ff1658c0` after task 3, with userland `c21fe9412fc4`.
+Kernel creation/mapping/release and withdrawal are delivered. The SDK currently
+exposes private MEMORY helpers only; bundle vocabulary accepts `memory/manage`.
+Boot-init's service inventory and the session/shell ordinary child grants narrow
+MEMORY to MANAGE. The existing trusted launch-source inventory, including exact
+held shell/Lua interpreters, is the route for declared child authority.
+
+No task-4 implementation has started. Two choices shape it:
+
+1. **Where creation is available — default: a private declared launch source,
+   without another space switch.** Stock trusted boot-init/session/mux/Remote
+   handoffs retain CREATE_SHARED in their launch-source inventory. Bundle
+   declarations add `memory/create_shared`; a program needing libc allocation
+   and region creation requests `rights: ["manage", "create_shared"]`.
+   Selecting the new right uses only that held source and normal attenuation.
+   Ordinary native launches and existing MANAGE-only manifests keep their
+   current rights; undeclared creation is not installed. Exact held interpreters
+   preserve the source under the existing launch-inventory rules, not by
+   granting it to arbitrary children. No helper mints authority, no new
+   `shared_memory = true` space policy, and no default application manifest
+   gains creation. Missing required authority refuses bundle preparation.
+   The alternative requiring a separate per-space opt-in needs an explicit
+   policy decision rather than being inferred from JIT.
+2. **First consumer — default: an opt-in `shared-min` SDK example bundle.** A
+   parent reads stdin in bounded reusable chunks into one fixed region. Its
+   worker maps a READ-only grant, counts bytes/newlines, and returns counts via
+   existing endpoints; the payload is shared, not copied into endpoint messages.
+   The parent waits for ownership acknowledgement before reusing the buffer
+   and joins actual worker completion before final release. The input can be
+   longer than the buffer. This exercises real streaming input and cross-process
+   ownership without changing an existing application's protocol. Build it as
+   an example target and ship its source/manifest beside the other SDK examples;
+   do not add it to the default archive or release catalog. It is not a new
+   benchmark framework or compositor interface.
+
+The SDK slice adds explicit-handle libpyxis create/map helpers beside native
+MEMORY release and a `pyxis/shared_memory.h` libc extension using the existing
+errno mapping. They borrow supplied grants, return owned region handles/view
+descriptors, and never discover extra authority, retry uncertain operations,
+automatically unmap on handle close, or change malloc. Native helpers preserve
+OUTCOME_UNKNOWN; libc documents its existing EIO mapping and the no-retry rule.
+The kernel's fixed-view/lifetime contract remains authoritative. No POSIX
+shm/mmap facade or process-shared libc lock is introduced.
+
+After these choices, capture a fresh before-code launch/pages/IPC control boot
+with the existing tools on this main, then repeat matched controls after the
+startup/launch changes. Build the SDK and ordinary userland; qualify the example,
+missing creation authority, READ-only worker mapping and cleanup in 1/4-CPU
+QEMU. No new native/PXE action is authorized by this scope note. Task 5 retains
+its coordinated native consumer/performance qualification.
+
+Delivery: focused userland SDK/libc and declared-grant/example PRs before the
+parent integration pins their published heads. The parent updates interface and
+usage docs and task 4's checkbox; no compiler-container change is expected.
+Stop for any further material choice when reached.
+
 ## You should know
 
 Shared views can outlive creator/handle close. Read-only does not mean immutable.
