@@ -195,7 +195,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   if (!install && strlen(image_uri) == sizeof(stock_boot_init_uri) - 1 &&
       !memcmp(image_uri, stock_boot_init_uri, sizeof(stock_boot_init_uri))) {
     system_info_rights |= SYSTEM_INFO_RIGHT_SET_HOSTNAME_ONCE;
-    /* Explicit trusted bootstrap authority; ordinary MANAGE grants stay private. */
+    /* Only trusted bootstrap receives the shared-region creation source. */
     memory_rights |= MEMORY_RIGHT_CREATE_SHARED;
     input_policy = input_policy_create();
     if (!input_policy || capability_install(&process->capabilities, input_policy,
@@ -392,7 +392,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   launcher = NULL; /* The process's grants now own the stateless services. */
 
   struct process_environment_entry entries[41] = {
-    {"memory", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, memory_handle, 0},
+    {"memory", ENVIRONMENT_CAP,
+      (memory_rights & MEMORY_RIGHT_CREATE_SHARED) ? 0 : ENVIRONMENT_EXPORTED, memory_handle, 0},
     {"threads", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, threads_handle, 0},
     {"launcher", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, launcher_handle, 0},
     {"clock", ENVIRONMENT_CAP, ENVIRONMENT_EXPORTED, clock_handle, 0},

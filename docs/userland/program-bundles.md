@@ -139,7 +139,7 @@ interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 
 | Resource | Rights |
 | --- | --- |
-| `memory` | `manage` |
+| `memory` | `manage`, `create_shared` |
 | `jit` | `manage` (explicit generated-code authority) |
 | `threads` | `manage` |
 | `keyboard`, `pointer` | `input` |
@@ -164,6 +164,36 @@ interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 
 Programs using libc allocation request `memory/manage` under its documented
 `memory` startup name; declaring an alias does not rewrite libc service lookups.
+
+Shared-region creation separately declares `memory/create_shared`. A program
+using allocation and creation requests both on its normal runtime binding:
+
+```json
+{"name":"memory","resource":"memory","rights":["manage","create_shared"],"required":true}
+```
+
+Trusted boot-init/session/mux/Remote handoffs retain the held constructor
+privately; no per-space switch enables it. Stock shell, Lua and Lua 5.1 bundles
+keep their required MANAGE-only `memory` and explicitly declare a separate
+optional launcher source:
+
+```json
+{"name":"memory_create_shared","resource":"memory","rights":["manage","create_shared"],"required":false}
+```
+
+Creation requests select that held source when present, otherwise a held
+canonical MEMORY grant. Preparation requires native MEMORY with no transport
+and attenuates one source to the declared rights; it never combines grants or
+mints missing authority. A creation-bearing result stays private and can supply
+another explicit declaration. Exact held native interpreter continuations
+preserve their captured source inventory; interpreter bundles retain the source
+through the optional declaration above. Ordinary native children and existing
+MANAGE-only declarations gain no creation right. Explicit native grant lists
+can still delegate held creation or region authority without changing a default
+profile. Missing optional authority is omitted; missing required authority
+refuses preparation. See
+[shared memory](../interfaces/shared-memory.md) for SDK helpers and the opt-in
+`shared-min` example; task 4 runtime qualification remains pending.
 
 Generated-code consumers separately declare `jit/manage`. Trusted launchers have
 a private source only when their space opts into `jit = true`; the live image's

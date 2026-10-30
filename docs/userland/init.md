@@ -61,6 +61,11 @@ directory as the `ram` resource, the HOST and native mount authority when
 present, and, on the install entry, the raw installer resources. Arguments add `--installed` when a disk is bound,
 `--pool N` for its `mount.pool` or `--pool-malformed` when that value is
 malformed, and `--default-config` for the rescue entry.
+
+The stock trusted boot-init entry holds private MEMORY MANAGE and CREATE_SHARED
+authority. This does not widen ordinary initial MANAGE grants; see
+[shared memory](../interfaces/shared-memory.md).
+
 `remote.beacon` adds `--remote-beacon NAME`. The name is 1–63 printable ASCII
 bytes without spaces, compared case-sensitively. Boot init supplies it only to
 the configured space named `remote`, together with separate BROADCAST-only
@@ -771,6 +776,16 @@ directory its start selects and the initial environment. Space configuration
 chooses which trusted init runs, its roots and whether to supply `child_launcher`;
 it is not an authority ceiling. A space name or CPU does not grant workload
 authority.
+
+Stock boot-init/session/mux/Remote handoffs retain held shared-memory creation
+authority as a private launch source, without another space setting. Shell and
+Lua bundles explicitly request the optional private `memory_create_shared`
+binding with `memory/manage` plus `memory/create_shared`; their required ordinary
+`memory` binding stays MANAGE-only. Exact held interpreter continuations preserve
+the source under the existing inventory rules. Ordinary native child profiles
+do not add creation; bundles receive it only through an explicit declaration,
+and required declarations refuse when the source is absent. See
+[bundle declarations](program-bundles.md) for attenuation and optional omission.
 
 Mount authority stays with boot init; the selected directory binding list travels
 through session, service and remote-server handoff and ordinary child launch.
