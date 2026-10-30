@@ -39,8 +39,8 @@ with the launcher work; this checklist distinguishes libc from that dependency.
   from the integration PR).
 - [ ] Common limit-reason wiring and coordinated native count/stack admission.
 - [x] Per-item one/four-CPU QEMU qualification and SDK/C++/SDL builds.
-- [ ] Quiet matched existing-tool measurements; load-affected samples retained
-  without a performance conclusion.
+- [x] Quiet matched existing-tool measurements after the concurrent build ended;
+  earlier load-affected samples retained without a performance conclusion.
 
 Kernel files and function ownership are sent to the orchestrator before edits;
 no independent launcher/process changes are implied by the libc delivery.
@@ -48,7 +48,7 @@ The SDL detached-thread no-op is a separate existing lifetime issue, not fixed
 or qualified by removing registry limits.
 
 The userland/ports work is pushed as draft PRs pending common limit reasons and
-quiet measurement. The current kernel still enforces 256 native task-storage
+remaining kernel/ABI coordination. The current kernel still enforces 256 native task-storage
 records; tests above that count await the coordinated kernel slice. Stopped raw
 context value-release ownership has source review; no allocator fault injection
 or native qualification is claimed. See the
