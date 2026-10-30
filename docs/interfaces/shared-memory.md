@@ -5,8 +5,10 @@ map R/NX or RW/NX. The public kernel interface is in
 [shared_memory.h](../../include/abi/shared_memory.h) and
 [memory.h](../../include/abi/memory.h). The SDK provides explicit-handle helpers,
 bundle declarations select held creation authority, and an opt-in shared-buffer
-example supplies the first application consumer. Qualification and remaining
-native checks are recorded in the [milestone](../wip/shared-memory.md#delivery-tasks).
+example supplies the first application consumer.
+[Kernel ownership](../kernel/shared-memory.md) describes withdrawal and retirement;
+the [qualification record](../development/experiments/shared-memory.md) separates
+QEMU, native evidence and remaining limits.
 
 ## Authority and operations
 
@@ -17,7 +19,7 @@ native checks are recorded in the [milestone](../wip/shared-memory.md#delivery-t
 | MEMORY RELEASE_RESERVATION | Exact identity in the calling process | Status only; MEMORY MANAGE required; removes that view without freeing object-owned frames |
 | COPY / DESCRIBE | Existing capability ABI | Normal attenuation or provider-free fixed-size metadata; no physical/object identity |
 
-CREATE_SHARED is independent of MANAGE. The trusted stock boot-init declaration
+CREATE_SHARED is independent of MANAGE. The normal trusted stock boot-init declaration
 explicitly holds both; existing application MANAGE grants gain no creation
 right. Receiving or mapping a region requires no creation authority. Explicit
 unmap requires the caller's own MEMORY MANAGE, including after the region handle
@@ -30,6 +32,8 @@ source with `memory/manage` plus `memory/create_shared`. A bundle receives
 creation only when it declares it; ordinary native children and MANAGE-only
 manifests keep their existing rights. Missing required authority refuses preparation. See
 [bundle declarations](../userland/program-bundles.md) for source selection.
+
+View identities are process-local and never reused within the process.
 
 CREATE rounds up to whole pages and publishes nothing until the entire backing
 is zeroed, including padding. Frames need not be contiguous. MAP chooses a
@@ -100,8 +104,9 @@ the view. An already-started operation grants no exemption to this registration:
 CUT either prevents enrollment or includes the view in withdrawal. All records
 and the reference needed for uncertain retirement are reserved before exposure.
 
-Explicit CUT success is an unmap fence for every selected mapping. It closes
-each affected process's admission, joins any preceding private mutation/reply,
+Explicit CUT success is an unmap fence for every selected mapping. Withdrawal is
+branch-local: independent branches and already-copied bytes remain unaffected.
+It closes each affected process's admission, joins any preceding private mutation/reply,
 and drains actual roots and mapping borrowers before PTE changes. Existing
 fixed RAM actors make nonblocking progress; one process mutation is owned at a
 time, without waiting while holding another. Private-root departure/reload and
@@ -109,7 +114,8 @@ non-reused generation proofs apply; a shared-kernel flush is no substitute.
 No per-message mapping checks or new worker are added.
 
 One absolute one-second observation budget covers the explicit CUT, not one
-budget per target. Completion and uncertainty are elected under the same guard:
+budget per target; it is not a guaranteed syscall-return deadline. Completion and
+uncertainty are elected under the same guard:
 completion that wins first can return OK; elected uncertainty stays
 OUTCOME_UNKNOWN, including on repeated CUT. Unconfirmed withdrawal requests
 termination of affected processes and quarantines uncertain backing until reboot.
@@ -158,7 +164,8 @@ does not double-charge, retain a process or add a group cleanup join. Queue
 acceptance and process completion never claim those frames were freed.
 
 Accounting is not a hard quota or RAM reservation. No general process/space RAM
-isolation, FILE-retention budget reuse or JIT budget reuse is added. Kernel
+isolation, FILE-retention budget reuse or JIT budget reuse is added; see the
+[budget limit](https://git.internal/PyxisOS/pyxis-os/issues/1655). Kernel
 snapshots distinguish physical, virtual-view, shared-record and private-table
 metadata; allocator overhead is not claimed as part of record-byte gauges.
 
@@ -176,4 +183,5 @@ source inspection, ordinary builds, QEMU behavior, debugger observations and
 native shared-buffer behavior and existing-path controls. The native vela run
 checks shared-min counts through joined cleanup; it does not exercise native
 CUT/races or isolate CREATE/MAP cost. No lost-CPU/ACK or allocator fault injection
-is claimed.
+is claimed; those checks remain
+[deferred qualification](https://git.internal/PyxisOS/pyxis-os/issues/1656).

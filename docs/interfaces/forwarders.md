@@ -108,7 +108,10 @@ Native queued operations need a before-effects boundary and readiness waits
 must observe cut. Creation and returned-child derivation must preflight
 allocation before effects. BSP owns allocation and destruction; guards never
 span allocation, callbacks or waits. Admitted operations own storage separately
-from logical grant authority. No shared-memory unmapping is introduced.
+from logical grant authority. Shared mappings additionally have persistent
+lineage enrollment and [owned withdrawal](shared-memory.md#source-lineage-and-lifetime):
+successful explicit CUT joins unmapping; automatic close queues it. These rules
+do not change non-mapping CUT outcomes.
 
 Ordinary COPY/launch/attachment capture preserves the wrapper. Operation
 resolution instead pins a target and flattened ancestors; RETARGET cannot

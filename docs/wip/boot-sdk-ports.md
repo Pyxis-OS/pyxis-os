@@ -115,11 +115,11 @@ workers and native hardware qualification remain open; hosted Rust remains later
 exact held shell and standalone Lua 5.5/5.1, with shared source selection and
 shell-equivalent lifetime. Embeddings and captured jobs retain their profiles.
 
-[Shared memory](shared-memory.md): assigned to Codex beta (chronium, 2026-10-29).
-Accepted fixed native regions, declared creation authority, branch-local mapping
-revocation and creator-independent accounting; baseline precedes implementation.
-Irrecoverably uncertain withdrawal terminates affected processes and quarantines
-only uncertain backing/frames. GPU/compositor integration remains separate.
+[Shared memory](../kernel/shared-memory.md): implemented fixed native RAM regions,
+declared creation authority, branch-local mapping withdrawal and origin accounting.
+SDK/shared-min pass QEMU checks; the native vela consumer also passes. Hard-budget
+and exceptional qualification limits are linked from the reference. GPU/compositor
+work is separate.
 
 [Space editor](space-editor.md): accepted and assigned to claude (chronium,
 2026-10-29). A Go/tview `spaces` program edits installed `boot.lua` spaces,
