@@ -83,28 +83,30 @@ leaving out empty and all-space lines and a repeat of the line before. A
 
 **Saved history.** Lines are saved in `home://.history`, one file per home,
 shared by every shell of every space that can write that home.
-- **Loading:** a shell loads the newest 100 saved entries when it starts. It
-  doesn't see lines other running shells save later; a new shell, including a
-  `session` successor, picks them up.
-- **Saving:** each line the shell records is saved before it runs. The shell
-  merges it into the newest file contents, writes them to a new
-  `.history.HEX` file, renames that over `.history` and syncs the file.
-- **Concurrent shells:** they interleave in the order they saved. Two saves
-  within the same few milliseconds can lose one line, because the later
-  rename wins.
-- **Crashes:** a crash or kill loses at most the line being saved. It may leave
-  one `.history.HEX` file, which is safe to delete when no shell is running.
-- **Sync:** a native volume writes back the moved file before the replacing
-  rename, and syncing that file commits both without writing back other cached
-  files. A RAM home has nothing to make durable.
+- **Loading:** a shell reads `.history` backwards from its end, in 4 KiB steps,
+  until it has the newest 100 valid entries, so it reads a few kilobytes
+  however long the file is. It doesn't see lines other running shells save
+  later; a new shell, including a `session` successor, picks them up.
+- **Saving:** each line the shell records is saved before it runs, as one
+  `FILE_APPEND` of the line and its LF to `.history` (created when missing),
+  followed by a sync of the file. Nothing is read, trimmed or replaced.
+- **Concurrent shells:** an append picks the end of the file and writes the
+  line in one mutation of that file, and a line is far below the 4080 bytes one
+  append carries. Lines from different shells therefore land whole and in the
+  order the appends complete; none is lost, overwritten or split by another.
+- **Crashes and full volumes:** a crash or kill loses at most the line being
+  saved. A short append (a full volume) is retried once for the rest of the
+  line, then reported as a failed save. The unterminated tail it may leave is
+  ignored when loading, but the next line saved joins it into one entry that is
+  skipped or, if both parts are printable, recalled as a single odd line.
 - **Private lines:** a line starting with a space stays in memory, so Up still
   recalls it, but is never saved.
 
 **File format.** One entry per line, ending in LF, printable ASCII and at most
 1023 bytes.
-- **Bounds:** the file keeps the newest 1000 entries within 64 KiB.
-- **Loading:** it skips anything else, and the next save rewrites the file
-  without it.
+- **Bounds:** none. The file only grows; delete it, or edit it while no shell
+  is saving, to shorten it. Only the newest 100 entries are loaded into memory.
+- **Loading:** it skips anything else and leaves it in the file.
 
 **No writable home.** A space without `home://`, or with a read-only one such
 as Read-only's, still loads what it can read but saves nothing, without a
