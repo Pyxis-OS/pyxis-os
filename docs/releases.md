@@ -172,6 +172,11 @@ Release notes:
 - **Known issues:**
   - A legacy Coexist install made by 0.0.8 or 0.0.9 cannot Update with the 0.0.10
     ISO. This is fixed after the release (#1624).
+  - The 0.0.10 ISO's Update fails when the installed package set includes a
+    package over 64 MiB, such as `clang-hosted` (281 MB), because the installer
+    held each download in a capped RAM snapshot. The cap is removed after the
+    release (#1624). Installing `clang-hosted` with `pkg install` on a running
+    0.0.10 system is not affected.
   - Installing or updating onto an NVMe disk from the ISO needs `nvme.write=1` on
     the kernel command line; NVMe writes are off by default. 0.0.11 turns them on by
     default.
