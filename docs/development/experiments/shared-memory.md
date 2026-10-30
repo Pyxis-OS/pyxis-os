@@ -60,7 +60,8 @@ inputs, existing collector adaptation and full raw records:
 `python3 run_baseline.py 1` or `python3 run_baseline.py 4` from that directory
 with fresh output paths. Keep identical control bytes for matched after-runs;
 no repeated runs merely to increase sample count. Shared-memory behavior and
-native qualification remain tasks of the [milestone](../../wip/shared-memory.md).
+native qualification are separate from these controls; see the
+[implemented interface](../../interfaces/shared-memory.md).
 
 ## Refreshed common base after process listing — 2026-10-29
 
@@ -280,8 +281,8 @@ no native/PXE action or new compiler container.
 
 ## Task 4 SDK, declared grants and shared-min — 2026-10-30
 
-All task-4 authority and example choices are accepted in the
-[milestone](../../wip/shared-memory.md#task-4-scope--accepted-chronium-2026-10-30).
+The task-4 authority and example contracts are documented in the
+[implemented interface](../../interfaces/shared-memory.md).
 The SDK helpers borrow explicit grants; ordinary native children keep MANAGE.
 Stock shell/Lua bundles explicitly declare their separate optional private
 constructor source. Only declaring children receive creation authority.
@@ -391,7 +392,7 @@ Local receipts are under `/home/chronium/build/shared-memory-task4/`:
 `integration/functional-final/` and `integration/functional-environment/`.
 The failed fixture inputs are preserved under the latter's `previous-inputs/`.
 Small handoff reports live under `/shared/present/shared-memory/task4/`.
-Native consumer/shared-buffer costs remain milestone task 5.
+Native consumer results follow in the task-5 section below.
 
 ## Task 5 native consumer — vela, 2026-10-30
 
