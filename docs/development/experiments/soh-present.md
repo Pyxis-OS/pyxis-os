@@ -307,9 +307,9 @@ Reports: `/shared/present/soh-frame-limiter/NATIVE-WAIT-ATTRIBUTION-RESULTS.md` 
 The collector used238.76s host elapsed; last capture ended at212.548s target
 clock, within the separately approved840s collection/900s visible window.
 
-### Next change proposed — explicit fixed THREAD packet lease
+### Accepted change — explicit fixed THREAD packet lease
 
-Pending chronium's decision: use one explicit mapping-read lease for the fixed
+Accepted (chronium, 2026-10-30): use one explicit mapping-read lease for the fixed
 ADDRESS_WAIT/WAKE packet, acquired after capability resolution and before header
 copy. Preserve separate header/body/word/reply checks, rights and error order,
 incarnations, atomic word reload, deadlines, CUT/stop/commit points and completion
@@ -323,4 +323,6 @@ one borrow acquire/release pair and syscall leave. Admission and borrower proofs
 remain distinct. Other protocols and non-wait THREAD operations keep their
 existing handling. No spin, scheduler, worker or Mesa policy change is proposed.
 VM-range indexing remains a separate possible follow-up after remeasurement.
-This paragraph authorizes no implementation; the full proposal is in the report.
+Implementation is authorized with all failures releasing exactly once. QEMU
+primitive qualification precedes native work; each screen-on native window needs
+chronium's separate approval. No spin, scheduler or Mesa policy change is included.
