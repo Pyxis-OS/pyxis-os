@@ -12,11 +12,10 @@
 #define DIRECTORY_PACKAGE_ROOTS UINT64_C(17)
 #define DIRECTORY_PACKAGE_ROOTS_SELECT UINT64_C(18)
 
-#define PACKAGE_COMMANDS_LIMIT 256u
-/* A capture holds the whole index in kernel memory, so its file is bounded
- * instead of the number of packages, at a quarter of the kernel's package
- * view budget; pkg refuses to publish a larger set. */
-#define PACKAGE_COMMAND_INDEX_MAX_BYTES (UINT64_C(1) << 20)
+/* A capture holds the whole index in kernel memory. Neither the number of
+ * commands nor the size of the file is limited by a constant: the bound is the
+ * kernel's package-view budget, derived from installed RAM and reported in
+ * package_command_info.budget, and a capture that does not fit is CALL_LIMIT. */
 #define PACKAGE_COMMAND_NAME_MAX 255u
 #define PACKAGE_COMMAND_ID_MAX 64u
 #define PACKAGE_COMMAND_VERSION_MAX 64u
@@ -53,8 +52,7 @@ struct package_command_index_header {
  *
  * A root record names one installed package's tree, of any kind: kind is
  * DIRECTORY_KIND_DIRECTORY, name equals id, and path, command and abi are
- * empty. All reserved bytes are zero. The whole file is at most
- * PACKAGE_COMMAND_INDEX_MAX_BYTES. */
+ * empty. All reserved bytes are zero. */
 struct package_command_record {
   uint64_t kind;
   char name[256];
@@ -73,7 +71,9 @@ struct package_command_info {
   uint64_t set; /* Zero means the captured empty set; live views report zero. */
   uint64_t flags;
   uint64_t count; /* Fixed views only. */
-  uint64_t limit;
+  /* Bytes of kernel memory the package views and the indexes they capture may
+   * hold together (one 512th of installed RAM, at least 4 MiB). */
+  uint64_t budget;
 };
 
 /* These operations use a complete directory_message. PACKAGE_COMMANDS creates

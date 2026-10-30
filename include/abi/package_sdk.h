@@ -8,9 +8,8 @@
 /* The npfs volume name the sdk view requires, the packages volume. */
 #define PACKAGE_SDK_VOLUME "packages"
 
-/* A capture holds the whole index in kernel memory, so its file is bounded;
- * pkg refuses to publish a set whose index is larger. */
-#define PACKAGE_SDK_INDEX_MAX_BYTES (UINT64_C(1) << 20)
+/* A capture holds the whole index in kernel memory, bounded by the package-view
+ * budget (package_command_info.budget), not by a constant. */
 #define PACKAGE_SDK_PATH_MAX PACKAGE_COMMAND_PATH_MAX
 /* Eight bytes: PXSDK and three zeros. */
 #define PACKAGE_SDK_INDEX_MAGIC "PXSDK\0\0"

@@ -358,12 +358,14 @@ of any kind, are sorted by ID and carry only the directory kind, the ID as name,
 and the version; the two lists are separate, so a root may share a command's
 name. Strings have zero-padded tails and reserved bytes are zero. No trailing
 data is allowed. A command view refuses any other header as a damaged
-projection. At most 256 commands are admitted per set. The number of root
-records is not fixed: the whole file is at most
-`PACKAGE_COMMAND_INDEX_MAX_BYTES` (1 MiB), a quarter of the 4 MiB kernel budget
-that package views and their captured indexes share, and `pkg` refuses to
-publish a larger set (decisions 56 and 58 of
-[the `sdk://` view](../wip/sdk-view.md)).
+projection. Neither the number of commands nor the number of root records is
+fixed, and no file-size constant bounds the file: the kernel holds a captured
+index in memory, and the bound is its package-view budget, one 512th of installed
+RAM and at least 4 MiB, shared by the command index, the `sdk://` index and any
+older capture still held. `package_command_info.budget` reports it. `pkg` reads
+the budget before the review and refuses a set whose two indexes would not fit,
+naming the sizes and the limit; a capture the kernel cannot fit is `CALL_LIMIT`.
+The record size is unchanged, so a set written before this change stays valid.
 
 Each new set also has `sets/N.sdk`, the index of the [`sdk://`
 view](#reaching-package-files), built from the inventories of the set's `dev`
@@ -382,8 +384,9 @@ package count, file count, string bytes, zero reserved), then 136-byte package
 records (ID and version, sorted by ID), 16-byte file records (path offset,
 path length, package index, zero reserved) sorted by path, and the paths, each
 followed by NUL, in record order. Directories are implied by the paths. The
-file is at most `PACKAGE_SDK_INDEX_MAX_BYTES` (1 MiB), from the same budget as
-the command index, and `pkg` refuses to publish a larger set. The kernel refuses
+file has no size constant: it counts against the same package-view budget as the
+command index, and only the format's own fields bound it (at most 2^24 files, 32-bit
+counts). The kernel refuses
 any other shape as a damaged index, including a duplicate path or a path that
 is both a file and a directory; `pkg` refuses those conflicts first, naming the
 packages ([layout](../../include/abi/package_sdk.h)).
@@ -409,8 +412,8 @@ carries an `abi`. The resolver returns `CALL_DENIED`;
 which the shell prints. The Lua and libuv launchers (Lua jobs, Neovim's `:!` and
 `clangd`) still call the plain forms and report only the status until they
 adopt these.
-The [ABI](../../include/abi/package_commands.h) defines the field layout; current
-admission is 256 exports per set. It is data, not executable configuration.
+The [ABI](../../include/abi/package_commands.h) defines the field layout; the number of
+exports is limited only by the package-view budget. It is data, not executable configuration.
 
 Old nonempty sets do not silently acquire exports. Explicit `pkg reindex`, with
 management authority and the writer lock, verifies the active packages and
@@ -677,12 +680,12 @@ status when a response supplied one).
 
 Fetches are serial GETs through a captured provider root and a configured
 [HTTP endpoint](http-transactions.md#configured-endpoints). Each index defaults
-to 30 seconds; an archive of `size` bytes gets
-`30 + ceil(size / 262144)` seconds. A derived duration above 86,400 seconds
-refuses before fetching. The global `--timeout SECONDS` option, before the
-command, accepts 1–86,400 and overrides the duration for each fetch, including
-indexes. One deadline covers redirects and completed snapshot creation; no
-retry, alternate downloader or successful partial archive is used.
+to an inactivity window of 30 seconds, as does an archive of any size: a fetch fails
+when no data has arrived for that long (`no data for 30 s (idle timeout)`), and a
+transfer that keeps arriving has no time limit. The global `--timeout SECONDS` option,
+before the command, sets the window for each fetch, including indexes, with no upper
+bound. The window covers redirects and completed snapshot creation; no retry,
+alternate downloader or successful partial archive is used.
 
 The completed READ-only FILE remains held through archive verification and
 extraction, and is closed before the next fetch. Installed HTTP uses a separate

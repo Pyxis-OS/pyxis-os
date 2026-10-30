@@ -80,7 +80,11 @@ accepted by the owner on 2026-10-15, not the final credential design.
 `--timeout SECONDS` is a nonzero integer duration, default 30 s. Each READ/REMOVE
 starts a fresh deadline at admission; WRITE starts at OPEN, including staging.
 Use the earlier of now plus duration and the caller's nonzero absolute deadline;
-overflow fails. No creation-time expiry. Issuance has a separate bounded private
+overflow fails. An endpoint issued with `HTTP_ENDPOINT_IDLE_TIMEOUT` reads the
+duration as an inactivity window instead: the deadline moves forward to the last
+data received plus the window, so only a stalled transfer fails and a slow one that
+stays alive is bounded only by the caller's absolute deadline. A response that has
+been received and is draining to staging keeps the window open per storage step. No creation-time expiry. Issuance has a separate bounded private
 call; native header I/O keeps its native waits. All three defaults were accepted
 by the owner on 2026-10-15.
 
@@ -123,8 +127,8 @@ also discarded on crossing. Request fields are erased on release, never logged.
 
 HTTP→HTTPS is allowed; HTTPS→HTTP is refused. Custom trust stays origin-bound.
 One explicitly provisioned TLS runtime serves the instance; redirects never
-acquire caller/destination bindings or trust. One absolute deadline (30 s default,
-explicit longer values allowed) covers staging, all hops and spooling, with
+acquire caller/destination bindings or trust. One deadline (a 30 s total by default,
+explicit longer values allowed; an inactivity window for an idle-timeout endpoint) covers staging, all hops and spooling, with
 aggregate framing bounds. No transport-error retry or uncertain mutation replay.
 
 Final 2xx succeeds. Invalid framing still fails, including nonempty 205 and

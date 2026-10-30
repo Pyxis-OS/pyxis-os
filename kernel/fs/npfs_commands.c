@@ -252,11 +252,11 @@ static enum call_status capture(struct npfs_store_context *context, struct npfs_
   if (set) {
     status = npfs_package_set_file(context, root, set, ".commands", &index);
     if (status != CALL_OK) return status;
-    /* The view is sized from the set; only the index's byte bound limits it. */
-    status = npfs_store_size(index) > PACKAGE_COMMAND_INDEX_MAX_BYTES ? CALL_LIMIT :
-        npfs_package_read(context, index, 0, &header, sizeof(header));
+    /* The view is sized from the set; only the package-view budget limits it,
+     * at the allocation below. */
+    status = npfs_package_read(context, index, 0, &header, sizeof(header));
     if (status == CALL_OK && (memcmp(header.magic, PACKAGE_COMMAND_INDEX_MAGIC, sizeof(header.magic)) ||
-        header.set != set || header.count > PACKAGE_COMMANDS_LIMIT || header.reserved ||
+        header.set != set || header.reserved ||
         header.record_size != sizeof(struct package_command_record) ||
         npfs_store_size(index) != sizeof(header) +
             ((uint64_t)header.count + header.roots) * sizeof(struct package_command_record))) {
@@ -304,7 +304,7 @@ static void info(struct npfs_node *node, struct package_command_view *view,
   npfs_store_file_info(node->inode, &identity);
   *out = (struct package_command_info){.set = view->set, .count = view->count,
       .origin = identity.domain, .flags = view->live ? PACKAGE_COMMAND_VIEW_LIVE : 0,
-      .limit = PACKAGE_COMMANDS_LIMIT};
+      .budget = npfs_package_budget()};
   memcpy(out->pool_id, backing.pool_id, sizeof(out->pool_id));
   memcpy(out->volume_id, backing.volume_id, sizeof(out->volume_id));
 }

@@ -38,6 +38,25 @@ property of a device, a format or the memory the machine has, and says so.
 - Shell history on disk has no cap: each line is appended and only the tail
   is read ([shell](../userland/shell.md)).
 
+## Package indexes and fetching
+
+The second package. The package command index (`sets/N.commands`) and the `sdk://`
+index (`sets/N.sdk`) are held whole in kernel memory. They were limited to 256
+commands and 1 MiB each out of a fixed 4 MiB, which also capped the number of
+installed packages with files at about 1,080, and the limits were reported only after
+every archive was downloaded. They are now bounded by one thing: the kernel's package-view
+memory, one 512th of installed RAM and at least 4 MiB, reported in
+`package_command_info.budget`. `pkg` checks the two indexes against it before the review and
+names the sizes and the limit; the file format is unchanged, so a set staged by an older
+`pkg` stays valid. The size of a set's indexes depends on each package's manifest, which `pkg`
+can read only after extraction; a refusal that needs earlier knowledge would put counts in
+the repository index, which is not done here.
+
+A fetch has an inactivity window, not a total time derived from its size: it fails after 30 s
+without data (`--timeout SECONDS` changes the window and has no upper bound) and a transfer
+that keeps arriving never expires. See [package formats](packages.md#command-projection-and-bootstrap)
+and [HTTP transactions](http-transactions.md).
+
 ## Literal parser
 
 The first package of that work. `userspace/lib/literal.c` limited a document to

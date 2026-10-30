@@ -9,6 +9,9 @@
 #define PACKAGE_VIEW_RIGHTS \
   (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES)
 
+/* Bytes the package views and captured indexes may hold together, from
+ * installed RAM; an allocation past it is CALL_LIMIT. */
+size_t npfs_package_budget(void);
 bool npfs_package_zero(const void *bytes, size_t size);
 /* NUL within SIZE, nonempty unless EMPTY, and zero after the NUL. */
 bool npfs_package_string(const char *bytes, size_t size, bool empty);
