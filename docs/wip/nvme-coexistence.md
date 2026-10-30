@@ -94,8 +94,8 @@ writes disabled. It qualifies no write or coexistence operation.
    the installer prints the entry, including the pool's disk GUID, for the owner to paste; that fallback stays. Firmware-variable
    edits remain excluded.
 3. **Write authority and the internal disk (accepted).** **The kernel, not the
-   installer, enforces the boundary.** NVMe writes are off until an explicit boot
-   option enables them for qualification. When enabled:
+   installer, enforces the boundary.** NVMe writes default on; `nvme.write=0`
+   explicitly disables the driver write path for read-only qualification. When enabled:
    - the installer gets writes only through partition-confined claims on the new pool and on the ESP (the
      interfaces exist on other transports; NVMe admission is still task 3);
    - the GPT is changed by one new kernel operation that only appends one entry

@@ -232,8 +232,8 @@ write, format or erase authority. Compare
 the bound control's OBSERVE identity/geometry with the reviewed plan before
 mutation. The selected-view path supports both Install and Update, and the
 executor stages coexistence payloads through it. These primitives establish
-no native NVMe write qualification; writes remain disabled until the explicit
-boot option enables the device.
+no native NVMe write qualification. For read-only qualification use
+`nvme.write=0`; the driver now enables its write path by default.
 
 ## Mounts, consent and limits
 
