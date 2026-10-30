@@ -9,8 +9,8 @@ runbook, and never sign or tag.
 
 - **No release branches.** A release ships whatever is on `main` at its tag
   (chronium, 2026-10-23). The tag is on the merge commit of the pull request that
-  adds the version's entry to `docs/releases.md` and its name to
-  `boot/os-release.lua`.
+  adds the version's entry to `docs/releases.md`. The actual tag establishes
+  the release identity; there is no handwritten ABI list.
 - **The ABI is fixed at the tag, not before** (chronium, 2026-10-23). Until the
   tag, `include/abi/` changes in place; at the tag it is that release's ABI
   ([ABI](../interfaces/abi.md)).
@@ -36,12 +36,15 @@ runbook, and never sign or tag.
    Take the content from the pull requests merged since the previous tag in
    pyxis-os, userland and ports; group them rather than listing each.
 2. **Check the ABI.** Compare `include/abi/` and the SDK's exported headers with
-   the previous tag. Run `scripts/check-abi.sh`: it must report that
-   `include/abi/` keeps every line of each listed release. If the public ABI
-   changed, say exactly what in the entry and decide the `abi` list with
-   chronium; if it did not, the entry says the ABI is unchanged.
-3. **Add the ABI name.** Add the version to `boot/os-release.lua` (for example
-   `abi = { "0.0.8", "0.0.9" }`), in the same pull request as the entry.
+   the previous tag. Run `scripts/check-abi.sh`: it reports textual line
+   preservation, the derived development base and any removed header lines.
+   State intentional breaks in the release entry; preserved lines alone do not
+   prove layout or semantic compatibility. The actual release tag provides its
+   own canonical ABI name; development identities are generated from the same
+   comparison ([ABI](../interfaces/abi.md)).
+3. **Review the generated identity.** Run `make build/os-release` in a clean
+   candidate checkout. Before the owner's tag it is `BASE+REV`, not the future
+   release. Do not manufacture a local tag or edit the generated record.
 4. **Update the site inputs.** The site renders `docs/releases.md` and
    `docs/manual/` from the selected ref at build time; nothing is copied by
    hand ([site build](../../site/README.md)).
@@ -65,6 +68,21 @@ representative target programs and make another clean boot after the final
 hop. Include disjoint ABI names and rebuilt bound packages; a same-ABI upgrade
 or a patched starting updater does not prove cross-ABI reachability. Each hop
 has its own review; no whole-route consent survives a reboot.
+
+Before the actual tag, check ordinary development ISO Install and installer
+Update using a separately named sparse repository containing the required
+packages for that exact development revision. Do not publish these builds into
+stock `public` or `releases`. Development builds anchor release routing just
+after their actual release ancestor; an ABI base is not a route position.
+
+Full released/development fallback starts with the real 0.0.11 release. Before
+that tag, development builds provide only their exact `0.0.11+REV` ABI. After
+chronium tags 0.0.11, qualify a header-compatible descendant admitting both
+0.0.11 and its own exact version, including repository-local selection and
+static launcher consumers. The final unchanged shipped-0.0.10 upgrade gate
+uses that real 0.0.11 tag before publication; a development candidate cannot
+substitute for it. 0.0.11 is the permanent `pyxis` bootstrap; later releases use
+the IDs below.
 
 ## Declaring release checkpoints
 

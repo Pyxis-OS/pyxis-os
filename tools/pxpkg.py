@@ -52,10 +52,8 @@ FIXED_ROOT_NAMES = ("boot", "tmp", "bin", "system", "home", "acpi", "packages", 
 VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+-]{0,63}")
 # A program version is VARIANT+LABEL, so a variant has no "+".
 VARIANT_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.-]{0,63}")
-# An ABI name. For now it is the kernel's build_revision, git rev-parse --short=12
-# (scripts/kernel-build-revision.sh); with dynamic linking it becomes a system
-# library's ABI name, so the field does not assume a revision.
-ABI_PATTERN = re.compile(r"[0-9a-z][0-9a-z.-]{0,63}")
+# Released ABI names and exact development ABIs such as 0.0.11+abcdef012345.
+ABI_PATTERN = re.compile(r"[0-9a-z][0-9a-z.+-]{0,63}")
 REVISION_PATTERN = re.compile(r"[0-9a-f]{12}")
 # Each published install ISO and QEMU image (docs/wip/qemu-image.md) has a line.
 SUMS_LINE = re.compile(r"([0-9a-f]{64})  (pyxis-[0-9a-z][0-9a-z.-]{0,63}\.(?:iso|qcow2))")
@@ -732,6 +730,8 @@ def release_entries(entries):
 
 def release_route_check(entries):
     route = release_entries(entries)
+    if route:
+        stock_abi_check(entries)
     versions = [entry["version"] for entry in route]
     require(len(set(versions)) == len(versions), "the release route repeats a version")
     modern = False
@@ -752,6 +752,14 @@ def release_route_check(entries):
             require(anchor and bootstrap == 1,
                     "publish the permanent pyxis bootstrap checkpoint after 0.0.10 first")
             modern = True
+
+
+def stock_abi_check(entries):
+    # Shipped 0.0.10 validates every entry before filtering for its own ABI.
+    require(all("+" not in entry.get("abi", "") and
+                all("+" not in name for name in entry.get("provides", []))
+                for entry in entries),
+            "stock release catalogs cannot contain development ABIs; use a separate development repository")
 
 
 def release_order_preserved(entries, published):
@@ -1052,28 +1060,23 @@ def build_identity(directory):
     """The ABI a build directory's packages name, and the label of their versions.
 
     The build's os-release decides: a tagged release build names its release's
-    ABI, which its own ABI list must include, and its versions carry the release
-    tag; any other build names its revision, which only that exact build
-    provides. The checkout must be clean and at that revision, so that the label
-    names the commit the bytes were built from."""
+    ABI and its versions carry the release tag. A development package names its
+    full base+REV version as ABI and label. The record must be the generator's
+    current output from a clean checkout, so it cannot claim an edited ABI list
+    or an identity belonging to another source tree."""
     root = Path(directory).resolve()
     record = root / "os-release"
     require(record.is_file(), f"no {record}; build it with make")
     table = parse_literal(record.read_bytes())
     require(isinstance(table, Table), f"{record} must be a table")
-    exact_fields(table, ("revision", "abi"), "os-release", ("release", "signed_floor"))
+    exact_fields(table, ("revision", "abi"), "os-release",
+                 ("release", "version", "upgrade_from", "signed_floor"))
     revision = text_field(table, "revision")
     require(REVISION_PATTERN.fullmatch(revision), f"{root} was not built from a Git checkout")
-    listed = []
-    for name in array(table.field("abi"), "abi"):
-        require(isinstance(name, bytes) and ABI_PATTERN.fullmatch(name.decode("utf-8", errors="replace")),
-                f"{record}: invalid abi entry")
-        listed.append(name.decode())
+    listed = abi_list(table.field("abi"), "os-release abi")
     release = None
     if table.field("release") is not None:
-        release = text_field(table, "release", ABI_PATTERN)
-        require(release_abi(release) in listed,
-                f"release {release}'s ABI {release_abi(release)} is not in its own os-release abi list")
+        release = text_field(table, "release")
 
     def git(*arguments):
         result = subprocess.run(["git", "-C", str(root), *arguments], capture_output=True, text=True)
@@ -1086,16 +1089,20 @@ def build_identity(directory):
     if changes:
         raise PackageError(f"the checkout has local changes, so {revision} would not name "
                            f"these bytes: {changes[0].strip()}")
-    tags = git("tag", "--points-at", "HEAD").split()
-    require(len(tags) <= 1, f"{revision} has several tags: {' '.join(tags)}")
-    if tags:
-        require(ABI_PATTERN.fullmatch(tags[0]), f"tag {tags[0]} is not an ABI name")
-    require(tags == ([release] if release else []),
-            f"{record} names {'release ' + release if release else 'no release'} but HEAD has "
-            f"tags {' '.join(tags) or 'none'}; rebuild it")
+    source = Path(git("rev-parse", "--show-toplevel").strip())
+    generator = Path(__file__).resolve().parent.parent / "scripts/os-release.sh"
+    generated = subprocess.run(["sh", str(generator)], cwd=source, capture_output=True)
+    require(generated.returncode == 0,
+            f"cannot derive build identity: {generated.stderr.decode(errors='replace').strip()}")
+    require(record.read_bytes() == generated.stdout,
+            f"{record} differs from the current generated build identity; rebuild it")
     if release:
+        require(listed == [release_abi(release)],
+                f"release {release} must provide only its canonical ABI")
         return root, release_abi(release), release
-    return root, revision, revision
+    version = text_field(table, "version", VERSION_PATTERN)
+    require(version in listed, f"{record} does not provide its exact development ABI {version}")
+    return root, version, version
 
 
 def recipe_sources(recipe_path, table, build):
@@ -1428,6 +1435,11 @@ def pack(recipe_path, repository, build_directory=None):
     with RepositoryLock(root, exclusive=True):
         clean_leftovers(root)
         entries = load_index(root)
+        previous = read_current(root)
+        if previous:
+            header, _ = load_snapshot(root, previous)
+            if header["repository"] in ("public", "releases"):
+                stock_abi_check([{"abi": abi or "", "provides": provides or []}])
         require(all((e["id"], e["version"]) != (package_id, version) for e in entries),
                 f"{package_id} {version} is already published")
         target = root / archive_path(package_id, version)
@@ -1508,6 +1520,8 @@ def publish(repository, name, signed_at=None, signer=None):
     with RepositoryLock(root, exclusive=True):
         clean_leftovers(root)
         entries = load_index(root)
+        if name in ("public", "releases"):
+            stock_abi_check(entries)
         previous = read_current(root)
         if previous:
             header, published = load_snapshot(root, previous)

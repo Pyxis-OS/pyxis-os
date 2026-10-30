@@ -94,12 +94,13 @@ export DISTRIBUTION
 # The archive's built-in package repository (decisions 65 and 68); empty builds
 # an image with none. The release process sets the release value.
 PACKAGE_REPOSITORY ?= http://192.168.0.213:5245/public/
+PACKAGE_REPOSITORY_NAME ?= public
 # Development repositories are unsigned (decision 72); a release image sets 1.
 PACKAGE_REPOSITORY_SIGNED ?= 0
 # Every image can upgrade from the signed releases repository (decision 74); an
 # empty value leaves it out.
 RELEASE_REPOSITORY ?= https://packages.pyxis.nexus/releases/
-export PACKAGE_REPOSITORY PACKAGE_REPOSITORY_SIGNED RELEASE_REPOSITORY
+export PACKAGE_REPOSITORY PACKAGE_REPOSITORY_NAME PACKAGE_REPOSITORY_SIGNED RELEASE_REPOSITORY
 
 LOG_LEVEL ?= debug
 ifeq ($(LOG_LEVEL),info)
@@ -227,7 +228,7 @@ game-packages: sdk build/os-release
 # One package per program (docs/wip/pkg-upgrade.md, step 2), and the dev
 # packages of sdk:// in packages/dev. packages/base.lua names the base set;
 # every other recipe in those directories is a development package. Each target
-# packs from this build, so its revision or release names the packages' ABI.
+# packs from this build, so its full development version or release names the ABI.
 BASE_PROGRAMS = $(shell $(LUA) -e 'for _, d in ipairs(dofile("packages/base.lua").depends) do print(d.id) end')
 DEVELOPMENT_PROGRAMS = $(filter-out $(BASE_PROGRAMS),$(basename $(notdir $(wildcard packages/programs/*.lua packages/dev/*.lua))))
 PACKAGE_RECIPE = recipe=packages/programs/$$program.lua; [ -f "$$recipe" ] || recipe=packages/dev/$$program.lua
@@ -506,8 +507,8 @@ build/kernel-build-revision.h: scripts/kernel-build-revision.sh FORCE
 
 build/kernel/object/system_info.o: build/kernel-build-revision.h
 
-# Like the revision header, boot://os-release follows HEAD and its tag.
-build/os-release: boot/os-release.lua scripts/os-release.sh scripts/os-release.lua scripts/kernel-build-revision.sh FORCE
+# Identity and provided ABIs follow HEAD, release ancestry and local changes.
+build/os-release: scripts/abi-contract.sh scripts/os-release.sh scripts/os-release.lua scripts/kernel-build-revision.sh FORCE
 	@mkdir -p $(@D)
 	@LUA=$(LUA) ./scripts/os-release.sh > $@.tmp
 	@cmp -s $@.tmp $@ || mv $@.tmp $@

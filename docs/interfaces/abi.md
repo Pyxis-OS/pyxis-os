@@ -1,110 +1,102 @@
-# Kernel ABI and release ABIs
+# Kernel ABI and build versions
 
-The kernel ABI is `include/abi/`. Compatibility between the kernel, libc and
-programs is by that ABI, not by build revision
-([decisions](../wip/pkg-upgrade.md#decided), chronium, 2026-10-22).
+The public kernel ABI is `include/abi/`. Its numbers and layouts determine
+binary compatibility; a build revision alone does not. Release and development
+package identities are generated from the real release ancestry and the shared
+[ABI comparison](../../scripts/abi-contract.sh).
 
-## Stability
+## Release and development identities
 
-- The ABI is stable only at releases (0.0.7, 0.0.8, …). A release's
-  `include/abi/` at its tag is the contract. The next release only adds to it,
-  unless a break is deliberate and listed in the release notes.
-- Between releases the ABI changes in place, and only what a test needs is
-  rebuilt. There are no ABI identities, levels, renumbering, reserved slots or
-  compatibility shims during development.
-- Reply buffers carry their capacity, so ABI structures grow by adding fields.
+A real tagged release provides only its canonical release ABI. For example,
+0.0.11 has `release = "0.0.11"` and `abi = { "0.0.11" }`. An existing letter
+release such as 0.0.11a keeps the 0.0.11 ABI while retaining 0.0.11a as its release
+and package-version label.
 
-## Keeping a release's ABI
-
-A release's ABI is its numbers and layouts, not only its text. Changes that keep
-a listed release follow two conventions, because the [CI check](#ci) sees only
-removed or changed lines:
-
-- **Explicit values.** Every enum member and constant that crosses the ABI has
-  an explicit value. Inserting a member into an implicitly numbered enum
-  renumbers every later member without changing their lines.
-- **Append at the end.** New enum members go after the last member, before any
-  `*_COUNT`, and new structure fields go after the last field. A field inserted
-  in the middle moves every later field without changing their lines.
-- **Growing a reply.** Today a reply's minimum size is its whole structure, and
-  a smaller capacity fails BUFFER_TOO_SMALL. The release change that first
-  grows a reply keeps the old size as the minimum and writes
-  `min(capacity, size)` bytes, so a caller built against the older release
-  still receives the prefix it knows.
-
-The check does not catch a renumbered enum or a moved field. It does catch
-removed and changed lines, including changed comments, and renamed or removed
-headers.
-
-## The release ABI list
-
-`boot/os-release.lua` holds the releases whose ABI the tree still provides:
+A clean development build is named `BASE+REV`, where REV is its 12-hex Git
+revision. The latest actual 0.0.x release tag on the first-parent ancestry is
+the baseline. If the current headers preserve every line of that tag, the build
+provides its released base and its exact development ABI, in that order:
 
 ```lua
 return {
-  abi = { "0.0.8" },
+  version = "0.0.11+abcdef012345",
+  revision = "abcdef012345",
+  abi = { "0.0.11", "0.0.11+abcdef012345" },
+  upgrade_from = "0.0.11",
+  signed_floor = "2026-10-30T12:00:00Z",
 }
 ```
 
-It is the only part of `os-release` that a change edits:
+This example applies after the real 0.0.11 tag exists. When the comparison
+finds removed/changed lines, the next numeric patch base in the 0.0.x series is
+used and only the exact development ABI is provided: a break from 0.0.11 gives
+`0.0.12+REV`, without claiming the unreleased 0.0.12 ABI. This is recomputed from
+the current source; restoring the baseline can restore released compatibility.
+There is no hidden sticky version state or manually maintained ABI list.
 
-- A change that breaks a listed release's ABI removes that release from the list
-  in the same change.
-- A release adds its own name when it is tagged.
+**The reader baseline is 0.0.11.** Released 0.0.10 shell, Lua and Neovim/libuv
+launch paths contain static readers that reject new os-release fields and `+`
+ABI names. Preserving kernel-header lines cannot repair those copies. Before
+the real 0.0.11 tag, new-model builds therefore use `0.0.11+REV` with only that
+exact ABI. Full released-base fallback begins with 0.0.11's rebuilt readers.
+The permanent [checkpoint bootstrap](../development/release-process.md#declaring-release-checkpoints)
+delivers that transition to installed 0.0.10 systems.
 
-**Letter releases** (chronium, 2026-10-22). A letter release such as 0.0.8a
-shares its base release's ABI name: its list keeps `"0.0.8"`, and packages built
-on it name `"0.0.8"`. Its `release` and the packer's version label stay
-`0.0.8a`. The list never names a letter release; generation refuses one.
+## Keeping a released ABI
 
-The list starts empty: main had already changed lines of 0.0.7's and 0.0.7a's
-`include/abi/` when the list was introduced.
+The comparison is textual, including comments; it does not establish layout or
+semantic compatibility. Changes that preserve a released ABI also follow these
+conventions:
 
-## boot://os-release
+- Give every cross-ABI enum member and constant an explicit value. Inserting
+  an implicitly numbered member can renumber others without changing their lines.
+- Append structure fields and enum members rather than inserting them into an
+  existing prefix. Preserve the existing sizes and offsets callers depend on.
+- When growing a reply, keep the old size as the minimum and write
+  `min(capacity, size)` bytes, so an older caller still receives its known prefix.
 
-Archive assembly writes `build/os-release` and places it at `boot://os-release`:
+An intentional break is recorded in the release notes. The next real tag
+freezes that release's ABI. The owner chooses a different numbering progression
+when the project moves beyond the current 0.0.x series.
 
-```lua
-return {
-  release = "0.0.8",
-  revision = "1a2b3c4d5e6f",
-  abi = { "0.0.8" },
-  signed_floor = "2026-10-23T12:00:00Z",
-}
-```
+## Generated os-release
 
-- `release` is the tag at HEAD when the build is of this repository's own
-  checkout, and absent otherwise. Several tags at HEAD, or a tag that is not an
-  ABI name, name no release; the packer refuses to pack such a build.
-- `revision` is the revision of the tree the archive was assembled from. It is
-  empty for a build without Git. The kernel reports its own build revision
-  through `system_info`; the two differ when only the kernel is replaced.
-- `abi` is the source list.
-- `signed_floor` is the UTC commit time of `revision`, absent without Git. pkg
-  accepts no signed index from before it on first contact with a repository
-  ([signed indexes](packages.md#signed-indexes)).
+`make` generates `build/os-release` and archives it as `boot://os-release`.
+There is no handwritten `boot/os-release.lua` input and no local tag substitute.
+The same comparison drives generation and the existing `abi` CI report.
+Fetch actual release tags/history; missing ancestry or ambiguous nearest release
+tags refuse generation rather than inventing a base. A shallow checkout is
+sufficient when the needed release and first-parent path are present.
 
-Readers refuse an `os-release` with any other field or an invalid name: it is
-written and read by the same archive. The running system provides the `abi` list
-plus its own `revision`. `pkg` and
-command launch read it from `boot://os-release` and accept a `program` or
-`toolchain` package whose `abi` is one of those names
-([packages](packages.md)). A package built from a development tree names that
-build's revision and only promises to work on that exact build.
+Real-release records retain `release`, `revision`, `abi` and `signed_floor`.
+Development records use `version` and `upgrade_from` instead of `release`:
 
-## CI
+- `version` is the full development identity, not a release declaration.
+- `revision` remains raw provenance; it is never implicitly added to `abi`.
+  The kernel's `system_info` build revision retains that meaning.
+- `abi` is ordered fallback first, preferred last. Eligibility compares exact
+  names. Within a selected package repository, the rightmost eligible ABI wins;
+  equal-ABI builds retain last-publication order.
+- `upgrade_from` is the actual release ancestor, independent of the ABI base.
+  The [release router](../userland/package-upgrades.md#upgrading-the-release)
+  places a dev build immediately after that entry and honors later checkpoints.
+- `signed_floor` remains the source commit's UTC time. Repository signature,
+  image-floor and accepted-index checks are unchanged.
 
-The `abi` job (`scripts/check-abi.sh`) compares `include/abi/` with the tag of
-every release `boot/os-release.lua` lists, so it includes the last release
-whenever that is listed. Every line of each tag's `include/abi/` must still be
-there:
+Dirty local images are visibly named `BASE+REV-dirty` and provide no exact dev
+ABI. They may provide only a line-compatible released base at or above 0.0.11;
+otherwise the list is empty. Commit the source before packing/testing exact
+dev packages. Packing requires the clean checkout and the current generated
+record; edited records and missing history are refused.
 
-- Added lines and files pass.
-- Removed or changed lines fail, including changed comments, and so does a
-  renamed or removed header.
-- A listed release without a tag yet, as in the change that adds it, is
-  reported and skipped.
-- An empty list passes.
+The kernel command-view validator, SDK readers and host packer accept `+` in
+ABI strings. Record sizes, syscalls and filesystem formats are unchanged.
+Rebuild the kernel, SDK and static consumers of the package library together;
+no compiler-container rebuild is needed. These changes do not make old 0.0.10
+readers compatible with the new metadata.
 
-It compares with tags, never with main, so parallel changes do not collide on
-it.
+Development catalogs stay separate from stock catalogs: old clients parse the
+entire stock index before filtering ABI offers. A new field or unsupported ABI
+syntax there could prevent an old client from reaching its checkpoint. See
+[package upgrades](../userland/package-upgrades.md#sparse-development-repositories)
+for the sparse repository and recorded-origin flow.

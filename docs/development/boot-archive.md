@@ -21,16 +21,18 @@ for the trusted installer; only `full` accepts the `INIT`, `LIVE_CONFIG`,
 `HOSTNAME` and `GO_HELLO` overrides. The SDK is the `pyxis-dev` package, not an
 archive tree.
 
-Both archives' `config/packages.lua` names one repository, `public`, at
-`PACKAGE_REPOSITORY` ([decisions 65 and 68](../wip/pkg-upgrade.md)).
-Development images default to `http://192.168.0.213:5245/public/`;
-`make image PACKAGE_REPOSITORY=URL` picks another, and `PACKAGE_REPOSITORY=`
-builds an image with no repository. Install, and Rescue on an installed system,
-can only fetch `base` for the image's own revision, so a test image needs `base`
-packed for it in that repository (`make base-packages REPOSITORY=DIR`). The root Makefile only
-orchestrates these steps. New applications belong in userland's install selection; new port payload paths
-belong in the ports manifest. Neither requires enumerating archive members in
-the root Makefile.
+Both archives' `config/packages.lua` names a package repository at
+`PACKAGE_REPOSITORY` and a signed release repository at `RELEASE_REPOSITORY`.
+The package name defaults to `public`; development images default to
+`http://192.168.0.213:5245/public/`. `PACKAGE_REPOSITORY=` leaves it out.
+For an untagged image, use `PACKAGE_REPOSITORY_NAME=dev
+PACKAGE_REPOSITORY=URL` with the separately named sparse dev catalog, and pack
+its needed programs and `base` for the exact generated development version
+([development repositories](../userland/package-upgrades.md#sparse-development-repositories)).
+The name identifies the configured source; it sets no repository preference.
+Install and Rescue need `base` packed for the image's own version. The root
+Makefile only orchestrates assembly. New applications belong in userland's
+install selection; new port payload paths belong in the ports manifest.
 
 The [installer boot resources](../devices/installer-authority.md#boot-sources-and-handoff)
 retain the original ELF and the whole archive as immutable FILE views. They borrow

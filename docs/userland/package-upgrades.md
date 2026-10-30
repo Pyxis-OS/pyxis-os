@@ -1,6 +1,6 @@
 # Package and release upgrades
 
-Pyxis 0.0.10 uses one active operating-system release and one active package
+Pyxis uses one active operating-system release or development build and one active package
 set. Package changes can take effect for new lookups in the running system; a
 release upgrade is staged and takes effect only after a verified reboot. The
 [package format and installed-set records](../interfaces/packages.md) define
@@ -36,6 +36,49 @@ after the old client has stopped. A pending release transition still refuses
 ordinary package mutations. Missing or conflicting proof is not repaired by
 guessing: use rescue or installer Update.
 
+## Sparse development repositories
+
+A development build is named `BASE+REV`. From the 0.0.11 reader baseline, a
+line-compatible build provides `{ BASE, BASE+REV }`: released packages remain
+eligible, and packages built for this exact revision are eligible too. Before
+the real 0.0.11 tag, and after an ABI break, only the exact dev ABI is provided;
+released packages for the earlier base do not qualify. See the
+[version and ABI contract](../interfaces/abi.md).
+
+The dev repository is **sparse**: it contains only packages needed for a
+particular development install or test, never a mirror of public. Configure it
+as an ordinary separate source, for example:
+
+```text
+pkg repository add --unsigned dev http://192.168.0.213:5245/dev/
+pkg install dev/ID
+```
+
+Use the signed form when that source has a reviewed signer. A plain `pkg install
+ID` asks the existing per-package chooser when several configured repositories
+offer an eligible build. Only the few packages that overlap the sparse dev
+catalog need that choice. There is no repository-preference mechanism or
+automatic dev-over-public source switch. `REPO/ID` makes the source explicit.
+Within the chosen source, the rightmost eligible ABI in the provided list wins;
+for `{ BASE, BASE+REV }`, this prefers the exact dev build. An explicit eligible
+`ID@VERSION` selects that version instead.
+
+The confirmed selection records its origin. `pkg update` follows that origin,
+including its URL and signed/unsigned policy; a later offer from another source
+does not change it. Use an explicit install/source review to change origins.
+
+Exact dev packages become stale when REV changes, even when BASE is unchanged.
+New installs cannot choose the old revision; an installed old dev package must
+be replaced by an eligible build from its source or removed before a set that
+keeps it can be verified. A compatible released-base package remains usable
+without a dev rebuild. After an ABI break, the sparse dev catalog must contain
+the builds/dependencies needed by that particular test/install; no released
+base fallback is claimed until the next real release establishes the new base.
+
+Keep `BASE+REV` entries out of stock `public` and `releases`: the old 0.0.10
+reader rejects their ABI syntax before filtering the catalog, which would
+strand its checkpoint route. Dev publication uses a separately named root.
+
 ## Upgrading the release
 
 On an installed system with the configured upgrade authority, `pkg upgrade
@@ -70,6 +113,14 @@ version, the destination is the final release in the index. With a version,
 the same checkpoint rules apply; an earlier release is refused. Versions are
 identities, not strings sorted as numbers. Duplicate versions across these IDs
 and an unknown running release refuse before staging.
+
+For a generated dev build, `upgrade_from` identifies its actual release
+ancestor. The router places it immediately after that release, independently
+of the ABI base, and honors every checkpoint toward the requested/latest real
+release. The anchor and earlier releases are not upgrade destinations. Missing
+or ambiguous ancestry refuses; if no later real release exists, pkg reports
+that there is no newer released destination. Dev identities are never inserted
+into the permanent stock route.
 
 Each invocation reviews and stages one hop. Reboot to verify and activate it,
 then run `pkg upgrade` again for the newest destination, or repeat the version

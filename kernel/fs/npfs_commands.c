@@ -105,7 +105,7 @@ static bool abi_name(const char *name)
   if (!*name || !((*name >= 'a' && *name <= 'z') || (*name >= '0' && *name <= '9'))) return false;
   for (; *name; ++name) {
     bool lower = (*name >= 'a' && *name <= 'z') || (*name >= '0' && *name <= '9');
-    if (!lower && *name != '.' && *name != '-') return false;
+    if (!lower && *name != '.' && *name != '-' && *name != '+') return false;
   }
   return true;
 }

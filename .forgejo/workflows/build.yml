@@ -71,7 +71,7 @@ jobs:
           done
           exec scripts/check-submodule-pins.sh "$BASE_SHA" "$HEAD_SHA"
 
-  # include/abi/ keeps every line of each release boot/os-release.lua lists.
+  # Report the generated ABI contract from the nearest first-parent release.
   # See docs/interfaces/abi.md.
   abi:
     name: abi
@@ -84,7 +84,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Compare include/abi/ with the listed releases
+      - name: Derive development ABI compatibility from release ancestry
         run: exec scripts/check-abi.sh
 
   filesystem:
@@ -98,6 +98,7 @@ jobs:
       - uses: https://data.forgejo.org/actions/checkout@v4
         if: ${{ needs.changes.outputs.code == 'true' }}
         with:
+          fetch-depth: 0
           submodules: recursive
           persist-credentials: false
       - name: Build pinned npfs format and host tools
@@ -138,6 +139,7 @@ jobs:
           GIT_CONFIG_KEY_0: submodule.fetchJobs
           GIT_CONFIG_VALUE_0: '8'
         with:
+          fetch-depth: 0
           submodules: recursive
           persist-credentials: false
       - name: Install host configuration and Mesa build dependencies
