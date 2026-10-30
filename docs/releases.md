@@ -177,6 +177,10 @@ Release notes:
     held each download in a capped RAM snapshot. The cap is removed after the
     release (#1624). Installing `clang-hosted` with `pkg install` on a running
     0.0.10 system is not affected.
+  - Rescue boots (the ISO's rescue entry and an installed system's rescue) open
+    with the Caelum tab selected, so the rescue shell looks missing. Press
+    Super+Right to reach it. This is fixed after the release (#1639, issue
+    [#1637](https://git.internal/PyxisOS/pyxis-os/issues/1637)).
   - Installing or updating onto an NVMe disk from the ISO needs `nvme.write=1` on
     the kernel command line; NVMe writes are off by default. 0.0.11 turns them on by
     default.
