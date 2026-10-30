@@ -4,9 +4,10 @@
 #include <abi/message.h>
 #include <stddef.h>
 
-/* MANAGE applies to the calling process, including after handle transfer.
- * Its private allocations belong to the process, not the service handle.
- * CREATE_SHARED is independent; its region lifetime is in shared_memory.h. */
+/* Authority applies to the calling process, including after a handle transfer.
+ * Regions belong to the process, not the handle or service object's lifetime. */
+/* The ownership above applies to the private allocation operations.
+ * CREATE_SHARED is independent of MANAGE; region lifetime is in shared_memory.h. */
 #define MEMORY_RIGHT_MANAGE (UINT64_C(1) << 0)
 #define MEMORY_RIGHT_CREATE_SHARED (UINT64_C(1) << 1)
 #define MEMORY_PAGE_SIZE UINT64_C(4096)
@@ -76,11 +77,12 @@ struct memory_subrange {
  * service releases neither kind. Reserved request words must be zero.
  * RESERVE takes a nonzero size, rounded up to pages, and a power-of-two
  * alignment at least one page. It returns memory_reservation without backing,
- * a guard or fixed placement. RELEASE_RESERVATION also releases sparse and
- * shared-view identities; shared pages stay owned by their region object.
- * CREATE_SHARED requires CREATE_SHARED rather than MANAGE. Its size/reserved
- * payload rounds to pages and returns shared_memory_created (shared_memory.h).
- * No partial backing or handle is published on failure. */
+ * a guard or fixed placement. RELEASE_RESERVATION also releases sparse IDs. */
+/* RELEASE_RESERVATION additionally accepts shared-view identities; shared pages
+ * stay owned by their region object. CREATE_SHARED requires CREATE_SHARED
+ * rather than MANAGE. Its size/reserved payload rounds to pages and returns
+ * shared_memory_created (shared_memory.h). No partial backing or handle is
+ * published on failure. */
 struct memory_message {
   struct message_header header;
   union memory_payload body;
