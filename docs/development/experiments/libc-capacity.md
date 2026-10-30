@@ -53,3 +53,10 @@ Kernel >256-thread admission and common numeric limit reasons await WP3
 coordination. Stopped raw-context key-value cleanup was source-reviewed, without
 an injected allocation failure or a new stopped-context runtime claim. The
 existing SDL detach no-op is outside this delivery. All owned QEMU guests stopped.
+
+WP6.7 follow-up: failed obsolete key-metadata retirement no longer stops the
+process. Source review checks that released/uncertain descriptors are forgotten
+before any collector could retry them; failed pre-publication allocation keeps
+its original status. Ordinary key growth/destructor and one/four-CPU controls
+are repeated after this change and the WP9 rebase. Cleanup-error behavior is
+source-reviewed; no injected native failure or every-byte reuse proof is claimed.

@@ -41,6 +41,11 @@ need no allocation, while non-NULL stores can fail real allocation/admission and
 preserve the previous value. A key value is cleared before its callback. Each
 pass has a finite eligibility snapshot; callback additions and rearming wait
 for a later pass.
+Obsolete key metadata is retired outside the registry guard. A failed retirement
+keeps surviving backing charged until process teardown; it does not terminate
+the process or undo a published key/value. No collector retries an uncertain
+address that may have been reused. Native CREATE uncertainty and running stack
+retirement still follow their existing stop/quarantine rules.
 After the key passes, language destructors first registered by keys also run.
 `libc_thread_cleanup_register` installs one per-thread runtime cleanup callback;
 it runs last, after both language drains. Repeated registration of the same

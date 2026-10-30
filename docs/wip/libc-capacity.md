@@ -1,6 +1,6 @@
 # Libc capacity
 
-Limits audit work package 6 (rows 21–22). WP6.1–WP6.6 were accepted by chronium
+Limits audit work package 6 (rows 21–22). WP6.1–WP6.7 were accepted by chronium
 on 2026-10-30. This work implements the [limits rules](../interfaces/limits.md)
 without adding authority or quotas. Kernel admission changes are coordinated
 with the launcher work; this checklist distinguishes libc from that dependency.
@@ -54,15 +54,14 @@ context value-release ownership has source review; no allocator fault injection
 or native qualification is claimed. See the
 [qualification record](../development/experiments/libc-capacity.md).
 
-## Decision reached during implementation
+## Key metadata retirement
 
-**WP6.7 — proposed default:** if native release of obsolete key metadata fails
-after a valid publication, retain uncertain backing under process ownership
-until teardown, without retrying UNKNOWN or using possibly unmapped pointers.
-Keep the actual charge; do not terminate solely for RAM-metadata retirement.
-Successful publication remains successful, while pre-publication failure keeps
-the old value. Collector state must prevent retrying a possibly reused address.
-This policy is not yet accepted or implemented: the current draft uses fail-stop
-after such cleanup failure. No ordinary qualification exercised that path.
-Chronium must choose before this slice becomes ready. Native CREATE uncertainty
-and running stack/context retirement rules remain unchanged.
+WP6.7 accepted (chronium, 2026-10-30): failure to retire obsolete key metadata
+retains surviving backing and its actual charge under process ownership until
+teardown, without terminating the process or undoing a valid publication.
+Uncertain addresses/handles are forgotten and never accessed or retried later;
+this prevents a collector from acting on a reused address. Pre-publication
+allocation failure keeps the old key/value and its original failure status.
+Orderly destructor drainage and stopped-context collection clear their ownership
+descriptors before retirement. Native CREATE uncertainty and live stack/context
+retirement rules are unchanged. No injected cleanup failure is claimed.
