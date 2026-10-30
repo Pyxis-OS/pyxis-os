@@ -59,6 +59,8 @@ not full upstream API qualification.
 | `sdl2-dev` 2.32.10 **existing** | `libSDL2.a`; `sdl2` | zlib, BSD-3-Clause, Sun fdlibm grant; MPL-2.0 Pyxis backend/configuration | — | raylib, Chocolate Doom/Quake, EDuke32 and DevilutionX personal builds |
 | `sdl2-mixer-dev` 2.8.2 | `libSDL2_mixer.a`; `SDL2_mixer` | zlib; MPL-2.0 Pyxis recipe | `sdl2-dev` | Chocolate Doom effects and OPL callback; WAV/AIFF/VOC, no MIDI |
 | `sdl2-osmesa-dev` 2.32.10 | `libSDL2-osmesa.a`; `sdl2-osmesa` | SDL terms above; Mesa/C++ notices through dependencies | `sdl2-dev`, `mesa-dev`, `libcxx-dev` | manual gears; opt-in desktop OpenGL |
+| `sdl3-dev` 3.2.28 | `libSDL3.a`; `sdl3` | zlib, BSD-3-Clause, Sun fdlibm grant; MPL-2.0 Pyxis backend/configuration | — | Private game port (planned) |
+| `sdl3-osmesa-dev` 3.2.28 | `libSDL3-osmesa.a`; `sdl3-osmesa` | SDL3 terms above; Mesa/C++ notices through dependencies | `sdl3-dev`, `mesa-dev`, `libcxx-dev` | Private game port (planned) |
 | `tree-sitter-dev` 0.26.13 | `libtree-sitter.a`; `tree-sitter` | MIT, bundled Unicode/endian notices | — | Neovim |
 | `utf8proc-dev` 2.11.3 | `libutf8proc.a`; `libutf8proc` | MIT and Unicode data licence | — | Neovim |
 | `zlib-dev` 1.3.2 | `libz.a`; `zlib` | zlib | — | libpng, screenshot/saver; DevilutionX |

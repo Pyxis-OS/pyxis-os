@@ -181,6 +181,10 @@ SDL2_INPUTS := $(wildcard ports/sdl2/*.lua ports/sdl2/Makefile ports/sdl2/*.pc p
                          ports/sdl2/PORT-NOTICE ports/sdl2/pyxis/* ports/sdl2/cmake/* \
                          ports/sdl2/patches/*.patch) \
                ports/ports.lua ports/build.lua
+SDL3_INPUTS := $(wildcard ports/sdl3/*.lua ports/sdl3/Makefile ports/sdl3/*.pc ports/sdl3/SDL_build_config.h \
+                         ports/sdl3/PORT-NOTICE ports/sdl3/pyxis/* ports/sdl3/cmake/* \
+                         ports/sdl3/patches/*.patch) \
+               ports/ports.lua ports/build.lua ports/LICENSE ports/LICENSING.md
 
 MESA_INPUTS := $(wildcard ports/mesa/*.* ports/mesa/Makefile ports/mesa/PORT-NOTICE ports/mesa/manual/* \
                          ports/mesa/notices/* ports/mesa/patches/*.patch) \
@@ -285,6 +289,7 @@ OPUSFILE_OUTPUTS := $(call port_outputs,opusfile)
 JSON_OUTPUTS := $(call port_outputs,json)
 FMT_OUTPUTS := $(call port_outputs,fmt)
 SDL2_OUTPUTS := $(call port_outputs,sdl2)
+SDL3_OUTPUTS := $(call port_outputs,sdl3)
 BLURGTEXT_OUTPUTS := $(call port_outputs,blurgtext)
 MESA_OUTPUTS := $(call port_outputs,mesa)
 RAYLIB_OUTPUTS := $(call port_outputs,raylib)
@@ -317,6 +322,7 @@ all: $(WPA_RSN_OUTPUTS) $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(ZLIB_OUTP
      $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) \
      $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 all: $(IMGUI_OUTPUTS) $(LIBULTRASHIP_OUTPUTS)
+all: $(SDL3_OUTPUTS)
 all: $(NCURSESW_OUTPUTS) $(HEXCURSE_OUTPUTS)
 all: $(CMATRIX_OUTPUTS) $(NUDOKU_OUTPUTS) $(VITETRIS_OUTPUTS) $(DFROTZ_OUTPUTS) $(SDL2_MIXER_OUTPUTS)
 all: $(RAYLIB_OUTPUTS) $(LIBUV_OUTPUTS) $(LUA51_OUTPUTS) $(UTF8PROC_OUTPUTS) $(TREE_SITTER_OUTPUTS) $(NEOVIM_OUTPUTS)
@@ -506,6 +512,11 @@ $(FMT_OUTPUTS) &: $(FMT_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(SDL2_OUTPUTS) &: $(SDL2_INPUTS) $(SDK_INPUTS) $(MESA_OUTPUTS) scripts/ports.mk
 	rm -rf build/ports/sdl2
 	$(LUA) ports/build.lua sdl2 --sdk $(abspath build/sdk) --work $(abspath build/ports/sdl2) \
+	  --mesa $(abspath build/ports/mesa/stage/dev)
+
+$(SDL3_OUTPUTS) &: $(SDL3_INPUTS) $(SDK_INPUTS) $(MESA_OUTPUTS) scripts/ports.mk
+	rm -rf build/ports/sdl3
+	$(LUA) ports/build.lua sdl3 --sdk $(abspath build/sdk) --work $(abspath build/ports/sdl3) \
 	  --mesa $(abspath build/ports/mesa/stage/dev)
 
 $(DEVILUTIONX_OUTPUTS) &: $(DEVILUTIONX_INPUTS) $(SDK_INPUTS) $(ZLIB_OUTPUTS) $(LIBPNG_OUTPUTS) \
