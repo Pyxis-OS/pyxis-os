@@ -14,11 +14,13 @@ receive-queue changes.
 | Connect, half-close, read EOF, close (guest closes first), until refusal | 62 of 300 | 246 of 300 | not run |
 | UDP burst of 200 datagrams, reader asleep, then drained | 4 received | 200 received, 0 dropped | not run |
 | UDP burst of 20,000 (about 11,100 reached the guest) | not run | 11,026 queued, 69 dropped (reported by INSPECT), first drop logged | not run |
-| `LISTEN` backlog 4 / 300 / 0 | not applicable (fixed 4) | not run | accepted, capacity 4 / `CALL_LIMIT`, limit 126 logged / `BAD_REQUEST` |
+| `LISTEN` backlog 4 / 300 / 0 | not applicable (fixed 4) | not run | clamped: capacity 4 / 30 (request 300, first clamp logged) / `BAD_REQUEST` |
 
 The budget the log reported at 4 GiB was 259,697,664 bytes (RAM/16 less the memory the kernel holds); the refusal line
 (`net: N admissions refused, X of Y bytes of network storage in use`) appeared once per second while the streams
-test refused. The `LISTEN` check needed `tcp_listen = true` in the development space, set for the test image only.
+test refused. Go (pyxis-go `8a8c61f116`, local build of the pinned toolchain): a bundle that `net.Listen`s on the guest address (backlog 128,
+clamped to 30), dials it, echoes five bytes and reads 221 UDP datagrams from the host burst server passed on the 4 GiB
+guest. The `LISTEN` checks needed `tcp_listen = true` in the development space, set for the test image only.
 
 Not measured: receive throughput (the window is delta's, #1647, and unchanged), upload throughput and loss
 recovery. The send budget, the out-of-order buffer and the 32-packet budget were not changed because the QEMU user

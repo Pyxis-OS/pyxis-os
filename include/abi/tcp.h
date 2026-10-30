@@ -85,10 +85,11 @@ struct tcp_connect_reply {
  * Wildcard/ephemeral binding and address reuse are unsupported. Init creates
  * the listener and delegates it; CONNECT grants do not authorize LISTEN.
  * `backlog` is the number of combined half-open/ready connections the listener
- * holds, at least one and at most a quarter of the streams the network storage
- * budget can hold (and 255, the width of lwIP's backlog counter); more is
- * CALL_LIMIT. Listener, connection and transport storage consume the shared
- * networking budget. */
+ * holds. Zero is BAD_REQUEST. A value above a quarter of the streams the network
+ * storage budget can hold (and 255, the width of lwIP's backlog counter) is
+ * clamped, and `listener.capacity` of the reply is the effective backlog.
+ * Listener, connection and transport storage consume the shared networking
+ * budget. */
 struct tcp_listen_request {
   struct message_header header;
   struct net_path path;

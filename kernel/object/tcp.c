@@ -28,11 +28,16 @@ static struct syscall_result listen_service(struct kernel_object *object, uint64
       !request.port) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
+  /* Like listen(2), a larger backlog is clamped; the reply reports the effective one. */
+  static bool clamp_logged;
   uint32_t limit = net_tcp_backlog_limit();
   if (request.backlog > limit) {
-    kwarn("tcp: listen backlog: %u exceeds the limit of %u (a quarter of the streams the "
-        "network storage budget holds)\n", request.backlog, limit);
-    return (struct syscall_result){CALL_LIMIT, 0};
+    if (!clamp_logged) {
+      clamp_logged = true;
+      kwarn("tcp: listen backlog %u clamped to %u (a quarter of the streams the network "
+          "storage budget holds); later clamps are not logged\n", request.backlog, limit);
+    }
+    request.backlog = limit;
   }
   struct tcp_listen_reply reply;
   enum call_status status = net_tcp_listen((struct net_factory *)object,

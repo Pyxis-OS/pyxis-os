@@ -110,10 +110,11 @@ The fourth package (work package 8, on top of the receive window of #1647).
   64 MiB a machine held 31 streams; at 4 GiB it now holds about 127. A refusal is `NO_MEMORY`
   (a state that clears when streams close, not a property of the request) and the kernel log
   reports, at most once a second, how many admissions were refused and the budget's use.
-- **Listener backlog.** `LISTEN` carries a `backlog` (at least 1). More than a quarter of the
-  streams the budget holds, or 255 (lwIP's counter width), is `CALL_LIMIT`: a half-open
+- **Listener backlog.** `LISTEN` carries a `backlog` (at least 1; 0 is `BAD_REQUEST`). More than a
+  quarter of the streams the budget holds, or 255 (lwIP's counter width), is clamped, as listen(2) does,
+  and the reply's `capacity` is the effective backlog; the kernel logs the first clamp. A half-open
   connection already holds its 2 MiB for ten seconds, so one listener cannot take more than that
-  share. The listener's `capacity` reports it. This is an ABI change; callers pass their own number.
+  share. This is an ABI change; callers pass their own number.
 - **UDP receive queues.** Per endpoint, bytes instead of a datagram count: a 256th of the budget
   (256 KiB at the floor), records charged to the budget and no longer part of the 32-packet
   software budget. Drops are counted per endpoint (`dropped` in `UDP_INSPECT`) and the log reports

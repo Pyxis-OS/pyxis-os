@@ -161,7 +161,7 @@ can cancel them without confusing a reused tuple or slot.
 | Resource | Current limit |
 | --- | --- |
 | Transport records | Dynamic; actual metadata/retained buffers share the native TCP/UDP storage budget (RAM/16, at least 64 MiB) |
-| Listeners / pending connections | Dynamic listeners; each holds its LISTEN `backlog` of combined half-open/ready connections: 1 to a quarter of the streams the budget holds, at most 255 (`CALL_LIMIT` above) |
+| Listeners / pending connections | Dynamic listeners; each holds its LISTEN `backlog` of combined half-open/ready connections: 1 to a quarter of the streams the budget holds, at most 255; a larger request is clamped and the reply's `capacity` reports the effective value |
 | Payload storage | 1,048,560-byte backed receive window; 65,535-byte send budget allocated as needed |
 | Out-of-order receive | Shares the receive window; at most 16 pbufs |
 | READ/WRITE extent | At most 4 KiB per call; helpers validate returned counts |
