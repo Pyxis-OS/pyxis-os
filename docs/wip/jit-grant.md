@@ -144,7 +144,9 @@ executable file mappings, sparse JIT regions and strict-near placement are defer
    caller-CPU transaction client, bounded all-or-nothing range permissions,
    budgets/profile accounting and teardown. No ordinary MEMORY execute right.
 2. Userland declarations/config checker, space provisioning and libpyxis wrappers;
-   dependency PR before the parent pin. No shipped space enables JIT implicitly.
+   dependency PR before the parent pin. The live configuration enables JIT for
+   the development, multiplexer and remote spaces (chronium, 2026-10-30);
+   installed defaults do not.
 3. Manual native consumer and QEMU/GDB on one/four CPUs: missing/right-attenuated
    authority, cross-process/stale IDs, mixed subranges, R/NX data, both W/X
    directions, no RWX aliases, real noncalling sibling execution, address waits,

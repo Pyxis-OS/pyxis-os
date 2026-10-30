@@ -169,8 +169,9 @@ return {
   handoffs. Exact held-shell scripts retain an available source and offer it to
   explicitly declaring bundles just as their launching shell does. Shell bundles
   remain subject to their declarations, including optional JIT; ordinary native
-  children and Lua interpreters keep their existing launch rules. No shipped
-  space enables it. A script cannot enable this switch or mint a missing source.
+  children and Lua interpreters keep their existing launch rules. Live
+  Development, Multiplexer and Remote enable it; live Read-only and installed
+  defaults leave it false. A script cannot enable this switch or mint a missing source.
   This source gate does not revoke capabilities explicitly transferred by a
   native caller. See
   [JIT memory](../interfaces/jit.md).

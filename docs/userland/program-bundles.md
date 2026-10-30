@@ -166,8 +166,8 @@ Programs using libc allocation request `memory/manage` under its documented
 `memory` startup name; declaring an alias does not rewrite libc service lookups.
 
 Generated-code consumers separately declare `jit/manage`. Trusted launchers have
-a private source only when their space opts into `jit = true`; no shipped space
-does. Exact held-shell scripts retain an already-held JIT source and offer it to
+a private source only when their space opts into `jit = true`; the live image's
+Development, Multiplexer and Remote spaces do, and installed defaults do not. Exact held-shell scripts retain an already-held JIT source and offer it to
 declaring children in every command position. A shell bundle still receives only
 its declared grants, including optional JIT. Ordinary native children do not
 inherit JIT through environment aliases. Explicit native grants/transfers remain
