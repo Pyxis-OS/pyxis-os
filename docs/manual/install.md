@@ -191,6 +191,11 @@ Continue only when every step printed the result shown.
    Pyxis OS (rescue)
    ```
 
+   Rescue starts its shell in a separate tab. On 0.0.10, select that tab with
+   Super+Right or click **Rescue**; Caelum's log remains selected initially.
+   Current builds request automatic Rescue selection once the prompt is ready,
+   unless an early key press or pointer click cancels it.
+
 3. The window first shows the kernel log in the **Caelum** tab. If it still
    does, wait a moment: the **Install** tab opens by itself and the installer
    starts the network and shows its first list:
