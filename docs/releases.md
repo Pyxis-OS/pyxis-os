@@ -31,6 +31,13 @@ upgrade`: boot the 0.0.10 installer and choose Update** (see the release notes).
 - **Install media:** the ISO and USB image carry the kernel and boot archive
   gzip-compressed (kernel 8.7 to 4.1 MB, archive 28.0 to 12.3 MB). Installed disks
   keep the plain files ([boot archive](development/boot-archive.md)).
+- **QEMU image:** `pyxis-0.0.10.qcow2`, a ready-to-run disk with 0.0.10 installed
+  the way the installer does it, so `pkg upgrade` works on it. The file is
+  48,168,960 bytes and the disk is 32 GiB virtual. It is published beside the ISO
+  and listed in the signed `SHA256SUMS`, so the ISO's checks apply (sha256
+  `13b7b4cd7cb267828bf7de6c5e553e86f4b6149ec2e796eff7ed5028aca16e0b`). Verify it,
+  then start it with the launcher script in the manual
+  ([run the ready-made image](manual/install.md#run-the-ready-made-image)).
 - **System log:** spaces and services write to the Caelum pane. A service's
   stdout and stderr go to the log, each line stamped with its space, and
   `log -s NAME` shows one space's lines. Programs write with the new `LOG_WRITE`
@@ -113,11 +120,14 @@ upgrade`: boot the 0.0.10 installer and choose Update** (see the release notes).
 - **Wi-Fi:** the Realtek RTL8922AE on the IdeaPad scans passively on channels
   1 to 13 by default (`wifi scan`, or an explicit channel set), and reports a
   truncated result as truncated. There is no association on this adapter yet ([Wi-Fi](interfaces/wifi.md)).
-- **Intel display:** on matched Intel GPUs the display driver reads the scanout
-  the firmware set up and presents frames with a synchronized flip at vblank. On
-  the IdeaPad (vela) chronium saw no tearing in OpenArena at low and native
-  resolution; at the native resolution the frame rate went from 15.6 to 15.9
-  (single runs, 1803 frames). Preparing the flip delayed boot by about 1.3 s; batching its
+- **Intel display:** on matched Intel GPUs the display driver can read the scanout
+  the firmware set up and present frames with a synchronized flip at vblank
+  (`CONFIG_INTEL_INHERITED_FLIP`). **The released 0.0.10 build has that option
+  off, so it copies without vblank sync;** 0.0.11 turns it on by default. The flip
+  was qualified on the IdeaPad (vela) with development builds that had it on:
+  chronium saw no tearing in OpenArena at low and native resolution, and at the
+  native resolution the frame rate went from 15.6 to 15.9 (single runs, 1803
+  frames). Preparing the flip delayed boot by about 1.3 s; batching its
   ownership and deadline checks cut that step to 0.39 s on vela, and the rest is
   tracked in [debt #1617](https://git.internal/PyxisOS/pyxis-os/issues/1617). Full Intel
   modesetting is later work.
@@ -159,6 +169,12 @@ Release notes:
   reads, and the Wi-Fi PHY and full status replies.
 - **Kilo is gone.** Update lists `remove kilo` and asks `[y/N]`; answer `y`. Use `vi`
   or Neovim.
+- **Known issues:**
+  - A legacy Coexist install made by 0.0.8 or 0.0.9 cannot Update with the 0.0.10
+    ISO. This is fixed after the release (#1624).
+  - Installing or updating onto an NVMe disk from the ISO needs `nvme.write=1` on
+    the kernel command line; NVMe writes are off by default. 0.0.11 turns them on by
+    default.
 - **Not in this release:** Rust and the `hexyl` package (planned for 0.0.11), Ship of Harkinian's game, Wi-Fi association and
   native hardware qualification of `pkg upgrade` on an installed system
   ([debt #1509](https://git.internal/PyxisOS/pyxis-os/issues/1509)).
