@@ -118,7 +118,7 @@ bool forwarder_mapping_revoked(const struct forwarder_mapping *mapping);
 enum call_status forwarder_mapping_status(struct kernel_object *controller);
 bool forwarder_mapping_target_pending(struct kernel_object *controller,
     struct process *process);
-void forwarder_mapping_timeout(struct kernel_object *controller);
+enum call_status forwarder_mapping_timeout(struct kernel_object *controller);
 /* Prepared task metadata link, IF=0. Rechecks status under the same guard;
  * BUSY publishes LINK, another result wakes it without publishing. Every count
  * or uncertainty change detaches/wakes all links. Always unwait after sleep,

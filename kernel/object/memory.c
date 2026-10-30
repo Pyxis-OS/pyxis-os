@@ -5,6 +5,9 @@
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/private.h>
+#include <kernel/mm/shared.h>
+#include <kernel/mm/shared_view.h>
+#include <kernel/object/forwarder.h>
 #include <kernel/object/memory.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -51,6 +54,52 @@ static size_t allocation_reply_size(uint64_t operation)
       sizeof(struct memory_reservation) : sizeof(struct memory_region);
 }
 
+static enum call_status cap_status(enum capability_result result)
+{
+  switch (result) {
+  case CAP_OK: return CALL_OK;
+  case CAP_DENIED: return CALL_DENIED;
+  case CAP_NO_MEMORY: return CALL_NO_MEMORY;
+  case CAP_LIMIT:
+  case CAP_FULL: return CALL_LIMIT;
+  default: return CALL_BAD_REQUEST;
+  }
+}
+
+static enum call_status create_shared(struct memory_request *request)
+{
+  struct shared_origin *origin;
+  enum call_status status = process_shared_origin(request->process, &origin);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct shared_region *region;
+  status = shared_region_create(origin, request->region.size, &region);
+  object_release(shared_origin_object(origin));
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct capability_grant grant = {0};
+  status = cap_status(capability_grant_retain(shared_region_object(region),
+      SHARED_MEMORY_RIGHTS, 0, &grant));
+  object_release(shared_region_object(region));
+  if (status == CALL_OK) {
+    status = cap_status(forwarder_derive_grant(&grant, request->request.operation));
+  }
+  if (status == CALL_OK) {
+    status = cap_status(capability_validate_grants(request->handle_reservation.table,
+        &grant, 1));
+  }
+  if (status == CALL_OK) {
+    handle_t handle;
+    capability_install_reserved(&request->handle_reservation,
+        &request->handle_slot, &grant, 1, &handle);
+    request->created = (struct shared_memory_created){handle, request->region.size};
+  }
+  capability_grant_release(&grant);
+  return status;
+}
+
 static void record_memory_profile(struct profile_snapshot *profile, uint64_t operation,
     const struct memory_region *region, enum mm_result result, uint64_t started_ns,
     uint64_t service_started_ns, uint64_t service_ended_ns)
@@ -75,16 +124,26 @@ void memory_request_execute(struct memory_request *request)
   KASSERT(request->request.state == BSP_REQUEST_FORWARDED && request->process);
   process_vm_require_mutation(request->process);
   request->service_started_ns = request->profiled ? arch_monotonic_ns() : 0;
-  if (returns_memory(request->operation) &&
+  size_t reply_size = request->shared_region ? sizeof(struct memory_reservation) :
+      request->operation == MEMORY_CREATE_SHARED ? sizeof(struct shared_memory_created) :
+      returns_memory(request->operation) ? allocation_reply_size(request->operation) : 0;
+  if (reply_size &&
       !process_vm_buffer_check(request->process, request->reply_address,
-        allocation_reply_size(request->operation), true)) {
+        reply_size, true)) {
     request->result = MM_INVALID;
     request->status = CALL_BAD_BUFFER;
     request->service_ended_ns = request->profiled ? arch_monotonic_ns() : 0;
     request->process = NULL;
     return;
   }
-  if (request->operation == MEMORY_RESERVE) {
+  if (request->shared_region) {
+    request->status = shared_view_map(request->process, request->shared_region,
+        request->shared_writable, &request->reservation);
+    request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
+  } else if (request->operation == MEMORY_CREATE_SHARED) {
+    request->status = create_shared(request);
+    request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
+  } else if (request->operation == MEMORY_RESERVE) {
     request->status = private_memory_reserve(request->process, request->region.size,
         request->alignment, &request->reservation);
     request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
@@ -98,8 +157,9 @@ void memory_request_execute(struct memory_request *request)
         &request->reservation);
     request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
   } else if (request->operation == MEMORY_RELEASE_RESERVATION) {
-    request->status = private_memory_release_reservation(request->process,
-        request->reservation.identity);
+    request->status = shared_view_release(request->process, request->reservation.identity) ?
+        CALL_OK : private_memory_release_reservation(request->process,
+          request->reservation.identity);
     request->result = request->status == CALL_OK ? MM_OK : MM_INVALID;
   } else {
     request->result = request->operation == MEMORY_ALLOCATE ?
@@ -114,11 +174,78 @@ void memory_request_execute(struct memory_request *request)
   request->process = NULL;
 }
 
+static struct syscall_result create_shared_call(uint64_t rights,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(rights & MEMORY_RIGHT_CREATE_SHARED)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (request_size != sizeof(union memory_payload)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (reply_capacity < sizeof(struct shared_memory_created)) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
+  union memory_payload input;
+  if (!copy_from_user(&input, request_address, sizeof(input))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!input.create_shared.size || input.create_shared.reserved ||
+      input.create_shared.size > SIZE_MAX - (PAGE_SIZE - 1)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(struct shared_memory_created), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct capability_reservation reservation;
+  struct capability_reserved_slot slot;
+  enum call_status status = cap_status(capability_request_reservation(1, &reservation, &slot));
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  struct process *process = process_current();
+  struct memory_request *pending = (void *)bsp_request_prepare(BSP_SERVICE_MEMORY);
+  pending->process = process;
+  pending->operation = MEMORY_CREATE_SHARED;
+  pending->region = (struct memory_region){.size =
+      (input.create_shared.size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)};
+  pending->shared_region = NULL;
+  /* Move the whole reservation; no second owner survives submission. */
+  pending->handle_reservation = reservation;
+  pending->handle_slot = slot;
+  reservation = (struct capability_reservation){0};
+  pending->created = (struct shared_memory_created){0};
+  pending->reply_address = reply_address;
+  pending->profiled = false;
+  pending->status = CALL_BUSY;
+  pending->request.vm_process = process;
+  pending->request.vm_mutator = task_current_user();
+  process_vm_private_call(&pending->request);
+  struct shared_memory_created created = pending->created;
+  bool reply_owned = pending->request.vm_reply_owned;
+  struct syscall_result reply = {pending->status, 0};
+  capability_reservation_release(&pending->handle_reservation, &pending->handle_slot);
+  bsp_request_release(&pending->request);
+  if (reply.status == CALL_OK) {
+    KASSERT(copy_to_user(reply_address, &created, sizeof(created)));
+    reply.reply_size = sizeof(created);
+  }
+  if (reply_owned) {
+    process_vm_reply_finish(process);
+  }
+  return reply;
+}
+
 struct syscall_result memory_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (operation == MEMORY_CREATE_SHARED) {
+    return create_shared_call(rights, request_address, request_size,
+        reply_address, reply_capacity);
+  }
   struct profile_snapshot *profile = profile_memory_current();
   /* Existing profiling totals describe eager operations, not sparse virtual
    * spans or repeated commits. Keep their layout and byte meaning unchanged. */
@@ -200,6 +327,7 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   pending->region = region;
   pending->reservation = reservation;
   pending->subrange = subrange;
+  pending->shared_region = NULL;
   pending->alignment = operation == MEMORY_RESERVE ? request.reserve.alignment : 0;
   pending->reply_address = reply_address;
   pending->profiled = profiled;
@@ -233,6 +361,61 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   if (profiled) {
     record_memory_profile(profile, operation, &region, result, started_ns,
         service_started_ns, service_ended_ns);
+  }
+  return reply;
+}
+
+struct syscall_result shared_memory_call(struct shared_region *region,
+    uint64_t rights, uint64_t operation, uintptr_t request_address,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+{
+  KASSERT(!cpu_interrupts_enabled() && region);
+  if (operation != SHARED_MEMORY_MAP) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (request_size != sizeof(struct shared_memory_map)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (reply_capacity < sizeof(struct memory_reservation)) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
+  struct shared_memory_map input;
+  if (!copy_from_user(&input, request_address, sizeof(input))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (input.reserved || (input.rights != SHARED_MEMORY_RIGHT_READ &&
+      input.rights != SHARED_MEMORY_RIGHTS)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (input.rights & ~rights) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(struct memory_reservation), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct process *process = process_current();
+  struct memory_request *pending = (void *)bsp_request_prepare(BSP_SERVICE_MEMORY);
+  pending->process = process;
+  pending->operation = 0;
+  pending->shared_region = region;
+  pending->shared_writable = input.rights & SHARED_MEMORY_RIGHT_WRITE;
+  pending->reservation = (struct memory_reservation){0};
+  pending->reply_address = reply_address;
+  pending->profiled = false;
+  pending->status = CALL_BUSY;
+  pending->request.vm_process = process;
+  pending->request.vm_mutator = task_current_user();
+  process_vm_private_call(&pending->request);
+  struct memory_reservation view = pending->reservation;
+  bool reply_owned = pending->request.vm_reply_owned;
+  struct syscall_result reply = {pending->status, 0};
+  bsp_request_release(&pending->request);
+  if (reply.status == CALL_OK) {
+    KASSERT(copy_to_user(reply_address, &view, sizeof(view)));
+    reply.reply_size = sizeof(view);
+  }
+  if (reply_owned) {
+    process_vm_reply_finish(process);
   }
   return reply;
 }

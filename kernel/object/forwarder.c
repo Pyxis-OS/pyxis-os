@@ -838,7 +838,7 @@ bool forwarder_mapping_target_pending(struct kernel_object *controller,
   return pending;
 }
 
-void forwarder_mapping_timeout(struct kernel_object *controller)
+enum call_status forwarder_mapping_timeout(struct kernel_object *controller)
 {
   struct forwarder *node = mapping_controller(controller);
   spin_lock(&forwarders_lock);
@@ -850,7 +850,9 @@ void forwarder_mapping_timeout(struct kernel_object *controller)
       shared_view_request_withdrawal(mapping->owner, true);
     }
   }
+  enum call_status status = mapping_status(node);
   spin_unlock(&forwarders_lock);
+  return status;
 }
 
 enum call_status forwarder_mapping_wait(struct kernel_object *controller,
@@ -1384,8 +1386,7 @@ struct syscall_result forwarder_controller_call(struct kernel_object *object,
       status = forwarder_mapping_status(object);
     }
     if (status == CALL_BUSY) {
-      forwarder_mapping_timeout(object);
-      status = CALL_OUTCOME_UNKNOWN;
+      status = forwarder_mapping_timeout(object);
     }
     if (status == CALL_OUTCOME_UNKNOWN &&
         forwarder_mapping_target_pending(object, process_current())) {
