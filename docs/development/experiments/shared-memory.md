@@ -278,81 +278,105 @@ receipts: `/home/chronium/build/shared-memory/task3/` (`qualification/final/`,
 `/shared/present/shared-memory/task3/`. All owned QEMU/debugger jobs stopped;
 no native/PXE action or new compiler container.
 
-## Task 4 before-code controls — 2026-10-30
+## Task 4 SDK, declared grants and shared-min — 2026-10-30
 
-Clean main `8ff1658c0f58`, userland `c21fe9412fc4`, ports `90ed9e60f6bf`;
-fresh C runtime/SDK and the selected control programs built with the same
-published `8bdf136` compiler. This replaces the older frozen application bytes
-for task 4; it is not a performance comparison against them. Kernel SHA-256
-`91f0bca02169343bf54623c46a5950d734443886ee7b83379d37ab468f318ece`;
-effective config remains `524590b0d7a5`. No C++/LLVM/Mesa rebuild. Eight existing
-C-runtime warnings are recorded; builds exit successfully.
+All task-4 authority and example choices are accepted in the
+[milestone](../../wip/shared-memory.md#task-4-scope--accepted-chronium-2026-10-30).
+The SDK helpers borrow explicit grants; ordinary native children keep MANAGE.
+Stock shell/Lua bundles explicitly declare their separate optional private
+constructor source. Only declaring children receive creation authority.
 
-Same existing launch/pages/CALL/SEND workload arguments, nested KVM/q35, UEFI,
-4 GiB, CPU0 Development and CPU0/1 Remote ceiling as above. One fresh boot per
-1/4-vCPU configuration, all counts and FINAL drains pass. IPC cells are
-within-boot median [min,max] ms, not boot variation. Another agent's QEMU
-guest was active on this VM during capture; host load/affinity and other-guest
-commands are retained. These numbers do not establish idle-host or native
-performance. No native/PXE action.
+### Build and source provenance
 
-| Guest interval, ms | 1 CPU | 4 CPUs |
-| --- | --- | --- |
-| 1,024 launches | 1565.356 | 839.561 |
-| Private pages | 22.616 | 17.747 |
-| CALL64 completion | 2.006 [1.600, 2.598] | 1.231 [1.212, 1.702] |
-| CALL4096 completion | 1.651 [1.526, 3.176] | 1.391 [1.356, 1.978] |
-| SEND64 completion | 0.705 [0.646, 1.444] | 0.645 [0.631, 1.149] |
-| SEND4096 completion | 1.147 [0.991, 1.334] | 0.712 [0.680, 1.259] |
+The common-base controls freeze main `9c9496546475`, userland `dbab8ae7b159`
+and ports `46b9242b7d86`, with compiler `pyxis-llvm23.1.3-8bdf136` and effective
+kernel configuration `524590b0d7a5`. A kernel SHA-256 is
+`2e10c7a033ba436feee64eb81d773dfa0a6cf235969de7d6697fc628408dd554`;
+B is `152cb4ed8ee99801fda05925b3968a7234990a0fa00bf300fd7aef0b567a1b0a`.
+B uses userland `f9b5ffef21bc`, ports `7695ecbacf86`, and the task-4 source at
+`e32781ba12a7` plus the recorded initial-MEMORY privacy patch. Exact source
+patches, application/member hashes and component provenance accompany inputs.
+No instrumentation, writable media or native/PXE action.
 
-Frozen app/source/header hashes, preparation logs, exact commands and all raw
-records: `/home/chronium/build/shared-memory-task4/baseline/`. Preserve these
-inputs for matched after-controls. Both owned guests stopped.
+After rebasing onto main `b7957e1291bd`, the code head is `39c9bbca205f`,
+userland `6808b8a7d277` (SDK ancestor `c10783bfc9cd`), ports unchanged. Incoming
+changes are TCP receive-window sizing and shell history; task-4 implementation
+files are unchanged. The fresh full kernel/SDK build, including libunwind,
+libc++abi and libc++, and ordinary userland `all shared-min` pass. Lua 5.5 and
+Lua 5.1/libuv builds pass. The existing compiler container is used unchanged.
+Other narrow static prefixes/data are reused read-only with consumed-header and
+content provenance checks; this is not a rebuild of every port. An initial
+container permission failure happened before compilation and remains a failed
+receipt, followed by the successful ordinary build with the documented container
+user/mount flags.
 
-### Refreshed common base and SDK wrapper checks
+### Functional qualification
 
-After the unrelated package-versioning merge, the task-4 comparison base is
-clean main `7aa17eb61` / userland `84b01f5`, same compiler/effective config.
-Fresh kernel/C runtime/selected apps and Lua are rebuilt. Other narrow static
-port prefixes/timezone bytes are reused read-only after checking their consumed
-SDK headers and recorded content; no LLVM/Mesa/all-ports build. Kernel SHA-256
-`fc2e1a1c7b356b6a7e369aa0486d7ef0a1e32e3c363dc6d6dcf26978ca53b917`.
-The original captures above remain unchanged, not relabelled. This refresh
-separates incoming main changes from the task's declared-grant delivery.
+Root-only SDK checks at kernel `8ff1658c0` / helpers `a331e7d90` pass native and
+libc create/map/unmap, zeroed padding, READ/RW coherence, handle-close survival,
+rights/argument errno refusals and stale identities at one/four vCPUs. C++23
+header/link checks pass. Subsequent rebases change none of the six SDK files;
+these older receipts keep their original source labels.
 
-Same existing commands/configuration, one fresh nested boot per CPU count; all
-counts/drains pass. IPC entries are within-boot median [min,max], milliseconds.
-Another agent's guest also overlaps both refreshed captures; its command and
-host context are retained. These results are observed concurrent-load samples,
-not a clean matched performance baseline or an attribution of the variation.
-Arrange a quiet matched window before drawing a before/after verdict. No
-boot-variance, native performance or speedup claim.
+Normal trusted-startup functional boots use nested KVM/q35, UEFI, 4 GiB and
+one/four vCPUs, with explicit `nvme.write=0 display.timing=off`. Exact commands,
+fixtures and expected byte/newline counts are recorded before execution:
 
-| Guest interval, ms | 1 CPU | 4 CPUs |
-| --- | --- | --- |
-| 1,024 launches | 1059.296 | 1897.364 |
-| Private pages | 18.382 | 20.805 |
-| CALL64 completion | 1.285 [1.263, 1.902] | 2.521 [1.614, 3.312] |
-| CALL4096 completion | 1.458 [1.406, 2.618] | 2.128 [1.669, 10.533] |
-| SEND64 completion | 0.657 [0.635, 1.119] | 1.406 [0.849, 7.447] |
-| SEND4096 completion | 0.758 [0.698, 1.652] | 2.593 [1.115, 8.448] |
+- `shared-min` empty input, six-byte input and 262,400-byte binary input produce
+  the expected counts after worker retirement. A 20 MiB input also succeeds;
+  the reusable buffer is 64 KiB, not a total-input cap.
+- A bundle explicitly declaring creation can create/map/write/read/unmap;
+  MANAGE-only and ordinary raw native children receive DENIED instead.
+- Lua 5.5 `pyxis.run`, captured jobs selecting MEMORY, and Lua 5.1 `luv.spawn`
+  can launch the declaring child. Captured jobs excluding MEMORY refuse before
+  child launch. A MANAGE-only shell bundle refuses the required child grant.
+- Counts, process results and Remote FINAL/drain are checked independently.
+  Source review confirms the worker receives a native READ-only region mapping,
+  payload reuse follows acknowledgement, and view release follows actual
+  contained-worker retirement.
 
-Focused SDK-wrapper 1/4-CPU boots use the real kernel `8ff1658c0` and userland
-helpers `a331e7d90`: native and libc create/map/unmap pass zeroed rounded padding,
-READ/RW alias coherence, handle-close survival, rights/argument errno refusals
-and stale-identity errors. A local qualifier replaces only the selected boot-init
-image and receives the kernel's ordinary explicit trusted-root creation grant;
-helpers add no authority. These cases are root-only, not a child-transfer or
-normal bundle-declaration qualification. C++23 header/link checks pass without
-C++ standard libraries; the SDK build here is C-only.
+All cases pass at four CPUs; the one-CPU run passes the first cases and its
+remaining-case rerun passes after correcting a local fixture read request from
+4,096 to 1,024 bytes (the native per-read maximum is 4,088). The failed receipt
+and old images are retained. No product change was required for that fixture.
+Concurrent guests are recorded in these correctness runs, which make no timing
+claim. No new kernel hooks, injected replies, lost-CPU simulation or native
+qualification is inferred from these checks.
 
-The wrapper branch rebases to `2301286e44` on dependency main `84b01f5` without
-changing any of its six source files; the refreshed C-only SDK/runtime build
-passes. Prior QEMU/SDK receipts retain their original source/manifests. The
-new native-job grant cases are source-reviewed; worker transfer remains with
-the declared-source/example slice. No injected malformed native replies, native
-run or compiler rebuild is claimed.
+### Matched existing-path controls
 
-Local provenance/results: `shared-memory-task4/{baseline-current,
-sdk-wrappers,sdk-qualification}/` under `/home/chronium/build/`. All owned
-QEMU/debugger/build jobs stopped after these checks.
+The unchanged launch/pages/CALL/SEND workloads and CPU allowances above are
+used. The initial 8ff and 7aa before-code captures were contended; all counts
+and drains passed, but they establish no clean performance baseline. A refreshed
+common-base A/B one-CPU attempt also passes counts/drains; a separate agent's
+guest starts during B, so that attempt is retained without a before/after
+performance verdict and no four-CPU timed boot starts in it.
+
+A subsequent quiet-window pair completes one boot per variant/CPU count, with
+69 half-second process-monitor samples showing no foreign or overlapping QEMU
+guest in this VM. All workload counts and FINAL drains pass. Inputs, compiler,
+configuration and commands are matched; IPC cells are median [min,max] across
+100 passes within one boot, not independent boots. Values are milliseconds:
+
+| Guest interval | A 1 CPU | B 1 CPU | A 4 CPUs | B 4 CPUs |
+| --- | --- | --- | --- | --- |
+| 1,024 launches | 1478.272 | 838.587 | 1391.333 | 849.971 |
+| Private pages | 32.540 | 18.336 | 25.846 | 17.864 |
+| CALL64 completion | 2.728 [2.553, 3.996] | 1.288 [1.263, 1.675] | 1.357 [1.230, 3.174] | 1.250 [1.219, 2.431] |
+| CALL4096 completion | 1.986 [1.516, 3.929] | 1.477 [1.434, 2.613] | 1.457 [1.385, 2.774] | 1.431 [1.375, 2.974] |
+| SEND64 completion | 0.680 [0.640, 1.171] | 0.659 [0.637, 1.083] | 0.652 [0.632, 2.584] | 0.651 [0.632, 0.915] |
+| SEND4096 completion | 0.796 [0.739, 1.536] | 0.748 [0.714, 1.134] | 0.742 [0.703, 1.051] | 0.732 [0.689, 1.284] |
+
+No measured regression appears in this pair. The large launch/pages reductions
+and one-CPU CALL changes are unattributed; they do not establish a task-4 speedup,
+boot-to-boot repeatability or native parity. Task 4 changes startup/delegation,
+not page or per-message IPC implementation, and no speculative hot-path change
+was made. Host CPU/affinity/load snapshots and every earlier contended receipt
+remain alongside the quiet-window results. No repeats select favorable timings.
+
+Local receipts are under `/home/chronium/build/shared-memory-task4/`:
+`baseline/`, `baseline-current/`, `baseline-final/`, `after-final/`,
+`sdk-wrappers/`, `sdk-qualification/`, and `integration/functional/`.
+The failed fixture inputs are preserved under the latter's `previous-inputs/`.
+Small handoff reports live under `/shared/present/shared-memory/task4/`.
+Native consumer/shared-buffer costs remain milestone task 5.

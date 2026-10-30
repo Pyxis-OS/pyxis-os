@@ -212,13 +212,12 @@ No new benchmark framework or implicit fault-injection/native interruption scope
 ## Task 4 scope — accepted (chronium, 2026-10-30)
 
 Inspected main `8ff1658c0` after task 3, with userland `c21fe9412fc4`.
-Kernel creation/mapping/release and withdrawal are delivered. The SDK currently
-exposes private MEMORY helpers only; bundle vocabulary accepts `memory/manage`.
-Boot-init's service inventory and the session/shell ordinary child grants narrow
-MEMORY to MANAGE. The existing trusted launch-source inventory, including exact
-held shell/Lua interpreters, is the route for declared child authority.
+At that baseline the kernel creation/mapping/release and withdrawal paths were
+delivered, while SDK and bundle creation declarations were absent. Task 4 now
+adds them through the trusted launch-source inventory, including exact held
+shell/Lua interpreters; ordinary child MEMORY grants remain MANAGE-only.
 
-Both choices are accepted; implementation is authorized after the fresh baseline:
+The accepted contract is:
 
 1. **Creation is available through a private declared launch source,
    without another space switch.** Stock trusted boot-init/session/mux/Remote
@@ -250,7 +249,7 @@ Both choices are accepted; implementation is authorized after the fresh baseline
    do not add it to the default archive or release catalog. It is not a new
    benchmark framework or compositor interface.
 
-The SDK slice adds explicit-handle libpyxis create/map helpers beside native
+The SDK provides explicit-handle libpyxis create/map helpers beside native
 MEMORY release and a `pyxis/shared_memory.h` libc extension using the existing
 errno mapping. They borrow supplied grants, return owned region handles/view
 descriptors, and never discover extra authority, retry uncertain operations,
