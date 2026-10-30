@@ -42,6 +42,8 @@
  * TCP_ROUTED_MSS once established; see tcp_connection_established(). */
 #define TCP_MSS 1460
 #define TCP_CALCULATE_EFF_SEND_MSS 1
+#define LWIP_WND_SCALE 1
+#define TCP_RCV_SCALE NET_TCP_RECEIVE_SCALE
 #define TCP_WND NET_TCP_RECEIVE_BYTES
 #define TCP_SND_BUF NET_TCP_SEND_BYTES
 #define TCP_OOSEQ_MAX_BYTES NET_TCP_RECEIVE_BYTES

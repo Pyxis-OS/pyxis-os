@@ -5,7 +5,11 @@ TCP on Pyxis was tuned toward the owner's gigabit LAN in #559 and userland
 [TCP](../devices/tcp.md#ownership-and-limits) and the benchmark in
 [`ttcp`](../devices/tcp.md#ttcp). This report records the configuration
 chosen, the native and QEMU measurements, how to repeat them, and what
-remains.
+remains. These are historical measurements and configuration. The current
+[receive profile](../devices/tcp.md#ownership-and-limits) negotiates a backed
+1,048,560-byte window; the send budget remains 65,535 bytes. See the
+[package-download comparison](experiments/pkg-download-throughput.md) for the
+2026-10-30 waterfall and scaling qualification.
 
 ## Configuration
 

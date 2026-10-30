@@ -7,8 +7,9 @@
 #include <kernel/object/object.h>
 #include <abi/tcp.h>
 
-/* The largest windows lwIP can advertise without window scaling. */
-#define NET_TCP_RECEIVE_BYTES 65535
+/* Backed receive capacity: the full 16-bit window at scale four. */
+#define NET_TCP_RECEIVE_SCALE 4
+#define NET_TCP_RECEIVE_BYTES (UINT32_C(65535) << NET_TCP_RECEIVE_SCALE)
 #define NET_TCP_SEND_BYTES 65535
 #define NET_TCP_MAX_WAIT_NS TCP_CONNECT_MAX_WAIT_NS
 
