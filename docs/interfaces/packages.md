@@ -27,21 +27,32 @@ Indexes and `package.lua` are Lua files returning one table, parsed with
 the literal parser in libpyxis (`userspace/lib/literal.c`), which never runs
 the source. Accepted values are tables, strings, finite numbers and booleans;
 comments and long strings are allowed. Functions, `nil`, names, calls, operators,
-duplicate keys and anything after the returned table are refused. Limits: 1 MiB
-of source, 32 nested tables, 8,192 values, 8,192 entries, 8,192 comments and 16 Mi
-work units. An index entry without `abi` costs 14 values and one with it 16,
-so one index holds 584 unbound or 511 bound package versions; the packer
-refuses the next one before publishing anything.
+duplicate keys and anything after the returned table are refused. The parser
+does not limit the number of values, entries or comments: a document costs memory
+in proportion to its source, duplicate keys are found in linear time, and parsing
+work is bounded at 64 units per source byte plus 1 MiB, which a valid document
+never approaches. The only fixed bound is 32 nested tables, because parsing
+recurses. A repository index and the set records are read whole and parsed
+without a source limit, so only memory bounds them; a refusal names the
+parser's complaint with its line and column, or the source size when memory ran
+out. Small documents that a program reads into one fixed buffer (`package.lua`,
+os-release, `packages.lua`, boot and shell configuration, a signature, a
+certificate) keep a 1 MiB source limit, reported as
+`N bytes exceeds the limit of M (small-document bound)`. See
+[limits](limits.md) for the policy behind both.
 
 The schemas below accept only the value types they name. `size`,
 `files` and `bytes` are integer literals: `1.0`, `true` or a string is refused,
 and so is a positional key in a field table or a named key in an array.
 
-`pxpkg.py` carries a Python port of that grammar, its limits and its work
-accounting, including the duplicate-key charge. On 2026-10-18 it agreed with the C
-parser, built on the host against stub Lua headers, on every input of two corpora:
-the author's 34 cases and the reviewer's 111 cases plus the work-limit tables
-(2,600 to 4,090 keys), comparing the parsed values as well as acceptance.
+`pxpkg.py` carries a Python port of that grammar and its limits: the same
+depth bound, the same proportional work bound and the same duplicate-key rule
+(an integer-valued number is the integer). The packer must accept whatever the
+client accepts, so the two change together. The port is not the shipped parser
+and the earlier cross-check corpora (34 and 111 cases, 2026-10-18) were against
+the previous limits; the removal of the item limits was checked with new cases for
+duplicate keys across the scan and hash paths and for large tables, not by
+re-running that corpus.
 
 ## Names
 
@@ -658,8 +669,8 @@ failure. Unreachable
 hosts, HTTP errors and invalid indexes refuse without changing configuration;
 there is no offline add. Remove needs no network request. The literal and HTTP
 URL parser bounds apply. There is no environment URL override or implicit
-repository. Every index must pass the existing
-1 MiB/schema limits; a failed index refuses the command instead of using a
+repository. Every index must pass the schema checks, with no source limit
+beyond memory; a failed index refuses the command instead of using a
 partial catalog. Fetch errors name the
 full index/archive URL and include the provider detail (including the HTTP
 status when a response supplied one).
