@@ -35,6 +35,7 @@ struct tcp_connection {
   struct tcp_connection *ready_next;
   struct tcp_connection *ready_head, *ready_tail;
   size_t pending_count;
+  uint32_t backlog;
 };
 
 /* IPv4's minimum reassembly size minus headers: safe on any routed path. */
@@ -52,7 +53,7 @@ enum net_result tcp_connection_allocation_status(void);
 void tcp_connection_abort_pending(struct tcp_connection *listener);
 
 enum net_result tcp_listener_prepare(const struct ipv4_route *route,
-    uint32_t address, uint16_t port,
+    uint32_t address, uint16_t port, uint32_t backlog,
     struct tcp_connection **output);
 void tcp_listener_close(struct tcp_connection *listener, enum call_status status);
 void tcp_listener_inspect(struct tcp_connection *listener, struct tcp_listener_info *info);

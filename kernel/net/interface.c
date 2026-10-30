@@ -6,6 +6,7 @@
 #include <kernel/debug.h>
 #include <kernel/net/interface.h>
 #include <kernel/net/registry.h>
+#include <kernel/net/storage.h>
 #include <kernel/net/factory.h>
 #include <kernel/net/arp.h>
 #include <kernel/net/config.h>
@@ -238,6 +239,7 @@ static void network_worker(void *argument)
     }
     bool serviced = net_config_service();
     net_route_refresh();
+    net_storage_report();
     serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
@@ -278,6 +280,7 @@ static void network_debug_worker(void *argument)
     }
     bool serviced = net_config_service();
     net_route_refresh();
+    net_storage_report();
     serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
@@ -310,6 +313,7 @@ enum mm_result net_init(void)
 {
   KASSERT(arch_cpu_index() == 0 && !net_worker_available());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  net_storage_init();
   enum mm_result result = kernel_task_create(boot_options_get()->debug_net ?
       network_debug_worker : network_worker, NULL);
   if (result == MM_OK) {

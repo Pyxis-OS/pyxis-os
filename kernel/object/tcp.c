@@ -1,6 +1,7 @@
 #include <abi/tcp.h>
 #include <kernel/net/factory.h>
 #include <kernel/object/net_factory.h>
+#include <kernel/log.h>
 #include <kernel/net/tcp.h>
 #include <kernel/object/tcp.h>
 #include <kernel/panic.h>
@@ -23,13 +24,20 @@ static struct syscall_result listen_service(struct kernel_object *object, uint64
       !user_buffer_check(reply_address, sizeof(struct tcp_listen_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (request.path.reserved || request.reserved || request.reserved2 || !request.path.source || !request.port) {
+  if (request.path.reserved || request.reserved || !request.backlog || !request.path.source ||
+      !request.port) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  uint32_t limit = net_tcp_backlog_limit();
+  if (request.backlog > limit) {
+    kwarn("tcp: listen backlog: %u exceeds the limit of %u (a quarter of the streams the "
+        "network storage budget holds)\n", request.backlog, limit);
+    return (struct syscall_result){CALL_LIMIT, 0};
   }
   struct tcp_listen_reply reply;
   enum call_status status = net_tcp_listen((struct net_factory *)object,
       &process_current()->capabilities,
-      request.path, request.path.source, request.port, &reply);
+      request.path, request.path.source, request.port, request.backlog, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

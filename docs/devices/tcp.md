@@ -38,8 +38,9 @@ another returns BUSY. Its absolute monotonic deadline is at most 30 seconds ahea
 Timeout leaves the listener usable and does not remove a connection from its queue.
 The caller's stream object and handle slot are reserved before waiting.
 
-Listener and connection records are dynamically owned under the shared 64 MiB
-TCP/UDP storage allowance. Each admitted stream has an allocated 1,048,560-byte
+Listener and connection records are dynamically owned under the shared
+TCP/UDP storage budget (one sixteenth of installed RAM, at least 64 MiB; see
+[limits](../interfaces/limits.md#network-storage)). Each admitted stream has an allocated 1,048,560-byte
 receive ring and a separate receive-window reservation before SYN/passive
 acceptance. New records and transmit data cannot spend those ingress credits.
 A separate 64 KiB allowance covers transient control/handshake work. The current
@@ -47,7 +48,7 @@ A separate 64 KiB allowance covers transient control/handshake work. The current
 each window reservation. Listener conversion releases its unused stream backing;
 stream reservations survive TIME_WAIT and release after actual PCB teardown.
 Unread ring data remains available independently until drained or closed.
-Each listener retains four pending connections across
+Each listener retains the `backlog` its LISTEN asked for, across
 SYN handshakes and established-but-unaccepted streams. New SYNs receive no answer
 when pending capacity or allocation is full; peers can retry normally. A handshake
 expires ten seconds after admission; retransmissions do not extend it. Accepting
@@ -159,8 +160,8 @@ can cancel them without confusing a reused tuple or slot.
 
 | Resource | Current limit |
 | --- | --- |
-| Transport records | Dynamic; actual metadata/retained buffers share the 64 MiB native TCP/UDP allowance |
-| Listeners / pending connections | Dynamic listeners; four combined half-open/ready connections each |
+| Transport records | Dynamic; actual metadata/retained buffers share the native TCP/UDP storage budget (RAM/16, at least 64 MiB) |
+| Listeners / pending connections | Dynamic listeners; each holds its LISTEN `backlog` of combined half-open/ready connections: 1 to a quarter of the streams the budget holds, at most 255 (`CALL_LIMIT` above) |
 | Payload storage | 1,048,560-byte backed receive window; 65,535-byte send budget allocated as needed |
 | Out-of-order receive | Shares the receive window; at most 16 pbufs |
 | READ/WRITE extent | At most 4 KiB per call; helpers validate returned counts |
@@ -174,13 +175,14 @@ Idle owned streams do not expire merely for being idle. Caller deadlines and
 transport timers are distinct. Repeated shutdown does not restart progress
 timers. Admission can fail while TIME_WAIT retains its charged storage.
 
-The 64 MiB allowance is a chosen admission quota, not a physical or protocol
+The budget is a chosen admission quota derived from installed RAM, not a physical or protocol
 capacity; actual heap allocation can fail separately. A stream claims about
 2 MiB for its ring and equal ingress reservation before other metadata or send
 data. The ring is freed after peer FIN and consumption of its last byte, or on
 failure/final release; the ingress reservation survives until PCB teardown,
 including TIME_WAIT. Thus many recently closed connections can also exhaust
-admission. The quota remains unchanged for the separate limits audit.
+admission. A refusal is `NO_MEMORY` and the kernel log reports, at most once a second, how
+many admissions were refused and how much of the budget was in use.
 
 Metadata, retained payloads, reassembly and pending replies are accounted; see
 [lwIP ownership and allocation](lwip.md) for the implementation details.

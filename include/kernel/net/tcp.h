@@ -11,6 +11,10 @@
 #define NET_TCP_RECEIVE_SCALE 4
 #define NET_TCP_RECEIVE_BYTES (UINT32_C(65535) << NET_TCP_RECEIVE_SCALE)
 #define NET_TCP_SEND_BYTES 65535
+/* A stream charges its ring and an equal receive reservation. */
+#define NET_TCP_STREAM_BUDGET_BYTES (2 * (size_t)NET_TCP_RECEIVE_BYTES)
+/* lwIP's listen backlog counter is eight bits wide. */
+#define NET_TCP_BACKLOG_FIELD_MAX 255
 #define NET_TCP_MAX_WAIT_NS TCP_CONNECT_MAX_WAIT_NS
 
 struct tcp_connection;
@@ -47,7 +51,9 @@ enum call_status net_tcp_connect(struct net_factory *factory,
     uint16_t port, uint64_t deadline, struct tcp_connect_reply *reply);
 enum call_status net_tcp_listen(struct net_factory *factory,
     struct capability_table *table, struct net_path path, uint32_t address,
-    uint16_t port, struct tcp_listen_reply *reply);
+    uint16_t port, uint32_t backlog, struct tcp_listen_reply *reply);
+/* Largest listener backlog the network storage budget allows. */
+uint32_t net_tcp_backlog_limit(void);
 enum call_status net_tcp_accept(struct kernel_object *object, struct capability_table *table,
     uint64_t deadline, bool nonblocking, struct tcp_accept_reply *reply);
 enum call_status net_tcp_listener_inspect(struct kernel_object *object,

@@ -171,8 +171,8 @@ worker visit, across the full ephemeral namespace if necessary. Each turn checks
 cancellation, source epoch, route and deadline; a SYN starts only after binding.
 Reuse stays disabled, including TIME_WAIT. The provisional grant remains private
 until the handshake completes; failure synchronously aborts it before reporting.
-No small global record/listener count remains: actual storage shares the 64 MiB
-allowance and exhaustion does not evict another connection.
+No small global record/listener count remains: actual storage shares the network
+storage budget and exhaustion does not evict another connection.
 
 The configured receive window is 1,048,560 bytes, negotiated with receive scale
 four; without a peer scale option lwIP limits it to 65,535 bytes. The send payload
@@ -264,7 +264,7 @@ The pinned lwIP listen conversion transfers extension arguments to the smaller P
 and clears the old PCB's extensions before freeing it; the record then points to
 the returned listener. Listener service never accesses full-stream PCB fields.
 
-The backlog is enabled with four slots. lwIP charges SYN_RCVD connections at SYN
+The backlog is enabled with the LISTEN request's slot count (lwIP's counter is eight bits). lwIP charges SYN_RCVD connections at SYN
 admission. Each new PCB gets its own generation and record from the allocation
 hook. The passive-open extension restores the child's callback argument, which
 lwIP overwrites with the listener's argument, then records its internal listener

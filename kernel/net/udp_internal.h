@@ -4,12 +4,16 @@
 #include <kernel/net/udp.h>
 
 #define UDP_HEADER_SIZE 8
-#define UDP_RECEIVE_QUEUE_LIMIT 4
-#define UDP_RECEIVE_GLOBAL_LIMIT 16
+/* An endpoint queues received datagrams up to this share of the network storage
+ * budget (256 KiB at the 64 MiB floor); later arrivals are dropped and counted. */
+#define UDP_RECEIVE_BUDGET_DIVISOR 256
 
 struct udp_datagram {
-  struct net_packet *packet; /* Owned UDP header + payload, including empty payloads. */
+  struct udp_datagram *next;
   uint32_t source;
+  uint16_t port;
+  size_t length; /* Payload without the UDP header; empty payloads are queued. */
+  uint8_t data[];
 };
 
 struct udp_io;
@@ -26,8 +30,9 @@ struct udp_endpoint {
   uint64_t address_epoch; /* Zero for address-independent broadcast endpoints. */
   bool broadcast;
   struct udp_io *send, *receive; /* Direction ownership, under the I/O lock. */
-  struct udp_datagram received[UDP_RECEIVE_QUEUE_LIMIT];
-  size_t receive_head, receive_count;
+  struct udp_datagram *received_head, *received_tail;
+  size_t receive_count, receive_bytes; /* Queued datagrams and their records' size. */
+  bool drop_logged;
 };
 
 enum call_status net_udp_endpoint_status(const struct udp_endpoint *endpoint);

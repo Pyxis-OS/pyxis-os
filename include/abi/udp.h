@@ -60,6 +60,7 @@ struct udp_endpoint_info {
   uint32_t reserved2;
   uint64_t interface_id;
   uint64_t address_epoch;
+  uint64_t dropped; /* Received datagrams dropped for lack of queue space since open. */
 };
 
 struct udp_open_reply {
@@ -124,7 +125,7 @@ _Static_assert(sizeof(struct udp_receive_reply) == 16, "UDP receive reply");
 
 _Static_assert(sizeof(struct udp_open_route_request) == 40, "UDP routed open request");
 _Static_assert(sizeof(struct udp_open_request) == 40, "UDP open request");
-_Static_assert(sizeof(struct udp_endpoint_info) == 32, "UDP endpoint info");
-_Static_assert(sizeof(struct udp_open_reply) == 40, "UDP open reply");
+_Static_assert(sizeof(struct udp_endpoint_info) == 40, "UDP endpoint info");
+_Static_assert(sizeof(struct udp_open_reply) == 48, "UDP open reply");
 
 #endif

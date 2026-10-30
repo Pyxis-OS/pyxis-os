@@ -2,6 +2,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/completion.h>
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/net/arp.h>
 #include <kernel/net/storage.h>
@@ -54,7 +55,6 @@ static struct udp_io *finished, *finished_tail;
 static struct udp_io *transmitting;
 static atomic_bool io_locked;
 static uint64_t next_token;
-static size_t queued_datagrams; /* Worker-owned, within the software packet budget. */
 static struct {
   uint64_t queued, delivered, unbound, queue_full, no_memory;
 } udp_receive_stats;
@@ -522,16 +522,14 @@ void net_udp_failed(uint64_t token, enum net_result result)
 
 static void release_datagram(struct udp_endpoint *endpoint)
 {
-  struct udp_datagram *datagram = &endpoint->received[endpoint->receive_head];
-  uint64_t flags = cpu_save_interrupts();
-  size_t charge = sizeof(*datagram->packet) + datagram->packet->length;
-  net_packet_release(datagram->packet);
-  net_storage_uncharge(charge);
-  cpu_restore_interrupts(flags);
-  *datagram = (struct udp_datagram){0};
-  endpoint->receive_head = (endpoint->receive_head + 1) % UDP_RECEIVE_QUEUE_LIMIT;
+  struct udp_datagram *datagram = endpoint->received_head;
+  endpoint->received_head = datagram->next;
+  if (!endpoint->received_head) {
+    endpoint->received_tail = NULL;
+  }
+  endpoint->receive_bytes -= sizeof(*datagram) + datagram->length;
   --endpoint->receive_count;
-  --queued_datagrams;
+  net_storage_free(datagram);
 }
 
 void net_udp_discard_received(struct udp_endpoint *endpoint)
@@ -625,15 +623,15 @@ static bool service_receive(struct udp_io *call)
     }
   }
   if (status == CALL_OK && endpoint->receive_count) {
-    struct udp_datagram *datagram = &endpoint->received[endpoint->receive_head];
-    size_t length = datagram->packet->length - UDP_HEADER_SIZE;
+    struct udp_datagram *datagram = endpoint->received_head;
+    size_t length = datagram->length;
     if (length > call->length) {
       status = CALL_BUFFER_TOO_SMALL;
     } else {
       call->reply = (struct udp_receive_reply){
-        .address = datagram->source, .port = net_read_u16(datagram->packet->data), .length = length,
+        .address = datagram->source, .port = datagram->port, .length = length,
       };
-      memcpy(call->data, datagram->packet->data + UDP_HEADER_SIZE, length);
+      memcpy(call->data, datagram->data, length);
       release_datagram(endpoint);
       ++udp_receive_stats.delivered;
     }
@@ -764,27 +762,37 @@ void net_udp_deliver(const struct net_interface *interface, uint32_t source,
     ++udp_receive_stats.unbound;
     return;
   }
-  if (endpoint->receive_count == UDP_RECEIVE_QUEUE_LIMIT || queued_datagrams == UDP_RECEIVE_GLOBAL_LIMIT) {
-    ++udp_receive_stats.queue_full;
+  size_t payload = length - UDP_HEADER_SIZE;
+  size_t cost = sizeof(struct udp_datagram) + payload;
+  size_t limit = net_storage_limit() / UDP_RECEIVE_BUDGET_DIVISOR;
+  bool full = cost > limit || endpoint->receive_bytes > limit - cost;
+  struct udp_datagram *datagram = full ? NULL : net_storage_alloc(cost);
+  if (!datagram) {
+    if (full) {
+      ++udp_receive_stats.queue_full;
+    } else {
+      ++udp_receive_stats.no_memory;
+    }
+    ++endpoint->local.dropped;
+    if (!endpoint->drop_logged) {
+      endpoint->drop_logged = true;
+      kwarn("udp: port %u dropped a received datagram (%zu of %zu bytes queued); "
+          "UDP_INSPECT counts further drops\n", endpoint->local.port, endpoint->receive_bytes, limit);
+    }
     return;
   }
-  uint64_t flags = cpu_save_interrupts();
-  size_t charge = sizeof(struct net_packet) + length;
-  bool charged = net_storage_charge(charge);
-  struct net_packet *packet = charged ? net_packet_allocate(length) : NULL;
-  if (!packet && charged) {
-    net_storage_uncharge(charge);
+  *datagram = (struct udp_datagram){
+    .source = source, .port = net_read_u16(message), .length = payload,
+  };
+  memcpy(datagram->data, message + UDP_HEADER_SIZE, payload);
+  if (endpoint->received_tail) {
+    endpoint->received_tail->next = datagram;
+  } else {
+    endpoint->received_head = datagram;
   }
-  cpu_restore_interrupts(flags);
-  if (!packet) {
-    ++udp_receive_stats.no_memory;
-    return;
-  }
-  memcpy(packet->data, message, length);
-  size_t tail = (endpoint->receive_head + endpoint->receive_count) % UDP_RECEIVE_QUEUE_LIMIT;
-  endpoint->received[tail] = (struct udp_datagram){.packet = packet, .source = source};
+  endpoint->received_tail = datagram;
+  endpoint->receive_bytes += cost;
   ++endpoint->receive_count;
-  ++queued_datagrams;
   ++udp_receive_stats.queued;
   /* RX can run after the worker's I/O pass; satisfy parked receivers now rather
    * than sleeping until their deadlines with a datagram already available. */

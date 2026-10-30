@@ -974,8 +974,7 @@ TIME_WAIT and release after PCB/pbuf teardown has returned. Unread ring data has
 its independent lifetime. Real heap exhaustion can still refuse allocation.
 These allowance values are initial resource settings, not wire-format constants.
 
-Retain the per-object rules: one operation per direction, four pending TCP
-handshakes/accepts per listener, existing UDP receive queues, 1472-byte datagrams,
+Retain the per-object rules: one operation per direction, listener backlog from the LISTEN request, existing UDP receive queues, 1472-byte datagrams,
 packet/NIC queue backpressure and native address-epoch invalidation. Dynamic
 worker service, timeout/cancel and teardown passes must remain bounded and
 resumable; no process-sized IF=0 scans or allocation in hardware interrupt
