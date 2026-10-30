@@ -1,6 +1,6 @@
 # Libc capacity qualification
 
-Inspected and built 2026-10-30: parent `b37debacd`, initial userland `ae6d946`,
+Initial before/after qualification, 2026-10-30: parent `b37debacd`, initial userland `ae6d946`,
 changed userland `dbc08a1`, ports `a527526`. Compiler container
 `pyxis-llvm23.1.3-8bdf136`, SDK/C++ runtime rebuilt, hosted C at the SDK's O2 and
 no-red-zone convention. No compiler-container rebuild. Kernel source unchanged.
@@ -57,6 +57,11 @@ existing SDL detach no-op is outside this delivery. All owned QEMU guests stoppe
 WP6.7 follow-up: failed obsolete key-metadata retirement no longer stops the
 process. Source review checks that released/uncertain descriptors are forgotten
 before any collector could retry them; failed pre-publication allocation keeps
-its original status. Ordinary key growth/destructor and one/four-CPU controls
-are repeated after this change and the WP9 rebase. Cleanup-error behavior is
+its original status. Rebased onto parent main `d1c409a8b`, userland main `869a40e`, and ports main
+`52381a0`; integrated userland `aba5e3a` and ports `19a4a02`. Rebuilt kernel,
+SDK/C++ runtime, selected applications and both SDL archives. No WP6 kernel edit.
+The 13 ordinary key growth/destructor, lifecycle, stack, allocation and SDL
+checks passed at both one and four CPUs after this change and the WP9 rebase.
+Existing allocator timing results above are retained; no timings were taken
+during the concurrent hosted LLVM build. Cleanup-error behavior is
 source-reviewed; no injected native failure or every-byte reuse proof is claimed.

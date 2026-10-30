@@ -35,8 +35,7 @@ with the launcher work; this checklist distinguishes libc from that dependency.
 - [x] Stable libc thread records and native-sized worker stacks (userland #454).
 - [x] Growable key registry and lazy per-context values (userland #455).
 - [x] Full-width checked allocator and over-page alignment (userland #456).
-- [x] SDL worker-stack migration and reached consumer updates (ports PR linked
-  from the integration PR).
+- [x] SDL worker-stack migration and reached consumer updates (ports #241).
 - [ ] Common limit-reason wiring and coordinated native count/stack admission.
 - [x] Per-item one/four-CPU QEMU qualification and SDK/C++/SDL builds.
 - [x] Quiet matched existing-tool measurements after the concurrent build ended;
@@ -48,8 +47,8 @@ The SDL detached-thread no-op is a separate existing lifetime issue, not fixed
 or qualified by removing registry limits.
 
 The userland/ports work is pushed as draft PRs pending common limit reasons and
-remaining kernel/ABI coordination. The current kernel still enforces 256 native task-storage
-records; tests above that count await the coordinated kernel slice. Stopped raw
+kernel/ABI coordination. The current kernel still enforces 256 native task
+storage records; tests above that count await the coordinated kernel slice. Stopped raw
 context value-release ownership has source review; no allocator fault injection
 or native qualification is claimed. See the
 [qualification record](../development/experiments/libc-capacity.md).
