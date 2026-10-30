@@ -232,7 +232,8 @@ previous ABI (25 in 0.0.9), and clients refuse those per package.
 
    It covers every published entry, which includes the previous ABI's builds. A
    `missing` or `changed` line stops the release: something pruned or rebuilt a
-   published entry.
+   published entry. The exception is a prune chronium decided on beforehand: the
+   entries it removed are expected as `missing`, and are listed in the publish record.
 3. **The tree is sound.** Every archive matches the index and nothing unlisted is
    present:
 
@@ -242,6 +243,17 @@ previous ABI (25 in 0.0.9), and clients refuse those per package.
 
 Run the same three on the `releases` tree, where the new release's package is
 the one added entry and `--abi` does not apply (a `release` entry has no `abi`).
+
+**Index size and older clients** (chronium, 2026-10-30). The working index lists
+every release's bound builds and every client reads all of it. `pkg` before
+0.0.11 parses at most 8,192 values, which is 511 ABI-bound entries, and cannot read a
+larger index; its systems then update through the installer's Update, which is
+acceptable under the 0.0.x policy. Count the bound entries before signing
+(`grep -o 'abi = "' "$OUT/public/index.lua" | wc -l`). Above 511, chronium may prune
+the oldest retired ABI first (`python3 tools/pxpkg.py prune "$OUT/public"
+--keep-abi ...`), which keeps older systems working a release longer. That is a
+courtesy, not a guarantee, and the entries it removes are listed in the publish
+record because check 2 reports them as `missing`.
 
 ## The QEMU image
 

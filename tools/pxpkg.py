@@ -25,10 +25,14 @@ class PackageError(ValueError):
 # Native literal parser limits: userspace/lib/literal.c and include/literal.h
 # (the userspace submodule). Keep this reader and that parser in step whenever
 # either side changes; the client parses every index and manifest with it.
+# The source limit is for the small documents the client reads into a fixed
+# buffer (manifests, os-release, configuration); indexes and set records have
+# none and are bounded by memory (parse_literal(..., sized=True)). The number
+# of values and entries is not limited. Work is proportional to the source.
 LITERAL_SOURCE_LIMIT = 1024 * 1024
 LITERAL_DEPTH_LIMIT = 32
-LITERAL_ITEM_LIMIT = 8192
-LITERAL_WORK_LIMIT = 16 * 1024 * 1024
+LITERAL_WORK_PER_BYTE = 64
+LITERAL_WORK_BASE = 1024 * 1024
 LITERAL_RESERVED = {
     "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto",
     "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true",
@@ -104,21 +108,20 @@ class Table:
 
 
 class LiteralParser:
-    def __init__(self, source):
+    def __init__(self, source, sized=False):
         self.source = source
+        self.sized = sized
         self.position = 0
-        self.values = 0
-        self.entries = 0
-        self.comments = 0
         self.work = len(source) * 2
+        self.work_limit = len(source) * LITERAL_WORK_PER_BYTE + LITERAL_WORK_BASE
 
     def fail(self, reason):
         line = self.source.count(b"\n", 0, self.position) + 1
         raise PackageError(f"literal line {line}: {reason}")
 
     def spend(self, count):
-        if count > LITERAL_WORK_LIMIT - self.work:
-            self.fail("literal parsing work limit exceeded")
+        if count > self.work_limit - self.work:
+            self.fail("literal parsing work exceeds its bound for this source")
         self.work += count
 
     def peek(self, offset=0):
@@ -161,20 +164,12 @@ class LiteralParser:
                 break
 
     def comment(self):
-        if self.comments == LITERAL_ITEM_LIMIT:
-            self.fail("too many comments")
-        self.comments += 1
         self.position += 2
         if self.bracket(self.position, b"[") != self.position:
             self.long_body()
         else:
             while self.position < len(self.source) and self.peek() not in (b"\n", b"\r"):
                 self.position += 1
-
-    def new_value(self):
-        if self.values == LITERAL_ITEM_LIMIT:
-            self.fail("too many literal values")
-        self.values += 1
 
     def keyword(self, word):
         end = self.position + len(word)
@@ -325,14 +320,12 @@ class LiteralParser:
             self.fail("literal table depth limit exceeded")
         self.position += 1
         result = Table()
+        seen = set()
         array_index = 0
         self.skip()
         while self.peek() != b"}":
             if not self.peek():
                 self.fail("unterminated table")
-            if self.entries == LITERAL_ITEM_LIMIT:
-                self.fail("too many table entries")
-            self.entries += 1
             if self.peek() == b"[" and self.bracket(self.position, b"[") == self.position:
                 self.position += 1
                 self.skip()
@@ -355,26 +348,19 @@ class LiteralParser:
                 key = self.source[start:self.position]
                 if key.decode() in LITERAL_RESERVED:
                     self.fail("reserved word cannot be a field key")
-                self.new_value()
                 self.skip()
                 if self.peek() != b"=":
                     self.fail("literal field needs equals")
                 self.position += 1
             else:
-                self.new_value()
                 array_index += 1
                 key = array_index
             self.skip()
             value = self.value(depth + 1)
-            # The same accounting as same_key and its caller in literal.c.
-            remaining = LITERAL_WORK_LIMIT - self.work
-            for prior_key, _ in result.entries:
-                duplicate, remaining = same_key(prior_key, key, remaining)
-                if not remaining:
-                    self.fail("literal parsing work limit exceeded")
-                if duplicate:
-                    self.fail("duplicate literal table key")
-            self.work = LITERAL_WORK_LIMIT - remaining
+            identity = key_identity(key)
+            if identity in seen:
+                self.fail("duplicate literal table key")
+            seen.add(identity)
             result.entries.append((key, value))
             self.skip()
             if self.peek() in (b",", b";"):
@@ -386,7 +372,6 @@ class LiteralParser:
         return result
 
     def value(self, depth):
-        self.new_value()
         byte = self.peek()
         if byte == b"{":
             return self.table(depth)
@@ -403,8 +388,9 @@ class LiteralParser:
         self.fail("unsupported Lua expression; expected literal value")
 
     def document(self):
-        if len(self.source) > LITERAL_SOURCE_LIMIT:
-            raise PackageError("literal source exceeds limit")
+        if not self.sized and len(self.source) > LITERAL_SOURCE_LIMIT:
+            raise PackageError(f"literal source of {len(self.source)} bytes exceeds the "
+                               f"small-document limit of {LITERAL_SOURCE_LIMIT}")
         if b"\0" in self.source:
             self.position = self.source.index(b"\0")
             self.fail("literal source contains NUL")
@@ -432,28 +418,24 @@ def identifier_part(byte):
     return identifier_start(byte) or (bool(byte) and byte.isdigit())
 
 
-def same_key(a, b, work):
-    """Return (equal, remaining work), charging as literal.c's same_key does."""
-    if not work:
-        return False, work
-    work -= 1
-    a_number = type(a) in (int, float)
-    b_number = type(b) in (int, float)
-    if a_number and b_number:
-        return a == b, work
-    if type(a) is not type(b):
-        return False, work
-    if type(a) is bool:
-        return a == b, work
-    if len(a) != len(b):
-        return False, work
-    if len(a) > work:
-        return False, 0
-    return a == b, work - len(a)
+def key_identity(key):
+    """Two keys are the same table key exactly when literal.c's same_key calls
+    them equal: an integer-valued number is the integer, other numbers compare
+    by value, and strings and booleans by content."""
+    if type(key) is bool:
+        return ("b", key)
+    if type(key) is float:
+        if key.is_integer() and -2**63 <= key < 2**63:
+            return ("n", int(key))
+        return ("f", key)
+    if type(key) is int:
+        return ("n", key)
+    return ("s", key)
 
 
-def parse_literal(source):
-    return LiteralParser(source).document()
+def parse_literal(source, sized=False):
+    """SIZED parses a repository index or snapshot, which has no source limit."""
+    return LiteralParser(source, sized).document()
 
 
 # Lua literal text for the schemas below: identifier keys, strings, integers.
@@ -1250,7 +1232,7 @@ def load_index(repository):
     path = Path(repository) / INDEX_NAME
     if not path.exists():
         return []
-    return index_check(parse_literal(path.read_bytes()))
+    return index_check(parse_literal(path.read_bytes(), sized=True))
 
 
 def index_document(entries):
@@ -1468,7 +1450,7 @@ def pack(recipe_path, repository, build_directory=None):
             # The new index must be valid before anything becomes visible.
             document = index_document(entries + [entry])
             try:
-                index_check(parse_literal(document))
+                index_check(parse_literal(document, sized=True))
             except PackageError as error:
                 raise PackageError(f"the index cannot take another entry ({error})") from None
             os.link(temporary, target)
@@ -1502,7 +1484,7 @@ def read_current(root):
 
 def load_snapshot(root, serial):
     path = root / SNAPSHOT_DIRECTORY / f"{serial}.lua"
-    header, entries = snapshot_check(parse_literal(path.read_bytes()))
+    header, entries = snapshot_check(parse_literal(path.read_bytes(), sized=True))
     require(header["serial"] == serial, f"{path} names serial {header['serial']}")
     return header, entries
 
@@ -1549,7 +1531,7 @@ def publish(repository, name, signed_at=None, signer=None):
             document["signer"] = certificate.name
         document["packages"] = [dict(entry) for entry in entries]
         data = literal_document(document)
-        snapshot_check(parse_literal(data))
+        snapshot_check(parse_literal(data, sized=True))
         directory = root / SNAPSHOT_DIRECTORY
         if not directory.exists():
             directory.mkdir()
