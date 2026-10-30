@@ -326,3 +326,25 @@ VM-range indexing remains a separate possible follow-up after remeasurement.
 Implementation is authorized with all failures releasing exactly once. QEMU
 primitive qualification precedes native work; each screen-on native window needs
 chronium's separate approval. No spin, scheduler or Mesa policy change is included.
+
+The implementation keeps capability resolution outside the packet lease and
+completion-protocol dispatch ahead of THREAD-specific validation. WAIT consumes
+the lease, including malformed/token/error paths, and drops it after bucket
+unlock before calling the scheduler. WAKE borrows it through the original
+pre-effect reply check and final checked reply/commit gate. Other THREAD
+operations release the header lease before their existing handlers.
+
+Matched QEMU/KVM q35 controls use1/4vCPU,4GiB,host,+invtsc and the same
+counter-disabled primitive binaries, SDK7d8d45f and public boot archive for both
+79a55c4a (baseline) and the candidate. Relevant thread/memory/message/syscall ABI
+headers are unchanged. Two quick primitive repeats and the ordinary protocol
+suite pass on each kernel/CPU configuration: mutex/condition/raw waiting,
+32/64-bit comparisons/expiry, rights and message validation order, completion
+precedence, reply capacity/writability, enrollment/wake, mapping withdrawal,
+thread creation/TLS/exit and process retirement. All four VMs stopped normally.
+No private observer operations are present in the production implementation.
+
+Enrollment readiness plus grace is not an exact enrollment observer. Final
+reply-delivery races, process-stop/CUT races and address reuse are source-reviewed
+but not qualified by these added protocol controls. No native performance gain
+is claimed; remeasurement and any visible native window go through chronium.
