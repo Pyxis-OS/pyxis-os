@@ -54,6 +54,10 @@ from a configured repository ([package formats](../interfaces/packages.md)).
 Toolchain self-hosting remains unsupported. The host Clang continues to build
 maintained OS/userland sources.
 
+For native C launchers, the [environment staging example](../../userspace/lib/ENVIRONMENT.md)
+shows how to inherit exported CAP/TEXT entries with explicit child replacements.
+Its SDK helper preserves borrowed ownership and keeps cwd selection separate.
+
 ## Try the pointer example
 
 The image ships a small graphics program as source in `boot://share/examples/`.

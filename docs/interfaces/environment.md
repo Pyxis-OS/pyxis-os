@@ -129,6 +129,17 @@ which must remain live through synchronous launch capture. Libc caches only TEXT
 with INCLUDE_PRIVATE and TEXT_ONLY, using INFO generation to refresh it. `getenv`
 returns a borrowed value; mutation must be excluded through its last use.
 
+The accepted staging contract (2026-10-30) uses explicit exact-name exclusions:
+`environment_capture_stage_except` appends all non-excluded entries after caller-staged
+CAP/TEXT replacements or additions. Excluded CAPs add no child grants. Missing or
+repeated exclusions are harmless; malformed names fail. It allocates nothing,
+preserves the output prefix and inherited flags/masks, and leaves both counts
+unchanged on failure. Sources stay borrowed through synchronous launch capture.
+The capture and parent table are unchanged. Names such as `home`, `pkg` or stdout
+have no special helper policy; callers also exclude stale output `.append`
+companions when replacing streams. Cwd stays a separate launch input and bundle
+authority stays with its launcher. See the [C example](../../userspace/lib/ENVIRONMENT.md).
+
 ## Publication
 
 Service startup publishes the exported slot as `NAME` and its private controller

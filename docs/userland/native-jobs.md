@@ -30,6 +30,11 @@ names, values and selected CAP handles through synchronous admission. Libc's
 contains an owned capture of exported TEXT only. A selected cwd is an independent
 owned directory chain, not another name lookup table.
 
+`environment_capture_stage_except` supports caller-staged replacements by omitting
+exact inherited names before staging, including their grants; see the
+[C environment example](../../userspace/lib/ENVIRONMENT.md). Output append companions
+are explicit exclusions when replacing a stream, and cwd selection remains separate.
+
 The synchronous call copies metadata and retains attenuated handles until kernel
 capture finishes. Source handles/descriptors survive. Immutable captures and cwd
 snapshots preserve their selected values across later parent mutation; callers
