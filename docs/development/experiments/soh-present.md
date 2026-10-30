@@ -228,8 +228,7 @@ in the task-accounting kernel bucket. File select uses 343ms, with 16–17ms in 
 bucket. Main-thread final-fence waits are about 20.5ms (pause) and 21.4ms (menu);
 pause command interpretation takes about 10ms, while game update itself is small.
 Concurrent CPU and nested wall spans cannot be added to get frame latency. The
-accepted next step attributes wait/VM/scheduling paths directly before another
-fix. Current accounting buckets are not exact implementation cost: entry VM
+direct attribution repeat below follows this lead before another fix. Current accounting buckets are not exact implementation cost: entry VM
 admission precedes the user-to-kernel accounting boundary, and scheduler-loop
 work is charged to the next dispatched task (task.c). Keep that limitation when
 interpreting all task-derived user/kernel figures above.
@@ -239,3 +238,89 @@ overhead limit attribution; no thermal series or unattended optical/audio proof.
 Reports: `/shared/present/soh-frame-limiter/NATIVE-ORIGINAL-RATES-RESULTS.md` and
 `NATIVE-ORIGINAL-RATES-COMPARISON.json`. Raw data remain private on horse at
 `~/.local/share/pyxis-private/soh-profile-20261030/results-vela-original-rates-20261030/`.
+
+
+## Direct native VM/wait attribution (2026-10-30)
+
+The approved one-run observer completed all twelve captures, both primitive
+controls and two waited foreground completions. Remote exited 0 with complete
+drain; continuous Intel flip admission was confirmed before/after, with no
+reported fencing or timeout. Source a3298342 is a never-merged diagnostic on
+fb4c1dae/userland7d8d45f/ports46b9242b, using the same old FPS-only game/library
+objects and compiler8bdf136. Only the small helper was relinked. The same binary
+runs counters-off then counters-on, with unchanged original-rate settings/save,
+2880x1768 content and default 16 Mesa workers. HWP applied16/16, XSAVE0x7/832;
+AC and loaded core frequencies were not independently recorded.
+
+| Scene | Target Hz | Counters off fps | Counters on fps |
+| --- | --- | --- | --- |
+| Gameplay | 20 | 19.99 | 19.98–19.99 |
+| Pause | 30 | 23.85–23.92 | 25.57–25.71 |
+| File select | 60 | 36.47–37.19 | 37.65–37.81 |
+
+This fixed-order pair observes +7.35% pause and +2.44% menu FPS, not a negative
+observer cost or proof of zero overhead. Gameplay is target-capped. Today's off
+pause also differs from the earlier 26.86–26.93fps control; between-run variation
+and disabled-hook overhead are not separated. No runtime optimization or shipped
+setting changed. No unattended optical/audio quality claim is made.
+
+All six enabled captures read16/16 coherent rows with zero busy rows and zero
+incomplete-timing/latency events. Metadata charge is169,424bytes against the
+512KiB diagnostic cap. Timing uses qualified ordered TSC, back-to-back pairs
+14–18ns, with Bernoulli1/64 sampling and actual per-kind coverage. Private
+thread diagnostics do not become production ABI or grants.
+
+| Exclusive phase, share of sampled CPU spans | Pause, two captures | File select, two captures |
+| --- | --- | --- |
+| Process-VM guard acquisition spin | 78.13–78.29% | 47.3–48.8% |
+| Token validation, excluding nested VM guard phases | 10.76–11.01% | 32.2–33.1% |
+| Local VM-guard held work | 5.01–5.10% | 5.9–6.1% |
+| Bucket + queue + notification sender | 0.89%, both | 3.0–3.1% |
+
+Pause WAKE calls spend93.86–95.17us in VM-guard acquisition on average per
+sampled complete WAKE call, across its multiple acquisitions, not per lock.
+The two 256-frame pause captures count6,329,230/6,361,263 VM-guard acquisitions,
+562,749/565,476 token checks and537,984,747/531,436,171 instrumented VM-range
+visits. Range visits cover all callers of range_containing(), not just tokens;
+visits/token is only an aggregate proxy. The token walk happens outside the VM
+guard, so these results do not show it holding that guard or causing the spin.
+
+VM-guard acquisition is the leading hotspot within the recorded spans, with
+token validation second. There is no phase-overlap bug identified in source
+review: child spans are exclusive and context-away time is excluded. Held-work
+excludes nested queue/notification time and is not full physical lock-hold time.
+Small queue/notification shares do not cover dequeue, all interrupt work or IPI
+reception. Park-to-wake and wake-to-resume remain elapsed distributions, not CPU;
+pause wake-to-resume p50 lies in2–4us and p95 in16–32us histogram buckets.
+
+Endpoints retain31–33 active calls and0–2 sampled latencies. Completed-call
+differences include some work from before the start and omit unfinished end
+calls; coherent rows are not a globally atomic or complete interval. Every range
+visit executes observer bookkeeping, including nonsampled calls. Clock-pair cost
+does not bound that overhead. Sampled shares/means are not extrapolated into
+exact frame CPU totals. Primitive controls ran alongside the uncaptured initial
+menu: semantic qualification and loaded timing, not no-game isolated costs.
+
+Reports: `/shared/present/soh-frame-limiter/NATIVE-WAIT-ATTRIBUTION-RESULTS.md` and
+`NATIVE-WAIT-ATTRIBUTION-COMPARISON.json`. Raw logs remain private on horse at
+`~/.local/share/pyxis-private/soh-profile-20261030/results-vela-wait-attribution-20261030/`.
+The collector used238.76s host elapsed; last capture ended at212.548s target
+clock, within the separately approved840s collection/900s visible window.
+
+### Next change proposed — explicit fixed THREAD packet lease
+
+Pending chronium's decision: use one explicit mapping-read lease for the fixed
+ADDRESS_WAIT/WAKE packet, acquired after capability resolution and before header
+copy. Preserve separate header/body/word/reply checks, rights and error order,
+incarnations, atomic word reload, deadlines, CUT/stop/commit points and completion
+protocol precedence. WAIT releases after enrollment/bucket unlock and before any
+park; WAKE retains it through final checked reply copy, then releases before
+outer authority cleanup. All failures release exactly once. A mapping lease
+does not freeze sibling-written data.
+
+Successful direct calls would use4 VM guards instead of8/12: syscall admission,
+one borrow acquire/release pair and syscall leave. Admission and borrower proofs
+remain distinct. Other protocols and non-wait THREAD operations keep their
+existing handling. No spin, scheduler, worker or Mesa policy change is proposed.
+VM-range indexing remains a separate possible follow-up after remeasurement.
+This paragraph authorizes no implementation; the full proposal is in the report.
