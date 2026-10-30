@@ -53,3 +53,16 @@ records; tests above that count await the coordinated kernel slice. Stopped raw
 context value-release ownership has source review; no allocator fault injection
 or native qualification is claimed. See the
 [qualification record](../development/experiments/libc-capacity.md).
+
+## Decision reached during implementation
+
+**WP6.7 — proposed default:** if native release of obsolete key metadata fails
+after a valid publication, retain uncertain backing under process ownership
+until teardown, without retrying UNKNOWN or using possibly unmapped pointers.
+Keep the actual charge; do not terminate solely for RAM-metadata retirement.
+Successful publication remains successful, while pre-publication failure keeps
+the old value. Collector state must prevent retrying a possibly reused address.
+This policy is not yet accepted or implemented: the current draft uses fail-stop
+after such cleanup failure. No ordinary qualification exercised that path.
+Chronium must choose before this slice becomes ready. Native CREATE uncertainty
+and running stack/context retirement rules remain unchanged.
