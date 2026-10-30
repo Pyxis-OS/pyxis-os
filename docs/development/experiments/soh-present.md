@@ -198,3 +198,44 @@ logic rate at interpolation40 still does not establish full-speed updates.
 Reports: `/shared/present/soh-frame-limiter/NATIVE-FLIP-CONTROL-RESULTS.md` and
 `NATIVE-FLIP-CONTROL-COMPARISON.json`. Raw captures remain private on horse at
 `~/.local/share/pyxis-private/soh-profile-20261030/results-vela-flip-control-20261030/`.
+
+
+## Original scene-rate check (2026-10-30)
+
+All twelve captures and two normal foreground retirements passed, with normal
+Remote closure and continuous flip admission before/after; no reported fencing
+or timeout. Controller f4dceb20 reuses the exact 51e50e63 compiled kernel, games,
+libraries and effective flip configuration. Only diagnostic interpolation40->20
+and the controller changed; all other settings, save, assets and manifest bytes
+are identical. Native content is 2880x1768, Mesa workers unchanged, MSAA/vsync off.
+HWP applied 16/16, XSAVE 0x7/832; AC/core frequency were not independently logged.
+
+| Scene | Target Hz | Profiled fps / completed game updates/s | FPS-only fps |
+| --- | --- | --- | --- |
+| Gameplay | 20 | 19.99 | 19.98–19.99 |
+| Pause | 30 | 24.22–24.30 | 26.86–26.93 |
+| File select | 60 | 35.46–36.27 | 37.02–37.49 |
+
+Actual target/divisor/mode/source geometry matched each scene. The existing
+interpolation20 option yields one render per logical update. Profiled completed
+update counts match the rendered rates; FPS-only cadence follows that source
+relationship as inference, since it has no update counter. Gameplay is near its
+original rate; pause and file select remain below theirs. Complete collection
+is not a claim of all targets met or of audio quality. No shipped setting changed.
+
+Profiled pause uses 510–512ms summed observed CPU/frame, of which 203–205ms falls
+in the task-accounting kernel bucket. File select uses 343ms, with 16–17ms in that
+bucket. Main-thread final-fence waits are about 20.5ms (pause) and 21.4ms (menu);
+pause command interpretation takes about 10ms, while game update itself is small.
+Concurrent CPU and nested wall spans cannot be added to get frame latency. The
+accepted next step attributes wait/VM/scheduling paths directly before another
+fix. Current accounting buckets are not exact implementation cost: entry VM
+admission precedes the user-to-kernel accounting boundary, and scheduler-loop
+work is charged to the next dispatched task (task.c). Keep that limitation when
+interpreting all task-derived user/kernel figures above.
+
+Two repeats, fixed profiled-then-FPS ordering and residual FPS-only frame/control
+overhead limit attribution; no thermal series or unattended optical/audio proof.
+Reports: `/shared/present/soh-frame-limiter/NATIVE-ORIGINAL-RATES-RESULTS.md` and
+`NATIVE-ORIGINAL-RATES-COMPARISON.json`. Raw data remain private on horse at
+`~/.local/share/pyxis-private/soh-profile-20261030/results-vela-original-rates-20261030/`.
