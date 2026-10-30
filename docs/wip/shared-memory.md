@@ -209,7 +209,7 @@ of status. Existing launch/pages/IPC controls must not materially regress withou
 attribution and chronium's decision; #1588 is not a waiver for new regressions.
 No new benchmark framework or implicit fault-injection/native interruption scope.
 
-## Task 4 scope — awaiting decisions
+## Task 4 scope — accepted (chronium, 2026-10-30)
 
 Inspected main `8ff1658c0` after task 3, with userland `c21fe9412fc4`.
 Kernel creation/mapping/release and withdrawal are delivered. The SDK currently
@@ -218,9 +218,9 @@ Boot-init's service inventory and the session/shell ordinary child grants narrow
 MEMORY to MANAGE. The existing trusted launch-source inventory, including exact
 held shell/Lua interpreters, is the route for declared child authority.
 
-No task-4 implementation has started. Two choices shape it:
+Both choices are accepted; implementation is authorized after the fresh baseline:
 
-1. **Where creation is available — default: a private declared launch source,
+1. **Creation is available through a private declared launch source,
    without another space switch.** Stock trusted boot-init/session/mux/Remote
    handoffs retain CREATE_SHARED in their launch-source inventory. Bundle
    declarations add `memory/create_shared`; a program needing libc allocation
@@ -232,9 +232,7 @@ No task-4 implementation has started. Two choices shape it:
    granting it to arbitrary children. No helper mints authority, no new
    `shared_memory = true` space policy, and no default application manifest
    gains creation. Missing required authority refuses bundle preparation.
-   The alternative requiring a separate per-space opt-in needs an explicit
-   policy decision rather than being inferred from JIT.
-2. **First consumer — default: an opt-in `shared-min` SDK example bundle.** A
+2. **The first consumer is an opt-in `shared-min` SDK example bundle.** A
    parent reads stdin in bounded reusable chunks into one fixed region. Its
    worker maps a READ-only grant, counts bytes/newlines, and returns counts via
    existing endpoints; the payload is shared, not copied into endpoint messages.
@@ -255,7 +253,7 @@ OUTCOME_UNKNOWN; libc documents its existing EIO mapping and the no-retry rule.
 The kernel's fixed-view/lifetime contract remains authoritative. No POSIX
 shm/mmap facade or process-shared libc lock is introduced.
 
-After these choices, capture a fresh before-code launch/pages/IPC control boot
+Capture a fresh before-code launch/pages/IPC control boot
 with the existing tools on this main, then repeat matched controls after the
 startup/launch changes. Build the SDK and ordinary userland; qualify the example,
 missing creation authority, READ-only worker mapping and cleanup in 1/4-CPU
