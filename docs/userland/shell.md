@@ -89,16 +89,19 @@ shared by every shell of every space that can write that home.
   later; a new shell, including a `session` successor, picks them up.
 - **Saving:** each line the shell records is saved before it runs, as one
   `FILE_APPEND` of the line and its LF to `.history` (created when missing),
-  followed by a sync of the file. Nothing is read, trimmed or replaced.
+  followed by a sync of the file. Only the file's last byte is read, to see
+  whether the previous save was torn; nothing is trimmed or replaced.
 - **Concurrent shells:** an append picks the end of the file and writes the
   line in one mutation of that file, and a line is far below the 4080 bytes one
   append carries. Lines from different shells therefore land whole and in the
   order the appends complete; none is lost, overwritten or split by another.
 - **Crashes and full volumes:** a crash or kill loses at most the line being
   saved. A short append (a full volume) is retried once for the rest of the
-  line, then reported as a failed save. The unterminated tail it may leave is
-  ignored when loading, but the next line saved joins it into one entry that is
-  skipped or, if both parts are printable, recalled as a single odd line.
+  line, then reported as a failed save. Either can leave the file ending inside
+  a line. Loading ignores such an unterminated last line, and every save reads
+  the file's last byte and starts with an LF when it is not one, so entries
+  never merge. The torn line stays in the file, terminated, as an entry of its
+  own: Up can recall it, cut short.
 - **Private lines:** a line starting with a space stays in memory, so Up still
   recalls it, but is never saved.
 
