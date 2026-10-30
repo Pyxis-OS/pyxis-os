@@ -111,8 +111,12 @@ and ends mux with group cleanup.
 See [remote resize qualification](../development/experiments/remote-multiplexer-resize.md)
 for QEMU checks and the owner-reported native pane Neovim, TCC and live resize results.
 
-History retains the last 1,024 rows scrolled off each pane, including colors and
-original widths, without reflow. Page Up/Down moves a screenful; Up/Down moves
+History retains the rows scrolled off each pane, including colors and original
+widths, without reflow, within a memory budget per pane (not a row count): one 512th
+of the allocator's capacity, at least 8 MiB, or `terminal.scrollback_bytes` in the
+[session configuration](session-configuration.md). Rows are allocated as they scroll
+in and the oldest are dropped when the budget is reached; the history view's status
+line then says how many were dropped and the byte limit. Page Up/Down moves a screenful; Up/Down moves
 one row; Home/End selects oldest history/live screen. Escape or `q` returns to
 live input. Output continues while browsing; existing text stays anchored until
 eviction of old rows. Screen erasure and resize cropping do not create history.
@@ -193,8 +197,9 @@ screen, scroll regions and saved cursor.
 
 Each live, alternate and history cell is 12 bytes, retaining supported Unicode
 scalars, tagged colours and attributes. UTF-8 follows the shared terminal
-repertoire; Copy exports scalars, while safe Paste remains ASCII-only. History still reserves 1,024 rows at the largest width seen; steady
-output allocates nothing. Creation and resize allocate new backing before
+repertoire; Copy exports scalars, while safe Paste remains ASCII-only. Each history row is allocated when it scrolls off, at the width it had, and the
+ring of rows doubles as it fills, up to the pane's budget; a row that cannot be stored
+is counted as dropped and output is never refused. Creation and resize allocate new backing before
 publication and leave the old state intact on failure. The frame and previous
 frame use the same cells and compare fields rather than padding. At 160 columns,
 46 pane rows and a 160×48 outer frame, one pane's two screens, history and width

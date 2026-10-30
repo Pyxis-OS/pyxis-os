@@ -75,10 +75,10 @@ allocation/VM-mutation ownership.
 
 Require stored manifest, executable entries and seek-heavy/large resources.
 Permit method-8 deflate only for small resources, decoded once into bounded
-backing before exposure. Draft budgets to qualify: 16,384 entries, 4 MiB
-index/metadata (including inferred directories), 512 MiB archive and total
-expanded contents; 1 MiB per deflated entry, 8 MiB aggregate decoded backing and
-expansion ratio at most 100:1. Exhaustion is an explicit error (profile/manifest
+backing before exposure. The packer enforces only the ZIP32 format's bounds
+(65,535 entries, 32-bit sizes and offsets); native budgets are chosen with the
+reader when it exists. Draft budgets to qualify there: 1 MiB per deflated entry,
+8 MiB aggregate decoded backing and expansion ratio at most 100:1. Exhaustion is an explicit error (profile/manifest
 errors BAD_REQUEST, budgets LIMIT, allocation NO_MEMORY, CRC/read failures IO;
 backend errors keep their status). Deflate needs an independent ZIP CRC check; see
 [PKWARE's specification](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT)

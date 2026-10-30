@@ -313,22 +313,21 @@ still in the [bundle direction](../wip/program-bundles.md#future-consent-policy)
 
 | Input or preparation | Budget |
 | --- | --- |
-| Manifest JSON | 64 KiB |
-| Commands per bundle | 32 |
-| Named resource directories per bundle | 8, plus `app` |
-| Grant requests per bundle | 20 |
-| JSON nesting | 16 |
-| Name/path component | 255 bytes |
-| Relative entry/resource path | 1024 bytes |
+| Manifest JSON | none: read whole, memory only |
+| Commands, resource directories and grant requests per bundle | none in the manifest reader; the launcher's request bounds apply |
+| JSON nesting | 16 (parser recursion) |
+| Name/path component | 255 bytes (NAME_MAX of the native filesystems) |
+| Relative entry/resource path | none beyond the component bound |
 | Final userspace launch roots | 16 total |
 | Launch capture / child startup | 64 KiB each, independently enforced by the kernel |
 
-Final capture/startup validation occurs before child publication. The parser
-allocates a bounded node array from the JSON byte count and releases each parse
-tree after retaining decoded strings; code inspection gives about 5 MiB of
-manifest preparation heap at maximum JSON size (an allocation
-bound, not a measured peak). Capture copies only the selected executable, never
-the whole bundle.
+Final capture/startup validation occurs before child publication. The manifest
+reader has no size or count limit (see [limits](../interfaces/limits.md)): its node
+table starts small and doubles as the document needs, about 40 bytes per node, and
+the parse tree is released after the decoded strings are retained. Duplicate
+object keys are found by sorting, so a manifest of any size costs n log n. A
+manifest the launcher cannot carry is refused by the launch path, which owns those
+bounds. Capture copies only the selected executable, never the whole bundle.
 
 ## Selected-image admission
 

@@ -36,7 +36,7 @@ next boot. It returns one table:
 ```lua
 return {
   timezone = "Europe/Bucharest",
-  terminal = { tab_width = 8 },
+  terminal = { tab_width = 8, scrollback_bytes = 33554432 },
   retention = { value_limit_bytes = 67108864, session_limit_bytes = 536870912 },
   environment = {
     -- The terminal profile: exactly the sequences in docs/userland/terminal.md.
@@ -47,7 +47,9 @@ return {
 }
 ```
 
-A missing file or setting defaults to UTC and eight-column tabs. An empty
+A missing file or setting defaults to UTC and eight-column tabs.
+`terminal.scrollback_bytes` is the memory each multiplexer pane may hold as scrollback;
+absent, the multiplexer takes one 512th of the allocator's capacity, at least 8 MiB. An empty
 timezone also selects UTC. Unknown keys, incorrect value types, NUL bytes in
 names, non-integral tab widths or widths outside 1–32 are errors. Fields are
 read directly from the returned tables; metatable lookups do not supply settings.
