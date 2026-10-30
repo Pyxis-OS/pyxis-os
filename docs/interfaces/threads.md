@@ -63,9 +63,13 @@ Device, display and caller-owned mappings are rejected.
   machine word wakes all) and returns the number of waiters detached. Zero matches
   is success. A failed output copy does not undo committed wakes.
 - Keys combine the process, the exact address and width, and a non-reused
-  per-page mapping incarnation. Tokens cover image data, BSS, heap and stacks, are
-  read under a short mapping lease and are never held across a sleep. Unmap or
-  loss of eligibility invalidates the affected pages and detaches their waiters
+  per-page mapping incarnation. Tokens cover image data, BSS, heap and stacks.
+  Their validation uses a short mapping lease, which is not held across sleep. The fixed
+  WAIT/WAKE packet shares one explicit lease across separately validated header,
+  body, word and reply accesses. WAIT releases it after enrollment and before
+  sleeping; WAKE releases after the final checked reply copy. Syscall admission
+  and capability/stop checks remain separate, and sibling-written contents are
+  not frozen by mapping stability. Unmap or loss of eligibility invalidates the affected pages and detaches their waiters
   first; unrelated pages keep their identity. Failed mutation preflight changes
   neither mapping nor registration.
 - Wake, timeout, stop and unmap each resolve one terminal reason under the

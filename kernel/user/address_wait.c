@@ -81,21 +81,19 @@ void address_wait_cancel(struct address_wait_record *record, size_t index,
   spin_unlock(&bucket->lock);
 }
 
-enum call_status address_wait(const struct thread_address_wait *request)
+enum call_status address_wait_leased(const struct thread_address_wait *request,
+    struct user_buffer_lease *lease)
 {
   if (!valid_word(request->address, request->word_size) ||
       (request->word_size == THREAD_ADDRESS_WORD32_BYTES && request->expected > UINT32_MAX)) {
+    user_buffer_lease_release(lease);
     return CALL_BAD_REQUEST;
   }
-  struct user_buffer_lease lease = {0};
-  if (!user_buffer_lease_acquire(&lease)) {
-    return CALL_BAD_BUFFER;
-  }
-  struct process *process = lease.process;
+  struct process *process = lease->process;
   uint64_t incarnation;
   if (!vm_address_wait_token(process->address_space, request->address,
       request->word_size, &incarnation)) {
-    user_buffer_lease_release(&lease);
+    user_buffer_lease_release(lease);
     return CALL_BAD_BUFFER;
   }
   size_t index = bucket_index(process, request->address, incarnation, request->word_size);
@@ -132,7 +130,7 @@ enum call_status address_wait(const struct thread_address_wait *request)
     }
   }
   spin_unlock(&bucket->lock);
-  user_buffer_lease_release(&lease);
+  user_buffer_lease_release(lease);
   if (!record || status != CALL_OK) {
     return status;
   }
@@ -152,21 +150,17 @@ enum call_status address_wait(const struct thread_address_wait *request)
   return CALL_BAD_REQUEST;
 }
 
-enum call_status address_wake(const struct thread_address_wake *request, uint64_t *woken)
+enum call_status address_wake_leased(const struct thread_address_wake *request, uint64_t *woken,
+    const struct user_buffer_lease *lease)
 {
   *woken = 0;
   if (!valid_word(request->address, request->word_size) || !request->maximum) {
     return CALL_BAD_REQUEST;
   }
-  struct user_buffer_lease lease = {0};
-  if (!user_buffer_lease_acquire(&lease)) {
-    return CALL_BAD_BUFFER;
-  }
-  struct process *process = lease.process;
+  struct process *process = lease->process;
   uint64_t incarnation;
   if (!vm_address_wait_token(process->address_space, request->address,
       request->word_size, &incarnation)) {
-    user_buffer_lease_release(&lease);
     return CALL_BAD_BUFFER;
   }
   struct address_wait_bucket *bucket =
@@ -185,7 +179,6 @@ enum call_status address_wake(const struct thread_address_wake *request, uint64_
     record = next;
   }
   spin_unlock(&bucket->lock);
-  user_buffer_lease_release(&lease);
   return CALL_OK;
 }
 
