@@ -131,6 +131,15 @@ return {
   mounted once, read-write if any space needs that, and each space receives only
   the access it asks for. FAT volumes instead use fixed configured admission access
   and ordinary RO roots; see [selected FAT grants](#fat32-volumes-and-selected-grants).
+- **Import.** A root table can set `import = true`, giving the space
+  `DIRECTORY_RIGHT_IMPORT` there: libraries in it may be mapped into processes
+  ([image mapping](../kernel/program-loading.md#mapping-images-into-a-running-process)).
+  Only `npfs`, `ram-npfs` and `ram` volumes can carry it; any other volume
+  refuses the space with a reason that names the root. The volume is opened with
+  IMPORT once, and only roots that ask receive it. The live and installed
+  Development homes set it; Multiplexer, Read-only, Remote, `tmp` and `host` do
+  not. `pkg` views always carry IMPORT and `sdk` views never do, so views may not
+  set it.
 - **Start.** A space's working directory is `home://`. `start` names another of
   its roots, such as `tmp`, `boot`, `bin` or a configured one; naming a root
   the space does not have is an error. A space without the root it would start
