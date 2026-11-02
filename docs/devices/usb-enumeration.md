@@ -185,8 +185,11 @@ Wait timeout does not consume or cancel the request. Abandonment removes client
 ownership while active hardware work retains its ring span/data buffer; successful
 terminal completion can later retire it. An owned STALL can safely retire the
 old sequence through Reset Endpoint, TT cleanup and Set TR Dequeue before reuse.
-Owned request deadlines, known disappearance and owned transaction-error/babble
-events close device/subtree admission and retain unresolved spans. Command
+Known disappearance closes device/subtree admission and retains unresolved
+spans; timeouts follow the cancellation below. A synchronous bulk
+transaction error or babble halts that endpoint for its class driver's
+recovery, as in Linux; other owned transaction-error/babble events still
+close device/subtree admission. Command
 failure or unowned/corrupt completions still stop the controller. EP0, configured interrupt and synchronous/
 asynchronous bulk endpoints are fenced before child-first Disable Slot; only
 a failed fence quarantines the controller for that removal. Halt, interrupt
@@ -203,6 +206,11 @@ carried it, and Set TR Dequeue past the TD. The request completes with
 means. A STALL racing the stop takes the stall recovery instead. Only a failed
 cancellation, or a timed-out request whose client already left, retires the
 device, because only then is EP0's ring position unknown.
+
+A synchronous bulk transfer that passes its deadline is cancelled the same way
+on its endpoint (Linux `xhci_urb_dequeue`) and returns `USB_TIMEOUT`; a TD that
+completed or halted before the stop keeps its result. USB storage then runs BOT
+reset recovery ([USB storage](usb-storage.md)).
 
 The runtime outer worker uses `usb_host_control_poll` before collecting an EP0
 ticket. An active request stays posted; an owned STALL uses the existing bounded

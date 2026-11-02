@@ -19,6 +19,7 @@ struct usb_bot {
   struct usb_bulk_endpoint in, out;
   enum usb_bot_state state;
   const char *detail, *write_detail;
+  const char *transport_detail; /* Last failure that reset recovery survived. */
   uint8_t configuration, interface, alternate;
   uint32_t tag, block_bytes;
   uint64_t blocks, read_bytes, write_bytes;

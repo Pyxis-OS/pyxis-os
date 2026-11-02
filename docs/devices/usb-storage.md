@@ -31,8 +31,9 @@ unbound; recognized unsupported storage retains an individual diagnostic.
 Controller, port, configuration, interface and endpoint identities come from
 hardware/descriptor observations, never vendor IDs or machine topology.
 
-GET_MAX_LUN accepts only LUN 0; a legitimate EP0 STALL means a single LUN after
-safe host recovery. Multiple LUNs remain explicitly unsupported. Media setup
+GET_MAX_LUN follows Linux `usb_stor_Bulk_max_lun`: a failure, STALL, short
+reply or count above 15 means LUN 0 only. Multiple LUNs remain explicitly
+unsupported. Media setup
 failure does not erase the candidate or choose another physical disk instead.
 Unsupported controllers and uninspected branches still make `lsusb` partial,
 while individually inspected disks can be probed.
@@ -83,17 +84,32 @@ and residue. Data-In or Data-Out STALL clears the halt before status collection.
 The CSW cannot report processing more bytes than were transferred; successful
 block reads and writes require the complete requested span. A status
 STALL permits one clear-and-retry within the original exchange deadline. Valid
-CSW command failure leads to REQUEST SENSE; invalid framing/status or a phase
-error requires reset recovery. Reset ordering is class reset, Bulk-In halt clear,
-then Bulk-Out halt clear, including the non-stalled pipe. Recovery never turns a
-failed command into success or replays data or a mutation command.
+CSW command failure leads to REQUEST SENSE; invalid framing/status, a phase
+error, a transfer timeout or a bulk transaction error requires reset recovery.
+Reset ordering is class reset, Bulk-In halt clear, then Bulk-Out halt clear,
+including the non-stalled pipe. A successful reset keeps the device, as Linux
+usb-storage does after `usb_stor_Bulk_reset`, and the same command is sent
+again, writes included, up to five more times as Linux SCSI error handling does
+(`SD_MAX_RETRIES`; chronium, 2026-11-02). Block writes are idempotent and the
+owning worker is serialized, so a retry precedes any later mutation. Only the
+final outcome reaches the request; with retries exhausted the device stays
+bound. A failed reset retires the device; Linux's port-reset fallback
+(`usb_reset_device`) is not implemented yet. Probing uses the same recovery and
+retries: a required probe step that still fails leaves the device FAILED, while
+the optional write-protection and cache-synchronization exchanges leave it
+read-only instead.
 
-Each exchange has a five-second absolute deadline. During boot probing it is
-also bounded by the controller's thirty-second enumeration/media deadline. Reset recovery has its own
-five-second absolute deadline; retries do not restart the exchange deadline.
-Owned transfer timeout or known removal closes local block admission, fails
-queued requests and fences the affected device/subtree, retaining unresolved
-DMA. Unproved fences, controller/command failure or corrupt events still
+Each attempt has Linux sd's deadline: 30 seconds, or 60 seconds for
+SYNCHRONIZE CACHE (`SD_TIMEOUT`, `SD_FLUSH_TIMEOUT_MULTIPLIER`); a retry gets a
+fresh one. During boot probing every attempt is also bounded by the controller's
+thirty-second enumeration/media deadline. Reset recovery has its own five-second
+absolute deadline. A status STALL's clear-and-retry stays within its attempt. A timed-out bulk TD is cancelled as Linux's `xhci_urb_dequeue`
+does: Stop Endpoint, a TT buffer clear for a split transaction and Set TR Dequeue
+past the TD, after which the captured buffer can be reused. Only a failed
+cancellation fences the device. A bulk transaction error or babble halts the
+endpoint, which reset recovery clears. Known removal closes local block
+admission, fails queued requests and fences the affected device/subtree,
+retaining unresolved DMA. Unproved fences, controller/command failure or corrupt events still
 quarantine that controller. Active exchanges
 retain their submitted/uncertain-effect outcome; even write-through flush refuses
 a removed host. A class failure abandons its device; other controllers continue independently.
@@ -212,20 +228,24 @@ exchange returns, even when its client abandons it. The owner-accepted read poli
 distinguishes a valid READ rejection followed by
 valid REQUEST SENSE from transport failure. A clean rejection completes only
 that request with `BLOCK_IO_ERROR`, retains sense, and keeps READY admission for
-later reads; it never replays the rejected command. Failed/malformed sense,
-transport/protocol failure, failed recovery and timeout retire the device and
-complete queued reads as unavailable. Probe-time READ rejection remains a terminal
+later reads; it never replays the rejected command. Failed/malformed sense and
+failed recovery retire the device and complete queued reads as unavailable; a
+transport failure that reset recovery survives is retried, and if retries run
+out fails only its request. Probe-time READ rejection remains a terminal
 setup failure: the initial probe must establish usable media before registration.
 
-Any failed runtime WRITE or FLUSH latches `write_failed` until reboot. Abandoning
+A WRITE or FLUSH that succeeds on a retry is a success and latches nothing
+(chronium, 2026-11-02). Any finally failed runtime WRITE or FLUSH latches
+`write_failed` until reboot. Abandoning
 a mutation after CBW publication also latches failure, even if the exchange
 later succeeds; an active abandoned request retains its slot until its worker
 returns. If an abandoned active request subsequently publishes, its worker
 latches failure on return. Later mutations, including already queued work,
 complete with `BLOCK_WRITE_FAILED` without publication. A clean rejection with
-valid sense preserves healthy read admission. Genuine transport/protocol
-failure, timeout or failed recovery retires the device and queued I/O. No
-mutation is replayed, and a later successful flush cannot clear the latch.
+valid sense preserves healthy read admission. A recovered transport failure
+whose retries run out fails only its request, latching write failure if it was
+a mutation; failed recovery retires the device and queued I/O. A later
+successful flush cannot clear the latch.
 The block backend solely owns the mutable failure flag; probe qualification
 facts remain unchanged.
 

@@ -1,3 +1,4 @@
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/task.h>
 #include <limits.h>
@@ -32,6 +33,9 @@
 #define BOT_CSW_PHASE_ERROR 2
 #define BOT_MAX_LUN 15
 #define BOT_READY_ATTEMPTS 3
+/* Linux sd's SD_MAX_RETRIES: attempts after the first, each following a
+ * successful reset recovery and with its own deadline. */
+#define BOT_COMMAND_RETRIES 5
 #define SCSI_TEST_UNIT_READY 0x00
 #define SCSI_REQUEST_SENSE 0x03
 #define SCSI_INQUIRY 0x12
@@ -247,20 +251,29 @@ static bool reset_recovery(struct usb_bot *bot)
          usb_host_bulk_clear(bot->host, bot->out.address, NULL, 0, NULL, deadline) == USB_OK;
 }
 
+/* A successful reset keeps the device, as Linux usb-storage does after
+ * usb_stor_Bulk_reset, and command() retries. Only a failed reset retires it. */
 static enum bot_command_result broken(struct usb_bot *bot, const char *detail)
 {
-  fail(bot, reset_recovery(bot) ? detail : "BOT reset recovery failed; device abandoned");
+  if (!reset_recovery(bot)) {
+    fail(bot, "BOT reset recovery failed; device abandoned");
+    return BOT_COMMAND_BROKEN;
+  }
+  bot->transport_detail = detail;
+  kwarn("usb: %s; BOT reset recovery succeeded, device kept (recoveries=%u)\n",
+        detail, bot->recoveries);
   return BOT_COMMAND_BROKEN;
 }
 
-static enum bot_command_result command(struct usb_bot *bot, const uint8_t *cdb,
+static enum bot_command_result command_once(struct usb_bot *bot, const uint8_t *cdb,
                                        unsigned cdb_bytes, enum bot_data_direction direction,
                                        void *data, size_t length,
                                        size_t *relevant, uint64_t overall, bool *submitted)
 {
   bot->timed_out = false;
   *relevant = 0;
-  uint64_t deadline = bounded_deadline(overall, USB_BOT_TIMEOUT_MS);
+  uint64_t deadline = bounded_deadline(overall, cdb[0] == SCSI_SYNCHRONIZE_CACHE_10 ?
+      USB_BOT_FLUSH_TIMEOUT_MS : USB_BOT_TIMEOUT_MS);
   if (task_deadline_expired(deadline)) {
     bot->timed_out = true;
     fail(bot, "BOT command deadline expired before admission");
@@ -339,14 +352,35 @@ static enum bot_command_result command(struct usb_bot *bot, const uint8_t *cdb,
   return BOT_COMMAND_OK;
 }
 
+/* As Linux SCSI error handling does, a command whose transport failure reset
+ * recovery survived is sent again, writes included; block writes are
+ * idempotent and the owning worker is serialized. Exhausted retries leave the
+ * device bound with the final failure. */
+static enum bot_command_result command(struct usb_bot *bot, const uint8_t *cdb,
+                                       unsigned cdb_bytes, enum bot_data_direction direction,
+                                       void *data, size_t length,
+                                       size_t *relevant, uint64_t overall, bool *submitted)
+{
+  for (unsigned attempt = 0;; ++attempt) {
+    enum bot_command_result result = command_once(bot, cdb, cdb_bytes, direction, data, length,
+        relevant, overall, submitted);
+    if (result != BOT_COMMAND_BROKEN || bot->state == USB_BOT_FAILED ||
+        attempt == BOT_COMMAND_RETRIES) {
+      return result;
+    }
+  }
+}
+
 static bool request_sense(struct usb_bot *bot, void *scratch, uint64_t overall)
 {
   uint8_t cdb[6] = { SCSI_REQUEST_SENSE, 0, 0, 0, SCSI_SENSE_BYTES, 0 };
   size_t bytes;
   bot->sense_valid = false;
-  if (command(bot, cdb, sizeof(cdb), BOT_DATA_IN, scratch, SCSI_SENSE_BYTES,
-          &bytes, overall, NULL) != BOT_COMMAND_OK) {
-    if (bot->state != USB_BOT_FAILED) {
+  enum bot_command_result result = command(bot, cdb, sizeof(cdb), BOT_DATA_IN, scratch,
+      SCSI_SENSE_BYTES, &bytes, overall, NULL);
+  if (result != BOT_COMMAND_OK) {
+    /* A transport failure that recovery survived keeps the device. */
+    if (bot->state != USB_BOT_FAILED && result != BOT_COMMAND_BROKEN) {
       fail(bot, "SCSI REQUEST SENSE failed");
     }
     return false;
@@ -599,7 +633,9 @@ static bool qualify_writes(struct usb_bot *bot, void *scratch, uint64_t overall)
     return true;
   }
   if (outcome != USB_BOT_IO_OK) {
-    return false;
+    /* Optional, like Linux sd's write-protect query: a recovered transport
+     * failure leaves protection unknown instead of failing the probe. */
+    return bot->state != USB_BOT_FAILED;
   }
   const uint8_t *mode = scratch;
   if (bytes != header) {
@@ -636,7 +672,8 @@ static bool qualify_writes(struct usb_bot *bot, void *scratch, uint64_t overall)
     }
     bot->write_through = true;
   } else if (outcome != USB_BOT_IO_OK) {
-    return false;
+    bot->write_detail = "cache synchronization failed; read-only";
+    return bot->state != USB_BOT_FAILED;
   }
   bot->flush_supported = true;
   bot->writable = true;
@@ -646,7 +683,24 @@ static bool qualify_writes(struct usb_bot *bot, void *scratch, uint64_t overall)
   return true;
 }
 
+static bool probe_steps(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uint64_t overall);
+
 bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uint64_t overall)
+{
+  if (bot->state == USB_BOT_FAILED || bot->state == USB_BOT_READY) {
+    return false;
+  }
+  if (probe_steps(bot, scratch, scratch_bytes, overall)) {
+    return true;
+  }
+  /* A required step whose retries all broke left the device recovered but unusable. */
+  if (bot->state != USB_BOT_FAILED && bot->state != USB_BOT_UNSUPPORTED) {
+    fail(bot, bot->transport_detail ? bot->transport_detail : "BOT probe failed");
+  }
+  return false;
+}
+
+static bool probe_steps(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uint64_t overall)
 {
   if (!bot->host || !bot->configuration || !scratch || scratch_bytes < USB_BULK_BYTES ||
       bot->state == USB_BOT_FAILED || bot->state == USB_BOT_READY) {
@@ -682,8 +736,9 @@ bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uin
   uint8_t max_lun = 0;
   result = control(bot, &setup, &max_lun, sizeof(max_lun), &bytes,
                    bounded_deadline(overall, USB_BOT_TIMEOUT_MS));
-  if (result != USB_STALL && (result != USB_OK || bytes != 1 || max_lun > BOT_MAX_LUN)) {
-    return fail(bot, "BOT GET_MAX_LUN returned invalid data or transport failure");
+  /* As usb_stor_Bulk_max_lun: any failure or invalid count means LUN 0 only. */
+  if (result != USB_OK || bytes != 1 || max_lun > BOT_MAX_LUN) {
+    max_lun = 0;
   }
   if (max_lun) {
     return unsupported(bot, "BOT multiple LUNs are deferred");
