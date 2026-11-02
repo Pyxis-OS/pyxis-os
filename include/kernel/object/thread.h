@@ -2,6 +2,7 @@
 #define KERNEL_THREAD_H
 
 #include <abi/thread.h>
+#include <abi/limit.h>
 #include <abi/syscall.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/object.h>
@@ -32,6 +33,7 @@ struct thread_request {
   uintptr_t reply_address;
   struct thread_reply reply;
   enum call_status status;
+  struct call_limit limit;
 };
 
 /* IF=0, unpublished allocation; observer storage owns no process/task/VM pointer.
@@ -45,7 +47,7 @@ struct syscall_result thread_control_call(struct thread_control *control,
     uintptr_t reply_address, size_t reply_capacity);
 struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity);
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail);
 /* Consumes the current-process packet lease on every path. WAIT releases it
  * before sleeping; WAKE keeps it through the final checked reply copy. */
 struct syscall_result thread_address_packet_call(uint64_t rights, uint64_t operation,
