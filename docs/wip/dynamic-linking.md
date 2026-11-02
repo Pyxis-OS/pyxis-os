@@ -308,16 +308,16 @@ added except the build split itself.
   action: build and publish the compiler container** (new `pyxis-llvm` pin and
   image tag). No further rebuild unless the format changes later.
   Progress: the headers and pyxis-llvm #23 are in review, validated on the host.
-- [ ] **2. Kernel map and seal.** The map operation, the one-way RELRO seal and
+- [x] **2. Kernel map and seal.** The map operation, the one-way RELRO seal and
   the IMPORT directory right, carried by the package and app views, and set on
   the Development space's `home://` in the live and installed defaults.
   Validation in QEMU with the debugger: fixed and kernel-chosen placement, W^X on
   every page, refusal without IMPORT or of an invalid image, IMPORT present
   on Development's home and absent on Read-only's, seal irreversibility, failure
   unwind and process-exit reclamation.
-  Progress: the kernel PR comes first (map, seal, rights, launch grant). A
-  userspace PR follows: the init-config `import` key, IMPORT on the packages
-  volume, and the Development homes. Then the gitlink moves.
+  Done: pyxis-os #1718 (kernel and ABI) and pyxis-userland #469 (the `import`
+  key, IMPORT on the packages volume and Development homes), validated in QEMU
+  as recorded in #1718.
 - [ ] **3. Loader and the C runtime.** `loader.pxe`; `libc.pxl` and
   `libpyxis.pxl`; the TLS block and loader-driven `libc_enter`; `dlfcn.h`; the
   module iterator for libunwind; the debugger module list; launcher selection in
