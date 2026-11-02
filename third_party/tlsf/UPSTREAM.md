@@ -17,6 +17,13 @@ same field then stalled on store forwarding. Under Clang 23 this made userland
 ordinary full-width store that compilers do not narrow; it adds no
 synchronization. Allocator logic is otherwise unchanged.
 
+Third local change: each block retains its owning pool, copied when a block
+splits, and `tlsf_block_pool()` queries it for a live allocation. The used-block
+header grows by one pointer. The kernel wrapper uses this identity to count
+allocations per pool and remove a wholly free pool in constant time, without
+walking pools or allocations in `kmalloc()`/`kfree()`. Coalescing stays within
+its existing pool boundaries. The separate userland allocator is unchanged.
+
 The kernel wrapper uses `tlsf_memalign(..., 16, ...)`, checked pool
 sizing and conservative request limits below TLSF's maximum bin. No host libc
 is linked.

@@ -299,6 +299,9 @@ typedef struct block_header_t
 	/* Points to the previous physical block. */
 	struct block_header_t* prev_phys_block;
 
+	/* Owning pool, retained through splitting and coalescing. */
+	pool_t pool;
+
 	/* The size of this block, excluding the block header. */
 	size_t size;
 
@@ -317,22 +320,24 @@ static const size_t block_header_free_bit = 1 << 0;
 static const size_t block_header_prev_free_bit = 1 << 1;
 
 /*
-** The size of the block header exposed to used blocks is the size field.
+** Used blocks retain the pool pointer and size field.
 ** The prev_phys_block field is stored *inside* the previous free block.
 */
-static const size_t block_header_overhead = sizeof(size_t);
+static const size_t block_header_overhead = sizeof(pool_t) + sizeof(size_t);
+/* Previous-block linkage is borrowed only while that block is free. */
+static const size_t block_header_borrowed = sizeof(block_header_t*);
 
 /* User data starts directly after the size field in a used block. */
 static const size_t block_start_offset =
 	offsetof(block_header_t, size) + sizeof(size_t);
 
 /*
-** A free block must be large enough to store its header minus the size of
-** the prev_phys_block field, and no larger than the number of addressable
+** A free block must be large enough to store its header minus the retained
+** used-block overhead, and no larger than the number of addressable
 ** bits for FL_INDEX.
 */
 static const size_t block_size_min = 
-	sizeof(block_header_t) - sizeof(block_header_t*);
+	sizeof(block_header_t) - sizeof(pool_t) - sizeof(size_t);
 static const size_t block_size_max = tlsf_cast(size_t, 1) << FL_INDEX_MAX;
 
 
@@ -445,7 +450,7 @@ static block_header_t* block_prev(const block_header_t* block)
 static block_header_t* block_next(const block_header_t* block)
 {
 	block_header_t* next = offset_to_block(block_to_ptr(block),
-		block_size(block) - block_header_overhead);
+		block_size(block) - block_header_borrowed);
 	tlsf_assert(!block_is_last(block));
 	return next;
 }
@@ -656,7 +661,7 @@ static block_header_t* block_split(block_header_t* block, size_t size)
 {
 	/* Calculate the amount of space left in the remaining block. */
 	block_header_t* remaining =
-		offset_to_block(block_to_ptr(block), size - block_header_overhead);
+		offset_to_block(block_to_ptr(block), size - block_header_borrowed);
 
 	const size_t remain_size = block_size(block) - (size + block_header_overhead);
 
@@ -664,6 +669,7 @@ static block_header_t* block_split(block_header_t* block, size_t size)
 		&& "remaining block not aligned properly");
 
 	tlsf_assert(block_size(block) == remain_size + size + block_header_overhead);
+	remaining->pool = block->pool;
 	block_set_size(remaining, remain_size);
 	tlsf_assert(block_size(remaining) >= block_size_min && "block split with invalid size");
 
@@ -913,7 +919,7 @@ void tlsf_walk_pool(pool_t pool, tlsf_walker walker, void* user)
 {
 	tlsf_walker pool_walker = walker ? walker : default_walker;
 	block_header_t* block =
-		offset_to_block(pool, -(int)block_header_overhead);
+		offset_to_block(pool, -(int)block_header_borrowed);
 
 	while (block && !block_is_last(block))
 	{
@@ -924,6 +930,11 @@ void tlsf_walk_pool(pool_t pool, tlsf_walker walker, void* user)
 			user);
 		block = block_next(block);
 	}
+}
+
+pool_t tlsf_block_pool(void* ptr)
+{
+	return ptr ? block_from_ptr(ptr)->pool : 0;
 }
 
 size_t tlsf_block_size(void* ptr)
@@ -1019,7 +1030,8 @@ pool_t tlsf_add_pool(tlsf_t tlsf, void* mem, size_t bytes)
 	** so that the prev_phys_block field falls outside of the pool -
 	** it will never be used.
 	*/
-	block = offset_to_block(mem, -(tlsfptr_t)block_header_overhead);
+	block = offset_to_block(mem, -(tlsfptr_t)block_header_borrowed);
+	block->pool = mem;
 	block_set_size(block, pool_bytes);
 	block_set_free(block);
 	block_set_prev_used(block);
@@ -1027,6 +1039,7 @@ pool_t tlsf_add_pool(tlsf_t tlsf, void* mem, size_t bytes)
 
 	/* Split the block to create a zero-size sentinel block. */
 	next = block_link_next(block);
+	next->pool = mem;
 	block_set_size(next, 0);
 	block_set_used(next);
 	block_set_prev_free(next);
@@ -1037,7 +1050,7 @@ pool_t tlsf_add_pool(tlsf_t tlsf, void* mem, size_t bytes)
 void tlsf_remove_pool(tlsf_t tlsf, pool_t pool)
 {
 	control_t* control = tlsf_cast(control_t*, tlsf);
-	block_header_t* block = offset_to_block(pool, -(int)block_header_overhead);
+	block_header_t* block = offset_to_block(pool, -(int)block_header_borrowed);
 
 	int fl = 0, sl = 0;
 
