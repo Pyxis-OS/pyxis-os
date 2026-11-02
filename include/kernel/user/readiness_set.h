@@ -12,6 +12,7 @@ struct process;
 struct readiness_account;
 struct readiness_set;
 struct readiness_registration;
+struct readiness_process_watch;
 struct user_buffer_lease;
 
 #define READINESS_CREATE UINT64_C(0)
@@ -35,6 +36,8 @@ struct readiness_set_request {
   enum call_status status;
   struct call_limit limit;
   struct readiness_registration *prepared;
+  struct readiness_process_watch *process_watch;
+  const struct capability_grant *observer;
   bool copied;
 };
 
@@ -47,6 +50,41 @@ struct syscall_result readiness_set_call(struct kernel_object *object, uint64_t 
 enum call_status readiness_set_publish(struct readiness_set_request *request,
     const struct user_buffer_lease *lease, uintptr_t reply, size_t capacity);
 void readiness_set_abandon(struct kernel_object *object);
+
+/* Internal observed launch. PREPARE/BIND/FINISH enter and return on the current
+ * user caller with IF=0 and no guards. They may park through the catalog's
+ * readiness-set request while the set's BSP worker owns metadata.
+ * PREPARE always consumes/clears set_reference, retaining storage rather than
+ * a CONTROL grant. It reserves a hidden, loaned registration before launch.
+ * BIND borrows the unpublished child's real observer grant until return,
+ * retaining only control storage and independent pending source lineage.
+ * PREPARE failure leaves no token. After admission, failure leaves the token
+ * owned by its preparer for FINISH(false). */
+enum call_status readiness_process_watch_prepare(struct process *owner,
+    struct capability_reference *set_reference, uint64_t tag,
+    struct readiness_process_watch **watch, struct call_limit *detail);
+enum call_status readiness_process_watch_bind(struct readiness_process_watch *watch,
+    const struct capability_grant *observer, struct call_limit *detail);
+
+/* Current admitted user caller, IF=0, no guards. Elects launch start against
+ * CUT of the SET argument and launcher; never starts persistent source lineage. */
+bool readiness_process_watch_start(struct readiness_process_watch *watch,
+    struct forwarder_operation *launch_lineage);
+
+/* Any CPU, IF=0, final group admission serialized. All other fallible launch
+ * checks must already have passed. Success commits the watch before the
+ * non-failing child queue/observer installation; only that sequence may follow.
+ * The key is kernel-owned storage. Closure/CUT after this point uses ordinary
+ * observation cancellation; failure leaves the child unpublished. */
+enum call_status readiness_process_watch_commit(struct readiness_process_watch *watch,
+    struct readiness_set_registration *registration);
+
+/* Consumes the token exactly once, after all preparation and reply work.
+ * True follows a committed launch and confirmed user reply: release the loan
+ * and freshly check completion. False joins and discards an unclaimed watch,
+ * including a committed watch after late reply failure; it never stops a child.
+ * The loan remains held through child queueing and user reply publication. */
+void readiness_process_watch_finish(struct readiness_process_watch *watch, bool published);
 
 void readiness_set_submit(struct readiness_set_request *request);
 bool readiness_sets_service(bool network);
