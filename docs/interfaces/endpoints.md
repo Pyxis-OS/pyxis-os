@@ -18,8 +18,8 @@ completion records notification without enqueueing a still-running caller.
 Neither operation changes private mappings or needs a VM handoff.
 
 The BSP allocates backing with IF=0 and no queue lock held. Validated owned
-grants move atomically into the claims. Export rechecks closure, duplicate ID and
-export limit before publication; failure releases backing and the claim. No
+grants move atomically into the claims. Export rechecks closure and duplicate ID before
+publication (the export budget is charged, and the index grown, before it); failure releases backing and the claim. No
 nested executor wait occurs. Completion clears inputs/claims before waking the
 caller and makes no further request access afterward.
 
@@ -67,7 +67,9 @@ handles are installed all at once or not at all.
 Sixteen delivery records bound queued messages, received unfinished messages,
 and completed calls awaiting collection. Calls and sends share the same FIFO
 and capacity. A full endpoint returns `CALL_QUEUE_FULL` without delivering the
-new message or waiting for capacity. Receiving does not release its record:
+new message or waiting for capacity; sixteen is the endpoint's backpressure bound
+(each record embeds its 4 KiB request and reply buffers, about 160 KiB per endpoint),
+not a size refusal, and the caller may retry. Receiving does not release its record:
 a provider can receive further work and complete it in a different order.
 
 RECEIVE supplies a kernel-authenticated `ENDPOINT_MESSAGE_CALL` or
@@ -226,8 +228,12 @@ allocation or parking. See [scheduling ownership](../kernel/smp.md#scheduling-an
 
 ## Exports and retirement
 
-An endpoint supports up to 64 live or unacknowledged exports, independently of
-its sixteen delivery slots. EXPORT requires service CREATE authority and the
+An endpoint has no limit on live or unacknowledged exports, independently of its
+sixteen delivery slots; only the kernel memory they use is bounded. Each export is
+charged its record and index share to one kernel-wide budget of one 1,024th of
+installed RAM (at least 4 MiB), and an export past it fails `CALL_LIMIT` with a log
+line naming the budget. Exports are found by object ID in a hash index that grows
+as they are added. EXPORT requires service CREATE authority and the
 process's own receiver with CONTROL authority. It fixes a nonzero object ID,
 nonzero protocol, resource-rights ceiling and transport ceiling. IDs are unique
 within that receiver until retirement acknowledgment. The receiver owns
