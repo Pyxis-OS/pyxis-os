@@ -30,8 +30,6 @@
 #include <kernel/user/readiness_set.h>
 #include <kernel/user/launch.h>
 
-/* Tunable storage policy, including the initial and retiring threads. */
-#define PROCESS_THREAD_LIMIT 256
 #define PROCESS_RESULT_KIND_SHIFT 32
 #define PROCESS_RESULT_KIND_MASK UINT64_C(0xffffffff00000000)
 #define PROCESS_RESULT_STATUS_MASK UINT64_C(0x00000000ffffffff)
@@ -311,7 +309,9 @@ static void attach_task_locked(struct process *process,
     struct process_task_member *member, struct task *task)
 {
   KASSERT(member && task && !member->next && !member->task);
-  KASSERT(process->task_storage_count < PROCESS_THREAD_LIMIT);
+  KASSERT(process->departing_tasks <= process->task_count &&
+      process->task_count <= process->task_storage_count &&
+      process->task_storage_count != SIZE_MAX);
   member->task = task;
   member->next = process->tasks;
   process->tasks = member;
@@ -407,7 +407,7 @@ enum call_status process_thread_attach_locked(struct process *process,
       process_result_committed(process)) {
     return CALL_ENDPOINT_CLOSED;
   }
-  if (process->task_storage_count >= PROCESS_THREAD_LIMIT) {
+  if (process->task_storage_count == SIZE_MAX) {
     return CALL_LIMIT;
   }
   attach_task_locked(process, member, task);

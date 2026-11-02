@@ -89,7 +89,8 @@ supported.
 Libc owns FS. A TLS-free bootstrap prepares guarded MEMORY backing and binds it
 before stdio, malloc or constructors run; failure exits honestly. `errno` is a TCB
 field. Kernel GS stays CPU-local and user FSGSBASE is disabled. Runtime keys are
-process-local and generational, 128 slots by default. Thread exit runs language
+process-local and generational, with growable native-memory-backed metadata and
+lazy per-context values. Thread exit runs language
 destructors in reverse registration order, then at most four key-destructor passes
 outside registry exclusion. FS survives `atexit`, `.fini_array` and stdio
 shutdown. Forced stop or fault runs no user destructors.
@@ -148,18 +149,18 @@ per-thread affinity, priority or fairness change, so more runnable threads get
 more round-robin share.
 
 - **Stacks.** Libc allocates 1 MiB eager RW/NX backing plus a guard per sibling,
-  with explicit page-aligned sizes of 1 to 8 MiB allowed. Native callers may pass
+  with explicit page-multiple sizes from one native page through actual guarded
+  reservation/backing admission. Native callers may pass
   any region. A guard does not stop a large stack jump from skipping its page.
   Join releases libc-owned regions; an exiting thread never frees its own stack.
-- **Bounds.** At most 256 live or retiring native threads, and 64 unreclaimed libc
-  context records, per process, both counting the initial thread. The native bound
-  includes storage awaiting actual reclamation; libc retains its independent
-  context bound. They are reserved
-  before publication and released at completion and reclamation. These are tunable
-  policy, not ABI; consumers must handle real limit and allocation errors. A
-  retained completion observer uses heap and capability storage, not a task slot.
-  Libc can use roughly 64 MiB of default stacks; 256 native threads require
-  roughly 4 MiB of kernel stacks. These bounds guarantee no physical capacity.
+- **Bounds.** Libc context records grow in stable blocks; slot/generation widths
+  and real allocation/admission remain limits. Uncollected or uncertain records
+  retain resources. Native admission has no chosen thread-count ceiling: it
+  checks the actual task-storage counter width, including retiring storage.
+  That refusal is CALL_LIMIT with THREAD_COUNT detail. A retained completion
+  observer uses heap and capability storage, not a task slot. No count promises
+  physical capacity. Native thread/context helpers accept optional caller-owned
+  limit detail; standard pthread/C11 interfaces keep their ordinary errors.
 
 ## Delivery
 

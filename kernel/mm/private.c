@@ -1,5 +1,7 @@
 #include <arch/cpu.h>
+#include <arch/paging.h>
 #include <arch/smp.h>
+#include <kernel/limit.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/private.h>
 #include <kernel/mm/vm.h>
@@ -59,18 +61,22 @@ static enum mm_result back_private(struct process *process, uintptr_t base, size
   return backing.status;
 }
 
-enum mm_result private_memory_allocate(struct process *process, size_t size,
-                                        uintptr_t *address)
+enum call_status private_memory_allocate(struct process *process, size_t size,
+    uintptr_t *address, struct call_limit *detail)
 {
   KASSERT(process && address);
   process_vm_require_mutation(process);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(size && !(size & (PAGE_SIZE - 1)));
   *address = 0;
+  if (size > arch_user_vm_size()) {
+    return call_limit_set(detail, CALL_LIMIT_MEMORY_ADDRESS, size, arch_user_vm_size(),
+        CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
+  }
 
   struct private_allocation *allocation = kmalloc(sizeof(*allocation));
   if (!allocation) {
-    return MM_NO_MEMORY;
+    return CALL_NO_MEMORY;
   }
   enum mm_result result = vm_reserve(process->address_space, size, PAGE_SIZE, address);
   if (result == MM_OK) {
@@ -82,14 +88,15 @@ enum mm_result private_memory_allocate(struct process *process, size_t size,
   }
   if (result != MM_OK) {
     kfree(allocation);
-    return result;
+    KASSERT(result == MM_NO_MEMORY);
+    return CALL_NO_MEMORY;
   }
 
   *allocation = (struct private_allocation){
     .next = process->allocations, .address = *address, .size = size,
   };
   process->allocations = allocation;
-  return MM_OK;
+  return CALL_OK;
 }
 
 enum mm_result private_memory_release(struct process *process, uintptr_t address,
@@ -115,16 +122,22 @@ enum mm_result private_memory_release(struct process *process, uintptr_t address
 }
 
 enum call_status private_memory_allocate_guarded(struct process *process, size_t size,
-    struct memory_reservation *reservation)
+    struct memory_reservation *reservation, struct call_limit *detail)
 {
   KASSERT(process && reservation);
   process_vm_require_mutation(process);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(size && !(size & (PAGE_SIZE - 1)) && size <= SIZE_MAX - PAGE_SIZE);
   *reservation = (struct memory_reservation){0};
+  size_t capacity = arch_user_vm_size() - PAGE_SIZE;
+  if (size > capacity) {
+    return call_limit_set(detail, CALL_LIMIT_MEMORY_ADDRESS, size, capacity,
+        CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
+  }
   uint64_t identity = private_memory_identity();
   if (!identity) {
-    return CALL_NO_MEMORY;
+    return call_limit_set(detail, CALL_LIMIT_MEMORY_IDENTITY, UINT64_MAX, UINT64_MAX,
+        CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT | CALL_LIMIT_REQUESTED_SATURATED);
   }
 
   struct private_allocation *allocation = kmalloc(sizeof(*allocation));
@@ -157,15 +170,20 @@ enum call_status private_memory_allocate_guarded(struct process *process, size_t
 }
 
 enum call_status private_memory_reserve(struct process *process, size_t size,
-    size_t alignment, struct memory_reservation *reservation)
+    size_t alignment, struct memory_reservation *reservation, struct call_limit *detail)
 {
   KASSERT(process && reservation);
   process_vm_require_mutation(process);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   *reservation = (struct memory_reservation){0};
+  if (size > arch_user_vm_size()) {
+    return call_limit_set(detail, CALL_LIMIT_MEMORY_ADDRESS, size, arch_user_vm_size(),
+        CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
+  }
   uint64_t identity = private_memory_identity();
   if (!identity) {
-    return CALL_NO_MEMORY;
+    return call_limit_set(detail, CALL_LIMIT_MEMORY_IDENTITY, UINT64_MAX, UINT64_MAX,
+        CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT | CALL_LIMIT_REQUESTED_SATURATED);
   }
   struct private_allocation *allocation = kmalloc(sizeof(*allocation));
   if (!allocation) {

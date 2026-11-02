@@ -1,3 +1,4 @@
+#include <kernel/limit.h>
 #include <kernel/mm/kernel_owner.h>
 #include <kernel/object/forwarder.h>
 #include <abi/wait.h>
@@ -199,6 +200,10 @@ void thread_request_execute(struct thread_request *request)
     } else {
       spin_lock(&process->lifetime_lock);
       request->status = task_thread_attach_locked(task);
+      if (request->status == CALL_LIMIT) {
+        call_limit_set(&request->limit, CALL_LIMIT_THREAD_COUNT, UINT64_MAX, SIZE_MAX,
+            CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT | CALL_LIMIT_REQUESTED_SATURATED);
+      }
       if (request->status == CALL_OK) {
         capability_install_reserved(&request->reservation, &request->slot, &grant, 1,
             &request->reply.completion);
@@ -280,7 +285,7 @@ done:
 
 struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
   if (operation != THREAD_CREATE && operation != THREAD_EXIT && operation != THREAD_SET_FS) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -328,6 +333,7 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
   pending->process = process;
   pending->caller = task_current_user();
   pending->operation = operation;
+  pending->limit = (struct call_limit){0};
   pending->input = input.body.create;
   pending->fs = input.body.set_fs;
   pending->reservation = reservation;
@@ -339,6 +345,7 @@ struct syscall_result thread_service_call(uint64_t rights, uint64_t operation,
   pending->request.vm_mutator = pending->caller;
   process_vm_private_call(&pending->request);
   struct syscall_result result = {pending->status, 0};
+  *detail = pending->limit;
   struct thread_reply reply = pending->reply;
   reservation = pending->reservation;
   slot = pending->slot;

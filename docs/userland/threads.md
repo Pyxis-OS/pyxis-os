@@ -13,9 +13,13 @@ Bundles request the existing resource as `threads = { "manage" }`.
 Libc-created siblings are joinable or detached, with process-local generational identities,
 distinct eager guarded stacks and static local-exec TLS/errno. The initial
 thread has a usable identity but cannot be joined; raw native tasks have no
-managed identity and cannot be joined through libc. Initially 64 unreclaimed
-records include the initial thread. The default stack is 1 MiB; explicit sizes
-are page-aligned within 1–8 MiB. These limits are tuning, not a public ABI.
+managed identity and cannot be joined through libc. Stable native-memory-backed
+records grow as needed; their slot/generation identity widths and actual native
+admission remain bounds. Metadata pages stay mapped until process teardown.
+The default stack is 1 MiB; explicit sizes are page multiples from
+`PTHREAD_STACK_MIN` (the native page size) through actual guarded reservation
+and backing admission. A legal minimum is not a promise that application code
+fits it. There is no automatic stack growth.
 
 CREATE reserves its record and backing before native publication. The child
 waits for the completion observer to be published before entering user code.
@@ -31,7 +35,17 @@ pools between BUSY attempts.
 
 Ordinary sibling return/exit drains language TLS destructors in reverse order,
 then up to four key passes, and reports its return value. Keys are generational;
-deletion invokes no callbacks. A key value is cleared before its callback.
+deletion invokes no callbacks. Registry metadata grows independently of the
+creating context. Per-thread values allocate lazily: unset reads and NULL stores
+need no allocation, while non-NULL stores can fail real allocation/admission and
+preserve the previous value. A key value is cleared before its callback. Each
+pass has a finite eligibility snapshot; callback additions and rearming wait
+for a later pass.
+Obsolete key metadata is retired outside the registry guard. A failed retirement
+keeps surviving backing charged until process teardown; it does not terminate
+the process or undo a published key/value. No collector retries an uncertain
+address that may have been reused. Native CREATE uncertainty and running stack
+retirement still follow their existing stop/quarantine rules.
 After the key passes, language destructors first registered by keys also run.
 `libc_thread_cleanup_register` installs one per-thread runtime cleanup callback;
 it runs last, after both language drains. Repeated registration of the same
@@ -53,8 +67,10 @@ as a join target (`EINVAL`), until collected. Nothing runs on the thread's behal
 the exiting thread never frees its own stack, so the next `pthread_create`,
 `thrd_create`, join or orderly exit collects every detached sibling whose native
 completion is ready, releasing its stack, TLS and observer exactly as a join does.
-The 64-record bound is unchanged and a finished detached thread no longer counts
-once collected; a burst of live threads still fails with `EAGAIN`. Detaching an
+There is no separate libc record-count policy. Collection releases the worker
+resources; native admission and allocation can still fail. Capacity refusals map
+to `EAGAIN`, metadata exhaustion to `ENOMEM`, and invalid stack shapes to `EINVAL`.
+Detaching an
 unknown or stale identity returns `ESRCH`; the initial thread, a thread already
 detached or being joined, and the wrong entry kind return `EINVAL`.
 

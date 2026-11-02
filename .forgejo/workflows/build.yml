@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  BUILDER_IMAGE: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74-r1
+  BUILDER_IMAGE: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c
 
 jobs:
   # A pull request touching only docs/ or Markdown files skips the expensive
@@ -18,7 +18,7 @@ jobs:
     runs-on: pyxis
     timeout-minutes: 5
     container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74-r1
+      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c
     outputs:
       code: ${{ steps.detect.outputs.code }}
     steps:
@@ -55,7 +55,7 @@ jobs:
     runs-on: pyxis
     timeout-minutes: 5
     container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74-r1
+      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
@@ -78,7 +78,7 @@ jobs:
     runs-on: pyxis
     timeout-minutes: 5
     container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74-r1
+      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
@@ -93,7 +93,7 @@ jobs:
     runs-on: pyxis-fs-ram
     timeout-minutes: 5
     container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74-r1
+      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         if: ${{ needs.changes.outputs.code == 'true' }}
@@ -109,16 +109,16 @@ jobs:
             build_gid=$(id -g nobody)
             chown -hR "$build_uid:$build_gid" .
             exec setpriv --reuid="$build_uid" --regid="$build_gid" --clear-groups \
-              --no-new-privs env HOME=/tmp make -j16 fs-tools
+              --no-new-privs env HOME=/tmp make -j12 fs-tools
           fi
-          exec make -j16 fs-tools
+          exec make -j12 fs-tools
 
   build:
     needs: [changes, filesystem, pins]
     if: ${{ always() }}
     runs-on: pyxis
     container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74-r1
+      image: git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c
     steps:
       - name: Require change detection, pin and pinned filesystem validation
         env:
@@ -158,6 +158,6 @@ jobs:
             chown -hR "$build_uid:$build_gid" .
             exec setpriv --reuid="$build_uid" --regid="$build_gid" --clear-groups \
               --no-new-privs env HOME=/tmp \
-              make -j16 image
+              make -j12 image
           fi
-          exec make -j16 image
+          exec make -j12 image

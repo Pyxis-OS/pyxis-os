@@ -4,6 +4,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
+#include <kernel/limit.h>
 #include <kernel/mm/private.h>
 #include <kernel/mm/shared.h>
 #include <kernel/mm/shared_view.h>
@@ -145,7 +146,7 @@ void memory_request_execute(struct memory_request *request)
     request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
   } else if (request->operation == MEMORY_RESERVE) {
     request->status = private_memory_reserve(request->process, request->region.size,
-        request->alignment, &request->reservation);
+        request->alignment, &request->reservation, &request->limit);
     request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
   } else if (updates_memory(request->operation)) {
     request->status = private_memory_update(request->process, &request->subrange,
@@ -154,17 +155,20 @@ void memory_request_execute(struct memory_request *request)
       request->status == CALL_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
   } else if (request->operation == MEMORY_ALLOCATE_GUARDED) {
     request->status = private_memory_allocate_guarded(request->process, request->region.size,
-        &request->reservation);
+        &request->reservation, &request->limit);
     request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
   } else if (request->operation == MEMORY_RELEASE_RESERVATION) {
     request->status = shared_view_release(request->process, request->reservation.identity) ?
         CALL_OK : private_memory_release_reservation(request->process,
           request->reservation.identity);
     request->result = request->status == CALL_OK ? MM_OK : MM_INVALID;
+  } else if (request->operation == MEMORY_ALLOCATE) {
+    request->status = private_memory_allocate(request->process, request->region.size,
+        &request->region.address, &request->limit);
+    request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
   } else {
-    request->result = request->operation == MEMORY_ALLOCATE ?
-      private_memory_allocate(request->process, request->region.size, &request->region.address) :
-      private_memory_release(request->process, request->region.address, request->region.size);
+    request->result = private_memory_release(request->process, request->region.address,
+        request->region.size);
     KASSERT(request->result == MM_OK || request->result == MM_INVALID ||
         request->result == MM_NO_MEMORY);
     request->status = request->result == MM_OK ? CALL_OK :
@@ -239,7 +243,7 @@ static struct syscall_result create_shared_call(uint64_t rights,
 
 struct syscall_result memory_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (operation == MEMORY_CREATE_SHARED) {
@@ -284,13 +288,16 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   if (returns_memory(operation)) {
     size_t size = request.allocate.size;
     size_t reply_size = allocation_reply_size(operation);
-    if (!size || size > SIZE_MAX - (PAGE_SIZE - 1) || reply_capacity < reply_size ||
+    if (!size || reply_capacity < reply_size ||
         (operation == MEMORY_ALLOCATE_GUARDED && request.allocate_guarded.reserved)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
+    if (size > SIZE_MAX - (PAGE_SIZE - 1)) {
+      return (struct syscall_result){call_limit_encoding(detail), 0};
+    }
     size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     if (operation == MEMORY_ALLOCATE_GUARDED && size > SIZE_MAX - PAGE_SIZE) {
-      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+      return (struct syscall_result){call_limit_encoding(detail), 0};
     }
     if (operation == MEMORY_RESERVE &&
         (request.reserve.alignment < PAGE_SIZE ||
@@ -332,12 +339,14 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
   pending->reply_address = reply_address;
   pending->profiled = profiled;
   pending->result = MM_INVALID;
+  pending->limit = (struct call_limit){0};
   pending->request.vm_process = process;
   pending->request.vm_mutator = task_current_user();
   process_vm_private_call(&pending->request);
   region = pending->region;
   reservation = pending->reservation;
   enum mm_result result = pending->result;
+  *detail = pending->limit;
   uint64_t service_started_ns = pending->service_started_ns;
   uint64_t service_ended_ns = pending->service_ended_ns;
   bool reply_owned = pending->request.vm_reply_owned;

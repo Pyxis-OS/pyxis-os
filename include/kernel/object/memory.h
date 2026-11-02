@@ -2,6 +2,7 @@
 #define KERNEL_MEMORY_SERVICE_H
 
 #include <abi/memory.h>
+#include <abi/limit.h>
 #include <abi/syscall.h>
 #include <abi/shared_memory.h>
 #include <kernel/mm/types.h>
@@ -28,6 +29,7 @@ struct memory_request {
   uintptr_t reply_address;
   enum mm_result result;
   enum call_status status;
+  struct call_limit limit;
   bool profiled;
   uint64_t service_started_ns, service_ended_ns;
 };
@@ -44,7 +46,7 @@ struct kernel_object *memory_create(void);
  * no reply buffer and may unmap its captured request itself. */
 struct syscall_result memory_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity);
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail);
 
 /* Same private mutation/reply ownership as MEMORY; REGION is a retained leaf
  * from the caller's resolved grant. Mapping retains its source lineage. */

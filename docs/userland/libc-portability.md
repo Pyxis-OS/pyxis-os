@@ -186,6 +186,20 @@ glibc frees `p` and returns NULL. `realloc(NULL, 0)` equals `malloc(0)`. No code
 in the userland repository or in the port sources fetched for the earlier builds
 relied on the old NULL result.
 
+## Allocation capacity and failures
+
+Libc derives TLSF classes from the native size and positive pointer-difference
+widths, with checked request normalization, search, alignment, pool and page
+arithmetic. It imposes no separate 2 GiB request ceiling or page-sized alignment
+ceiling. Real address/backing admission remains fallible; the kernel allocator is
+separate. Normal malloc alignment is 16 bytes. Existing power-of-two
+`aligned_alloc` semantics and failed-realloc ownership are unchanged.
+
+Arithmetic/object overflow and real exhaustion return NULL/ENOMEM; missing heap
+authority returns EACCES, exhausted native BUSY attempts EBUSY, and uncertain
+native effects EIO without retry. Libc prints nothing and keeps no last-error
+slot. Standard `errno` is the diagnostic surface.
+
 ## Regular expressions and UTF-8 conversion
 
 The SDK exports `regex.h` with `regcomp`, `regexec`, `regerror` and `regfree`,

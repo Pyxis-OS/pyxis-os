@@ -2,6 +2,7 @@
 #define KERNEL_MM_PRIVATE_H
 
 #include <abi/memory.h>
+#include <abi/limit.h>
 #include <abi/jit.h>
 #include <abi/syscall.h>
 #include <kernel/mm/types.h>
@@ -39,15 +40,15 @@ static inline bool private_memory_stepped(size_t size)
  * enables interrupts and yields between steps; the result stays
  * all-or-nothing, and failure unwinds the partial backing in steps. Other
  * allocations never yield. */
-enum mm_result private_memory_allocate(struct process *process, size_t size,
-                                        uintptr_t *address);
+enum call_status private_memory_allocate(struct process *process, size_t size,
+    uintptr_t *address, struct call_limit *detail);
 enum mm_result private_memory_release(struct process *process, uintptr_t address,
                                        size_t size);
 
 /* Same drained BSP mutation token. Size is nonzero whole-page usable backing;
  * the full reservation adds one lower guard. Output is zero on failure. */
 enum call_status private_memory_allocate_guarded(struct process *process, size_t size,
-    struct memory_reservation *reservation);
+    struct memory_reservation *reservation, struct call_limit *detail);
 enum call_status private_memory_release_reservation(struct process *process,
     uint64_t identity);
 /* Same drained BSP mutation token. Only sparse identities can yield on release;
@@ -58,7 +59,7 @@ bool private_memory_release_stepped(struct process *process, uint64_t identity);
  * sparse address range; updates operate only on sparse identities. Updates and
  * sparse release run on the VM worker and yield between bounded steps. */
 enum call_status private_memory_reserve(struct process *process, size_t size,
-    size_t alignment, struct memory_reservation *reservation);
+    size_t alignment, struct memory_reservation *reservation, struct call_limit *detail);
 enum call_status private_memory_update(struct process *process,
     const struct memory_subrange *range, bool commit);
 
