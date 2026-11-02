@@ -855,7 +855,7 @@ void arch_frame_unmap(void)
 
 bool arch_frames_prepare_scanout(const phys_addr_t *physical, size_t count)
 {
-  KASSERT(cpu_current() == cpu_bsp() && !arch_cpu_count());
+  KASSERT(cpu_current() == cpu_bsp() && vm_kernel_owner_held());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   uint32_t eax, ebx, ecx, edx;
   cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
@@ -1788,7 +1788,8 @@ enum mm_result arch_kernel_map_prepared(uintptr_t virtual, phys_addr_t physical,
 enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(active && !arch_cpu_count());
+  KASSERT(active);
+  require_kernel_mutator(&kernel_space, virtual);
   uint64_t pat = read_msr(IA32_PAT);
   if (((pat >> (PAT_FRAMEBUFFER_INDEX * PAT_ENTRY_BITS)) & PAT_TYPE_MASK) != PAT_WRITE_COMBINING ||
       paging_display_aperture_overlaps(physical, PAGE_SIZE)) {
@@ -1802,7 +1803,7 @@ enum mm_result arch_page_map_scanout_run(uintptr_t virtual, const phys_addr_t *p
     size_t count, size_t *mapped)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(active && !arch_cpu_count());
+  KASSERT(active);
   *mapped = 0;
   uint64_t pat = read_msr(IA32_PAT);
   if (!physical || !count || count > PMM_FRAME_BATCH_MAX ||

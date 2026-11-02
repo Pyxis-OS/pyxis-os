@@ -170,6 +170,22 @@ join until reboot while unrelated RAM cleanup can continue. See
 
 ## Deliberate fixed and permanent domains
 
+`device_pages` provides runtime device-owned backing to a fixed BSP kernel task.
+It allocates a page vector and one zero-filled RW/NX CPU mapping, explicitly WB
+or WC, under the shared VM owner. PMM, zeroing and mapping steps are bounded
+by the existing 64-frame batch, with interrupts and scheduling restored between
+steps, including the final reservation-vacancy check. Metadata uses the existing
+heap and VM registry operations; the batch bound is not a hard elapsed-time
+bound on those operations. The vector contains physical addresses, not device addresses; allocation
+does not authorize DMA or establish an IOMMU mapping.
+
+The device owner must close and join CPU borrowers and confirmed hardware
+references before release. Published CPU mappings require the normal remote
+invalidation proof. Admission BUSY leaves the allocation unchanged; uncertain
+acknowledgement quarantines its mapping, vector and backing until reboot.
+Allocation failure unwinds only unpublished storage. This service does not
+change the boot-only coherent `dma_buffer` or bootstrap scanout contracts.
+
 Device queues, IRQs, network/audio/USB/filesystem workers, ACPI/GPE and firmware
 actions keep their existing owners. DMA/BAR/ECAM and scanout obey their device,
 cache-attribute, claim and boot/reset lifetimes; runtime DMA is not generically

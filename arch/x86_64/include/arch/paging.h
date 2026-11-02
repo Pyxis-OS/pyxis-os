@@ -74,17 +74,17 @@ enum mm_result arch_kernel_map_prepared(uintptr_t virtual, phys_addr_t physical,
 /* Same permanent owner, only rollback of an unpublished partial fill. The
  * consumed addresses may never be filled or published afterward. */
 enum mm_result arch_kernel_unmap_prepared(uintptr_t virtual, phys_addr_t *physical);
-/* BSP IF=0 before AP startup, caller-proven driver-owned scanout page.
- * No generic RAM use; PAT[5] must remain WC. */
+/* Fixed BSP IF=0, kernel structural owner, fresh caller-owned scanout page.
+ * No generic RAM use, aliases or live replacement; PAT[5] must remain WC. */
 enum mm_result arch_page_map_scanout(uintptr_t virtual, phys_addr_t physical);
-/* Unmapped caller-owned PMM frame, BSP/IF=0 before AP startup. Flush prior WB
+/* Unmapped caller-owned PMM frame, BSP/IF=0, kernel structural owner. Flush prior WB
  * cache lines through the temporary scratch alias, then withdraw that alias
  * before the caller installs its sole WC scanout mapping. */
 bool arch_frame_prepare_scanout(phys_addr_t physical);
 /* Same cache transition, at most PMM_FRAME_BATCH_MAX frames. Every cache line
  * and per-frame MFENCE is retained; no WB scratch pointer survives the call. */
 bool arch_frames_prepare_scanout(const phys_addr_t *physical, size_t count);
-/* Same bootstrap scanout contract, at most PMM_FRAME_BATCH_MAX frames and no
+/* Same fresh caller-owned scanout contract, at most PMM_FRAME_BATCH_MAX frames and no
  * leaf-table crossing. Prevalidate the run before publishing; report progress. */
 enum mm_result arch_page_map_scanout_run(uintptr_t virtual, const phys_addr_t *physical,
     size_t count, size_t *mapped);

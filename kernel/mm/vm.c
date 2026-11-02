@@ -452,6 +452,16 @@ static enum mm_result require_unmapped(struct vm_space *space,
   return arch_range_vacant(page_space(space), range->base, range->pages);
 }
 
+static void release_reserved(struct vm_space *space, struct vm_range *range)
+{
+  registry_lock(space);
+  release_range(space, range);
+  registry_unlock(space);
+  if (space == &kernel_space) {
+    trim_kernel_spares();
+  }
+}
+
 enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
 {
   require_kernel_owner(space);
@@ -468,13 +478,45 @@ enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
     return status;
   }
 
-  registry_lock(space);
-  release_range(space, range);
-  registry_unlock(space);
-  if (space == &kernel_space) {
-    trim_kernel_spares();
-  }
+  release_reserved(space, range);
   return MM_OK;
+}
+
+enum mm_result vm_release_kernel(uintptr_t base, size_t bytes)
+{
+  KASSERT(cpu_interrupts_enabled() && task_current_actor() && vm_kernel_owner_held());
+  uint64_t flags = cpu_save_interrupts();
+  require_kernel_owner(&kernel_space);
+  struct vm_range *range = find_range(&kernel_space, base, bytes);
+  enum mm_result status = MM_INVALID;
+  if (range && range->quarantined) {
+    status = MM_BUSY;
+  } else if (range && range->state == RANGE_RESERVED) {
+    /* The retained owner stabilizes the reservation and all its mappings
+     * across yields. Keep the ordinary release's full vacancy check. */
+    size_t checked = 0;
+    while (checked < range->pages) {
+      size_t step = range->pages - checked;
+      if (step > PMM_FRAME_BATCH_MAX) {
+        step = PMM_FRAME_BATCH_MAX;
+      }
+      status = arch_range_vacant(page_space(&kernel_space), base + checked * PAGE_SIZE, step);
+      if (status != MM_OK) {
+        break;
+      }
+      checked += step;
+      if (checked < range->pages) {
+        cpu_restore_interrupts(flags);
+        kernel_task_yield_if_runnable();
+        flags = cpu_save_interrupts();
+      }
+    }
+    if (status == MM_OK) {
+      release_reserved(&kernel_space, range);
+    }
+  }
+  cpu_restore_interrupts(flags);
+  return status;
 }
 
 static void free_backing(struct vm_space *space, uintptr_t base,
@@ -1585,8 +1627,8 @@ enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical)
   return arch_page_map_scanout(base, physical);
 }
 
-enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
-    size_t count, size_t *mapped)
+static enum mm_result map_kernel_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped, bool write_combining)
 {
   require_kernel_owner(&kernel_space);
   *mapped = 0;
@@ -1598,7 +1640,20 @@ enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
       count > PMM_FRAME_BATCH_MAX || count > range->pages - (base - range->base) / PAGE_SIZE) {
     return MM_INVALID;
   }
-  return arch_page_map_scanout_run(base, physical, count, mapped);
+  return write_combining ? arch_page_map_scanout_run(base, physical, count, mapped) :
+      arch_page_map_run(page_space(&kernel_space), base, count, physical, PAGE_WRITE, mapped);
+}
+
+enum mm_result vm_map_kernel_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped)
+{
+  return map_kernel_run(base, physical, count, mapped, false);
+}
+
+enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped)
+{
+  return map_kernel_run(base, physical, count, mapped, true);
 }
 
 bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes)
@@ -1647,6 +1702,18 @@ enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
     return MM_INVALID;
   }
   return arch_page_unmap(page_space(space), base, physical);
+}
+
+size_t vm_unmap_kernel_run(uintptr_t base, phys_addr_t *physical, size_t count)
+{
+  require_kernel_owner(&kernel_space);
+  struct vm_range *range = range_containing(&kernel_space, base);
+  if (!range || range->quarantined || range->state != RANGE_RESERVED ||
+      !physical || !count || count > PMM_FRAME_BATCH_MAX ||
+      count > range->pages - (base - range->base) / PAGE_SIZE) {
+    return 0;
+  }
+  return arch_page_unmap_run(page_space(&kernel_space), base, count, physical);
 }
 
 static uint64_t *owned_wait_token(struct vm_range *range, uintptr_t base)

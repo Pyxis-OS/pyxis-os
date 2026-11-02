@@ -78,7 +78,7 @@ layer or successful unsupported operations.
 
 | Service | Existing boundary and required work |
 | --- | --- |
-| Allocation/WC mappings | PMM batches and heap exist. Scanout page-vector/WC preparation is currently pre-AP. Sleepable runtime display discovery needs a real owned mapping/cache transaction; no WB/WC aliases or driver-local allocator bypass. |
+| Allocation/WC mappings | PMM batches and heap exist. Native `device_pages` adds an owned runtime WB/WC page vector for the fixed BSP kernel worker, separate from bootstrap scanout. Its physical vector is not a device address map. No WB/WC aliases or driver-local allocator bypass. |
 | DMA/SG | Keep CPU VA, physical frame, GPU VA and device address distinct. Existing identity-DMA proof does not provide translated SG mappings or permission to change firmware IOMMU tables. Decide any required new mapper at that task. |
 | PCI/MMIO/MSI | Native claims, BAR mappings and single-vector MSI-X/MSI exist. Keep one device owner and the native BME/claim lifecycle; use the reference's access widths, ordering and posting. |
 | Delays/waits | Use native monotonic deadlines and task waits. Separate short hardware polling from sleepable waits; never replace a sleeping mutex with a spinlock held over PHY/AUX work. |
@@ -93,11 +93,10 @@ milestone is not a silent change to kernel contracts.
 
 ## Task2 decisions at the native-service boundary
 
-The four milestone decisions above are accepted. The following are new task2
-choices, **proposed, not accepted**; they shape the bootstrap/worker and memory
-contracts before their implementation.
+**Decisions5 and6 accepted (chronium, 2026-11-02).** They define the
+bootstrap/worker and native runtime-buffer contracts for task2.
 
-**5. Bootstrap-to-worker handoff — recommended default: keep boot presentation
+**5. Bootstrap-to-worker handoff — accepted: keep boot presentation
 running while the fixed BSP Intel worker discovers and prepares the owned
 display.** Reserve the device/resources during bootstrap, but do not call the
 sleepable probe in pre-AP IF=0 context or stall all userspace behind it. The new
@@ -108,10 +107,8 @@ through the existing display generation/resize transaction; retain the previous
 layout until that commit. Preparation failure can leave untouched GOP copying;
 after effects, recovery must actually establish valid scanout before claiming
 fallback. This does not add a public source-resolution or modesetting right.
-The alternative is delaying normal presentation/user launch until driver probe
-finishes; that puts sleepable hardware discovery on the boot-visible path.
 
-**6. Runtime buffer support — recommended default: a native device-owned page
+**6. Runtime buffer support — accepted: a native device-owned page
 vector in kernel/mm, with explicit WB or WC CPU mapping and the existing
 identity-DMA admission for the held requester.** CPU and device/GPU addresses
 remain distinct; this is an internal kernel service, not a userspace constructor
@@ -122,9 +119,7 @@ retirement before unmapping/freeing. An uncertain VM/ACK or device outcome keeps
 the owned record/backing and fences reuse, as the existing VM/scanout contract
 requires. Do not silently broaden today's boot-only DMA helpers or introduce
 an arbitrary framebuffer cap. Allocation failure is reported; no eviction,
-IOMMU reprogramming or hidden blocking reserve. The alternative is retaining
-boot-prepared buffers for the whole boot, which would constrain runtime panel
-mode discovery and defer real allocation/reclamation rather than port it.
+IOMMU reprogramming or hidden blocking reserve.
 
 Panic publication and exact hardware recovery are settled when task5 reaches
 those transitions, using the owned front and reference behavior; they are not
@@ -161,6 +156,30 @@ Kernel build passed. This is a correctness/source baseline, not a timing or
 native driver result. Two existing warnings remain in NPFS/lwIP; this task does
 not change those subsystems. No new hardware worker, mapping, frame, firmware
 load or source/object build rule is added by the pin.
+
+### Task2: runtime buffer foundation
+
+The first task2 slice adds `kernel/mm/device_pages`: runtime zero-filled,
+RW/NX WB or WC backing with a caller-owned descriptor and an immutable physical
+page vector. Its shared VM ownership survives scheduling between 64-page
+allocation, mapping, vacancy-check and release steps. It does not establish
+device addressing or DMA authority. Confirmed CPU/device retirement remains
+the concrete owner's prerequisite for release; uncertain remote invalidation
+retains the whole allocation until reboot. Heap metadata keeps its existing
+allocation and retained-pool limits.
+
+Disposable QEMU controls passed with KVM, `host,+invtsc`, 1 and 4 CPUs, 1 GiB
+RAM and the existing builder at explicit `-j12`. A never-merged kernel task
+exercised 1-, 65- and 513-page WB/WC allocations after scheduler startup,
+zeroing and readback, physical translations, RW/NX/supervisor and PAT flags,
+local and remote-confirmed release, and exact backing reclamation after PMM
+exhaustion. The diagnostic task and PTE readout are not product code. No device
+was given these buffers; device joining and the new API's timeout/quarantine
+path have not been exercised natively or by a missing-ACK control.
+
+Task2 remains open: bootstrap reservation, the asynchronous owner/OAL handoff,
+requester-specific DMA admission, IRQ/work joining and the first real driver
+consumer still follow this memory foundation. No eDP activation is claimed.
 
 ## Code retained and replaced
 
