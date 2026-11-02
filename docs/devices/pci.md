@@ -146,6 +146,35 @@ on malformed size/alignment or overlapping BARs. Unassigned resources and obsole
 memory BAR encodings are rejected. I/O BARs stay untouched and are not mapped.
 There is no resource reassignment or bridge-window programming.
 
+### Claimed, display preserved
+
+`pci_claim_display_preserved` is a separate bootstrap path for an endpoint
+display whose firmware consumer remains live. The BSP excludes all CPU
+framebuffer/MMIO writers during its short decode-off window. It preserves BME,
+sizes and immediately restores each standard BAR dword, then restores original
+I/O/memory decoding before interpreting resources. There is no output, sleep,
+allocation or callback while decode is off. Inherited MSI/MSI-X enables are
+cleared and INTx stays disabled. Power state, mode and BAR assignments are not
+changed; unassigned resources are not allocated.
+
+The explicit `PCI_DISPLAY_PRESERVED` claim is no longer a provisional
+reservation, but inherited BME is not `dma_started`. Assigned memory BARs can
+be mapped and MSI/MSI-X prepared through the existing pre-AP interfaces before
+driver DMA publication. Unsupported or invalid individual BARs stay unavailable
+without discarding valid others. The native decoder follows Linux's implemented
+decode-bit sizing and 32/64-bit interpretation. The pinned `mmio_always_on`
+quirk applies to host bridges, not these display endpoints.
+
+Ordinary claim completion, cancellation/release, reset and BAR reassignment
+cannot consume a preserved-display claim. It and its ownership record stay for
+the boot. Device-specific CPU/IRQ/DMA/scanout joining still precedes buffer
+retirement; PCI ownership is not a hardware-stop proof. Failure after acquisition
+retains the claim as `PCI_DISPLAY_RETAINED`, blocks resource/IRQ setup and grants
+no GOP fallback proof. Its caller must keep framebuffer writers closed.
+The handoff reuses the existing checked native COMMAND write, without treating
+firmware BME restoration as publication of driver DMA. No extra full-BAR
+readback equality predicate is added.
+
 ## Single-message MSI
 
 The shared helper admits the standard 32- and 64-bit message-address layouts,

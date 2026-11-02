@@ -122,7 +122,8 @@ enum mm_result pci_assignment_window_prepare(struct pci_claim *claim, size_t byt
 {
   KASSERT(!cpu_interrupts_enabled());
   if (!prepared || !claim || !claim->device || claim->device->owner != claim ||
-      !claim->generation || !window || window->base || !bytes || (bytes & (PAGE_SIZE - 1))) {
+      claim->display_state != PCI_DISPLAY_NONE || !claim->generation ||
+      !window || window->base || !bytes || (bytes & (PAGE_SIZE - 1))) {
     return MM_INVALID;
   }
   uintptr_t base;
@@ -678,6 +679,10 @@ bool pci_assign_memory_bar(struct pci_claim *claim, unsigned bar,
   const struct acpi_pci_resources *resources = NULL;
   struct allocation *allocation = NULL;
   struct pci_bar_placement placement;
+  if (claim->display_state != PCI_DISPLAY_NONE) {
+    fail(&proof, "preserved display claim cannot reassign BARs");
+    goto refused;
+  }
   if (placement_uncertain) {
     fail(&proof, "earlier BAR write left an unbounded uncertain decode");
     goto refused;

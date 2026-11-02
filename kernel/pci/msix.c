@@ -26,6 +26,9 @@ bool pci_msix_discover(struct pci_claim *claim, struct pci_msix *msix)
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(claim && claim->device && claim->device->owner == claim);
   KASSERT(!claim->reserved && !claim->dma_started && msix && !msix->claim);
+  if (claim->display_state == PCI_DISPLAY_RETAINED) {
+    return false;
+  }
   unsigned capability = 0;
   for (unsigned i = 0; i < claim->capability_count; ++i) {
     unsigned offset = claim->capabilities[i];
@@ -84,6 +87,9 @@ enum mm_result pci_msix_map(struct pci_msix *msix, const struct boot_info *boot)
 bool pci_msix_prepare(struct pci_msix *msix, uint8_t vector)
 {
   require_owner(msix);
+  if (msix->claim->display_state == PCI_DISPLAY_RETAINED) {
+    return false;
+  }
   KASSERT(!msix->claim->dma_started && msix->table.mapping.address && msix->pba.mapping.address);
   struct pci_claim *claim = msix->claim;
   unsigned offset = msix->capability + PCI_MSIX_CONTROL;
@@ -116,6 +122,9 @@ bool pci_msix_prepare(struct pci_msix *msix, uint8_t vector)
 bool pci_msix_enable(struct pci_msix *msix)
 {
   require_owner(msix);
+  if (msix->claim->display_state == PCI_DISPLAY_RETAINED) {
+    return false;
+  }
   KASSERT(msix->table.mapping.address);
   volatile struct pci_msix_entry *table =
     (volatile struct pci_msix_entry *)msix->table.mapping.address;
@@ -134,6 +143,9 @@ bool pci_msix_enable(struct pci_msix *msix)
 bool pci_msix_disable(struct pci_msix *msix)
 {
   require_owner(msix);
+  if (msix->claim->display_state == PCI_DISPLAY_RETAINED) {
+    return false;
+  }
   KASSERT(msix->table.mapping.address);
   volatile struct pci_msix_entry *table =
     (volatile struct pci_msix_entry *)msix->table.mapping.address;

@@ -68,6 +68,9 @@ bool pci_msi_prepare(struct pci_claim *claim, struct pci_msi *msi, uint8_t vecto
 {
   require_claim(claim);
   KASSERT(!claim->dma_started && msi && !msi->claim);
+  if (claim->display_state == PCI_DISPLAY_RETAINED) {
+    return false;
+  }
   unsigned capability = 0;
   for (unsigned i = 0; i < claim->capability_count; ++i) {
     unsigned offset = claim->capabilities[i];
@@ -128,6 +131,9 @@ static bool set_enabled(struct pci_msi *msi, bool enabled)
 {
   KASSERT(msi && msi->claim && msi->capability);
   require_claim(msi->claim);
+  if (msi->claim->display_state == PCI_DISPLAY_RETAINED) {
+    return false;
+  }
   unsigned offset = msi->capability + PCI_MSI_CONTROL;
   struct pci_address address = msi->claim->device->address;
   uint16_t control = pci_read16(address, offset);
