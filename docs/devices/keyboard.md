@@ -70,8 +70,24 @@ RESEND, or no ACK within 200 ms (checked by the task that drains key events),
 restarts the command; after three failed attempts the request is dropped without
 a message, because the lights are cosmetic. A later lock change tries again.
 
-USB keyboards do not get their lights updated yet; see
-[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1292).
+USB keyboards pull the same state. Between admissions, the controller's BSP
+worker compares the lock state with the last LED report attempted on each bound
+boot keyboard and, when they differ, sends `SET_REPORT(Output)` with the
+one-byte boot LED report (Num, Caps and Scroll in bits 0 to 2) on endpoint 0. A
+newly bound keyboard has no report attempted, so it receives one once binding
+completes. Changes made while a transfer is pending coalesce: the next worker
+pass sends only the latest state. The input path only updates the shared state;
+it never submits or waits for the transfer.
+
+The worker waits for each transfer within its pass, at most 5 s, so no LED
+request is left on endpoint 0 for later identity checks. Report collection
+continues during that wait. While endpoint 0 has another client or the
+device's identity is held for verification, the report waits for a later pass.
+A refused report (STALL) keeps the keyboard bound; the
+first failure on each binding is logged at debug level, and a later lock change
+tries again. A timeout or transaction error follows the USB host rule for any
+uncertain control transfer: the device is retired, and a topology readmission
+sends the report again at bind.
 
 Space navigation, character mapping and userspace delivery belong to callers;
 the driver installs no bindings or consumer task.

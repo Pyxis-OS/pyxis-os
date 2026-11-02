@@ -29,8 +29,9 @@ sibling. Before continuing, xHCI
 resets halted EP0, clears the owning transaction translator when applicable,
 and advances the dequeue pointer past the failed transfer. Failed recovery or
 other GET_REPORT errors still fail closed.
-Keyboard SET_IDLE(0) is required; a mouse may stall it. Report-protocol
-keyboards, tablets, gamepads, vendor protocols, media keys and keyboard LED updates
+Keyboard SET_IDLE(0) is required; a mouse may stall it. Bound boot keyboards
+receive [lock lights](keyboard.md#lock-lights) as boot Output reports.
+Report-protocol keyboards, tablets, gamepads, vendor protocols and media keys
 are unsupported.
 
 Boot admission covers low/full/high-speed leaves on roots or through at most

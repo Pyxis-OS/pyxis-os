@@ -35,6 +35,7 @@
 #define USB_REQUEST_CLASS_INTERFACE_IN 0xa1
 #define USB_REQUEST_CLASS_INTERFACE_OUT 0x21
 #define USB_REPORT_INPUT 1
+#define USB_REPORT_OUTPUT 2
 #define USB_REPORT_FEATURE 3
 #define USB_MODIFIER_FIRST 0xe0
 #define USB_KEY_ERROR_LAST 3
@@ -50,6 +51,10 @@
 #define USB_HID_MALFORMED_DIAGNOSTIC_NS UINT64_C(5000000000)
 #define USB_HID_MOUSE_SAMPLES 4
 #define USB_HID_MOUSE_SAMPLE_BYTES 16
+/* Boot keyboard Output report: LED usage page bits. */
+#define USB_LED_NUM_LOCK (1u << 0)
+#define USB_LED_CAPS_LOCK (1u << 1)
+#define USB_LED_SCROLL_LOCK (1u << 2)
 
 enum hid_stage {
   HID_CONFIGURATION, HID_KEYBOARD_DESCRIPTOR, HID_MOUSE_DESCRIPTOR, HID_EDGE_DESCRIPTOR, HID_ENDPOINTS,
@@ -1117,4 +1122,68 @@ void usb_hid_collect(struct usb_hid_binding *binding)
       }
     }
   }
+}
+
+static uint8_t boot_leds(unsigned locks)
+{
+  uint8_t report = 0;
+  if (locks & KEY_MOD_NUM_LOCK) {
+    report |= USB_LED_NUM_LOCK;
+  }
+  if (locks & KEY_MOD_CAPS_LOCK) {
+    report |= USB_LED_CAPS_LOCK;
+  }
+  if (locks & KEY_MOD_SCROLL_LOCK) {
+    report |= USB_LED_SCROLL_LOCK;
+  }
+  return report;
+}
+
+bool usb_hid_update_leds(struct usb_hid_binding *binding, unsigned locks)
+{
+  const struct usb_hid_interface *keyboard = &binding->interfaces[0];
+  if (!binding->active || keyboard->protocol != USB_PROTOCOL_KEYBOARD ||
+      !usb_host_device_present(binding->host)) {
+    return false;
+  }
+  uint8_t report = boot_leds(locks);
+  if (binding->leds_attempted && binding->leds == report) {
+    return false;
+  }
+  /* Admission confirmed boot protocol, whose Output report has no ID. */
+  struct usb_setup setup = {
+    .request_type = USB_REQUEST_CLASS_INTERFACE_OUT,
+    .request = USB_REQUEST_SET_REPORT,
+    .value = USB_REPORT_OUTPUT << 8,
+    .index = keyboard->number,
+    .length = sizeof(report),
+  };
+  uint64_t deadline = task_deadline_after_ms(USB_CONTROL_TIMEOUT_MS);
+  struct usb_ticket ticket;
+  enum usb_result result = usb_host_control_submit(binding->host, &setup, &report, deadline, &ticket);
+  if (result == USB_BUSY) {
+    /* Identity hold or another EP0 client; a later pass sends the latest state. */
+    return false;
+  }
+  if (result == USB_OK) {
+    struct usb_completion completion;
+    result = usb_host_control_wait(binding->host, ticket, deadline);
+    if (result == USB_OK) {
+      result = usb_host_control_take(binding->host, ticket, NULL, 0, &completion);
+    }
+    if (result != USB_OK) {
+      usb_host_control_abandon(binding->host, ticket);
+    } else {
+      result = completion.result;
+    }
+  }
+  /* A failure is retried only by a later lock change, like PS/2. */
+  binding->leds = report;
+  binding->leds_attempted = true;
+  if (result != USB_OK && !binding->leds_failure_reported) {
+    binding->leds_failure_reported = true;
+    kdebug("usb HID: %x:%x interface %u LED report not accepted (result %u); lights unchanged\n",
+           binding->vendor, binding->product, keyboard->number, (unsigned)result);
+  }
+  return true;
 }
