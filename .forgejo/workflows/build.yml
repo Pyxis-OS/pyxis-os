@@ -109,9 +109,9 @@ jobs:
             build_gid=$(id -g nobody)
             chown -hR "$build_uid:$build_gid" .
             exec setpriv --reuid="$build_uid" --regid="$build_gid" --clear-groups \
-              --no-new-privs env HOME=/tmp make -j16 fs-tools
+              --no-new-privs env HOME=/tmp make -j12 fs-tools
           fi
-          exec make -j16 fs-tools
+          exec make -j12 fs-tools
 
   build:
     needs: [changes, filesystem, pins]
@@ -158,6 +158,6 @@ jobs:
             chown -hR "$build_uid:$build_gid" .
             exec setpriv --reuid="$build_uid" --regid="$build_gid" --clear-groups \
               --no-new-privs env HOME=/tmp \
-              make -j16 image
+              make -j12 image
           fi
-          exec make -j16 image
+          exec make -j12 image

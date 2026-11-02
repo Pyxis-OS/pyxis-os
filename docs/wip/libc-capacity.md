@@ -41,13 +41,13 @@ with the launcher work; this checklist distinguishes libc from that dependency.
 - [x] Quiet matched existing-tool measurements after the concurrent build ended;
   earlier load-affected samples retained without a performance conclusion.
 
-The kernel slice is stacked on the actual WP3 launcher/capacity branch, reusing
-its common optional reason ABI. No launcher or process-lifetime redesign is added.
+The kernel slice follows merged WP3, reusing its common optional reason ABI. No launcher or process-lifetime redesign is added.
 The SDL detached-thread no-op is a separate existing lifetime issue, not fixed
 or qualified by removing registry limits.
 
-The stack remains draft until WP3 merges and the native LLVM prefix/container
-is rebuilt for the changed development SDK signatures. Native count admission
+The combined native LLVM/container producer is published at c63fb8c. Its
+recorded SDK snapshot is retained when rebasing; ordinary consumers rebuild
+against current source. Exact-head CI and final integration checks gate readiness. Native count admission
 now checks representability, and ordinary one/four-CPU QEMU holds and joins 288
 workers, then checks process completion with 288 workers still held. Named
 rounding/address refusals and success-path detail clearing also pass. Stopped

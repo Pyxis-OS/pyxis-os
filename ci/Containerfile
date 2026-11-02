@@ -15,8 +15,8 @@ RUN for cert in /tmp/pyxis-ci/*.crt; do \
     && rm -rf /tmp/pyxis-ci
 
 COPY toolchain/ /tmp/pyxis-toolchain/
-RUN JOBS="$(nproc)" /tmp/pyxis-toolchain/build.sh /opt/cross /tmp/cross-build \
-    && JOBS="$(nproc)" /tmp/pyxis-toolchain/build-container-libraries.sh \
+RUN JOBS=12 /tmp/pyxis-toolchain/build.sh /opt/cross /tmp/cross-build \
+    && JOBS=12 /tmp/pyxis-toolchain/build-container-libraries.sh \
       /opt/cross /tmp/native-llvm-build /tmp/cross-build/llvm-project \
     && rm -rf /tmp/cross-build /tmp/native-llvm-build
 
