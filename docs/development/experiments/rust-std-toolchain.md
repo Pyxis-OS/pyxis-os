@@ -1,6 +1,6 @@
 # Fork-built Rust compiler and core+alloc qualification
 
-2026-10-25, gate 1 of the [std milestone](../../wip/rust-std.md).
+2026-10-25, gate 1 of the [std profile](../rust-toolchain.md#native-std-profile).
 This qualifies the compiler and built-in target. Pyxis std, Rust workers,
 filesystem adapters and hexyl remain unimplemented. No kernel, ABI, runtime,
 package default or compiler container changes are part of this gate.

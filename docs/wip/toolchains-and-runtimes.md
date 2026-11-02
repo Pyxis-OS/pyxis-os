@@ -110,14 +110,12 @@ also a separate result from cross-compiling Go programs on the host for Pyxis.
 
 ## Rust alongside the LLVM direction
 
-The [Rust stage-1 delivery](rust.md) provides a
-[pinned host toolchain](../development/rust-toolchain.md), native custom
-target and `core` + `alloc`/tiny-skia qualification under the accepted decisions
-(chronium, 2026-10-25). The existing SDK/P1F link boundary
-uses ordinary ELF objects with LTO off. The [stage-2 milestone](rust-std.md)
-covers the fork's built-in target and first native std/hexyl profile; its
-decisions and implementation are authorized (chronium, 2026-10-25).
-Tier-3 upstreaming and hosted Rust remain separate work.
+The [Rust cross-toolchains](../development/rust-toolchain.md) provide pinned
+core+alloc and a fork-built first native std profile with hexyl, workers and
+filesystem operations. The target uses ordinary ELF objects, Pyxis Clang/LLD
+and LTO off. [Hosted Rust, later ports and tier-3 upstreaming](rust.md) remain
+separate work; [native profile qualification](https://git.internal/PyxisOS/pyxis-os/issues/1679)
+is open.
 
 ## Homelab administration over Tailscale
 

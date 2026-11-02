@@ -13,7 +13,7 @@ Ordinary `make -j16 image PREBUILT='sdk userspace ports'` passes in existing
 `pyxis-llvm23.1.3-df87791`. Unchanged dependencies are verified CI2699 bundles.
 No compiler rebuild, upstream implementation import, probe or new test tooling.
 The scope/ownership and source references are in the
-[milestone](../../../wip/vela-i2c-touchpad.md#task-2-attachment-and-limits).
+[attachment reference](../../../devices/hid-i2c-touchpad.md#attachment-and-ownership).
 Raw logs, images, JSONL and GDB: task worktree `build/task2-*`.
 
 ## QEMU controls

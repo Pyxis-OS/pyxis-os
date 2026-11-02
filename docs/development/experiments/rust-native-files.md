@@ -1,6 +1,6 @@
 # Rust native writable files
 
-2026-10-26, the writable-file slice of the [std milestone](../../wip/rust-std.md).
+2026-10-26, the writable-file slice of the [std profile](../rust-toolchain.md#native-std-profile).
 Directory enumeration/mutation remains separate; no native/PXE run is involved.
 
 ## Inputs and build

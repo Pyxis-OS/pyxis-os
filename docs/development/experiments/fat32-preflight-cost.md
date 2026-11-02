@@ -73,7 +73,7 @@ Native scratch timing is not collected; source/count evidence is stronger than
 an extrapolation to physical media.
 
 Raw images, commands, debugger scripts/captures and excluded records stay local.
-The following implementation record updates the [accepted contract](../../wip/fat32-preflight-cost.md); the preceding measurements describe the original implementation.
+The following implementation record updates the [accepted contract](../../devices/fat32-mounts.md#native-mutations-and-publication-intervals); the preceding measurements describe the original implementation.
 
 
 ## 2026-10-14 retained allocation proof and local checks

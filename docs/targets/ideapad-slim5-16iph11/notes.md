@@ -60,7 +60,7 @@ Boots from the owner's installed USB stick. Status as of 2026-10-20; the
 | Boot, x2APIC, 16 CPUs | Works: Limine 12.9.3, [x2APIC](../../kernel/smp.md) and CPUID 0x15 timers |
 | Display | Firmware framebuffer, 2880x1800, 8-bit XRGB |
 | Keyboard | Works over PS/2 |
-| Touchpad | Works: ELAN precision touchpad over HID-over-I2C on DesignWare I2C, polled; native move, click, drag and two-finger scroll qualified 2026-10-16. GPIO interrupt delivery is later work ([milestone](../../wip/vela-i2c-touchpad.md)) |
+| Touchpad | Works: ELAN precision touchpad over HID-over-I2C on DesignWare I2C, polled; native move, click, drag and two-finger scroll qualified 2026-10-16. GPIO interrupt delivery is later work ([limits](../../devices/hid-i2c-touchpad.md#limits)) |
 | USB | Works with the xHCI capability window and MSI fallback (#848) |
 | NVMe | [#853](https://git.internal/PyxisOS/pyxis-os/pulls/853) admits newer controllers by the NVM contract; owner read-only namespace/GPT check passed, writes remain disabled |
 | Power button | Works through the `INTC10CC` power event: a held press runs orderly power-off, native qualification 2026-10-14; short taps are ignored by the firmware ([ACPI](../../kernel/acpi.md#power-off-and-restart)) |

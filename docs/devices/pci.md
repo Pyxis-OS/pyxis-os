@@ -212,7 +212,7 @@ relocation, rebalancing, I/O allocation or PCI hotplug is provided.
 
 Assignment is native-qualified on vela (#897, 2026-10-15): the proof covered 1
 root, 3 apertures, 23 memory reservations, 24 functions and 302 exclusions, and
-placed the LPSS I2C0 BAR0 (size `0x1000`) for the [touchpad](../wip/vela-i2c-touchpad.md).
+placed the LPSS I2C0 BAR0 (size `0x1000`) for the [touchpad](hid-i2c-touchpad.md).
 The [qualification record](../development/experiments/pci-bar-assignment/README.md)
 separates source inspection, nested controls and that native run.
 

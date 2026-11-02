@@ -1,9 +1,10 @@
 # Rust native copy and recursive removal
 
 2026-10-26. Delivers the accepted native `fs::copy` and `remove_dir_all`
-contracts in the [std milestone](../../wip/rust-std.md#recursive-removal-and-copy--accepted-chronium-2026-10-26).
+contracts in the [std profile](../rust-toolchain.md#copy-and-recursive-removal).
 This is QEMU qualification, not native hardware or crash-durability evidence.
-The first-profile close-out remains a separate task.
+The [profile reference](../rust-toolchain.md#qualification-and-limits) records
+the combined qualification and remaining limits.
 
 ## Revisions and build
 

@@ -81,7 +81,7 @@ worker starts the embedded controller and the power button, after loading.
 
 After EC, battery and button setup, the worker makes one HID-I2C discovery pass
 before publishing readiness. This does not replay `_INI`, run power methods or
-touch the I2C/GPIO controller. See [the vela task](../wip/vela-i2c-touchpad.md).
+touch the I2C/GPIO controller. See [HID-over-I2C attachment](../devices/hid-i2c-touchpad.md#attachment-and-ownership).
 
 uACPI's informational messages, such as the table list and AML load
 statistics, are debug records, read with `log`. Warnings and errors are logged
@@ -819,4 +819,4 @@ space before AP startup; attachment fills fresh UC addresses once and retains
 all partial failures until reboot. REVID/PADBAR and host-owned, RX-enabled
 GPIO input configuration must agree. The BSP reader returns the electrical
 level or a refusal; it changes no pad, ownership or interrupt register.
-The client applies the live polarity. See [task 3](../wip/vela-i2c-touchpad.md#task-3-implementation-and-limits-2026-10-16).
+The client applies the live polarity. See [HID-over-I2C transport and recovery](../devices/hid-i2c-touchpad.md#transport-and-recovery).

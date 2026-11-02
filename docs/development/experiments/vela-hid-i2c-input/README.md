@@ -36,7 +36,7 @@ is extrapolated from 8 ms idle, not a separate measurement. No scheduler probe.
 
 ## Native gates
 
-The [accepted task 4 contract](../../../wip/vela-i2c-touchpad.md#accepted-task-4-decisions-owner-2026-10-16)
+The [input contract](../../../devices/hid-i2c-touchpad.md#input-and-qualification)
 requires source-owned filter state, honest contact metadata, bounded client
 reinitialization and lift-tail classification before pointer publication.
 Session (a) completed with publication disabled; its classification and RESET
@@ -154,7 +154,7 @@ HID and Synaptics used fixed 6 pixels/mm without acceleration. These native
 observations are the follow-up reference, not a timing or CPU measurement.
 Raw log: `/shared/present/vela-touchpad-input-final/hid-i2c-task4-b.txt`.
 The owner accepted the clickpad/physical-speed/runtime-setting follow-up in the
-[WIP contract](../../../wip/vela-i2c-touchpad.md#session-b-follow-up-decisions-accepted-by-owner-2026-10-16).
+[pointer filter](../../../devices/pointer-input-quality.md#precision-hid-over-i2c-integration).
 This slice changes HID motion/button mapping only; Synaptics behavior stays
 unchanged. Its native idle admission, click mapping, feel and regression checks
 remain due. The owner now also uses RTL8156 NCM at the existing network boundary.

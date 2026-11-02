@@ -400,7 +400,7 @@ Main `106eba83`, updated natively on the stick from vela's own PXE live system
 over a USB-A RTL8156BG adapter (Install → classic → Update): the first update
 run on vela itself. 53 pull requests since 0.0.5.
 
-- **vela touchpad:** [HID-over-I2C precision input](wip/vela-i2c-touchpad.md):
+- **vela touchpad:** [HID-over-I2C precision input](devices/hid-i2c-touchpad.md):
   LPSS, GPIO-gated polling at 4 ms, Input Mode 3, velocity-based acceleration,
   bottom-right and two-finger right click, click-drag, two-finger scroll, palm
   and typing rejection, bounded recovery and an `input.touchpad_speed` setting.

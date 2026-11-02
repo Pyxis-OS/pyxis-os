@@ -170,7 +170,7 @@ report establishes a baseline, the second can produce motion; no moving average
 or extra native scroll-entry report is added. Typing, edge admission, scroll
 separation/dead zone and source policy remain shared.
 
-The [vela milestone](../wip/vela-i2c-touchpad.md#task-4-integration-and-qualification-boundary)
+The [HID-over-I2C reference](hid-i2c-touchpad.md#input-and-qualification)
 records qualified bounded client recovery and native input behavior.
 
 Identified HID single-switch clickpads retain per-contact touchdown positions,
@@ -191,6 +191,6 @@ separate 1 mm touchdown bound.
 Unknown report IDs do not update history; lift, source loss and reinitialization
 clear it. Existing bottom-right selection, other physical buttons and the
 legacy Synaptics path stay separate. The
-[owner-accepted defaults](../wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16)
+[owner-accepted defaults](pointer-input-quality.md#precision-hid-over-i2c-integration)
 and [qualification record](../development/experiments/clickpad-tuning/README.md)
 keep authored policy distinct from measured native behavior.

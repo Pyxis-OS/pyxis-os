@@ -1,6 +1,6 @@
 # Rust std main
 
-2026-10-25, gate 2 of the [std milestone](../../wip/rust-std.md).
+2026-10-25, gate 2 of the [std profile](../rust-toolchain.md#native-std-profile).
 This is the first ordinary `fn main`, with native startup/args, owned TEXT,
 allocation, descriptor I/O, clocks/entropy, lexical paths and initial-thread
 TLS cleanup. At this gate, worker creation, FILE adapters and hexyl were later
