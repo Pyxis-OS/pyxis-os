@@ -14,6 +14,7 @@
 #include <kernel/process.h>
 #include <kernel/user.h>
 #include <kernel/user/wait.h>
+#include <kernel/user/readiness_set.h>
 #include <kernel/user_memory.h>
 #include <kernel/wait.h>
 
@@ -344,14 +345,20 @@ static void list_locked(struct space *space, struct task **tasks, size_t count,
   }
 }
 
-enum call_status execution_group_publish(struct execution_group *group,
+static enum call_status publish_tasks(struct execution_group *group,
     struct task **tasks, size_t count, size_t *destinations, size_t destination_capacity,
+    struct readiness_process_watch *watch, struct readiness_set_registration *registration,
     struct call_limit *detail)
 {
   KASSERT(!cpu_interrupts_enabled());
   if (!group) {
     struct space *space = user_task_process(tasks[0])->space;
     lock_tree(space);
+    enum call_status status = watch ? readiness_process_watch_commit(watch, registration) : CALL_OK;
+    if (status != CALL_OK) {
+      unlock_tree(space);
+      return status;
+    }
     list_locked(space, tasks, count, 0);
     user_task_publish_group(tasks, count, destinations, destination_capacity);
     unlock_tree(space);
@@ -364,7 +371,10 @@ enum call_status execution_group_publish(struct execution_group *group,
   } else if (count > SIZE_MAX - group->members) {
     status = call_limit_set(detail, CALL_LIMIT_GROUP_MEMBERS, UINT64_MAX, SIZE_MAX,
         CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT | CALL_LIMIT_REQUESTED_SATURATED);
-  } else {
+  } else if (watch) {
+    status = readiness_process_watch_commit(watch, registration);
+  }
+  if (status == CALL_OK) {
     for (size_t i = 0; i < count; ++i) {
       struct process *process = user_task_process(tasks[i]);
       KASSERT(process->execution_group == group);
@@ -378,6 +388,24 @@ enum call_status execution_group_publish(struct execution_group *group,
   }
   unlock_tree(group->space);
   return status;
+}
+
+enum call_status execution_group_publish(struct execution_group *group,
+    struct task **tasks, size_t count, size_t *destinations, size_t destination_capacity,
+    struct call_limit *detail)
+{
+  return publish_tasks(group, tasks, count, destinations, destination_capacity,
+      NULL, NULL, detail);
+}
+
+enum call_status execution_group_publish_observed(struct execution_group *group,
+    struct task **tasks, size_t count, size_t *destinations, size_t destination_capacity,
+    struct readiness_process_watch *watch, struct readiness_set_registration *registration,
+    struct call_limit *detail)
+{
+  KASSERT(count == 1 && watch && registration);
+  return publish_tasks(group, tasks, count, destinations, destination_capacity,
+      watch, registration, detail);
 }
 
 void execution_group_unlist(struct process *process)

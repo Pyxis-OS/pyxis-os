@@ -65,6 +65,11 @@ generation and performs a fresh level check. Stale keys return NOT_FOUND;
 identity/generation exhaustion returns LIMIT with its named counter detail instead of wrapping. Each copied
 source can have an independent registration.
 
+[Observed launch](processes.md#launch-with-a-completion-registration) reserves a
+process registration before child publication and returns its key with the
+observer. It uses the same ownership, CONTROL, lineage and metadata budget as
+REGISTER; it cannot miss a child that exits before the launcher resumes.
+
 Admission reserves storage and attaches hooks before its first level check.
 Reply publication uses a short current-process mapping lease; failed admission
 unwinds its provisional record before returning. REMOVE excludes producers,

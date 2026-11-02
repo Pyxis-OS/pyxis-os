@@ -26,6 +26,9 @@
 #define READINESS_BUDGET (16 * 1024 * 1024)
 #define READINESS_WORK_BUDGET 64
 #define READINESS_INITIAL_BUCKETS 16
+#define READINESS_PROCESS_WATCH_PREPARE (UINT64_MAX - 1)
+#define READINESS_PROCESS_WATCH_BIND (UINT64_MAX - 2)
+#define READINESS_PROCESS_WATCH_FINISH (UINT64_MAX - 3)
 
 struct readiness_account {
   struct process *owner;
@@ -51,6 +54,15 @@ struct readiness_registration {
   uint64_t pending_active, pending_observed;
   enum call_status status;
   bool network, provisional, loaned, denied, terminal_sent, delivering, delivered_terminal;
+};
+
+struct readiness_process_watch {
+  struct capability_reference set_reference;
+  struct forwarder_operation admission;
+  struct readiness_registration *entry;
+  struct process *owner;
+  uint64_t tag;
+  bool bound, started, committed;
 };
 
 struct readiness_set {
@@ -783,24 +795,60 @@ static void evaluate_registration(struct readiness_registration *entry)
   }
 }
 
+static struct readiness_registration *allocate_registration(struct readiness_set *set,
+    uint64_t allowed, uint64_t active, uint64_t observed, uint64_t tag,
+    enum call_status *status, struct call_limit *detail)
+{
+  if (!set->next_identity) {
+    *status = call_limit_set(detail, CALL_LIMIT_READINESS_IDENTITY,
+        UINT64_MAX, UINT64_MAX, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT |
+        CALL_LIMIT_REQUESTED_SATURATED);
+    return NULL;
+  }
+  struct readiness_registration *entry = account_alloc(set->account, sizeof(*entry), status, detail);
+  if (!entry) {
+    return NULL;
+  }
+  *entry = (struct readiness_registration){.set = set, .network = set->network,
+      .identity = set->next_identity, .generation = 1, .tag = tag,
+      .allowed = allowed, .pending_active = active, .pending_observed = observed,
+      .provisional = true, .loaned = true};
+  forwarder_operation_init(&entry->lineage);
+  return entry;
+}
+
+static void insert_registration(struct readiness_registration *entry,
+    struct readiness_source *source)
+{
+  struct readiness_set *set = entry->set;
+  uint64_t flags = lock_sets();
+  entry->next = set->first;
+  entry->previous = &set->first;
+  if (entry->next) {
+    entry->next->previous = &entry->next;
+  }
+  set->first = entry;
+  ++set->count;
+  ++set->next_identity; /* Zero permanently refuses the next admission. */
+  if (source) {
+    source_attach(entry, source);
+  }
+  unlock_sets(flags);
+  size_t bucket = registration_bucket(entry->identity, set->bucket_count);
+  entry->hash_next = set->buckets[bucket];
+  set->buckets[bucket] = entry;
+}
+
 static enum call_status prepare_registration(struct readiness_set_request *request)
 {
   struct readiness_set *set = request->set;
-  if (!set->next_identity) {
-    return call_limit_set(&request->limit, CALL_LIMIT_READINESS_IDENTITY,
-        UINT64_MAX, UINT64_MAX, CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT |
-        CALL_LIMIT_REQUESTED_SATURATED);
-  }
   enum call_status status = CALL_OK;
-  struct readiness_registration *entry = account_alloc(set->account, sizeof(*entry), &status, &request->limit);
+  struct readiness_registration *entry = allocate_registration(set,
+      request->allowed_events, request->active_events, request->observed_generation,
+      request->tag, &status, &request->limit);
   if (!entry) {
     return status;
   }
-  *entry = (struct readiness_registration){.set = set, .network = set->network,
-      .identity = set->next_identity, .generation = 1, .tag = request->tag,
-      .allowed = request->allowed_events, .pending_active = request->active_events,
-      .pending_observed = request->observed_generation, .provisional = true, .loaned = true};
-  forwarder_operation_init(&entry->lineage);
   uint64_t flags = cpu_save_interrupts();
   enum capability_result result = capability_reference_resolve_for_with_limit(&request->target,
       &entry->lineage, &request->limit);
@@ -830,28 +878,244 @@ static enum call_status prepare_registration(struct readiness_set_request *reque
     account_free(set->account, entry, sizeof(*entry));
     return status;
   }
-  flags = lock_sets();
   entry->target = request->target.object;
   request->target.object = NULL;
-  entry->next = set->first;
-  entry->previous = &set->first;
-  if (entry->next) {
-    entry->next->previous = &entry->next;
-  }
-  set->first = entry;
-  ++set->count;
-  ++set->next_identity; /* Zero permanently refuses the next admission. */
-  source_attach(entry, source);
-  unlock_sets(flags);
-  size_t bucket = registration_bucket(entry->identity, set->bucket_count);
-  entry->hash_next = set->buckets[bucket];
-  set->buckets[bucket] = entry;
+  insert_registration(entry, source);
   flags = cpu_save_interrupts();
   forwarder_operation_readiness(&entry->lineage, true);
   cpu_restore_interrupts(flags);
   request->prepared = entry;
   request->registration_reply = (struct readiness_set_registration){entry->identity, 1};
   return CALL_OK;
+}
+
+static enum call_status prepare_process_watch(struct readiness_set_request *request)
+{
+  struct readiness_process_watch *watch = request->process_watch;
+  enum call_status status = CALL_OK;
+  struct readiness_registration *entry = allocate_registration(request->set,
+      WAIT_COMPLETE, WAIT_COMPLETE, 0, watch->tag, &status, &request->limit);
+  if (!entry) {
+    return status;
+  }
+  status = grow_index(request->set, &request->limit);
+  if (status != CALL_OK) {
+    account_free(request->set->account, entry, sizeof(*entry));
+    return status;
+  }
+  insert_registration(entry, NULL);
+  watch->entry = entry;
+  return CALL_OK;
+}
+
+static enum call_status bind_process_watch(struct readiness_set_request *request)
+{
+  struct readiness_process_watch *watch = request->process_watch;
+  struct readiness_registration *entry = watch->entry;
+  const struct capability_grant *observer = request->observer;
+  KASSERT(entry && entry->loaned && entry->provisional && !watch->bound);
+  KASSERT(!entry->target && !entry->source && !entry->lineage.count);
+  struct capability_reference target;
+  uint64_t flags = cpu_save_interrupts();
+  enum call_status status = forwarder_resolve_with_limit(observer->object,
+      observer->rights, observer->transport, &entry->lineage, &target, &request->limit);
+  cpu_restore_interrupts(flags);
+  if (status == CALL_OK) {
+    status = target.object->type == OBJECT_PROCESS_CONTROL ?
+        readiness_interest_authority(target.object, watch->owner,
+            target.rights, target.transport, WAIT_COMPLETE) : CALL_BAD_REQUEST;
+  }
+  if (status != CALL_OK) {
+    flags = cpu_save_interrupts();
+    forwarder_operation_release(&entry->lineage);
+    capability_release(&target);
+    cpu_restore_interrupts(flags);
+    return status;
+  }
+  flags = lock_sets();
+  entry->target = target.object;
+  target.object = NULL;
+  source_attach(entry, object_source(entry->target));
+  watch->bound = true;
+  unlock_sets(flags);
+  flags = cpu_save_interrupts();
+  forwarder_operation_readiness(&entry->lineage, true);
+  capability_release(&target);
+  cpu_restore_interrupts(flags);
+  return CALL_OK;
+}
+
+static void release_process_watch(struct readiness_process_watch *watch)
+{
+  struct capability_reference reference = watch->set_reference;
+  struct readiness_set *set = (struct readiness_set *)reference.object;
+  uint64_t flags = cpu_save_interrupts();
+  forwarder_operation_release(&watch->admission);
+  account_free(set->account, watch, sizeof(*watch));
+  capability_release(&reference);
+  cpu_restore_interrupts(flags);
+}
+
+static void finish_process_watch(struct readiness_process_watch *watch, bool published)
+{
+  struct readiness_registration *entry = watch->entry;
+  struct readiness_set *set = entry->set;
+  KASSERT(entry->loaned && (!published || watch->committed));
+  uint64_t flags = lock_sets();
+  entry->loaned = false;
+  unlock_sets(flags);
+  if (published) {
+    evaluate_registration(entry);
+  } else {
+    destroy_registration(entry);
+  }
+  flags = lock_sets();
+  resume_deferred(set);
+  schedule_set(set);
+  unlock_sets(flags);
+  release_process_watch(watch);
+}
+
+/* The dispatcher admits stable storage; only the owning readiness worker grows
+ * indices, attaches sources or frees a loaned registration. */
+static enum call_status admit_process_watch(struct readiness_set_request *request)
+{
+  struct capability_reference reference = request->target;
+  request->target = (struct capability_reference){0};
+  struct forwarder_operation admission;
+  forwarder_operation_init(&admission);
+  enum capability_result resolved = reference.object ?
+      capability_reference_resolve_for_with_limit(&reference, &admission,
+          &request->limit) : CAP_BAD_HANDLE;
+  enum call_status status = resolved == CAP_OK ? CALL_OK : resolved == CAP_DENIED ?
+      CALL_DENIED : resolved == CAP_NO_MEMORY ? CALL_NO_MEMORY :
+      resolved == CAP_LIMIT ? CALL_LIMIT : CALL_BAD_HANDLE;
+  struct readiness_set *set = NULL;
+  if (status == CALL_OK) {
+    if (reference.object->type != OBJECT_READINESS_SET) {
+      status = CALL_BAD_REQUEST;
+    } else if (!(reference.rights & READINESS_SET_RIGHT_CONTROL) ||
+        !readiness_set_owned(reference.object, request->caller)) {
+      status = CALL_DENIED;
+    } else {
+      set = (struct readiness_set *)reference.object;
+    }
+  }
+  struct readiness_process_watch *watch = NULL;
+  if (status == CALL_OK) {
+    watch = account_alloc(set->account, sizeof(*watch), &status, &request->limit);
+    if (watch) {
+      *watch = (struct readiness_process_watch){.set_reference = reference,
+          .owner = request->caller, .tag = request->tag};
+      reference = (struct capability_reference){0};
+      status = forwarder_operation_clone(&watch->admission, &admission);
+      if (status == CALL_LIMIT) {
+        call_limit_reference(&request->limit);
+      }
+    }
+  }
+  forwarder_operation_release(&admission);
+  if (status == CALL_OK) {
+    request->set = set;
+    request->process_watch = watch;
+  } else if (watch) {
+    release_process_watch(watch);
+  }
+  capability_release(&reference);
+  return status;
+}
+
+enum call_status readiness_process_watch_prepare(struct process *owner,
+    struct capability_reference *set_reference, uint64_t tag,
+    struct readiness_process_watch **result, struct call_limit *detail)
+{
+  KASSERT(!cpu_interrupts_enabled() && process_current() == owner);
+  *result = NULL;
+  struct readiness_set_request *request =
+      (void *)bsp_request_prepare(BSP_SERVICE_READINESS_SET);
+  request->caller = owner;
+  request->operation = READINESS_PROCESS_WATCH_PREPARE;
+  request->target = *set_reference;
+  *set_reference = (struct capability_reference){0};
+  request->tag = tag;
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status status = request->status;
+  if (detail) {
+    *detail = request->limit;
+  }
+  if (status == CALL_OK) {
+    *result = request->process_watch;
+  }
+  bsp_request_release(&request->request);
+  return status;
+}
+
+enum call_status readiness_process_watch_bind(struct readiness_process_watch *watch,
+    const struct capability_grant *observer, struct call_limit *detail)
+{
+  KASSERT(!cpu_interrupts_enabled() && process_current() == watch->owner);
+  KASSERT(watch->entry && !watch->bound && observer && observer->object);
+  struct readiness_set_request *request =
+      (void *)bsp_request_prepare(BSP_SERVICE_READINESS_SET);
+  request->caller = watch->owner;
+  request->set = watch->entry->set;
+  request->operation = READINESS_PROCESS_WATCH_BIND;
+  request->process_watch = watch;
+  request->observer = observer;
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status status = request->status;
+  if (detail) {
+    *detail = request->limit;
+  }
+  bsp_request_release(&request->request);
+  return status;
+}
+
+bool readiness_process_watch_start(struct readiness_process_watch *watch,
+    struct forwarder_operation *launch_lineage)
+{
+  KASSERT(!cpu_interrupts_enabled() && process_current() == watch->owner);
+  KASSERT(watch->bound && !watch->started && !watch->committed);
+  watch->started = forwarder_operation_start_pair(&watch->admission, launch_lineage);
+  return watch->started;
+}
+
+enum call_status readiness_process_watch_commit(struct readiness_process_watch *watch,
+    struct readiness_set_registration *registration)
+{
+  KASSERT(!cpu_interrupts_enabled() && watch->started && !watch->committed);
+  struct readiness_registration *entry = watch->entry;
+  struct readiness_set *set = entry->set;
+  uint64_t flags = lock_sets();
+  KASSERT(entry->loaned && entry->provisional);
+  enum call_status status = set->account->owner != watch->owner ? CALL_DENIED :
+      set->closing || set->account->closing ? CALL_ENDPOINT_CLOSED :
+      entry->denied ? CALL_DENIED : CALL_OK;
+  if (status == CALL_OK) {
+    KASSERT(watch->bound && entry->target);
+    entry->active = WAIT_COMPLETE;
+    entry->provisional = false;
+    watch->committed = true;
+    *registration = (struct readiness_set_registration){entry->identity, entry->generation};
+  }
+  unlock_sets(flags);
+  return status;
+}
+
+void readiness_process_watch_finish(struct readiness_process_watch *watch, bool published)
+{
+  KASSERT(!cpu_interrupts_enabled() && process_current() == watch->owner);
+  struct readiness_set_request *request =
+      (void *)bsp_request_prepare(BSP_SERVICE_READINESS_SET);
+  request->caller = watch->owner;
+  request->set = watch->entry->set;
+  request->operation = READINESS_PROCESS_WATCH_FINISH;
+  request->process_watch = watch;
+  request->copied = published;
+  request->request.operation = NULL; /* Join cleanup even after outer CUT/stop. */
+  bsp_request_submit_and_wait(&request->request);
+  KASSERT(request->status == CALL_OK);
+  bsp_request_release(&request->request);
 }
 
 /* Called after task_operation_start and output validation under a live current
@@ -1009,6 +1273,11 @@ static bool handle_command(struct readiness_set_request *request)
   if (request->operation == READINESS_FINISH) {
     return finish_operation(request);
   }
+  if (request->operation == READINESS_PROCESS_WATCH_FINISH) {
+    finish_process_watch(request->process_watch, request->copied);
+    complete_request(request, CALL_OK);
+    return true;
+  }
   uint64_t flags = cpu_save_interrupts();
   bool denied = forwarder_operation_denied(request->request.operation);
   cpu_restore_interrupts(flags);
@@ -1018,10 +1287,20 @@ static bool handle_command(struct readiness_set_request *request)
       task_wait_stop_requested(request->request.wait) ? CALL_ENDPOINT_CLOSED : CALL_OK;
   unlock_sets(flags);
   if (status != CALL_OK) {
+    if (request->operation == READINESS_PROCESS_WATCH_PREPARE) {
+      release_process_watch(request->process_watch);
+      request->process_watch = NULL;
+    }
     complete_request(request, status);
     return true;
   }
   switch (request->operation) {
+  case READINESS_PROCESS_WATCH_PREPARE:
+    status = prepare_process_watch(request);
+    break;
+  case READINESS_PROCESS_WATCH_BIND:
+    status = bind_process_watch(request);
+    break;
   case READINESS_SET_REGISTER:
     status = prepare_registration(request);
     break;
@@ -1085,6 +1364,10 @@ static bool handle_command(struct readiness_set_request *request)
   default:
     status = CALL_BAD_OPERATION;
     break;
+  }
+  if (request->operation == READINESS_PROCESS_WATCH_PREPARE && status != CALL_OK) {
+    release_process_watch(request->process_watch);
+    request->process_watch = NULL;
   }
   complete_request(request, status);
   return true;
@@ -1283,11 +1566,23 @@ void readiness_set_submit(struct readiness_set_request *request)
     complete_request(request, status);
     return;
   }
+  if (request->operation == READINESS_PROCESS_WATCH_PREPARE) {
+    enum call_status status = admit_process_watch(request);
+    if (status != CALL_OK) {
+      complete_request(request, status);
+      return;
+    }
+  }
   uint64_t flags = lock_sets();
   struct readiness_set *set = request->set;
   if (!set->attached) {
     unlock_sets(flags);
     KASSERT(request->operation != READINESS_FINISH);
+    KASSERT(request->operation != READINESS_PROCESS_WATCH_FINISH);
+    if (request->operation == READINESS_PROCESS_WATCH_PREPARE) {
+      release_process_watch(request->process_watch);
+      request->process_watch = NULL;
+    }
     complete_request(request, CALL_ENDPOINT_CLOSED);
     return;
   }

@@ -871,6 +871,32 @@ The optional client/server example requires a readable server image and endpoint
 grants in addition to its launcher. Endpoint creation from userspace is separate
 work.
 
+## Launch with a completion registration
+
+`LAUNCHER_LAUNCH_OBSERVED` uses the ordinary held LAUNCH authority and image,
+grants and startup request. It additionally borrows an owner-local readiness
+set with CONTROL and an opaque tag. Before making the child runnable, the kernel
+reserves the process observer, registration, index space and charged metadata.
+Success returns the owned process-control handle and its readiness key together;
+the child receives neither the set nor any new authority.
+
+The watch captures the process completion source and the launcher's revocable
+lineage. It observes actual retirement under WAIT, independently of logical
+process-handle ownership. Closing the observer does not terminate the child.
+The set follows the [readiness ownership and budget](readiness-sets.md).
+
+Known preparation or admission refusal unwinds the unpublished child and watch.
+Final group admission commits the watch before queueing runnable tasks, without
+allocation or user copy in that publication step. The reservation remains owned
+through reply delivery. Failed delivery removes an unclaimed watch and releases
+the unreported observer; an already published child cannot be undone. The SDK
+reports OUTCOME_UNKNOWN and callers must not retry that launch.
+
+The optional `launch_observation` in libpyxis's prepared-program and observer-job
+helpers selects this operation. Ordinary launch and contained/captured jobs keep
+their existing routes and lifetime rules. This operation adds no process quota
+or new creation grant.
+
 ## Batch launch
 
 `LAUNCHER_LAUNCH_BATCH` accepts a nonempty, checked-size array of ordinary launch

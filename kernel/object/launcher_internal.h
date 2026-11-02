@@ -10,6 +10,7 @@
 struct file_object;
 struct space;
 struct launch_capture_block;
+struct readiness_process_watch;
 
 /* Space creation only. Text is NUL-terminated and validated by the caller;
  * cpus points into an owned capture block and covers cpu_count boot CPUs. */
@@ -29,6 +30,7 @@ struct launch_space {
  * Source grants own logical authority before image capture can wait. The capture
  * owns image storage independently of its optional file operation. */
 struct launch_capture {
+  struct readiness_process_watch *watch; /* Borrowed from launch_one through reply/finish. */
   struct process_startup startup;
   struct launch_grant *grants;
   size_t grant_count;
@@ -57,7 +59,8 @@ struct launch_capture {
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
     size_t parent_cpu, struct execution_group *execution_group,
     struct capability_reservation *reservation, struct capability_reserved_slot *slots,
-    handle_t *result, struct call_limit *detail);
+    handle_t *result, struct readiness_set_registration *registration,
+    struct call_limit *detail);
 /* Fixed BSP device provisioning borrows the inactive child while its preparation
  * actor waits. All shared inputs/results live in the owned heap capture. */
 enum call_status launcher_preflight_space(struct launch_capture *capture,
@@ -102,6 +105,7 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
     struct launch_capture *capture, struct process *parent, size_t parent_cpu,
     struct execution_group *execution_group, struct call_limit *detail);
 enum call_status launcher_batch_publish(struct launch_preparation *group, handle_t *children,
+    struct readiness_process_watch *watch, struct readiness_set_registration *registration,
     struct call_limit *detail);
 void launcher_batch_discard(struct launch_preparation *group);
 

@@ -31,16 +31,15 @@ tools only; it does not install host packages or run tests.
 A build directory belongs to one compiler. `build/toolchain` records it, and a
 different compiler needs `make clean`.
 
-`ci/Containerfile` runs the compiler build and native-library producer below.
-The owner builds and publishes
-`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c` before merging
-consumers of that image; the tag names the release and the fork commit, and the
-image checks that commit. Normal workflows consume the image without rebuilding
-LLVM. WP6 updates the native MEMORY helper signature: rebuild the native
-LLVM producer and reached consumers against the final combined WP3/WP6/WP5
-SDK snapshot before these consumers merge. Coordinate one batched image build;
-this branch's intermediate SDK snapshot is not a separate build request. The existing cross compiler can still build ordinary
-local kernel/SDK checks, but an old native LLVM prefix must not be relabelled.
+`ci/Containerfile` builds the compiler and native-library producer below.
+Chronium published `git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c`
+with target LLVM from the same fork pin. Its actual producer SDK source is
+`9c26aac9985bc8e1707f270748625f0b292376a9`, recorded beside the compiler
+provenance. Keep that historical input through consumer rebases; it is not the
+current consumer SDK revision. Both provenance files are publicly readable.
+Normal workflows consume this image without rebuilding LLVM. Export the current
+consumer SDK with that compiler and rebuild reached static consumers; never
+relabel an old native prefix or an SDK produced by another compiler.
 The public image is pulled anonymously by CI; the Forgejo instance must
 allow anonymous registry access. Publishing still requires login with an
 account allowed to write packages in `PyxisOS`. Container paths use the

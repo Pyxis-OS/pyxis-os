@@ -77,6 +77,14 @@ void execution_group_thread_end(struct execution_group *group);
 /* IF=0, exclusive preparation actor. Prepared processes own group references.
  * Serialize final admission/enrollment with sealing, then transfer every task.
  * Failure leaves all tasks unpublished and owned by the preparer. */
+struct readiness_process_watch;
+struct readiness_set_registration;
+/* Same publication, with one pre-admitted single-child watch. Its fixed commit
+ * is elected after group admission and before any task is made runnable. */
+enum call_status execution_group_publish_observed(struct execution_group *group,
+    struct task **tasks, size_t count, size_t *destinations, size_t destination_capacity,
+    struct readiness_process_watch *watch, struct readiness_set_registration *registration,
+    struct call_limit *detail);
 enum call_status execution_group_publish(struct execution_group *group,
     struct task **tasks, size_t count, size_t *destinations, size_t destination_capacity,
     struct call_limit *detail);
