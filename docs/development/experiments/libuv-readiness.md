@@ -88,3 +88,16 @@ millisecond: kernel/worker phase attribution and native magnitude are unmeasured
 Native IPC is much cheaper than nested exits; do not extrapolate this percentage.
 Measure the matched workload natively after the one coordinated compiler image
 before treating the performance qualification as complete.
+
+## Published producer integration
+
+The c63fb8c compiler/native-LLVM image is published (image ID
+`be031e331bddec84678a2d7f862f6ec5190b9a17070d6f8c0aabe3f6ba97a3ac`).
+An unprivileged container reads both compiler and SDK-source provenance files
+(mode 0644); they identify LLVM `c63fb8cd` and actual SDK source `9c26aac9`.
+That historical input is preserved rather than relabelled after the current-main
+rebase. Current userland includes streaming vfprintf and the merged debt/limits
+batch; ports includes clangd's CPU allowance. Those unrelated changes do not
+alter the measured intervals above. Fresh SDK/static consumers use the published
+compiler; exact-head CI and final integration receipts are linked from the PR.
+No new native or JIT runtime qualification is inferred from the image publication.

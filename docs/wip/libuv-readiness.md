@@ -39,8 +39,10 @@ explicit; actual refusals propagate through caller-owned reasons and UV errors.
   and successful loops qualified, without injecting an editor failure.
 - [x] Neovim 4/20/64 jobs, callback ownership, bounded batches and nested
   matched comparison; see the [record](../development/experiments/libuv-readiness.md).
-- [ ] One coordinated native LLVM/container build, reached static consumers
-  and exact-head CI; native performance remains unmeasured.
+- [x] One coordinated native LLVM/container published at c63fb8c; its actual
+  SDK source remains `9c26aac9985bc8e1707f270748625f0b292376a9` through rebases.
+  Final static-consumer and exact-head CI receipts are recorded on the PR.
+  Native performance remains unmeasured.
 
 ## Neovim loop errors
 
