@@ -22,7 +22,6 @@
 #define TCP_ACCEPT UINT64_C(2)
 #define TCP_TRY_ACCEPT UINT64_C(3)
 #define TCP_ACCEPT_MAX_WAIT_NS UINT64_C(30000000000)
-#define TCP_LISTENER_PENDING_LIMIT UINT32_C(4)
 #define TCP_LISTENER_HANDSHAKE_NS UINT64_C(10000000000)
 
 #define TCP_RIGHT_INSPECT (UINT64_C(1) << 0)
@@ -85,14 +84,18 @@ struct tcp_connect_reply {
 /* LISTEN binds exactly the configured local IPv4 address and a nonzero port.
  * Wildcard/ephemeral binding and address reuse are unsupported. Init creates
  * the listener and delegates it; CONNECT grants do not authorize LISTEN.
- * Each listener permits four combined half-open/ready connections. Listener,
- * connection and transport storage consume the shared networking allowance. */
+ * `backlog` is the number of combined half-open/ready connections the listener
+ * holds. Zero is BAD_REQUEST. A value above a quarter of the streams the network
+ * storage budget can hold (and 255, the width of lwIP's backlog counter) is
+ * clamped, and `listener.capacity` of the reply is the effective backlog.
+ * Listener, connection and transport storage consume the shared networking
+ * budget. */
 struct tcp_listen_request {
   struct message_header header;
   struct net_path path;
   uint16_t port;
   uint16_t reserved;
-  uint32_t reserved2;
+  uint32_t backlog;
 };
 
 struct tcp_listener_info {

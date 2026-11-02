@@ -713,7 +713,7 @@ subject to the bound source address. The existing invalidation and shutdown
 rules below apply to those two operations.
 
 Endpoint, control and pending-I/O records are dynamically owned under the shared
-64 MiB TCP/UDP storage allowance, including stopped objects still retained by
+TCP/UDP storage budget (one sixteenth of installed RAM, at least 64 MiB), including stopped objects still retained by
 handles. Each TCP stream preallocates its receive ring and reserves ingress
 capacity before admission; native records and new transmit data cannot spend
 those credits. A 64 KiB control allowance is separate. Exhaustion refuses with
@@ -763,12 +763,14 @@ endpoint reference cross CPUs. The worker never borrows a user buffer or private
 syscall stack. Immediate transmit acceptance records completion before waking,
 so the submitting stack cannot still be reading a slot that its caller reuses.
 
-Receive queues hold four datagrams per endpoint and sixteen globally, counted
-within the existing 32-packet software budget. They own copies of UDP header and
-payload; DMA receive bytes are copied before reposting the descriptor. New
-arrivals are dropped when either receive bound or packet allocation is exhausted.
-Existing queued data is preserved. Diagnostic counters record delivery, unbound
-ports, queue pressure, allocation failure, malformed lengths and checksum failure.
+Each endpoint's receive queue holds datagrams up to a 256th of the storage budget
+(256 KiB at the 64 MiB floor), counting each record's header. The queue owns copies of
+the payload, charged to the budget; DMA receive bytes are copied before reposting the
+descriptor. New arrivals are dropped when the endpoint's bytes or the budget are
+exhausted; queued data is preserved. Each endpoint counts its drops (`dropped` in
+UDP INSPECT) and the kernel log reports the first one. Diagnostic counters record
+delivery, unbound ports, queue pressure, allocation failure, malformed lengths and
+checksum failure.
 
 The wire path checks the eight-byte header and declared length against the IPv4
 payload, and never delivers bytes beyond that length. Every outgoing datagram

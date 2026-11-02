@@ -1,5 +1,8 @@
+#include <arch/clock.h>
 #include <arch/cpu.h>
+#include <kernel/log.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/pmm.h>
 #include <kernel/net/storage.h>
 #include <kernel/panic.h>
 #include <stdatomic.h>
@@ -14,6 +17,21 @@ struct net_storage_allocation {
  * those preclaimed RX/control credits. This guard never covers heap work. */
 static atomic_flag storage_locked = ATOMIC_FLAG_INIT;
 static size_t storage_bytes, protocol_bytes, receive_reserved_bytes;
+static size_t storage_limit = NET_STORAGE_MIN_BYTES;
+/* Admissions refused since the last report; reported outside this guard because
+ * the log can itself be sent over the network. */
+static atomic_size_t refused_admissions;
+
+void net_storage_init(void)
+{
+  uint64_t share = (uint64_t)pmm_get_stats().total_frames * PAGE_SIZE / NET_STORAGE_RAM_DIVISOR;
+  storage_limit = share > NET_STORAGE_MIN_BYTES ? (size_t)share : NET_STORAGE_MIN_BYTES;
+}
+
+size_t net_storage_limit(void)
+{
+  return storage_limit;
+}
 
 static uint64_t lock_storage(void)
 {
@@ -30,11 +48,28 @@ static void unlock_storage(uint64_t flags)
   cpu_restore_interrupts(flags);
 }
 
+void net_storage_report(void)
+{
+  static uint64_t last_report_ns;
+  uint64_t now = arch_monotonic_ns();
+  if (!atomic_load_explicit(&refused_admissions, memory_order_relaxed) ||
+      now - last_report_ns < UINT64_C(1000000000)) {
+    return;
+  }
+  size_t refused = atomic_exchange_explicit(&refused_admissions, 0, memory_order_relaxed);
+  uint64_t flags = lock_storage();
+  size_t used = storage_bytes + receive_reserved_bytes;
+  unlock_storage(flags);
+  last_report_ns = now;
+  kwarn("net: %zu admissions refused, %zu of %zu bytes of network storage in use "
+      "(one sixteenth of installed RAM, at least 64 MiB)\n", refused, used, storage_limit);
+}
+
 static bool charge_storage(size_t bytes, bool protocol)
 {
   uint64_t flags = lock_storage();
   size_t limit = protocol ? receive_reserved_bytes + NET_STORAGE_CONTROL_RESERVE_BYTES :
-      NET_STORAGE_LIMIT_BYTES - NET_STORAGE_CONTROL_RESERVE_BYTES - receive_reserved_bytes;
+      storage_limit - NET_STORAGE_CONTROL_RESERVE_BYTES - receive_reserved_bytes;
   size_t used = protocol ? protocol_bytes : storage_bytes - protocol_bytes;
   bool admitted = used <= limit && bytes <= limit - used;
   if (admitted) {
@@ -42,7 +77,9 @@ static bool charge_storage(size_t bytes, bool protocol)
     if (protocol) {
       protocol_bytes += bytes;
     }
-    KASSERT(storage_bytes <= NET_STORAGE_LIMIT_BYTES);
+    KASSERT(storage_bytes <= storage_limit);
+  } else {
+    atomic_fetch_add_explicit(&refused_admissions, 1, memory_order_relaxed);
   }
   unlock_storage(flags);
   return admitted;
@@ -72,11 +109,13 @@ void net_storage_uncharge(size_t bytes)
 bool net_storage_reserve_receive(size_t bytes)
 {
   uint64_t flags = lock_storage();
-  size_t limit = NET_STORAGE_LIMIT_BYTES - NET_STORAGE_CONTROL_RESERVE_BYTES - receive_reserved_bytes;
+  size_t limit = storage_limit - NET_STORAGE_CONTROL_RESERVE_BYTES - receive_reserved_bytes;
   size_t used = storage_bytes - protocol_bytes;
   bool admitted = used <= limit && bytes <= limit - used;
   if (admitted) {
     receive_reserved_bytes += bytes;
+  } else {
+    atomic_fetch_add_explicit(&refused_admissions, 1, memory_order_relaxed);
   }
   unlock_storage(flags);
   return admitted;

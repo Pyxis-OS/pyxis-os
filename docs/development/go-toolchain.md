@@ -238,6 +238,8 @@ IPv4 address and nonzero port. Normal interactive CONNECT grants do not authoriz
 it; the qualification uses an existing trusted init handoff. Wildcard/ephemeral
 TCP listeners, IPv6, raw/Unix sockets, multicast/OOB, FileConn/FileListener and
 socket options without a native operation return unsupported errors.
+`net.Listen` asks the kernel for a backlog of 128; the kernel clamps it to a quarter of the
+streams its network storage budget holds and the listener keeps the effective value.
 
 TCP transfers retain native partial I/O, EOF and write half-close. Native Close
 aborts unless write shutdown was committed and incoming data drained; callers

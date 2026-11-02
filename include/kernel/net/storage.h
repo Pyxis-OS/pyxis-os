@@ -3,10 +3,19 @@
 
 #include <stddef.h>
 
-/* Initial shared TCP/UDP storage allowance, not a wire-format limit. */
-#define NET_STORAGE_LIMIT_BYTES ((size_t)64 * 1024 * 1024)
+/* Shared TCP/UDP storage budget: one sixteenth of installed RAM, never less than
+ * this floor. A stream charges about 2 MiB of it, so this is a bulk-data share,
+ * larger than the 1/512 the small-text budgets (clipboard, packages) take. */
+#define NET_STORAGE_MIN_BYTES ((size_t)64 * 1024 * 1024)
+#define NET_STORAGE_RAM_DIVISOR 16
 /* Transient control/handshake space; stream ingress is reserved separately. */
 #define NET_STORAGE_CONTROL_RESERVE_BYTES ((size_t)64 * 1024)
+
+/* Sets the budget from installed RAM; before network start-up, any CPU. */
+void net_storage_init(void);
+size_t net_storage_limit(void);
+/* Network worker: logs, at most once a second, that admissions were refused. */
+void net_storage_report(void);
 
 /* Charge existing or separately allocated operation storage. Any CPU, including
  * IF=0. A successful charge must remain until the actual owner releases storage. */

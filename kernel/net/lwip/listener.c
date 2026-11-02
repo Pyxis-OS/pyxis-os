@@ -1,5 +1,6 @@
 #include <arch/clock.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/storage.h>
 #include <lwip/netif.h>
 #include <caelum_hooks.h>
 #include "connection.h"
@@ -54,7 +55,7 @@ err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *pcb_listener,
     return ERR_IF;
   }
   uint64_t now = arch_monotonic_ns();
-  if (listener->pending_count == TCP_LISTENER_PENDING_LIMIT ||
+  if (listener->pending_count >= listener->backlog ||
       now > UINT64_MAX - TCP_LISTENER_HANDSHAKE_NS) {
     return ERR_MEM;
   }
@@ -104,8 +105,16 @@ static err_t accept_connection(void *argument, struct tcp_pcb *pcb, err_t error)
   return ERR_OK;
 }
 
+uint32_t net_tcp_backlog_limit(void)
+{
+  size_t streams = (net_storage_limit() - NET_STORAGE_CONTROL_RESERVE_BYTES) /
+      NET_TCP_STREAM_BUDGET_BYTES;
+  size_t limit = streams / 4;
+  return limit > NET_TCP_BACKLOG_FIELD_MAX ? NET_TCP_BACKLOG_FIELD_MAX : (uint32_t)limit;
+}
+
 enum net_result tcp_listener_prepare(const struct ipv4_route *route,
-    uint32_t address, uint16_t port,
+    uint32_t address, uint16_t port, uint32_t backlog,
     struct tcp_connection **output)
 {
   net_worker_assert_context();
@@ -130,8 +139,9 @@ enum net_result tcp_listener_prepare(const struct ipv4_route *route,
     tcp_connection_abort(connection, CALL_ENDPOINT_CLOSED);
     return result == ERR_USE ? NET_QUEUE_FULL : NET_INVALID;
   }
-  struct tcp_pcb *listener = tcp_listen_with_backlog_and_err(pcb,
-      TCP_LISTENER_PENDING_LIMIT, &result);
+  KASSERT(backlog >= 1 && backlog <= NET_TCP_BACKLOG_FIELD_MAX);
+  connection->backlog = backlog;
+  struct tcp_pcb *listener = tcp_listen_with_backlog_and_err(pcb, (u8_t)backlog, &result);
   if (!listener) {
     tcp_connection_abort(connection, CALL_NO_MEMORY);
     return NET_NO_MEMORY;
@@ -169,7 +179,7 @@ void tcp_listener_inspect(struct tcp_connection *listener, struct tcp_listener_i
   *info = (struct tcp_listener_info){
     .local_address = listener->local, .local_port = listener->local_port,
     .interface_id = listener->interface->id, .address_epoch = listener->address_epoch,
-    .pending = listener->pending_count, .capacity = TCP_LISTENER_PENDING_LIMIT,
+    .pending = listener->pending_count, .capacity = listener->backlog,
     .terminal_status = listener->terminal_status,
   };
 }

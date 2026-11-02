@@ -33,6 +33,7 @@ struct tcp_control {
   struct tcp_stream *listener;
   uint32_t address;
   uint16_t port;
+  uint32_t backlog;
   uint64_t deadline;
   bool nonblocking;
   struct tcp_connect_reply reply;
@@ -598,10 +599,11 @@ void native_completion_net_cancel(struct native_completion *operation)
 
 enum call_status net_tcp_listen(struct net_factory *factory,
     struct capability_table *table, struct net_path path, uint32_t address,
-    uint16_t port, struct tcp_listen_reply *reply)
+    uint16_t port, uint32_t backlog, struct tcp_listen_reply *reply)
 {
   struct tcp_control request = {
-    .operation = CONTROL_LISTEN, .address = address, .port = port, .factory = factory, .path = path,
+    .operation = CONTROL_LISTEN, .address = address, .port = port, .backlog = backlog,
+    .factory = factory, .path = path,
   };
   enum call_status status = exchange_control(&request, table);
   if (status == CALL_OK) {
@@ -785,7 +787,7 @@ bool net_tcp_service(void)
       }
       if (status == CALL_OK) {
         status = prepare_status(tcp_listener_prepare(&route, call->address, call->port,
-            &call->stream->connection));
+            call->backlog, &call->stream->connection));
       }
       if (status == CALL_OK) {
         call->stream->connection->stream = call->stream;
