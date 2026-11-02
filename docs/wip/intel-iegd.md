@@ -78,7 +78,7 @@ layer or successful unsupported operations.
 
 | Service | Existing boundary and required work |
 | --- | --- |
-| Allocation/WC mappings | PMM batches and heap exist. Scanout page-vector/WC preparation is currently pre-AP. Sleepable runtime display discovery needs a real owned mapping/cache transaction; no WB/WC aliases or driver-local allocator bypass. |
+| Allocation/WC mappings | PMM batches and heap exist. Native `device_pages` adds an owned runtime WB/WC page vector for the fixed BSP kernel worker, separate from bootstrap scanout. Its physical vector is not a device address map. No WB/WC aliases or driver-local allocator bypass. |
 | DMA/SG | Keep CPU VA, physical frame, GPU VA and device address distinct. Existing identity-DMA proof does not provide translated SG mappings or permission to change firmware IOMMU tables. Decide any required new mapper at that task. |
 | PCI/MMIO/MSI | Native claims, BAR mappings and single-vector MSI-X/MSI exist. Keep one device owner and the native BME/claim lifecycle; use the reference's access widths, ordering and posting. |
 | Delays/waits | Use native monotonic deadlines and task waits. Separate short hardware polling from sleepable waits; never replace a sleeping mutex with a spinlock held over PHY/AUX work. |

@@ -177,15 +177,21 @@ enum mm_result vm_sparse_finish(struct vm_sparse_update *update);
  * bookkeeping by mutating its spaces through the arch interface. */
 enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physical,
                       unsigned permissions);
+/* Fresh, unpublished caller-owned RAM, RW/NX/WB in one bare kernel reservation.
+ * Structural owner, IF=0; at most PMM_FRAME_BATCH_MAX frames, stopping at a leaf
+ * boundary. No supplied frame may still have another active cache alias. */
+enum mm_result vm_map_kernel_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped);
 /* Map a device-owned frame into a bare kernel reservation as RW/NX/uncached.
  * Caller must exclude RAM/cache aliases. Never free MMIO frames through PMM;
  * undo with vm_unmap and release the virtual reservation. Normally before AP
  * startup. ACPI and prepared PCI/GPIO native owners may fill fresh, never-published
  * addresses in an early reserved window once; no late remap or reuse. */
 enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical);
-/* Boot-only driver-owned scanout page, RW/NX/WC; caller excludes aliases. */
+/* Unpublished driver-owned scanout page, RW/NX/WC; caller excludes aliases.
+ * Fixed BSP, IF=0, structural owner; no live mapping/cache-type replacement. */
 enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical);
-/* Bootstrap-only WC scanout, one reservation, at most PMM_FRAME_BATCH_MAX
+/* Fresh WC scanout, one reservation, at most PMM_FRAME_BATCH_MAX
  * frames per call. A successful run may stop at a leaf-table boundary. */
 enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
     size_t count, size_t *mapped);
@@ -199,6 +205,10 @@ struct vm_physical_range {
 bool vm_kernel_physical_overlap_any(const struct vm_physical_range *ranges, size_t count);
 enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
                         phys_addr_t *physical);
+/* Caller-owned kernel reservation, same closed-consumer/owner proof as unmap.
+ * At most PMM_FRAME_BATCH_MAX pages; may stop at a leaf boundary. Returns the
+ * actual unmapped prefix, or zero for invalid/unmapped/quarantined storage. */
+size_t vm_unmap_kernel_run(uintptr_t base, phys_addr_t *physical, size_t count);
 /* Protect one mapped page in a reservation or VM-owned allocation. */
 enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
                           unsigned permissions);

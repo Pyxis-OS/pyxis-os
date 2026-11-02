@@ -1585,8 +1585,8 @@ enum mm_result vm_map_scanout(uintptr_t base, phys_addr_t physical)
   return arch_page_map_scanout(base, physical);
 }
 
-enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
-    size_t count, size_t *mapped)
+static enum mm_result map_kernel_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped, bool write_combining)
 {
   require_kernel_owner(&kernel_space);
   *mapped = 0;
@@ -1598,7 +1598,20 @@ enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
       count > PMM_FRAME_BATCH_MAX || count > range->pages - (base - range->base) / PAGE_SIZE) {
     return MM_INVALID;
   }
-  return arch_page_map_scanout_run(base, physical, count, mapped);
+  return write_combining ? arch_page_map_scanout_run(base, physical, count, mapped) :
+      arch_page_map_run(page_space(&kernel_space), base, count, physical, PAGE_WRITE, mapped);
+}
+
+enum mm_result vm_map_kernel_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped)
+{
+  return map_kernel_run(base, physical, count, mapped, false);
+}
+
+enum mm_result vm_map_scanout_run(uintptr_t base, const phys_addr_t *physical,
+    size_t count, size_t *mapped)
+{
+  return map_kernel_run(base, physical, count, mapped, true);
 }
 
 bool vm_kernel_physical_overlap(phys_addr_t physical, size_t bytes)
@@ -1647,6 +1660,18 @@ enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
     return MM_INVALID;
   }
   return arch_page_unmap(page_space(space), base, physical);
+}
+
+size_t vm_unmap_kernel_run(uintptr_t base, phys_addr_t *physical, size_t count)
+{
+  require_kernel_owner(&kernel_space);
+  struct vm_range *range = range_containing(&kernel_space, base);
+  if (!range || range->quarantined || range->state != RANGE_RESERVED ||
+      !physical || !count || count > PMM_FRAME_BATCH_MAX ||
+      count > range->pages - (base - range->base) / PAGE_SIZE) {
+    return 0;
+  }
+  return arch_page_unmap_run(page_space(&kernel_space), base, count, physical);
 }
 
 static uint64_t *owned_wait_token(struct vm_range *range, uintptr_t base)
