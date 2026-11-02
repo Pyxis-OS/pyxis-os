@@ -9,7 +9,8 @@ struct pci_msi {
   uint16_t layout;
 };
 
-/* Completed claim, BSP/IF=0 before DMA. Checked 32/64-bit MSI, with optional
+/* Completed ordinary or preserved-display claim, BSP/IF=0 before driver DMA.
+ * Inherited display BME may remain enabled. Checked 32/64-bit MSI, with optional
  * per-vector masks; exactly one message is enabled, even when more are supported.
  * Prepare binds the BSP vector with delivery off and supported messages masked;
  * enable unmasks only message zero. Pending Bits is never written.

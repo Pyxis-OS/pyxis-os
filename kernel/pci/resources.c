@@ -108,13 +108,23 @@ static bool enable_forwarding(struct pci_device *device)
 void pci_write8(struct pci_claim *claim, unsigned offset, uint8_t value)
 {
   require_owner(claim);
+  KASSERT(claim->display_state != PCI_DISPLAY_RETAINED);
   KASSERT(offset != PCI_COMMAND && offset != PCI_COMMAND + 1);
   arch_pci_write8(claim->device->address, offset, value);
+}
+
+static bool write_command(struct pci_claim *claim, uint16_t value)
+{
+  arch_pci_write16(claim->device->address, PCI_COMMAND, value);
+  return pci_read16(claim->device->address, PCI_COMMAND) == value;
 }
 
 bool pci_write16(struct pci_claim *claim, unsigned offset, uint16_t value)
 {
   require_owner(claim);
+  if (claim->display_state == PCI_DISPLAY_RETAINED) {
+    return false;
+  }
   KASSERT(offset != PCI_COMMAND || !claim->reserved);
   if (offset == PCI_COMMAND && (value & PCI_COMMAND_MASTER)) {
     if (!enable_forwarding(claim->device)) {
@@ -122,13 +132,17 @@ bool pci_write16(struct pci_claim *claim, unsigned offset, uint16_t value)
     }
     claim->dma_started = true;
   }
+  if (offset == PCI_COMMAND) {
+    return write_command(claim, value);
+  }
   arch_pci_write16(claim->device->address, offset, value);
-  return offset != PCI_COMMAND || pci_read16(claim->device->address, offset) == value;
+  return true;
 }
 
 void pci_write32(struct pci_claim *claim, unsigned offset, uint32_t value)
 {
   require_owner(claim);
+  KASSERT(claim->display_state != PCI_DISPLAY_RETAINED);
   KASSERT(offset != PCI_COMMAND);
   arch_pci_write32(claim->device->address, offset, value);
 }
@@ -150,7 +164,8 @@ bool pci_capability_fits(const struct pci_claim *claim, unsigned offset, size_t 
   return found;
 }
 
-static bool capture_capabilities(struct pci_address address, struct pci_claim *claim)
+static bool capture_capabilities(struct pci_address address, struct pci_claim *claim,
+    bool allow_enabled)
 {
   if (!(pci_read16(address, PCI_STATUS) & PCI_STATUS_CAPABILITIES)) {
     return true;
@@ -176,7 +191,7 @@ static bool capture_capabilities(struct pci_address address, struct pci_claim *c
       }
       uint16_t control = pci_read16(address, offset + PCI_MSI_CONTROL);
       unsigned enabled = id == PCI_CAP_MSIX ? PCI_MSIX_ENABLE : PCI_MSI_ENABLE;
-      if (control & enabled) {
+      if (control == UINT16_MAX || (!allow_enabled && (control & enabled))) {
         return false;
       }
     }
@@ -184,7 +199,8 @@ static bool capture_capabilities(struct pci_address address, struct pci_claim *c
   return true;
 }
 
-bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
+static bool reserve_device(struct pci_device *device, struct pci_claim *claim,
+    bool allow_enabled)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(claim && !claim->device && !claim->mappings);
@@ -194,7 +210,8 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
   }
   *claim = (struct pci_claim){0};
   uint16_t command = pci_read16(device->address, PCI_COMMAND);
-  if (!capture_capabilities(device->address, claim) || !prepare_forwarding(device)) {
+  if (command == UINT16_MAX ||
+      !capture_capabilities(device->address, claim, allow_enabled) || !prepare_forwarding(device)) {
     return false;
   }
 
@@ -204,6 +221,98 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
   claim->reserved = true;
   device->owner = claim;
   arch_pci_config_writable(device->address, true);
+  return true;
+}
+
+bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
+{
+  return reserve_device(device, claim, false);
+}
+
+static void display_bar_sizes(struct pci_claim *claim, const uint32_t values[PCI_BAR_COUNT],
+    const uint32_t masks[PCI_BAR_COUNT])
+{
+  for (unsigned bar = 0; bar < PCI_BAR_COUNT; ++bar) {
+    uint32_t low = values[bar];
+    if ((low & PCI_BAR_IO) || low == UINT32_MAX) {
+      continue;
+    }
+    unsigned type = low & PCI_BAR_MEMORY_TYPE_MASK;
+    bool wide = type == PCI_BAR_MEMORY_64;
+    if (wide && bar + 1 == PCI_BAR_COUNT) {
+      continue;
+    }
+    /* Linux interprets other memory encodings as 32-bit too. */
+    uint64_t base = low & PCI_BAR_MEMORY_ADDRESS_MASK;
+    uint64_t mask = masks[bar] & PCI_BAR_MEMORY_ADDRESS_MASK;
+    uint64_t address_mask = PCI_BAR_MEMORY_ADDRESS_MASK;
+    bool accessible = masks[bar] != UINT32_MAX;
+    if (wide) {
+      base |= (uint64_t)values[bar + 1] << PCI_BAR_HIGH_SHIFT;
+      mask |= (uint64_t)masks[bar + 1] << PCI_BAR_HIGH_SHIFT;
+      address_mask |= UINT64_C(0xffffffff00000000);
+    }
+    /* As Linux's PCI sizing: the lowest implemented decode bit gives the
+     * extent. A bad individual resource does not discard other BARs. */
+    uint64_t bytes = mask & -mask;
+    if (accessible && base && bytes && bytes <= UINT64_MAX - base &&
+        (base != mask || ((base | (bytes - 1)) & address_mask) == address_mask)) {
+      claim->bars[bar] = (struct pci_bar){.physical = base, .bytes = bytes};
+    }
+    if (wide) {
+      ++bar;
+    }
+  }
+}
+
+bool pci_claim_display_preserved(struct pci_device *device, struct pci_claim *claim)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled() && !arch_cpu_count());
+  if (!device || device->base_class != PCI_CLASS_DISPLAY ||
+      !reserve_device(device, claim, true)) {
+    return false;
+  }
+  /* The pinned Linux mmio_always_on quirk covers host bridges, not these
+   * endpoint displays. No blanket decode-on BAR probe is introduced. */
+  /* This path owns the inherited live consumer, not a reset/quiesced device.
+   * From the first write it can never use ordinary claim failure unwinding. */
+  claim->reserved = false;
+  claim->display_state = PCI_DISPLAY_RETAINED;
+  struct pci_address address = device->address;
+  uint16_t command = claim->saved_command | PCI_COMMAND_INTX_DISABLE;
+  if (!write_command(claim, command)) {
+    return false;
+  }
+  for (unsigned i = 0; i < claim->capability_count; ++i) {
+    unsigned offset = claim->capabilities[i];
+    unsigned id = pci_read8(address, offset);
+    if (id == PCI_CAP_MSI || id == PCI_CAP_MSIX) {
+      uint16_t control = pci_read16(address, offset + PCI_MSI_CONTROL);
+      uint16_t masked = control & ~(id == PCI_CAP_MSIX ? PCI_MSIX_ENABLE : PCI_MSI_ENABLE);
+      arch_pci_write16(address, offset + PCI_MSI_CONTROL, masked);
+    }
+  }
+  uint32_t values[PCI_BAR_COUNT], masks[PCI_BAR_COUNT];
+  for (unsigned i = 0; i < PCI_BAR_COUNT; ++i) {
+    values[i] = pci_read32(address, PCI_BAR_FIRST + i * PCI_REGISTER_BYTES);
+  }
+  /* Linux pci_read_bases: one short decode-off window, BME preserved, and
+   * each dword restored immediately. No logging/allocation/callback here. */
+  bool decoding_off = write_command(claim, command & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY));
+  if (decoding_off) {
+    for (unsigned i = 0; i < PCI_BAR_COUNT; ++i) {
+      unsigned offset = PCI_BAR_FIRST + i * PCI_REGISTER_BYTES;
+      arch_pci_write32(address, offset, UINT32_MAX);
+      masks[i] = pci_read32(address, offset);
+      arch_pci_write32(address, offset, values[i]);
+    }
+  }
+  bool restored = write_command(claim, command);
+  if (!decoding_off || !restored) {
+    return false;
+  }
+  display_bar_sizes(claim, values, masks);
+  claim->display_state = PCI_DISPLAY_PRESERVED;
   return true;
 }
 
@@ -217,7 +326,7 @@ static bool begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *st
     bool allow_d3hot_handoff, bool enable_memory)
 {
   require_owner(claim);
-  KASSERT(claim->reserved && !claim->mappings);
+  KASSERT(claim->reserved && claim->display_state == PCI_DISPLAY_NONE && !claim->mappings);
   KASSERT(state && !state->command_changed && !state->power_changed && !state->d3hot_handoff);
   *state = (struct pci_probe_state){0};
   struct pci_address address = claim->device->address;
@@ -339,7 +448,7 @@ bool pci_begin_d3hot_assignment_probe(struct pci_claim *claim, struct pci_probe_
 bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
 {
   require_owner(claim);
-  KASSERT(claim->reserved && state);
+  KASSERT(claim->reserved && claim->display_state == PCI_DISPLAY_NONE && state);
   if (state->d3hot_handoff) {
     return false;
   }
@@ -375,7 +484,7 @@ bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *sta
 static bool disable_dma_and_intx(struct pci_claim *claim)
 {
   require_owner(claim);
-  KASSERT(claim->reserved);
+  KASSERT(claim->reserved && claim->display_state == PCI_DISPLAY_NONE);
   uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
   claim->reserved = false;
   /* The adjacent status word has write-one-to-clear bits: command updates
@@ -429,7 +538,8 @@ static void withdraw_claim(struct pci_claim *claim)
 void pci_cancel_reservation(struct pci_claim *claim)
 {
   require_owner(claim);
-  KASSERT(claim->reserved && !claim->dma_started && !claim->assignment_pinned &&
+  KASSERT(claim->reserved && claim->display_state == PCI_DISPLAY_NONE &&
+      !claim->dma_started && !claim->assignment_pinned &&
       !claim->reset_retained);
   /* Firmware may still own an active controller. Only CPU mappings/config
    * permissions were borrowed; cancellation must not write its command word. */
@@ -440,7 +550,8 @@ void pci_cancel_reservation(struct pci_claim *claim)
 void pci_release_device(struct pci_claim *claim)
 {
   require_owner(claim);
-  KASSERT(!claim->reserved && !claim->dma_started && !claim->assignment_pinned &&
+  KASSERT(!claim->reserved && claim->display_state == PCI_DISPLAY_NONE &&
+      !claim->dma_started && !claim->assignment_pinned &&
       !claim->reset_retained);
   uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
   KASSERT((command & (PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE)) == PCI_COMMAND_INTX_DISABLE);
@@ -461,7 +572,7 @@ void pci_release_device(struct pci_claim *claim)
 bool pci_size_bars(struct pci_claim *claim)
 {
   require_owner(claim);
-  KASSERT(!claim->reserved && !claim->dma_started);
+  KASSERT(!claim->reserved && claim->display_state == PCI_DISPLAY_NONE && !claim->dma_started);
   struct pci_address address = claim->device->address;
   KASSERT(!(pci_read16(address, PCI_COMMAND) &
             (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)));
@@ -526,7 +637,7 @@ static bool placement_fenced(const struct pci_claim *claim)
 {
   struct pci_address address = claim->device->address;
   uint16_t command = pci_read16(address, PCI_COMMAND);
-  if (claim->dma_started ||
+  if (claim->display_state != PCI_DISPLAY_NONE || claim->dma_started ||
       (command & (PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER |
                   PCI_COMMAND_INTX_DISABLE)) != PCI_COMMAND_INTX_DISABLE) {
     return false;
@@ -816,7 +927,7 @@ enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar, size
     size_t bytes, const struct boot_info *boot, struct pci_mapping *mapping)
 {
   require_owner(claim);
-  KASSERT(claim->reserved);
+  KASSERT(claim->reserved && claim->display_state == PCI_DISPLAY_NONE);
   if (bar >= PCI_BAR_COUNT || !bytes || ((window | bytes) & (PAGE_SIZE - 1)) ||
       window > PCI_BOOTSTRAP_WINDOW_LIMIT || bytes > PCI_BOOTSTRAP_WINDOW_LIMIT - window) {
     return MM_INVALID;
@@ -875,6 +986,9 @@ enum mm_result pci_map_bar(struct pci_claim *claim, unsigned bar, uint64_t offse
 {
   require_owner(claim);
   KASSERT(!claim->reserved && !claim->dma_started);
+  if (claim->display_state == PCI_DISPLAY_RETAINED) {
+    return MM_BUSY;
+  }
   if (bar >= PCI_BAR_COUNT || !bytes || offset > claim->bars[bar].bytes ||
       bytes > claim->bars[bar].bytes - offset) {
     return MM_INVALID;
@@ -887,6 +1001,9 @@ enum mm_result pci_map_display_bar(struct pci_claim *claim, unsigned bar,
 {
   require_owner(claim);
   KASSERT(!claim->reserved && !claim->dma_started);
+  if (claim->display_state == PCI_DISPLAY_RETAINED) {
+    return MM_BUSY;
+  }
   if (!boot || !address) {
     return MM_INVALID;
   }

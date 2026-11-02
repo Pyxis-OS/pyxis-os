@@ -72,6 +72,12 @@ struct pci_region {
   struct pci_mapping mapping;
 };
 
+enum pci_display_claim_state {
+  PCI_DISPLAY_NONE,
+  PCI_DISPLAY_RETAINED, /* Incomplete handoff: no CPU/device access or GOP proof. */
+  PCI_DISPLAY_PRESERVED,
+};
+
 struct pci_claim {
   struct pci_device *device;
   /* Boot-unique ownership identity; never reused after claim storage is cleared. */
@@ -81,6 +87,7 @@ struct pci_claim {
   unsigned capability_count;
   struct pci_bar bars[PCI_BAR_COUNT];
   struct pci_mapping *mappings;
+  enum pci_display_claim_state display_state;
   bool reserved, dma_started, assignment_pinned, reset_retained;
 };
 
@@ -142,6 +149,19 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim);
 bool pci_reserve_device_at(size_t index, struct pci_claim *claim);
 bool pci_complete_claim(struct pci_claim *claim);
 void pci_cancel_reservation(struct pci_claim *claim);
+/* BSP/IF=0 before AP startup, zeroed stable claim. Caller excludes every CPU
+ * framebuffer/MMIO writer throughout the decode-off window; no output from it.
+ * A display endpoint becomes claimed, display preserved: inherited BME and
+ * assigned BARs/decoding survive sizing; inherited MSI/MSI-X/INTx stay disabled.
+ * Exposes assigned memory BARs only; an invalid/unassigned BAR is unavailable,
+ * without discarding other resources. No reset, power transition or new DMA.
+ * Inherited BME is not dma_started. Mappings and IRQ preparation use the normal
+ * pre-AP APIs before driver DMA publication. Claim storage stays for the boot:
+ * ordinary cancellation/release/reset/placement never consumes this claim.
+ * Failure before acquisition leaves existing ownership unchanged. A failed handoff
+ * keeps the claim in PCI_DISPLAY_RETAINED; keep CPU writers closed and do not
+ * claim GOP fallback. Only success establishes PCI_DISPLAY_PRESERVED. */
+bool pci_claim_display_preserved(struct pci_device *device, struct pci_claim *claim);
 /* Reserved claim before mappings, zeroed caller-owned snapshot. If D0/memory
  * decode is already usable, leave configuration untouched, including BME.
  * Otherwise require BME off before temporarily waking/enabling memory decode;

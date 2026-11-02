@@ -19,7 +19,8 @@ struct pci_msix {
   struct pci_region table, pba;
 };
 
-/* Completed claim, sized BARs, BSP/IF=0 before AP startup. Exactly one disabled
+/* Completed ordinary or preserved-display claim, sized BARs, BSP/IF=0 before
+ * AP startup and driver DMA. Inherited display BME may remain enabled. One disabled
  * MSI-X capability; table/PBA extents must fit and not overlap. Other device
  * register regions must be checked for overlap by their driver before mapping.
  * Discovery failure leaves the initially empty record unchanged. Mapping failure

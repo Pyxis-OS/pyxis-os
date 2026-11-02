@@ -169,6 +169,7 @@ pci_function_reset_prepare(struct pci_claim *claim, struct pci_function_reset *r
 {
   KASSERT(cpu_current() == cpu_bsp() && !cpu_interrupts_enabled() && !arch_cpu_count());
   KASSERT(claim && claim->device && claim->device->owner == claim && claim->reserved &&
+      claim->display_state == PCI_DISPLAY_NONE &&
       !claim->mappings && !claim->dma_started && !claim->reset_retained &&
       reset && !reset->claim);
   *reset = (struct pci_function_reset){.claim = claim, .generation = claim->generation};
@@ -447,7 +448,8 @@ bool
 pci_function_reset_boot(struct pci_function_reset *reset, uint64_t deadline_ns)
 {
   require_owner(reset);
-  KASSERT(!arch_cpu_count() && reset->claim->reserved && !reset->claim->mappings &&
+  KASSERT(!arch_cpu_count() && reset->claim->reserved &&
+      reset->claim->display_state == PCI_DISPLAY_NONE && !reset->claim->mappings &&
       !reset->claim->dma_started && !reset->running);
   if (!reset->prepared || reset->boot_attempted)
     return refuse(reset, "PCI boot reset unavailable or already attempted");
@@ -469,7 +471,8 @@ pci_function_reset_stop(struct pci_function_reset *reset, uint64_t deadline_ns)
   KASSERT(cpu_current() == cpu_bsp() && cpu_interrupts_enabled());
   uint64_t flags = cpu_save_interrupts();
   require_owner(reset);
-  KASSERT(!reset->claim->reserved && !reset->running);
+  KASSERT(!reset->claim->reserved && reset->claim->display_state == PCI_DISPLAY_NONE &&
+      !reset->running);
   if (!reset->boot_completed || reset->stop_attempted) {
     cpu_restore_interrupts(flags);
     return refuse(reset, "PCI stop reset unavailable or already attempted");
