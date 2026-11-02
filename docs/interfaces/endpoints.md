@@ -229,11 +229,9 @@ allocation or parking. See [scheduling ownership](../kernel/smp.md#scheduling-an
 ## Exports and retirement
 
 An endpoint has no limit on live or unacknowledged exports, independently of its
-sixteen delivery slots; only the kernel memory they use is bounded. Each export is
-charged its record and index share to one kernel-wide budget of one 1,024th of
-installed RAM (at least 4 MiB), and an export past it fails `CALL_LIMIT` with a log
-line naming the budget. Exports are found by object ID in a hash index that grows
-as they are added. EXPORT requires service CREATE authority and the
+sixteen delivery slots; only the kernel heap bounds them, and an export (or the
+growth of the index) that cannot be allocated fails `CALL_NO_MEMORY`. Exports are
+found by object ID in a hash index that grows as they are added. EXPORT requires service CREATE authority and the
 process's own receiver with CONTROL authority. It fixes a nonzero object ID,
 nonzero protocol, resource-rights ceiling and transport ceiling. IDs are unique
 within that receiver until retirement acknowledgment. The receiver owns

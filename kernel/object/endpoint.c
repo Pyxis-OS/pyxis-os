@@ -10,9 +10,7 @@
 #include <kernel/bulk.h>
 #include <kernel/completion.h>
 #include <kernel/memory.h>
-#include <kernel/log.h>
 #include <kernel/mm/heap.h>
-#include <kernel/mm/pmm.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/describe.h>
 #include <kernel/object/file.h>
@@ -316,8 +314,6 @@ static void destroy_endpoint_storage(struct kernel_object *object)
   kfree(state);
 }
 
-static void uncharge_export(void);
-
 static void destroy_export_storage(struct kernel_object *object)
 {
   struct endpoint_export *export = (void *)((uint8_t *)object -
@@ -328,7 +324,6 @@ static void destroy_export_storage(struct kernel_object *object)
   bool destroy = --state->storage_references == 0;
   unlock_endpoint(state);
   kfree(export);
-  uncharge_export();
   if (destroy) {
     object_release(&state->storage);
   }
@@ -1055,51 +1050,9 @@ static struct endpoint_export *find_export(struct endpoint_state *state, uint64_
   return NULL;
 }
 
-/* Exports are metadata the receiver's process makes the kernel hold, so they
- * share one budget: one ENDPOINT_EXPORT_BUDGET_RAM_DIVISOR-th of installed RAM,
- * at least ENDPOINT_EXPORT_BUDGET_MIN_BYTES. Each export is charged its record
- * and its share of the index. */
-#define ENDPOINT_EXPORT_BUDGET_MIN_BYTES ((size_t)4 * 1024 * 1024)
-#define ENDPOINT_EXPORT_BUDGET_RAM_DIVISOR 1024
+/* Exports are limited by the kernel heap alone: a failed allocation is
+ * CALL_NO_MEMORY, as for every other kernel record. */
 #define ENDPOINT_EXPORT_BUCKETS_MIN 16
-#define ENDPOINT_EXPORT_CHARGE (sizeof(struct endpoint_export) + 2 * sizeof(void *))
-
-static atomic_size_t export_bytes;
-static atomic_bool export_limit_logged;
-
-static size_t export_budget(void)
-{
-  uint64_t share = (uint64_t)pmm_get_stats().total_frames * PAGE_SIZE /
-      ENDPOINT_EXPORT_BUDGET_RAM_DIVISOR;
-  return share > ENDPOINT_EXPORT_BUDGET_MIN_BYTES ? (size_t)share :
-      ENDPOINT_EXPORT_BUDGET_MIN_BYTES;
-}
-
-static bool charge_export(void)
-{
-  size_t budget = export_budget();
-  size_t used = atomic_load_explicit(&export_bytes, memory_order_relaxed);
-  do {
-    if (used > budget || ENDPOINT_EXPORT_CHARGE > budget - used) {
-      if (!atomic_exchange_explicit(&export_limit_logged, true, memory_order_relaxed)) {
-        kwarn("endpoint: exports use %zu of %zu bytes of the export budget (one "
-            "%u-th of installed RAM, at least %zu); refusing further exports\n",
-            used, budget, (unsigned)ENDPOINT_EXPORT_BUDGET_RAM_DIVISOR,
-            ENDPOINT_EXPORT_BUDGET_MIN_BYTES);
-      }
-      return false;
-    }
-  } while (!atomic_compare_exchange_weak_explicit(&export_bytes, &used,
-      used + ENDPOINT_EXPORT_CHARGE, memory_order_relaxed, memory_order_relaxed));
-  return true;
-}
-
-static void uncharge_export(void)
-{
-  size_t before = atomic_fetch_sub_explicit(&export_bytes, ENDPOINT_EXPORT_CHARGE,
-      memory_order_relaxed);
-  KASSERT(before >= ENDPOINT_EXPORT_CHARGE);
-}
 
 /* Keeps chains short (at most two exports per bucket on average). The new table is
  * allocated with no lock held; only the move of the existing exports is under it,
@@ -1376,15 +1329,11 @@ static enum call_status endpoint_export_create(struct endpoint_export_request *r
   if (status == CALL_OK) {
     status = reserve_export_index(state);
   }
-  if (status == CALL_OK && !charge_export()) {
-    status = CALL_LIMIT;
-  }
   if (status != CALL_OK) {
     return status;
   }
   struct endpoint_export *export = kmalloc(sizeof(*export));
   if (!export) {
-    uncharge_export();
     return CALL_NO_MEMORY;
   }
   memset(export, 0, sizeof(*export));
