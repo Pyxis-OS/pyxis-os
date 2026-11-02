@@ -1,3 +1,4 @@
+#include <kernel/display/iegd_owner.h>
 #include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
@@ -139,6 +140,11 @@ void interrupt_handler(struct exception_frame *frame)
   }
   if (frame->vector == APIC_WIFI_VECTOR) {
     wifi_interrupt();
+    finish_interrupt(frame);
+    return;
+  }
+  if (frame->vector == APIC_INTEL_DISPLAY_VECTOR) {
+    iegd_irq_interrupt();
     finish_interrupt(frame);
     return;
   }
