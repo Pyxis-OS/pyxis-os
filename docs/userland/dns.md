@@ -83,9 +83,12 @@ An empty answer section or valid negative response such as NXDOMAIN is a
 successful diagnostic exchange, not a transport error. Usage, native-call,
 timeout, output and supported-size failures return a nonzero process status.
 
-This slice uses classic 512-byte DNS messages without EDNS. A matching truncated
-response reports that TCP fallback is unavailable; oversized replies are also
-reported as unsupported. Neither exposes partial answers. Full supported UDP
+Queries carry an EDNS(0) OPT record advertising a 1232-byte UDP payload (RFC 6891
+and the current avoid-fragmentation guideline), so replies up to 1232 bytes are
+accepted; a server that answers FORMERR or NOTIMP to the OPT record is asked
+again without it. A matching truncated response still reports that TCP fallback
+is unavailable; replies over 1232 bytes are also reported as unsupported. Neither exposes
+partial answers. Full supported UDP
 datagrams are consumed so an oversized DNS response cannot block the receive
 queue. Random matching fields do not authenticate DNS or provide DNSSEC.
 
