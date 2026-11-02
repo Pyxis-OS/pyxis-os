@@ -39,9 +39,11 @@ reply:
 - **Result:** the reply's byte count.
 
 **Capacity:**
-- At most `PROCESS_LIST_REPLY_MAX` (64 KiB) is produced per call.
-- If the records don't fit, the header sets `PROCESS_LIST_TRUNCATED` and
-  `total` gives the full count; retry with more room.
+- A call produces no more than the records that exist: the kernel counts them just
+  before the pass and sizes its buffer to that, so a large capacity costs nothing.
+- If the records don't fit, or some appeared after the count, the header sets
+  `PROCESS_LIST_TRUNCATED` and `total` gives the full count; retry with more room
+  (a header-only capacity returns just `total`).
 - There is no cursor.
 - A capacity smaller than the header fails `CALL_BUFFER_TOO_SMALL`.
 - An unwritable reply fails `CALL_BAD_BUFFER`.
@@ -110,8 +112,9 @@ reply:
 - **Cost of a listing:** the pass holds the space's tree guard while it samples
   each process, up to the reply's capacity. That delays launches and group
   changes in that space for the duration. Samples take each process's lifetime
-  lock and the scheduler queue lock. That and the 64 KiB cap are
-  [debt](https://git.internal/PyxisOS/pyxis-os/issues/1603).
+  lock and the scheduler queue lock. That is
+  [debt](https://git.internal/PyxisOS/pyxis-os/issues/1603). A listing walks the
+  space twice, once to count and once to fill.
 - **Implicit listing is a deliberate exception** to "authority comes only from
   held capabilities". It exposes labels and figures to every program in the
   space.
