@@ -91,8 +91,8 @@ void npfs_ram_discard(struct npfs_ram *ram)
 {
   if (!ram) return;
   npfs_require_worker();
-  for (size_t group = 0; group < ram->index_count; ++group) {
-    struct ram_index *index = ram->index ? ram->index[group] : NULL;
+  for (size_t group = 0; ram->index && group < ram->index_count; ++group) {
+    struct ram_index *index = ram->index[group];
     if (!index) continue;
     for (size_t i = 0; i < RAM_INDEX_ENTRIES; ++i) {
       if (!index->frames[i]) continue;
