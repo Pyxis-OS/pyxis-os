@@ -164,10 +164,13 @@ held-link worker-death recovery remains unqualified.
 
 ## Limits
 
-- Native GTK rekey, held-link worker-death recovery, independent over-air
-  confidentiality/replay and firmware PN behavior remain unqualified, accepted
-  for stage-4 closure (chronium, 2026-10-22); consequences and revisit points are
-  in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1285).
+- Native GTK rekey, independent over-air confidentiality/replay and firmware PN
+  behavior remain unqualified, accepted for stage-4 closure (chronium,
+  2026-10-22); consequences and revisit points are in
+  [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1285).
+- Held-link worker-death recovery is unqualified, because no authority can stop
+  the worker on purpose; it is revisited when a worker death is observed
+  ([#1677](https://git.internal/PyxisOS/pyxis-os/issues/1677)).
 - Live hardware-rfkill transitions are unqualified on this ThinkPad
   ([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1282)).
 - Native idle and BSP worker cost are unmeasured
