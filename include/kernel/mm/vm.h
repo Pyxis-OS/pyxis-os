@@ -120,6 +120,10 @@ enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment
                           uintptr_t *result);
 enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes);
 enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes);
+/* Kernel-root task, IF=1, retained structural owner, no short lock/loan.
+ * Same bare-reservation checks as vm_release, but checks vacancy in bounded
+ * batches and yields between them. Caller still owns any backing separately. */
+enum mm_result vm_release_kernel(uintptr_t base, size_t bytes);
 /* Backs a whole bare reservation or a contained suffix, leaving its lower
  * prefix unmapped. One reservation owns that suffix; release/free remain whole.
  * Backing is eager, zeroed and owned by VM. Failure leaves a bare reservation.

@@ -66,6 +66,13 @@ static void free_frames(phys_addr_t *frames, size_t count, uint64_t *flags)
   kfree(frames);
 }
 
+static uint64_t release_reservation(uintptr_t address, size_t bytes, uint64_t flags)
+{
+  cpu_restore_interrupts(flags);
+  KASSERT(vm_release_kernel(address, bytes) == MM_OK);
+  return cpu_save_interrupts();
+}
+
 enum mm_result device_pages_allocate(struct device_pages *pages, size_t bytes,
     enum device_pages_cache cache)
 {
@@ -142,7 +149,7 @@ done:
   /* No reference escaped: local unpublished rollback requires no remote ACK. */
   if (address) {
     unmap_pages(address, frames, mapped, &flags);
-    KASSERT(vm_release(vm_kernel_space(), address, bytes) == MM_OK);
+    flags = release_reservation(address, bytes, flags);
   }
   if (frames) {
     free_frames(frames, allocated, &flags);
@@ -182,7 +189,7 @@ enum mm_result device_pages_release(struct device_pages *pages, bool confirm_rem
   uint64_t flags = cpu_save_interrupts();
   size_t count = pages->bytes / PAGE_SIZE;
   unmap_pages(pages->address, pages->frames, count, &flags);
-  KASSERT(vm_release(vm_kernel_space(), pages->address, pages->bytes) == MM_OK);
+  flags = release_reservation(pages->address, pages->bytes, flags);
   free_frames((phys_addr_t *)pages->frames, count, &flags);
   *pages = (struct device_pages){0};
   vm_kernel_owner_release(&owner);

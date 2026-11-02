@@ -452,6 +452,16 @@ static enum mm_result require_unmapped(struct vm_space *space,
   return arch_range_vacant(page_space(space), range->base, range->pages);
 }
 
+static void release_reserved(struct vm_space *space, struct vm_range *range)
+{
+  registry_lock(space);
+  release_range(space, range);
+  registry_unlock(space);
+  if (space == &kernel_space) {
+    trim_kernel_spares();
+  }
+}
+
 enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
 {
   require_kernel_owner(space);
@@ -468,13 +478,45 @@ enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
     return status;
   }
 
-  registry_lock(space);
-  release_range(space, range);
-  registry_unlock(space);
-  if (space == &kernel_space) {
-    trim_kernel_spares();
-  }
+  release_reserved(space, range);
   return MM_OK;
+}
+
+enum mm_result vm_release_kernel(uintptr_t base, size_t bytes)
+{
+  KASSERT(cpu_interrupts_enabled() && task_current_actor() && vm_kernel_owner_held());
+  uint64_t flags = cpu_save_interrupts();
+  require_kernel_owner(&kernel_space);
+  struct vm_range *range = find_range(&kernel_space, base, bytes);
+  enum mm_result status = MM_INVALID;
+  if (range && range->quarantined) {
+    status = MM_BUSY;
+  } else if (range && range->state == RANGE_RESERVED) {
+    /* The retained owner stabilizes the reservation and all its mappings
+     * across yields. Keep the ordinary release's full vacancy check. */
+    size_t checked = 0;
+    while (checked < range->pages) {
+      size_t step = range->pages - checked;
+      if (step > PMM_FRAME_BATCH_MAX) {
+        step = PMM_FRAME_BATCH_MAX;
+      }
+      status = arch_range_vacant(page_space(&kernel_space), base + checked * PAGE_SIZE, step);
+      if (status != MM_OK) {
+        break;
+      }
+      checked += step;
+      if (checked < range->pages) {
+        cpu_restore_interrupts(flags);
+        kernel_task_yield_if_runnable();
+        flags = cpu_save_interrupts();
+      }
+    }
+    if (status == MM_OK) {
+      release_reserved(&kernel_space, range);
+    }
+  }
+  cpu_restore_interrupts(flags);
+  return status;
 }
 
 static void free_backing(struct vm_space *space, uintptr_t base,

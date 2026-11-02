@@ -174,7 +174,9 @@ join until reboot while unrelated RAM cleanup can continue. See
 It allocates a page vector and one zero-filled RW/NX CPU mapping, explicitly WB
 or WC, under the shared VM owner. PMM, zeroing and mapping steps are bounded
 by the existing 64-frame batch, with interrupts and scheduling restored between
-steps. The vector contains physical addresses, not device addresses; allocation
+steps, including the final reservation-vacancy check. Metadata uses the existing
+heap and VM registry operations; the batch bound is not a hard elapsed-time
+bound on those operations. The vector contains physical addresses, not device addresses; allocation
 does not authorize DMA or establish an IOMMU mapping.
 
 The device owner must close and join CPU borrowers and confirmed hardware
