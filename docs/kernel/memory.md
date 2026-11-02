@@ -204,7 +204,15 @@ permission changes share the caller-CPU private transaction and final teardown.
 
 [Libpyxis](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/memory.h) exposes `memory_allocate()` and
 `memory_release()`, returning native statuses and validating allocation replies.
-Allocation clears its output on failure. Release takes the region by value and
+Allocation clears its output on failure and accepts optional caller-owned
+`struct call_limit` detail (NULL opts out). Zero size and malformed fields remain
+BAD_REQUEST. Page/guard arithmetic overflow reports REQUEST_ENCODING; a span
+larger than the architecture's user address range reports MEMORY_ADDRESS;
+exhausted non-reused reservation identities report MEMORY_IDENTITY. Actual
+backing, metadata or available-range exhaustion remains NO_MEMORY. The address
+limit describes representability, not a promise that an otherwise valid span
+fits the process's occupied or fragmented space. No hidden quota or free-RAM
+sample replaces allocation admission. Release takes the region by value and
 writes no output, so its descriptor need not outlive the call.
 
 Hello uses temporary acquired regions for file reads, releasing each after use.

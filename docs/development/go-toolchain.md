@@ -143,8 +143,8 @@ overflow error; a subsequent read can recover through that same stdin.
 Many idle streams do not each require a native M. Regular FILE calls release
 the P during native I/O; they have no readiness or deadline facility.
 
-Go's initial native-M limit is 256, matching the kernel's total live/retiring
-task capacity. Its table holds 256 noninitial contexts; the initial M is separate,
+Go's initial native-M limit is 256, a separate runtime-table policy. Native
+thread admission follows counter representability and actual backing capacity. Its table holds 256 noninitial contexts; the initial M is separate,
 so the native total permits at most 255 siblings. A definitive CREATE LIMIT
 without an observer can wait for a known retiring peer's actual completion and
 retry while holding the creation lock. Other creators spin with `osyield` until

@@ -155,11 +155,12 @@ more round-robin share.
   Join releases libc-owned regions; an exiting thread never frees its own stack.
 - **Bounds.** Libc context records grow in stable blocks; slot/generation widths
   and real allocation/admission remain limits. Uncollected or uncertain records
-  retain resources. This libc change does not remove the current kernel policy
-  of 256 live or retiring native threads per process; its coordinated removal is
-  tracked in [libc capacity](../wip/libc-capacity.md). A retained completion
+  retain resources. Native admission has no chosen thread-count ceiling: it
+  checks the actual task-storage counter width, including retiring storage.
+  That refusal is CALL_LIMIT with THREAD_COUNT detail. A retained completion
   observer uses heap and capability storage, not a task slot. No count promises
-  physical capacity.
+  physical capacity. Native thread/context helpers accept optional caller-owned
+  limit detail; standard pthread/C11 interfaces keep their ordinary errors.
 
 ## Delivery
 

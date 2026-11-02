@@ -49,8 +49,7 @@ No material regression is established in these nested samples; they do not
 predict native throughput. Small receipts and provenance are in
 `/shared/present/limits-audit/wp6-evidence/`; source, SDKs and images stay local.
 
-Kernel >256-thread admission and common numeric limit reasons await WP3
-coordination. Stopped raw-context key-value cleanup was source-reviewed, without
+The initial run above preceded coordinated native count/reason changes. Stopped raw-context key-value cleanup was source-reviewed, without
 an injected allocation failure or a new stopped-context runtime claim. The
 existing SDL detach no-op is outside this delivery. All owned QEMU guests stopped.
 
@@ -65,3 +64,43 @@ checks passed at both one and four CPUs after this change and the WP9 rebase.
 Existing allocator timing results above are retained; no timings were taken
 during the concurrent hosted LLVM build. Cleanup-error behavior is
 source-reviewed; no injected native failure or every-byte reuse proof is claimed.
+
+
+## Coordinated kernel admission, 2026-11-02
+
+Base is actual WP3 `2f9463ae4` (userland `a0a4a9d`, ports `02aec1f`), with the
+WP6 userland/SDL commits rebased onto those heads. Before editing kernel code,
+rebuilt the kernel, SDK/C++ runtime and selected boot/session/shell/Remote/HTTP,
+benchmark and thread consumers with the same `8bdf136` compiler. Unchanged
+ancillary archive programs were not treated as rebuilt release artifacts.
+
+One/four-CPU Q35 KVM, 8 GiB: 288 workers held concurrently and joined; generation
+reuse/detach controls; process exit while 288 workers remained held followed by
+successful fresh native-thread launch; 192 keys/destructor growth; 4 KiB/16 MiB
+stacks; C++ thread control all pass. A native SDK consumer checks page/guard
+rounding LIMIT, user-address MEMORY_ADDRESS LIMIT, zero/reserved BAD_REQUEST,
+cleared failure outputs, small allocation/release and optional key detail clearing.
+No failures are injected and no counter/identity exhaustion is claimed.
+
+Fresh per-variant boot controls (three samples each) show heap medians
+18.723/19.523 ms, mixed 1.802/2.386 ms and pages 18.209/19.020 ms. The mixed
+candidate spans 1.760–2.698 ms, overlapping the baseline; no causal performance
+conclusion follows from that variation. A follow-up interleaves the before/after
+SDK-linked allocbench binaries in one candidate-kernel boot, using the same
+commands above and no concurrent owned build:
+
+| Workload | Before median ms [min, max] | After median ms [min, max] |
+| --- | --- | --- |
+| Heap | 18.985 [18.962, 19.372] | 18.904 [18.892, 21.667] |
+| Mixed | 1.786 [1.736, 3.243] | 1.855 [1.821, 3.522] |
+| Pages | 18.222 [17.894, 18.521] | 18.332 [18.033, 19.051] |
+
+Changes are −0.4%, +3.9% and +0.6%, with overlapping ranges. This isolates the
+relinked SDK/libc path on the changed kernel; it is not a native or fresh-boot
+kernel A/B result. Other agents' idle/low-load guests were not stopped. No
+material regression is established by these nested controls.
+
+The LLVM native `Memory.cpp` translation unit also compiles against the new SDK;
+full LLVM producer/consumer qualification awaits the required native-library
+container rebuild. The cross compiler itself remains usable for these local
+checks. Small receipts/provenance are in the existing WP6 handoff directory.

@@ -36,21 +36,23 @@ with the launcher work; this checklist distinguishes libc from that dependency.
 - [x] Growable key registry and lazy per-context values (userland #455).
 - [x] Full-width checked allocator and over-page alignment (userland #456).
 - [x] SDL worker-stack migration and reached consumer updates (ports #241).
-- [ ] Common limit-reason wiring and coordinated native count/stack admission.
+- [x] Common limit-reason wiring and coordinated native count/stack admission.
 - [x] Per-item one/four-CPU QEMU qualification and SDK/C++/SDL builds.
 - [x] Quiet matched existing-tool measurements after the concurrent build ended;
   earlier load-affected samples retained without a performance conclusion.
 
-Kernel files and function ownership are sent to the orchestrator before edits;
-no independent launcher/process changes are implied by the libc delivery.
+The kernel slice is stacked on the actual WP3 launcher/capacity branch, reusing
+its common optional reason ABI. No launcher or process-lifetime redesign is added.
 The SDL detached-thread no-op is a separate existing lifetime issue, not fixed
 or qualified by removing registry limits.
 
-The userland/ports work is pushed as draft PRs pending common limit reasons and
-kernel/ABI coordination. The current kernel still enforces 256 native task
-storage records; tests above that count await the coordinated kernel slice. Stopped raw
-context value-release ownership has source review; no allocator fault injection
-or native qualification is claimed. See the
+The stack remains draft until WP3 merges and the native LLVM prefix/container
+is rebuilt for the changed development SDK signatures. Native count admission
+now checks representability, and ordinary one/four-CPU QEMU holds and joins 288
+workers, then checks process completion with 288 workers still held. Named
+rounding/address refusals and success-path detail clearing also pass. Stopped
+raw-context value-release ownership has source review; no allocator fault
+injection, identity/counter-exhaustion injection or native qualification is claimed. See the
 [qualification record](../development/experiments/libc-capacity.md).
 
 ## Key metadata retirement
