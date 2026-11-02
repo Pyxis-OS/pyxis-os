@@ -2,9 +2,10 @@
 
 Accepted by chronium (2026-11-02): the round-1 decisions and the grouped defaults
 below, then direct `.pxe` launches, declared library directories, the explicit
-`libs` source and MAP_CODE on Development's home. The bundle lookup proposal in
-[library lookup](#library-lookup) awaits confirmation. Release placement (0.0.11 or 0.0.12) is open. No task has started; each
-task starts when the owner says so.
+`libs` source, the IMPORT directory right and IMPORT on Development's home.
+How bundles locate their libraries is an [open owner decision](#owner-actions).
+Release placement (0.0.11 or 0.0.12) is open. No task has started; each task
+starts when the owner says so.
 
 ## Goal
 
@@ -63,22 +64,32 @@ which it refines, and serves the program side of
   library. It reuses image capture, segment validation and W^X: text R/X, rodata
   R, data and GOT RW, no relocation. A second, one-way call seals the image's
   RELRO range from RW to R. There is no release operation.
-- **Authority:** mapping a library needs its FILE handle and a new MAP_CODE
-  right on the directory source it was opened from. The right attenuates like
-  any directory right: a directory opened from a source with MAP_CODE keeps it
-  only if the opener asks for it.
-- **Which sources carry MAP_CODE (accepted, chronium 2026-11-02):** the package
+- **Authority: the IMPORT right** (name chosen by chronium, 2026-11-02).
+  IMPORT is a directory right meaning that libraries reached through this
+  directory may be imported into a process. Importing a library means the map
+  operation places its code in a process that is already running. IMPORT is not
+  a right to execute anything:
+  - a program's own launch authorizes the program, as for any P1F today;
+  - a `.pxl` cannot be run, because it has no entry point and the launcher
+    refuses it.
+
+  So IMPORT decides only which directories may supply code to a process that
+  was launched for other reasons. Mapping a library needs its FILE handle and
+  IMPORT on the directory source it was opened from. IMPORT attenuates like any
+  directory right: a directory opened from a source with IMPORT keeps it only if
+  the opener asks for it.
+- **Which sources carry IMPORT (accepted, chronium 2026-11-02):** the package
   view, the library view and a bundle's `app://` always do. The Development
   space's `home://` root does by default, for programs and libraries under
   development. Hardened spaces (Read-only, and any space that does not set it)
-  grant MAP_CODE only on the package view, the library view and `app://`. tmp
-  and host never carry it by default. A manifest grant may name another
-  directory with code rights. Without JIT, a process runs only code its launcher
-  chose or code from a source that carries MAP_CODE.
+  grant IMPORT only on the package view, the library view and `app://`. tmp and
+  host never carry it by default. A manifest grant may name another directory
+  with IMPORT. Without JIT, a process runs only its launched program and
+  libraries imported from directories that carry IMPORT.
 - **The executable itself** is authorized by its launch, as a P1F is today: the
   launcher hands the loader the program's FILE handle as a one-shot image
   capability. A dynamic program therefore runs wherever a static one would;
-  only its libraries need MAP_CODE.
+  only its libraries need IMPORT.
 - **Loader:** `loader.pxe`, a static P1F at a fixed base away from `0x400000`,
   loaded by the kernel like any program. The launcher (libpyxis `program_open`)
   starts it for a P1D/P2D image, both for bundle programs and for a `.pxe` run
@@ -135,9 +146,9 @@ at launch, in this order, and the first source holding the name wins:
 2. **The program's declared library directories**, in their recorded order.
 3. **The set's library view.**
 
-Every source must carry MAP_CODE; a source without it is not searched. When a
+Every source must carry IMPORT; a source without it is not searched. When a
 name is not found, the loader's error names the library and every source it
-skipped for lacking MAP_CODE, so a missing right is not mistaken for a missing
+skipped for lacking IMPORT, so a missing right is not mistaken for a missing
 file. There is no environment search path and no fixed directory convention.
 
 **Declared directories.** The executable records where its own libraries live,
@@ -156,8 +167,8 @@ records `../lib`.
   reached; a bundle program never climbs above its `app/` directory.
 - The launcher resolves the entries, relative to the directory it opened the
   executable from and within that root. It hands the loader exactly those
-  directories, opened with LOOKUP, READ_FILES and MAP_CODE when the source
-  carries MAP_CODE. The loader never receives the executable's directory itself
+  directories, opened with LOOKUP, READ_FILES and IMPORT when the source
+  carries IMPORT. The loader never receives the executable's directory itself
   or its root.
 - **The executable's own directory is not searched unless declared** (an entry
   of `.`). Programs often share a directory, such as a command list or a home
@@ -167,21 +178,25 @@ records `../lib`.
 - Libraries record no directories of their own. Their needed names resolve in
   the same process-wide sources as the executable's.
 
-**Bundles.** I propose that bundles use the same declaration instead of a fixed
-`app://lib/` convention. A bundle program declares its library directory like any
-program, typically `../lib` from `app/bin/` or `lib` beside an entry at the
-top of `app/`, resolved within `app/`, which already carries MAP_CODE. The same
-binary then works run directly during development and inside its bundle, without
-relinking or a manifest field. The alternative is a manifest `library_dirs` field:
-it would let one binary be laid out differently per bundle, at the cost of a
-second mechanism with the same purpose. Pending chronium's confirmation.
+**Bundles: open owner decision, before task 3.** My recommendation is that
+bundles use the same declaration, with no fixed `app://lib/` convention.
+- A bundle program declares its library directory like any program, typically
+  `../lib` from `app/bin/` or `lib` beside an entry at the top of `app/`.
+- The declaration is resolved within `app/`, which already carries IMPORT.
+- The same binary then works run directly during development and inside its
+  bundle, without relinking or a manifest field.
+
+The alternatives are:
+- a fixed `app://lib/`, which every bundle program would search implicitly;
+- a manifest `library_dirs` field, which would let one binary be laid out
+  differently per bundle, at the cost of a second mechanism for the same job.
 
 ### dlopen
 
 libc provides `dlfcn.h`: `dlopen`, `dlsym`, `dlerror`, `dladdr` and a module
 iterator, which libunwind uses instead of linker-script bounds. A name without
 `/` or `:` resolves like a needed name, through the
-[same sources](#library-lookup); a URI needs MAP_CODE on its source.
+[same sources](#library-lookup); a URI needs IMPORT on its source.
 `RTLD_LOCAL` and `RTLD_GLOBAL` work, and `dlsym(RTLD_DEFAULT)` serves LLVM's
 process symbols. `dlclose` drops a reference and never unmaps.
 
@@ -240,10 +255,10 @@ added except the build split itself.
   container** (new `pyxis-llvm` pin and image tag). No further rebuild unless the
   format changes later.
 - [ ] **2. Kernel map and seal.** The map operation, the one-way RELRO seal and
-  the MAP_CODE directory right, carried by the package and app views, and set on
+  the IMPORT directory right, carried by the package and app views, and set on
   the Development space's `home://` in the live and installed defaults.
   Validation in QEMU with the debugger: fixed and kernel-chosen placement, W^X on
-  every page, refusal without MAP_CODE or of an invalid image, MAP_CODE present
+  every page, refusal without IMPORT or of an invalid image, IMPORT present
   on Development's home and absent on Read-only's, seal irreversibility, failure
   unwind and process-exit reclamation.
 - [ ] **3. Loader and the C runtime.** `loader.pxe`; `libc.pxl` and
@@ -255,7 +270,7 @@ added except the build split itself.
   directly from Development's home with vendored libraries in a declared
   directory, and inside a bundle; a `libs` source overriding a set library; the
   same launches from Read-only, where home libraries are skipped and the error
-  names the sources lacking MAP_CODE; `..` stopping at the program's root and at
+  names the sources lacking IMPORT; `..` stopping at the program's root and at
   `app/`; gdb with ELF side files; `dlopen`/`dlsym` from a sample; refused
   `dlopen` of a TLS library.
 - [ ] **4. C++ runtime and userland.** `libc++`, `libc++abi` and `libunwind` as
@@ -294,6 +309,6 @@ document is removed.
 | When | Action |
 | --- | --- |
 | Open | Release placement (0.0.11 or 0.0.12) |
-| Before task 3 | Confirm that bundles use declared directories instead of `app://lib/` ([proposal](#library-lookup)) |
+| Before task 3 | Decide how bundles locate their libraries; recommended: declared relative directories as for any program, no fixed `app://lib/` ([library lookup](#library-lookup)) |
 | Task 1 | Build and publish the compiler container |
 | Before task 8 | Choose the artifact store; enable CI in pyxis-userland and pyxis-ports |
