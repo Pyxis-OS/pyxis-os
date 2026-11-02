@@ -29,10 +29,10 @@ is accepted. User settings would be a separate `home://` tree, not this store.
 ## Later writer and authority
 
 Task 2's writer validates through the same shared schema, creates a temporary
-file beside the key, writes and syncs it, then renames it over the key. The
-[directory-sync limit](https://git.internal/PyxisOS/pyxis-os/issues/1407) still applies:
-a crash can lose the new name or leave a temporary file, which readers ignore
-by opening exact key names. The writer emits one trailing LF.
+file beside the key, writes and syncs it, renames it over the key and syncs the
+directory with native `directory_sync`, as the installer does. A crash before the
+rename can leave a temporary file, which readers ignore by opening exact key
+names. The writer emits one trailing LF.
 
 Read authority is a directory grant attenuated from the relevant system subtree;
 no general machine-settings API is added. Today the installed `pyxis` space

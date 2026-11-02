@@ -68,14 +68,10 @@ Userland libc gained `ftruncate` over native `FILE_RESIZE`, plus `memrchr`,
 `strchrnul` and `stpcpy`. Fastfetch now uses the libc `memrchr` instead of its
 bundled fallback.
 
-A save (`:w`, `:w NAME`, `:wq`, `:x`, `ZZ`) replaces the file atomically instead
-of upstream's in-place write and truncate. The adapter writes a random
-`NAME.XXXXXX` beside it (`mkstemp`, native exclusive creation), syncs it and
-renames it over the target. A failed write, sync, close or rename removes the
-temporary file, leaves the old file untouched and reports the error. The
-[atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407) cover what a crash
-can lose, and saving needs CREATE and REMOVE on the directory, not only WRITE on
-the file.
+A save (`:w`, `:w NAME`, `:wq`, `:x`, `ZZ`) keeps upstream's in-place
+`file_write`: open with `O_WRONLY | O_CREAT`, write the selected bytes, then
+`ftruncate` to the number written. An existing file needs its native WRITE
+authority; a new file needs CREATE on its directory.
 
 Patch 0002 fixes an upstream defect: the per-file read-only bit was never
 cleared, so after one read-only file every later `:n`/`:e` file was also
@@ -100,10 +96,9 @@ keep line anchors and advance after zero-length matches.
 - **Shell:** there is no `:!` and no shell filters.
 - **Screen size:** a change takes effect at the next redraw, since there is no
   resize handler enabled for vi.
-- **Saves:** atomic replacement within the
-  [atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407). Directory
-  CREATE and REMOVE are required. A full or failing write was not exercised
-  and is covered by source inspection only.
+- **Saves:** in place, as upstream. There is no atomic replacement or
+  rollback, so a crash or short write can leave partial contents. A full or
+  failing write was not exercised and is covered by source inspection only.
 - **Input EOF and failures:** input EOF ends vi as upstream does, losing unsaved
   edits; this comes from source inspection and was not exercised. Allocation or
   terminal output failure also exits and loses unsaved edits.
