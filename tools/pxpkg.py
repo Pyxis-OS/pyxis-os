@@ -629,9 +629,9 @@ def native_rights(text):
 
 
 GRANT_RIGHTS = native_rights(native_source("userspace/lib/bundle.c"))
-LAUNCHER_ABI = native_source("include/abi/launcher.h")
-STACK_MIN = native_size(LAUNCHER_ABI, "LAUNCH_INITIAL_STACK_MIN_SIZE")
-STACK_MAX = native_size(LAUNCHER_ABI, "LAUNCH_INITIAL_STACK_MAX_SIZE")
+# libpyxis's manifest reader accepts any whole number of pages; the kernel
+# checks the stack against the address layout at launch.
+PAGE_SIZE = native_size(native_source("include/abi/memory.h"), "MEMORY_PAGE_SIZE")
 
 
 def manifest_text(text):
@@ -712,8 +712,8 @@ def bundle_manifest_check(data, directories, native_entry):
     manifest_name(value["id"])
     if "stack_bytes" in value:
         size = value["stack_bytes"]
-        require(type(size) is int and STACK_MIN <= size <= STACK_MAX
-                and size % 4096 == 0, "invalid stack_bytes")
+        require(type(size) is int and size >= PAGE_SIZE and size % PAGE_SIZE == 0,
+                "invalid stack_bytes")
     commands, roots, grants = value["commands"], value["resource_dirs"], value["grants"]
     require(type(commands) is dict, "invalid command map")
     require(type(roots) is dict, "invalid resource map")
