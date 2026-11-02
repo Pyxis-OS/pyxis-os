@@ -9,6 +9,12 @@ three decisions on 2026-10-09 (#606):
 
 The behaviour is in the [shell guide](../../../userland/shell.md#commands-and-quoting).
 
+**Superseded on 2026-10-30.** Saving no longer merges and replaces the file: each
+line is one `FILE_APPEND` plus a sync, the file is append-only and uncapped, and
+no `.history.HEX` temporary file exists (`6daa6219`, `c2cafb5f`). This record
+measures the replaced design and its rewrite cost; the current behaviour is in
+the shell guide.
+
 ## Configuration
 
 - **QEMU:** 10.2.2 with the local AHCI fix, nested KVM on the development VM,
