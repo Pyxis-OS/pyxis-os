@@ -47,7 +47,9 @@ including packets, segment/PCB/timer metadata and connection/call records.
 one short guard that never covers heap work. Ordinary storage plus reserved
 windows plus 64 KiB control capacity must fit; protocol allocations consume those
 preclaimed credits instead of being charged twice. New records/transmit data
-cannot spend ingress credits. A timer-split hook keeps copied transmit payload
+cannot spend ingress credits. A passive open allocates its PCB while lwIP processes
+the SYN, so the allocation hook moves the PCB to ordinary storage: it outlives the
+reservation that backs protocol allocations (TIME_WAIT). A timer-split hook keeps copied transmit payload
 ordinary even inside timer processing. There is no parallel accounting authority. TLSF overhead, factory/readiness metadata,
 and the separately bounded common software-packet/NIC/DMA storage are excluded.
 There is no host libc, second heap or extra network worker.

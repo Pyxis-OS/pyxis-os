@@ -163,6 +163,26 @@ void *net_storage_protocol_alloc(size_t bytes)
   return allocate_storage(bytes, true);
 }
 
+bool net_storage_make_ordinary(void *pointer)
+{
+  struct net_storage_allocation *allocation = (struct net_storage_allocation *)pointer - 1;
+  uint64_t flags = lock_storage();
+  bool admitted = true;
+  if (allocation->protocol) {
+    size_t limit = storage_limit - NET_STORAGE_CONTROL_RESERVE_BYTES - receive_reserved_bytes;
+    size_t used = storage_bytes - protocol_bytes;
+    admitted = used <= limit && allocation->bytes <= limit - used;
+    if (admitted) {
+      protocol_bytes -= allocation->bytes;
+      allocation->protocol = false;
+    } else {
+      atomic_fetch_add_explicit(&refused_admissions, 1, memory_order_relaxed);
+    }
+  }
+  unlock_storage(flags);
+  return admitted;
+}
+
 void net_storage_free(void *pointer)
 {
   if (!pointer) {
