@@ -79,8 +79,8 @@ the boot configuration lacks `remote`. See [reverse connections](remote-terminal
 Boot init reads `boot://config/live.lua`, or the pool's
 `system://config/boot.lua` when the boot entry names `mount.pool` (see
 [installed configuration](#installed-configuration)). Each file returns a
-`hostname` default, named `volumes`, a list of `spaces` and, when a volume uses
-`ram-npfs`, `ram_npfs_bytes`:
+`hostname` default, named `volumes`, a list of `spaces` and an optional
+`ram_npfs_bytes`:
 
 ```lua
 return {
@@ -108,10 +108,16 @@ return {
   volume; spaces that name it share it until reboot. A `ram-npfs` volume takes a
   volume name like `npfs` but has no disk: it is a named npfs volume in a RAM-backed
   pool shared by every `ram-npfs` volume, which keeps npfs semantics and is lost at
-  reboot. The archive-level `ram_npfs_bytes` sets that pool's capacity and is required
-  by any `ram-npfs` volume; it must be a multiple of 4096 from 8 MiB to 64 GiB. The
-  packaged live configuration uses 2 GiB for its `system`, `packages` and
-  `http-work` volumes. Ordinary `ram` volumes are unchanged. Names use 1–31 characters
+  reboot. Archive-level `ram_npfs_bytes` defaults to `"auto"`: the kernel uses
+  allocator RAM capacity, excluding permanent reservations, rounded down to
+  4096 bytes. It is not currently free memory or a physical reservation. A
+  positive 4096-aligned Lua integer selects explicit bytes. There is no 64 GiB
+  pool ceiling; the kernel checks the actual format layout, initial root space
+  and representability, then allocates metadata. A too-small layout returns
+  `LIMIT`; real allocation can return `NO_MEMORY`. A pool's first initialization
+  fixes its capacity through reboot; later opens must agree. The live profile
+  shares it between `system`, `packages` and `http-work`. Ordinary `ram` volumes
+  are unchanged. Names use 1–31 characters
   from `a-z`, `0-9` and `-`, other than `boot`, `tmp` and `bin`, and become the
   root's scheme.
 - **Spaces.** `name` follows the same rules, other than `rescue` and `caelum`,

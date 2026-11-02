@@ -511,8 +511,10 @@ or manufacturing a GPT. Add bounded initial formatting/provisioning using the
 existing codecs; ordinary programs receive roots, not raw backing or creation
 rights. Keep current `home://` and `tmp://` RAM trees unchanged.
 
-Use a configurable **2 GiB logical pool capacity** as the authored live default,
-not an eager 2 GiB allocation or a format limit. Allocate zero-filled pages on
+The [live capacity default](../interfaces/limits.md#pool-and-image-defaults)
+is now derived from allocator RAM (accepted, chronium, 2026-11-02), with explicit
+numeric configuration available. Logical capacity is not an eager allocation or
+a format limit. Allocate zero-filled pages on
 write, within that capacity and available memory, using existing BSP ownership
 rules and bounded work. The pool holds separate `packages`, private `http-work`
 and `system` volumes. Store and activation trees remain together in `packages`;

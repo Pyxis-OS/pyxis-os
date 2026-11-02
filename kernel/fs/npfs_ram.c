@@ -12,6 +12,8 @@
 
 #define RAM_INDEX_ENTRIES 512u
 #define RAM_JOURNAL_BLOCKS 258u
+/* A volume's first root needs its inode-file block and directory block. */
+#define RAM_ROOT_BLOCKS 2u
 
 struct ram_index {
   phys_addr_t frames[RAM_INDEX_ENTRIES];
@@ -89,8 +91,8 @@ void npfs_ram_discard(struct npfs_ram *ram)
 {
   if (!ram) return;
   npfs_require_worker();
-  for (size_t group = 0; group < ram->index_count; ++group) {
-    struct ram_index *index = ram->index ? ram->index[group] : NULL;
+  for (size_t group = 0; ram->index && group < ram->index_count; ++group) {
+    struct ram_index *index = ram->index[group];
     if (!index) continue;
     for (size_t i = 0; i < RAM_INDEX_ENTRIES; ++i) {
       if (!index->frames[i]) continue;
@@ -104,7 +106,8 @@ void npfs_ram_discard(struct npfs_ram *ram)
   release(ram);
 }
 
-static enum call_status format(struct npfs_ram *ram, uint64_t deadline)
+static enum call_status format(struct npfs_ram *ram, struct npfs_header header,
+    uint64_t deadline)
 {
   uint8_t id[NPFS_ID_SIZE] = {'R', 'A', 'M', 'N', 'P', 'F', 'S', 0};
   uint64_t identity;
@@ -113,9 +116,7 @@ static enum call_status format(struct npfs_ram *ram, uint64_t deadline)
   cpu_restore_interrupts(flags);
   if (!identified) return CALL_LIMIT;
   memcpy(id + 8, &identity, sizeof(identity));
-  struct npfs_header header;
-  if (npfs_header_layout(ram->blocks, RAM_JOURNAL_BLOCKS, id, &header) != NPFS_OK)
-    return CALL_BAD_REQUEST;
+  memcpy(header.pool_id, id, sizeof(id));
   header.read_only_compatible = NPFS_FEATURE_RO_HARD_LINKS;
   uint8_t *block = allocate(NPFS_BLOCK_SIZE);
   if (!block) return CALL_NO_MEMORY;
@@ -147,14 +148,21 @@ enum call_status npfs_ram_create(uint64_t capacity, uint64_t deadline, struct np
 {
   npfs_require_worker();
   *out = NULL;
-  if (capacity < MOUNT_RAM_MIN_BYTES || capacity > MOUNT_RAM_MAX_BYTES ||
-      capacity % NPFS_BLOCK_SIZE) return CALL_BAD_REQUEST;
+  if (capacity % NPFS_BLOCK_SIZE) return CALL_BAD_REQUEST;
+  const uint8_t id[NPFS_ID_SIZE] = {'R', 'A', 'M', 'N', 'P', 'F', 'S', 0};
+  struct npfs_header header;
+  if (npfs_header_layout(capacity / NPFS_BLOCK_SIZE, RAM_JOURNAL_BLOCKS,
+      id, &header) != NPFS_OK ||
+      header.pool_blocks - 1 - header.journal_start - header.journal_blocks < RAM_ROOT_BLOCKS)
+    return CALL_LIMIT;
+  uint64_t index_count = (header.pool_blocks + RAM_INDEX_ENTRIES - 1) / RAM_INDEX_ENTRIES;
+  if (index_count > SIZE_MAX / sizeof(struct ram_index *)) return CALL_LIMIT;
   struct npfs_ram *ram = allocate(sizeof(*ram));
   if (!ram) return CALL_NO_MEMORY;
-  ram->blocks = capacity / NPFS_BLOCK_SIZE;
-  ram->index_count = (ram->blocks + RAM_INDEX_ENTRIES - 1) / RAM_INDEX_ENTRIES;
+  ram->blocks = header.pool_blocks;
+  ram->index_count = (size_t)index_count;
   ram->index = allocate(ram->index_count * sizeof(*ram->index));
-  enum call_status status = ram->index ? format(ram, deadline) : CALL_NO_MEMORY;
+  enum call_status status = ram->index ? format(ram, header, deadline) : CALL_NO_MEMORY;
   if (status != CALL_OK) npfs_ram_discard(ram);
   else *out = ram;
   return status;

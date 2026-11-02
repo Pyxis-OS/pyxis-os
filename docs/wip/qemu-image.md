@@ -8,7 +8,9 @@ ships with 0.0.10 if ready, otherwise 0.0.11, and it never blocks a release.
 
 Accepted:
 
-- **Virtual size 32 GiB, sparse** (changed from 16 GiB on 2026-10-29).
+- **Virtual size 128 GiB, sparse** (chronium, 2026-11-02). Earlier published
+  32 GiB images remain valid and unchanged; a larger virtual disk does not grow
+  an existing GPT partition or npfs pool.
 - **A genuine Classic install.** Built at release time from the tag by running the
   real installer inside QEMU, so `pkg upgrade` and release upgrades work from it.
 - **One shared identity.** Every download carries the same disk GUIDs, pool
@@ -82,8 +84,13 @@ the installed core archive.
       and its signature last.
 
    The release is delayed by one image build, not blocked by it.
-4. **Size and journal.** 32 GiB sparse; the journal stays at the installer's
-   default (252 MiB at this size). The script does not override it.
+4. **Size and journal.** 128 GiB sparse; the journal stays at the installer's
+   default (1,016 MiB with the new 1 GiB Classic ESP). The script does not
+   override it. Standalone verification checks an image's actual geometry and
+   boots it without requiring the latest creation default; builds additionally
+   verify the size they selected. Compressed download and allocated host sizes
+   are reported separately from virtual capacity. Guest writes can eventually
+   exhaust the host's storage.
 5. **Compression.** `qemu-img convert -c -O qcow2` (zlib, default clusters) from a
    raw sparse intermediate written with `detect-zeroes=unmap`. Not zstd: it needs
    QEMU 5.1 to read.

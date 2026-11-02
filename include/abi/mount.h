@@ -22,8 +22,7 @@
 #define MOUNT_OPEN_RAM_VOLUME UINT64_C(10)
 #define MOUNT_BOOT_OBSERVE UINT64_C(11)
 #define MOUNT_BOOT_ADMIT UINT64_C(12)
-#define MOUNT_RAM_MIN_BYTES (UINT64_C(8) << 20)
-#define MOUNT_RAM_MAX_BYTES (UINT64_C(64) << 30)
+#define MOUNT_RAM_AUTO_CAPACITY UINT64_C(0)
 #define MOUNT_RAM_ALIGNMENT UINT64_C(4096)
 #define MOUNT_VOLUME_NAME_MAX 255u
 
@@ -66,7 +65,11 @@ struct mount_volume_request {
 
 /* Boot-only RAM authority owns one volatile npfs pool. The first successful
  * pool initialization fixes its capacity, even if its requested root cannot
- * be returned; later opens must agree. Names create/open volumes
+ * be returned; later opens must agree. Capacity zero selects page-aligned
+ * allocator RAM capacity, excluding permanent reservations, not currently free
+ * memory. Numeric capacity has no policy ceiling: alignment, the actual format
+ * layout and allocation govern admission. Sparse capacity reserves no data pages.
+ * Names create/open volumes
  * inside that pool, never select a device or physical extent. Backing and views
  * last through this boot; sync gives ordering, not reboot persistence. */
 struct mount_ram_volume_request {

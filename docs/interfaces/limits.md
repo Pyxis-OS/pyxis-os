@@ -33,11 +33,50 @@ property of a device, a format or the memory the machine has, and says so.
 - The launcher limits (startup size, capture budget, image capture, batch
   size, stack) may break the ABI: the 0.0.x policy in the
   [release process](../development/release-process.md#policy) allows it.
-- The live image's RAM pool is sized from installed RAM, not a fixed 2 GiB.
-  Default ESP and Coexist pool sizes are decided with their reasons in the
-  work package that changes them.
+- The live image's RAM pool is sized from RAM, not a fixed 2 GiB.
+  [Pool and image defaults](#pool-and-image-defaults) keep creation choices
+  separate from the geometry of an existing installation.
 - Shell history on disk has no cap: each line is appended and only the tail
   is read ([shell](../userland/shell.md)).
+
+## Pool and image defaults
+
+Accepted by chronium on 2026-11-02. A creation default is not an admission limit
+for an existing installation, and changing it never resizes existing storage.
+
+- **Live npfs RAM pool: allocator RAM capacity**, rounded down to 4 KiB,
+  without a reserve fraction. Stock `ram_npfs_bytes = "auto"` and omission select
+  this mode; positive aligned numeric settings remain available. Allocator
+  capacity excludes permanent reservations, and is not currently free RAM or
+  installed hardware RAM. Logical capacity is sparse: metadata and touched pages
+  compete with programs, so writes can return `NO_MEMORY` before logical space
+  runs out. The chosen capacity and source are logged once at initialization;
+  filesystem information reports pool capacity and free space. There is no
+  64 GiB policy ceiling or chosen 8 MiB floor: the real layout must fit its
+  headers, bitmap, volume table, journal and initial root. Too-small layouts
+  return `LIMIT` before backing allocation. Capacity stays fixed until reboot.
+- **Classic ESP: 1 GiB** for a new install, at the existing 1 MiB offset. This
+  gives staging and recovery more headroom at another 512 MiB of disk cost.
+  Update uses the reviewed existing GPT extents, including older 512 MiB ESPs;
+  shared Coexist ESPs are not enlarged. Checked free space must cover retained
+  recovery/current payloads plus fresh staging; later cleanup gives no credit.
+- **Coexist pool: the whole selected MiB-aligned gap**, editable before Review.
+  The largest-gap choice and lower-LBA tie remain. Review shows the selected
+  gap, chosen pool and unallocated tail, and warns that the pool cannot currently
+  be resized. Reserving space for another use requires an explicit smaller size.
+- **Published QEMU disk: 128 GiB virtual, sparse** for future images. A useful
+  development disk avoids stranding a trial install at 32 GiB. The retained
+  npfs bitmap grows with logical capacity; sparse storage is not free metadata.
+  Compressed download, allocated host bytes and virtual size are separate facts.
+  Existing published images stay unchanged and remain verifiable. Growing a
+  qcow2 alone does not enlarge its GPT partition or npfs pool; actual guest
+  writes can eventually fill host storage.
+
+The separate developer USB sample keeps its explicit image/ESP settings. These
+defaults do not change partition authority, publication ordering or journal policy.
+See the [installer](../userland/installer.md) and
+[QEMU image](../wip/qemu-image.md), and the
+[disposable qualification record](../development/experiments/pool-sizing-defaults.md).
 
 ## Package indexes and fetching
 

@@ -35,7 +35,7 @@ eligible disks, while lost registry records or incomplete VirtIO bookkeeping
 refuse inventory.
 
 A classic target has healthy matching GPT copies with the exact installer
-layout: the 512 MiB ESP at 1 MiB and an npfs partition extending to the aligned
+layout: the ESP at 1 MiB and an npfs partition immediately after it extending to the aligned
 end before backup GPT metadata. Its pool must pass the live format code's
 writable-mount metadata admission, have a live `system` volume and an empty
 selected journal. A valid npfs header/control copy may survive a damaged peer,

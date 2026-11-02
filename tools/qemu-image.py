@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build and check a release's ready-to-run QEMU image (docs/wip/qemu-image.md).
 
-build runs the release install ISO in QEMU on a blank sparse 32 GiB disk and
+build runs the release install ISO in QEMU on a blank sparse 128 GiB disk and
 answers the real installer's prompts through QEMU's monitor, then converts the
 disk to a compressed qcow2. verify checks an image and boots it. Neither needs
 root; both need qemu-system-x86_64, qemu-img, OVMF and, by default, /dev/kvm.
@@ -19,7 +19,7 @@ import sys
 import tempfile
 import time
 
-DISK_BYTES = 32 * 1024**3
+DISK_BYTES = 128 * 1024**3
 RAM = "4G"
 CPUS = "4"
 
@@ -304,7 +304,7 @@ def build(arguments):
             temporary.unlink(missing_ok=True)
     try:
         verify_image(output, accel, Path(arguments.screens) if arguments.screens else None,
-                     arguments.timeout)
+                     arguments.timeout, expected_bytes=DISK_BYTES)
     except (ImageError, subprocess.CalledProcessError):
         output.unlink()
         raise
@@ -317,12 +317,15 @@ def info(qemu_img, image):
     return json.loads(report)
 
 
-def verify_image(image, accel, screens, timeout):
+def verify_image(image, accel, screens, timeout, expected_bytes=None):
     qemu_img = find_tool("QEMU_IMG", "qemu-img")
     require(image.is_file(), f"{image} is not a file")
     report = info(qemu_img, image)
     require(report["format"] == "qcow2", f"{image} is {report['format']}, not qcow2")
-    require(report["virtual-size"] == DISK_BYTES, f"{image} is not {DISK_BYTES // 1024**3} GiB")
+    size = report["virtual-size"]
+    require(size > 0 and size % 512 == 0, f"{image} has invalid block geometry")
+    if expected_bytes is not None:
+        require(size == expected_bytes, f"{image} is not {expected_bytes // 1024**3} GiB")
     require("backing-filename" not in report, f"{image} has a backing file")
     subprocess.run([qemu_img, "check", str(image)], check=True, stdout=subprocess.DEVNULL)
     log(f"qcow2, {report['virtual-size'] // 1024**3} GiB virtual, {report['actual-size']} bytes allocated")

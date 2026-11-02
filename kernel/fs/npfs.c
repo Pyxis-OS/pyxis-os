@@ -1,4 +1,5 @@
 #include <kernel/object/forwarder.h>
+#include <abi/mount.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/npfs.h>
@@ -460,6 +461,14 @@ static enum call_status acquire_ram_root(struct npfs_store_context *context,
   enum call_status status = check_name(job->name, job->count);
   if (status != CALL_OK || !(job->rights & DIRECTORY_RIGHT_LOOKUP) ||
       (job->rights & ~DIRECTORY_RIGHTS)) return status != CALL_OK ? status : CALL_BAD_REQUEST;
+  bool automatic = job->offset == MOUNT_RAM_AUTO_CAPACITY;
+  if (automatic) {
+    uint64_t flags = cpu_save_interrupts();
+    struct pmm_stats memory = pmm_get_stats();
+    cpu_restore_interrupts(flags);
+    job->offset = (uint64_t)memory.total_frames * PAGE_SIZE;
+    job->offset -= job->offset % MOUNT_RAM_ALIGNMENT;
+  }
   struct npfs_pool *pool = pools;
   while (pool && !pool->ram_capacity) pool = pool->next;
   if (pool && pool->ram_capacity != job->offset) return CALL_BAD_REQUEST;
@@ -474,6 +483,9 @@ static enum call_status acquire_ram_root(struct npfs_store_context *context,
     pool->ram_capacity = job->offset;
     pool->next = pools;
     pools = pool;
+    kinfo("npfs: RAM pool capacity=%llu bytes (%s); sparse backing\n",
+        (unsigned long long)pool->ram_capacity,
+        automatic ? "allocator RAM capacity" : "configured capacity");
   }
   struct npfs_store_inode *inode;
   status = npfs_store_root(context, pool->store, job->name, job->count, &inode);
