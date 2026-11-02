@@ -93,11 +93,10 @@ milestone is not a silent change to kernel contracts.
 
 ## Task2 decisions at the native-service boundary
 
-The four milestone decisions above are accepted. The following are new task2
-choices, **proposed, not accepted**; they shape the bootstrap/worker and memory
-contracts before their implementation.
+**Decisions5 and6 accepted (chronium, 2026-11-02).** They define the
+bootstrap/worker and native runtime-buffer contracts for task2.
 
-**5. Bootstrap-to-worker handoff — recommended default: keep boot presentation
+**5. Bootstrap-to-worker handoff — accepted: keep boot presentation
 running while the fixed BSP Intel worker discovers and prepares the owned
 display.** Reserve the device/resources during bootstrap, but do not call the
 sleepable probe in pre-AP IF=0 context or stall all userspace behind it. The new
@@ -108,10 +107,8 @@ through the existing display generation/resize transaction; retain the previous
 layout until that commit. Preparation failure can leave untouched GOP copying;
 after effects, recovery must actually establish valid scanout before claiming
 fallback. This does not add a public source-resolution or modesetting right.
-The alternative is delaying normal presentation/user launch until driver probe
-finishes; that puts sleepable hardware discovery on the boot-visible path.
 
-**6. Runtime buffer support — recommended default: a native device-owned page
+**6. Runtime buffer support — accepted: a native device-owned page
 vector in kernel/mm, with explicit WB or WC CPU mapping and the existing
 identity-DMA admission for the held requester.** CPU and device/GPU addresses
 remain distinct; this is an internal kernel service, not a userspace constructor
@@ -122,9 +119,7 @@ retirement before unmapping/freeing. An uncertain VM/ACK or device outcome keeps
 the owned record/backing and fences reuse, as the existing VM/scanout contract
 requires. Do not silently broaden today's boot-only DMA helpers or introduce
 an arbitrary framebuffer cap. Allocation failure is reported; no eviction,
-IOMMU reprogramming or hidden blocking reserve. The alternative is retaining
-boot-prepared buffers for the whole boot, which would constrain runtime panel
-mode discovery and defer real allocation/reclamation rather than port it.
+IOMMU reprogramming or hidden blocking reserve.
 
 Panic publication and exact hardware recovery are settled when task5 reaches
 those transitions, using the owned front and reference behavior; they are not
