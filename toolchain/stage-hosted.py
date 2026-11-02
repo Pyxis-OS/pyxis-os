@@ -11,6 +11,8 @@ import sys
 import tarfile
 
 P1F_MAGIC = 0x54414C4631455850
+P2F_MAGIC = 0x54414C4632455850
+P2_SYMBOL_SIZE = 24
 P1F_EXECUTE = 1
 P1F_WRITE = 2
 P1F_READ = 4
@@ -103,11 +105,11 @@ def write_json(path, value):
 def image_sizes(path):
     size = path.stat().st_size
     if size < 24:
-        raise ValueError(f"Invalid P1F serialized image: {path}")
+        raise ValueError(f"Invalid P1F/P2F serialized image: {path}")
     with path.open("rb") as image:
         magic, entry, count = struct.unpack("<3Q", image.read(24))
-        if magic != P1F_MAGIC or not count or count > (size - 24) // 32:
-            raise ValueError(f"Invalid P1F header: {path}")
+        if magic not in (P1F_MAGIC, P2F_MAGIC) or not count or count > (size - 24) // 32:
+            raise ValueError(f"Invalid P1F/P2F header: {path}")
         segments = []
         previous_end = PAGE_SIZE
         payload = 24 + count * 32
@@ -129,8 +131,16 @@ def image_sizes(path):
             previous_end = rounded
             payload += file_bytes
         span = previous_end - segments[0]["virtual_address"]
+        if magic == P2F_MAGIC:
+            # The symbol section ends the file and is never mapped.
+            image.seek(payload)
+            header = image.read(16)
+            if len(header) != 16:
+                raise ValueError(f"Invalid P2F symbol section: {path}")
+            symbol_count, string_size = struct.unpack("<2Q", header)
+            payload += 16 + symbol_count * P2_SYMBOL_SIZE + string_size
         if payload != size or not executable_entry:
-            raise ValueError(f"Invalid P1F payload or entry: {path}")
+            raise ValueError(f"Invalid P1F/P2F payload or entry: {path}")
     return {"serialized_bytes": size, "mapped_span_bytes": span, "segments": segments,
             "image_backing_bytes": sum(s["backing_bytes"] for s in segments),
             "eager_stack_bytes": STACK_BYTES}

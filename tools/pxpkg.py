@@ -589,7 +589,9 @@ def commands_check(value):
 # Bundle manifests (docs/userland/program-bundles.md), checked for every bundle a
 # package exports a command from. The grant table and the stack limits are read
 # from their only authorities, userland/lib/bundle.c and include/abi/launcher.h.
-P1F_MAGIC = b"PXE1FLAT"
+# Launchable static images: P1F, or P2F with its symbol section.
+PROGRAM_MAGICS = (b"PXE1FLAT", b"PXE2FLAT")
+PROGRAM_MAGIC_SIZE = 8
 # Startup binding names a manifest may not take: source selectors' prefix, the
 # packages source, and the roots its "packages" list and "sdk" grant.
 BUNDLE_SOURCE_PREFIX = "source."
@@ -699,7 +701,7 @@ def json_depth(value, depth=0):
 
 def bundle_manifest_check(data, directories, native_entry):
     """DIRECTORIES holds the bundle's directory paths; NATIVE_ENTRY(path) says
-    whether that bundle path is a file starting with the P1F magic."""
+    whether that bundle path is a file starting with a P1F or P2F magic."""
     require(len(data) > 0, "empty manifest")
     value = json.loads(data.decode("utf-8", errors="strict"),
                        object_pairs_hook=json_unique_object, parse_int=json_unsigned_integer,
@@ -781,7 +783,7 @@ def bundle_manifest_check(data, directories, native_entry):
         aliases.add(alias)
     for path in [value["entry"], *commands.values()]:
         manifest_path(path)
-        require(native_entry("app/" + path), f"entry is not a native P1F file: {path!r}")
+        require(native_entry("app/" + path), f"entry is not a native P1F or P2F file: {path!r}")
     return value
 
 
@@ -792,8 +794,8 @@ def command_targets_check(commands, files, read_file):
         path = target["path"]
         if "command" not in target:
             require(path in sizes, f"missing command target: {path!r}")
-            require(read_file(path, len(P1F_MAGIC)) == P1F_MAGIC,
-                    f"command is not a native P1F file: {path!r}")
+            require(read_file(path, PROGRAM_MAGIC_SIZE) in PROGRAM_MAGICS,
+                    f"command is not a native P1F or P2F file: {path!r}")
             continue
         if path not in bundles:
             prefix = path + "/"
@@ -806,7 +808,7 @@ def command_targets_check(commands, files, read_file):
             try:
                 bundles[path] = bundle_manifest_check(
                     read_file(manifest, sizes[manifest]), directories,
-                    lambda entry: entry in members and read_file(prefix + entry, len(P1F_MAGIC)) == P1F_MAGIC)
+                    lambda entry: entry in members and read_file(prefix + entry, PROGRAM_MAGIC_SIZE) in PROGRAM_MAGICS)
             except (ValueError, RecursionError) as error:
                 raise PackageError(f"invalid command bundle {path!r}: {error}") from error
         require(target["command"] in bundles[path]["commands"],

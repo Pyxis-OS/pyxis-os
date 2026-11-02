@@ -15,6 +15,8 @@ remains `0x400000`; it is not a required minimum. Segments must be ordered and
 disjoint after page rounding, readable, and never writable and executable
 together. The entry must lie inside an executable segment's unrounded extent.
 Payload bounds, arithmetic overflow and canonical-address checks remain.
+A P2F image launches as the same P1F image: its symbol section must exactly end
+the file and is never mapped or read beyond its two size fields.
 
 There is no 256 MiB total-span policy. Gaps between segments consume no physical
 backing. Every segment must still fit the user address space and avoid the

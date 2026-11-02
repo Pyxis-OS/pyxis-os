@@ -27,6 +27,19 @@ static struct p1f_segment read_segment(const uint8_t *bytes, size_t index)
   return segment;
 }
 
+/* P2's symbol section must be exactly the remaining bytes. */
+static bool symbols_fill(const uint8_t *bytes, size_t remaining)
+{
+  struct p2_symbols symbols;
+  if (remaining < sizeof(symbols)) {
+    return false;
+  }
+  memcpy(&symbols, bytes, sizeof(symbols));
+  remaining -= sizeof(symbols);
+  return symbols.symbol_count <= remaining / P2_SYMBOL_SIZE &&
+      symbols.string_size == remaining - symbols.symbol_count * P2_SYMBOL_SIZE;
+}
+
 static bool validate_image(const uint8_t *bytes, size_t size,
     uintptr_t reserved_base, uintptr_t reserved_end,
     struct p1f_header *header, size_t *payload)
@@ -35,7 +48,7 @@ static bool validate_image(const uint8_t *bytes, size_t size,
     return false;
   }
   memcpy(header, bytes, sizeof(*header));
-  if (header->magic != P1F_MAGIC || !header->segment_count ||
+  if ((header->magic != P1F_MAGIC && header->magic != P2F_MAGIC) || !header->segment_count ||
       header->segment_count > (size - sizeof(*header)) / sizeof(struct p1f_segment)) {
     return false;
   }
@@ -71,7 +84,11 @@ static bool validate_image(const uint8_t *bytes, size_t size,
       executable_entry = true;
     }
   }
-  return !remaining && executable_entry;
+  if (header->magic == P1F_MAGIC ? remaining != 0 :
+      !symbols_fill(bytes + size - remaining, remaining)) {
+    return false;
+  }
+  return executable_entry;
 }
 
 static enum mm_result load_segment(struct vm_space *space,
@@ -197,19 +214,6 @@ struct p1f_segment image_dynamic_segment(const void *bytes, size_t index)
   memcpy(&segment, (const uint8_t *)bytes + sizeof(struct p1d_header) +
       index * sizeof(segment), sizeof(segment));
   return segment;
-}
-
-/* P2's symbol section must be exactly the remaining bytes. */
-static bool symbols_fill(const uint8_t *bytes, size_t remaining)
-{
-  struct p2_symbols symbols;
-  if (remaining < sizeof(symbols)) {
-    return false;
-  }
-  memcpy(&symbols, bytes, sizeof(symbols));
-  remaining -= sizeof(symbols);
-  return symbols.symbol_count <= remaining / P2_SYMBOL_SIZE &&
-      symbols.string_size == remaining - symbols.symbol_count * P2_SYMBOL_SIZE;
 }
 
 bool image_dynamic_validate(const void *bytes, size_t size, struct image_dynamic *image)
