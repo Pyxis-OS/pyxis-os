@@ -65,7 +65,7 @@ normal completion after abandoning remaining callbacks.
 having no joiner; a thread may detach itself. The record stays valid, and refused
 as a join target (`EINVAL`), until collected. Nothing runs on the thread's behalf:
 the exiting thread never frees its own stack, so the next `pthread_create`,
-`thrd_create`, join or orderly exit collects every detached sibling whose native
+`thrd_create` or join collects every detached sibling whose native
 completion is ready, releasing its stack, TLS and observer exactly as a join does.
 There is no separate libc record-count policy. Collection releases the worker
 resources; native admission and allocation can still fail. Capacity refusals map
