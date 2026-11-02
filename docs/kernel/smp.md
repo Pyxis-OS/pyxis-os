@@ -623,14 +623,18 @@ outside interrupt and fault entry:
 
 - **Kernel heap.** `kmalloc()` and `kfree()` hold a short heap lock around
   TLSF and its counters. Pools live in a 256 GiB arena after the general kernel
-  VM area, in the same shared PML4 slot, and are never removed.
+  VM area, in the same shared PML4 slot. Wholly free pools are removed from
+  TLSF under the guard and handed to a BSP reclamation worker; no free path
+  walks allocations or waits for remote CPUs.
   - **Growth.** A miss drops the heap lock and takes a separate growth lock.
     It then retries, because another CPU may have grown the heap meanwhile.
     Only then does it map zeroed frames at arena addresses that were never
     mapped before. It publishes the pool and allocates the request in one
     heap-lock section.
   - **No shootdown.** No other CPU can hold a translation for an address that
-    was never mapped, so publication needs none.
+    was never mapped, so publication needs none. Published pools instead need
+    confirmed remote TLB withdrawal before physical reclamation: see
+    [heap pool reclamation](memory.md#kernel-heap-pool-reclamation).
   - **Failure.** Growth first compares the pool's pages, plus an allowance
     for new page tables, with the free frames. A growth that cannot fit is
     refused before mapping anything; it retires nothing and sends a
@@ -702,7 +706,7 @@ private-root activity while executing or parked in that mode.
 Native siblings share the process address space under these rules; an ordinary
 launch still has one task. The kernel TLB-flush IPI is a separate contract.
 
-Kernel code, CPU records, scheduler stacks, heap pools and direct boot/Bochs
+Kernel code, CPU records, scheduler stacks and direct boot/Bochs
 framebuffer mappings remain mapped throughout AP execution. Resizable TTY backing follows
 the retirement protocol below. A shared kernel range must not be
 unmapped, remapped or protected while another CPU can use it.
@@ -715,7 +719,8 @@ translations, including those of reused kernel-stack ranges. A task executes on
 one CPU at a time; after a move, the previous CPU has already left the task's
 stack and dropped its private root, and the destination reloads CR3 before using
 them. Endpoint messages and wait records
-use heap storage, whose mappings remain backed even after freeing the object.
+use heap storage. After their last allocation is freed, a pool follows the
+separate remote-withdrawal protocol before returning its physical pages.
 This task-stack protocol does not permit arbitrary shared mapping changes.
 
 `vm_kernel_flush_remote()` permits a separate quiescent retirement. The caller

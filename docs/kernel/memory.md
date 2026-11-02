@@ -196,6 +196,38 @@ time proportional to the space's record count.
 
 Qualification and measured limits: [caller-CPU MEMORY](../development/experiments/memory-caller-cpu/README.md).
 
+## Kernel heap pool reclamation
+
+The kernel TLSF wrapper counts live allocations in each frame-backed pool.
+Allocation and free stay constant-time under the short heap guard; a block
+retains its owning pool in one additional pointer of internal TLSF header.
+There is no pool count, byte quota or reserved RAM fraction.
+
+The last free removes that pool from TLSF before releasing the guard, ending
+all access and preventing new allocations from refilling it. Any CPU may free;
+the caller then transfers the pool's intrinsic metadata and the current cleanup
+group obligation to a BSP worker. Free does not wait or perform shared unmapping.
+Boot starts the worker after task initialization, draining any earlier retirements.
+
+The worker batches detached pools under the existing kernel structural owner.
+With interrupts enabled and no allocator/queue locks, it requests remote kernel
+TLB withdrawal while every mapping and frame is still intact. Confirmation
+permits unmapping and returning the frames to PMM, yielding between bounded
+page steps. Joined cleanup ends after physical reclamation. An unconfirmed
+withdrawal quarantines mappings, backing and cleanup pins until reboot; a late
+acknowledgment cannot authorize reuse. Partly live pools remain available to TLSF.
+
+`heap_get_stats()` distinguishes active pools, retiring bytes, physically
+reclaimed bytes and quarantined bytes. The existing heap arena still uses fresh
+virtual addresses; reclamation returns physical pages rather than reusing old
+arena addresses. Shared page-table ancestors remain allocated. The
+[arena-address follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1316)
+is separate from physical pool reclamation.
+
+Chronium accepted this allocator prerequisite as capability-pipes C.10 on
+2026-11-02. It changes no public ABI and requires only a kernel rebuild.
+See the [recovery and cost measurements](../development/experiments/heap-pool-reclamation.md).
+
 ## Native use
 
 Generated code uses the separate [JIT interface](../interfaces/jit.md), not an

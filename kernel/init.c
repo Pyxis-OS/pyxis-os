@@ -115,6 +115,7 @@
 
   task_init();
   bsp_requests_init();
+  heap_reclaim_init();
   process_reaper_init();
   kinfo("tasks: scheduler and BSP request queues ready\n");
   arch_clock_maintain();

@@ -40,7 +40,9 @@ bool arch_space_release_step(struct arch_address_space *space, size_t *budget);
 /* Kernel mutations are limited to its shared allocation area and the heap
  * arena; other spaces permit lower-half mutations. IF=0. General kernel ranges
  * require their logical structural owner; any-CPU heap growth owns unpublished
- * arena pages. A private space may be mutated on its recorded exclusive owner
+ * arena pages. Published heap pools may unmap only after last-allocation
+ * detachment and confirmed remote withdrawal, under the structural owner.
+ * A private space may be mutated on its recorded exclusive owner
  * CPU after process root and borrower drainage, with kernel CR3 active. Walks
  * use local scratch slots.
  * Kernel ranges still used by another CPU must not be unmapped or protected;
