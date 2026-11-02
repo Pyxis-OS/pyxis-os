@@ -203,8 +203,8 @@ The fifth package (work package 10).
   A URL longer than 2,048 bytes (a split of the 4,096-byte request packet) is `CALL_LIMIT`.
 - **Process listing.** A call returns every record that exists; the kernel sizes its buffer to the
   count it takes just before, and `procs` asks again with room for the reported total.
-- **Endpoint exports.** No count limit. Exports share one kernel budget, one 1,024th of RAM and at
-  least 4 MiB, and are found through a hash index. The 16 delivery records stay: a backpressure bound.
+- **Endpoint exports.** No count limit and no budget: an export that cannot be allocated fails
+  `NO_MEMORY`. They are found through a hash index. The 16 delivery records stay: a backpressure bound.
 - **Terminal geometry.** Up to 65,535 columns and rows, the width of the POSIX `winsize` fields.
   The remote terminal protocol keeps its own 512 x 256.
 - **Log writes.** Text longer than 255 bytes continues on the next line; a call takes up to 4,096.
