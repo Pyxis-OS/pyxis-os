@@ -1,5 +1,10 @@
 # Intel inherited scanout: vela tearing
 
+**Further implementation parked (chronium, 2026-11-02).** The proper
+[Intel IEGD/eDP driver](intel-iegd.md) takes priority. Current main remains the
+interim; #1683 and #1623 stay drafts. Earlier decisions/evidence below do not
+authorize resuming these implementations.
+
 Assigned to Codex alpha (chronium, 2026-10-28). The startup slice admits and observes inherited display state. Synchronized
 flips are authorized under the accepted contract below; implementation and
 native qualification are pending, so this does not yet remove tearing.

@@ -35,6 +35,10 @@ userspace loader, `.pxl` libraries exported by packages, and the build split
 that removes pyxis-os's dependency on userland and ports builds. Release
 placement is open; no task has started.
 
+[Intel eDP through IEGD](intel-iegd.md): alpha owns the native kernel/OAL port and
+real vela panel ownership, accepted by chronium (2026-11-02). Inherited-flip and
+two-plane implementation are parked; GuC rendering follows later.
+
 [Wi-Fi](wifi.md): stages 1–4 complete; the [AX200 reference](../devices/ax200-wifi.md)
 covers firmware, passive scan, legacy open and WPA2-CCMP links with independent
 DHCP/verified data and recorded qualification limits. Next: vela RTL8922AE, then
@@ -70,9 +74,6 @@ Each delivery task needs a separate go-ahead.
 
 [SQLite](application-ports.md#libraries-and-terminal-tools) through a native VFS.
 
-[Intel inherited scanout](intel-inherited-scanout.md): vela tearing investigation
-assigned to Codex alpha (chronium, 2026-10-28); ordinary inherited-state startup/readout accepted; plane/GGTT writes await evidence.
-Broader physical GPU drivers remain separately assigned.
 
 [Installer curses frontend](https://git.internal/PyxisOS/pyxis-os/issues/1686): unassigned UI/Wi-Fi join
 follow-up over the delivered planner and executor.
