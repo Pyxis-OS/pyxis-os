@@ -63,6 +63,12 @@ actual-device contract before task 1. Ultimate 2 and generic HID are later.
 Developing inside Pyxis, the Java virtual machine: the owner, see
 [developing inside Pyxis](in-pyxis-development.md).
 
+[Dynamic linking](dynamic-linking.md): claude's design, accepted by chronium
+(2026-11-02): P2F/P1D/P2D formats, a kernel map-and-seal operation with a
+userspace loader, `.pxl` libraries exported by packages, and the build split
+that removes pyxis-os's dependency on userland and ports builds. Release
+placement is open; no task has started.
+
 [FAT32 mutation preflight cost](fat32-preflight-cost.md): owner-assigned
 investigation (2026-10-13) before installed configuration publication; whole-volume
 read/workspace costs are proposed for reduction without extending the lease.
@@ -141,8 +147,9 @@ command/SDK views, core archive and online Install are delivered. The
 implemented: whole-set updates, one active release, verified first-boot set
 selection, owned Classic/Coexist publication and reviewed signed-index floors.
 The release-day vela native gate remains [open](https://git.internal/PyxisOS/pyxis-os/issues/1509).
-The earlier [updater record](pkg-upgrade.md) is historical; dynamic linking
-and on-device source builds remain later work.
+The earlier [updater record](pkg-upgrade.md) is historical;
+[dynamic linking](dynamic-linking.md) has its own milestone, and on-device source
+builds remain later work.
 
 [Wi-Fi](wifi.md): stages 1–4 complete; the [AX200 reference](../devices/ax200-wifi.md)
 covers firmware, passive scan, legacy open and WPA2-CCMP links with independent

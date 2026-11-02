@@ -67,7 +67,8 @@ installed layout.
 ## Owner direction (2026-10-18)
 
 Historical direction. The ABI, signing, archive and updater contracts are now
-defined by [package upgrades](pkg-upgrade.md); dynamic linking remains future work.
+defined by [package upgrades](pkg-upgrade.md); dynamic linking by its own
+[milestone](dynamic-linking.md).
 
 - Plan a package manager and updater. Ready-built binary packages first; building
   from source later, once Git and make or CMake exist on Pyxis.
@@ -192,7 +193,7 @@ retail data. Accepted defaults:
    [stage 2 proposal](#stage-2-game-packages-proposal-2026-10-20) details it.
 
 Game packages contain programs, which stay tied to a release until
-[dynamic linking](#dynamic-linking-later-milestone-outline-only). Each repository
+[dynamic linking](dynamic-linking.md). Each repository
 therefore holds a build per release, and `pkg` refuses a build made for another
 release.
 
@@ -232,7 +233,7 @@ PXE boot, no separate update path and no choice of target.
 The write reuses the installer's [publisher](../userland/installer.md#shared-mounted-esp-payload-stager):
 a scratch publication, previous and rescue entries retained, and the boot menu
 switched only once publication is complete. Programs are release-tied for now,
-until [dynamic linking](#dynamic-linking-later-milestone-outline-only). The
+until [dynamic linking](dynamic-linking.md). The
 release's package set is therefore staged and switched at the same reboot.
 Because the switch happens at reboot, running programs never see their package
 set change, and no running-program lifetime contract is needed. Booting the
@@ -269,7 +270,7 @@ natively qualified. Multiple regular-file names in one volume share identity and
 contents; counted lifetime, lazy first-use feature activation and count-aware
 fsck/replay are provided. Source LOOKUP/READ_FILES/WRITE_FILES and destination
 CREATE authorize linking; links carry no persistent rights ceiling. Package
-slices 1 and 2 still do not depend on links; stable library names do.
+slices 1 and 2 do not depend on links.
 
 - **Symbolic links:** a new inode kind holding a target, behind a `required`
   feature bit set only when a pool contains one, so older readers refuse such a
@@ -280,30 +281,15 @@ slices 1 and 2 still do not depend on links; stable library names do.
   link's creator held. Following stays an explicit per-lookup choice; the default
   remains never.
 
-For stable library names, either kind works. With hard links, `libc.pxl` and
-`libc.pxl.REVISION` are one file, and the stable name moves atomically: link a
-new name, then rename it over `libc.pxl` and explicitly sync. Accepted: hard links
-first, with symbolic links (store, read, explicit follow) as a later step for Git
-and ports.
+Accepted: hard links first, with symbolic links (store, read, explicit follow) as
+a later step for Git and ports. Stable library names no longer use links: the
+[dynamic linking](dynamic-linking.md) milestone takes them from the package set's
+library projection.
 
-### Dynamic linking (later milestone, outline only)
+### Dynamic linking
 
-- **Formats:** P2F, a P1F superset with a symbol table that can also export
-  symbols; P1D/P2D for position-independent programs and libraries carrying
-  relocations and needed-library records. `.pxe`, `.pxl`, `.pxl.REVISION`.
-- **Loading:** a userspace loader in the launcher path, as the subsystems
-  invariant requires; the kernel keeps loading P1F, including the loader itself.
-- **ABI names:** a system library's ABI name is what packages record in
-  `abi`, and the system's list grows and shrinks by the
-  [release-ABI policy](pkg-upgrade.md#decided).
-- **Toolchain and SDK:** LLD writes the new formats; position-independent builds
-  of libc, libpyxis, libterm, libfont and libc++; relocation kinds; a TLS model
-  beyond today's static local-exec; library naming and versions; the SDK exports
-  `.pxl` files.
-- **Authority:** a program reaches its libraries through its bundle or declared
-  package roots, never through an environment search path.
-
-None of this is designed here.
+Designed and accepted in its own [milestone](dynamic-linking.md) (chronium,
+2026-11-02), which refines the direction above.
 
 ## Staged plan
 
@@ -319,10 +305,9 @@ None of this is designed here.
    programs then leave the image entirely (owner direction, 2026-10-20).
    [Proposal](#stage-2-game-packages-proposal-2026-10-20): decisions accepted (owner, 2026-10-20).
 3. **Native links:** [hard links are complete](../interfaces/native-hard-links.md).
-   Stage 4's stable `.pxl` names use them; slices 1 and 2 do not depend on them.
    Symbolic links follow later.
 4. **Dynamic linking:** programs untied from kernel revisions and versioned on
-   their own; `.pxl` libraries under stable names.
+   their own; see the [milestone](dynamic-linking.md).
 5. **Source builds:** packages built on Pyxis once Git and make or CMake exist.
 
 ## Decisions
