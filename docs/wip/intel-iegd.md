@@ -125,41 +125,29 @@ Panic publication and exact hardware recovery are settled when task5 reaches
 those transitions, using the owned front and reference behavior; they are not
 silently inferred from the old GOP pointer or designed prematurely here.
 
-### Decision7: preserved-display PCI resource handoff — proposed
+### Decision7: preserved-display PCI resource handoff — accepted
 
-The current PCI reservation preserves firmware command state. Completing it
-disables bus mastering; BAR sizing then requires I/O, memory decode and bus
-mastering off. BAR/MSI-X mapping is pre-AP, and the existing unsized bootstrap
-window reaches only 256 KiB. These contracts cannot simply be bypassed to map
-the new driver's registers while keeping inherited scanout alive.
+**Accepted (chronium, 2026-11-02):** add the explicit native **claimed,
+display preserved** ownership contract. During bootstrap, the selected display
+owner performs Linux-style short BAR sizing with CPU framebuffer/MMIO writers
+excluded, preserving firmware bus mastering and restoring the assigned BARs and
+decoding before presentation continues. Mask inherited interrupt delivery,
+retain the sized resource claim, and prepare its mappings before AP startup.
+The fixed runtime worker can use those resources and prepare owned masked IRQ
+delivery; attach the software handler before enabling it.
 
-Linux's pinned `pci_read_bases()` temporarily disables I/O/memory decode for
-BAR sizing, preserves bus mastering, restores the BAR values and command, and
-performs no console writes while decode is disabled. It observes the applicable
-`mmio_always_on` quirk. Xe then enables the PCI device and bus mastering before
-its display probe. It does not require a reset or blanket bus-master shutdown
-as a prerequisite for display discovery. Linux's capability initialization
-also disables inherited MSI/MSI-X before the driver's interrupt setup.
+This is a separate path from ordinary reset-driver claim completion, which
+clears BME and requires quiescence. Do not reset or halt inherited scanout just
+to reuse that path. Keep identity-DMA admission and actual scanout retirement
+separate: no IOMMU programming, GuC or rendering is authorized. Ordinary PCI/DMA
+claim, reset and release rules stay unchanged. An uncertain restoration retains
+ownership/resources and must not be reported as valid GOP fallback.
 
-**Recommended default:** add a separate native preserved-display resource
-handoff. During bootstrap, the reserved display owner performs Linux-style
-short BAR sizing with CPU framebuffer/MMIO writers excluded, preserving firmware
-bus mastering and restoring the assigned BARs/decoding before presentation
-continues. Include the native inherited-interrupt masking handoff rather than
-silently assuming the firmware left delivery disabled. Retain the sized
-resource claim and prepare its mappings before AP
-startup. The fixed runtime worker can then use those resources and prepare
-masked interrupt delivery without the ordinary reset-driver claim transition.
-Attach the software handler before delivery is enabled. Keep identity-DMA
-admission and actual scanout retirement separate; this authorizes no reset,
-IOMMU programming, GuC or rendering. Ordinary PCI/DMA claim and release rules
-stay unchanged. An uncertain restoration retains ownership/resources and must
-not be reported as valid GOP fallback.
-
-This needs explicit acceptance because it adds a native ownership path that
-preserves a live firmware consumer. The alternative is to stop inherited
-scanout before acquiring these resources, changing decision5's preparation
-handoff. No PCI/configuration effect for either choice is implemented yet.
+The reference is Linux's pinned `pci_read_bases()`: disable I/O/memory decode
+for sizing while preserving BME, restore BARs/command, no console writes in the
+window, and observe applicable `mmio_always_on` quirks. Capability initialization
+disables inherited MSI/MSI-X; Xe enables the PCI device and bus mastering before
+its display probe. No blanket bus-master shutdown is required for discovery.
 
 ## Ordered tasks
 
@@ -245,7 +233,7 @@ ring-zero software interrupt is not PCI/MSI or Intel register qualification;
 the diagnostic task is absent from product code. Native source review found
 no remaining queue/cancellation/record-lifetime defect.
 
-Normal boot starts no new worker and attaches no handler yet. Bootstrap PCI
+Normal boot starts no new worker and attaches no handler yet. The accepted bootstrap PCI
 resource handoff (decision7), requester-specific DMA admission and the concrete
 fork OAL/display consumer remain. Task2 stays unchecked until that integration.
 
