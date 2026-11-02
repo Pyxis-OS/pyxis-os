@@ -35,18 +35,15 @@ explicit; actual refusals propagate through caller-owned reasons and UV errors.
   observes 48 exact process completions and checks retirement, cleanup and
   missing-CONTROL refusal. No race/fault-injection or native claim.
 - [ ] Libuv backend, reached Lua/Neovim callers and explicit spawn detail.
-- [ ] Neovim outer-loop error policy, decision below.
+- [ ] Accepted Neovim outer-loop error policy, implementation/qualification.
 - [ ] Complete Neovim >31-handle qualification and matched comparison.
 
-## Decision needed
+## Neovim loop errors
 
-**WP5.4 PROPOSED DEFAULT:** at an actual negative outer-loop uv_run error,
-Neovim prints the native error and aborts that editor process. Teardown stops
-on the same error instead of retrying indefinitely. Unsaved edits may be lost;
-no orderly-save guarantee is implied. Ordinary spawn refusals stay recoverable
-command errors. The library adds no implicit output or last-error slot.
-
-Neovim's current loop API returns only a timeout bool and ignores the error.
-An alternative recoverable result needs explicit pending-request/borrowed-buffer
-ownership, cancellation and user-retry rules. No such policy is implemented or
-inferred from its recursive-loop invariant abort. Stop for chronium's decision.
+WP5.4 accepted (chronium, 2026-11-02): at an actual negative outer-loop uv_run
+error, Neovim prints the native error and aborts that editor process. Teardown
+stops on the same error instead of retrying indefinitely. Existing swap-file
+recovery is unchanged; this does not add an orderly-save step or guarantee that
+the most recent edits reached a swap file. Ordinary spawn refusals remain
+recoverable command errors. The library adds no implicit output or last-error
+slot, and no error becomes a timeout, fake interrupt or invented child exit.
