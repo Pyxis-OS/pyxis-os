@@ -308,8 +308,9 @@ or promise fairness. Channels may use it during bounded contention backoff;
 blocking synchronization still uses native address waits. This adds no scheduler
 operation or clock-grant requirement. Worker delivery retains the existing
 managed stacks, FS ownership, TLS/runtime cleanup order and panic-abort contract.
-`available_parallelism` remains Unsupported until effective caller eligibility
-can be reported truthfully; online CPU count is not substituted.
+`available_parallelism` reports the grant-free startup CPU allowance (see the
+[runtime CPU check](../development/experiments/startup-usable-cpus.md)); online
+CPU count is not substituted.
 
 ### Native writable files — accepted (chronium, 2026-10-26)
 

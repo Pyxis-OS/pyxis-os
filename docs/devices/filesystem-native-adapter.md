@@ -66,9 +66,10 @@ mixed backends fail BAD_OPERATION. Directory sync requires CREATE or REMOVE.
 Archive, RAM and HOST behavior remains separate.
 
 Reads and enumeration stage output and publish no bytes/name on failure. Capture
-requires the full recorded file length, rejects empty executables and uses the
-shared 128 MiB serialized-image ceiling. Its owned buffer remains outside adapter
-wrapper accounting; the 256 MiB mapped image span is independent.
+requires the full recorded file length, rejects empty executables and allocates
+page-rounded backing for that length, without a per-image size ceiling (see
+[file capture](../kernel/program-loading.md#file-capture-and-costs)). Its owned
+buffer remains outside adapter wrapper accounting.
 Enumeration uses a shared directory generation, not wrapper identity or an immutable
 view. Mutation returns CHANGED for an acquired stale cursor. Short-buffer replies
 preserve input position; cursors are opaque and provide no snapshot.

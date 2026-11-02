@@ -300,9 +300,9 @@ through existing libc threads and native parking. See the
 worker stacks are 1 MiB, explicit requests round up within the 8 MiB ceiling,
 and real record/backing failures remain errors. Panic aborts the process; join
 workers before orderly main return. `yield_now` is a weak CPU hint without a
-forced reschedule or fairness promise, and `available_parallelism` remains
-Unsupported. The native writable-file extension adds create/exclusive/truncate,
-read/write, resize and backend sync. `File::metadata` reports held rights;
+forced reschedule or fairness promise; `available_parallelism` reports the
+startup CPU allowance described above. The native writable-file extension adds
+create/exclusive/truncate, read/write, resize and backend sync. `File::metadata` reports held rights;
 `fs::metadata(path)` reports authority obtainable through the captured path.
 Files use WRITE, directories use CREATE or REMOVE. Unknown provider facts
 and writable provider routes return Unsupported; no write request is
