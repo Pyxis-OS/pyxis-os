@@ -91,7 +91,7 @@ done
 ln -sf ld.lld "$prefix/bin/$target-ld.lld"
 
 mkdir -p "$prefix/share/pyxis-toolchain"
-cp "$toolchain/README.md" "$source/llvm/LICENSE.TXT" \
+install -m 644 "$toolchain/README.md" "$source/llvm/LICENSE.TXT" \
   "$prefix/share/pyxis-toolchain/"
 printf 'repository=%s\ncommit=%s\n' "$llvm_repository" \
   "$(git -C "$source" rev-parse HEAD)" > "$prefix/share/pyxis-toolchain/llvm-revision"
