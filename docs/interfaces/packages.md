@@ -842,6 +842,10 @@ return {
 ```
 
 Recipes accept the same optional `commands` map and copy it into the manifest.
+For a bundle export, the packer also checks the bundle's `manifest.json` under
+the [bundle rules](../userland/program-bundles.md#manifest-and-stack). It reads
+the grant table from `userspace/lib/bundle.c` and the stack limits from
+`include/abi/launcher.h`, their only authorities.
 
 `program`, `toolchain` and `dev` recipes need `--build DIR`, the build
 directory of the system they are for. Their entries may also be
