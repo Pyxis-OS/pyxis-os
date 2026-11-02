@@ -593,7 +593,7 @@ static enum usb_result initial_snapshot(struct usb_hid_binding *binding,
                                          const struct usb_completion *completion)
 {
   struct usb_hid_interface *interface = &binding->interfaces[binding->interface];
-  if (completion->result == USB_STALL) {
+  if (completion->result != USB_OK) {
     /* EP0 has been fenced before collection. Unknown attachment holds begin
      * empty; only this report's state is affected when IDs are present. */
     if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
@@ -799,12 +799,16 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   }
   binding->ticket_active = false;
   struct usb_hid_interface *interface = &binding->interfaces[binding->interface];
-  bool optional_stall = completion.result == USB_STALL &&
-      ((binding->stage == HID_IDLE && interface->protocol == USB_PROTOCOL_MOUSE) ||
-       binding->stage == HID_KEYBOARD_DESCRIPTOR || binding->stage == HID_MOUSE_DESCRIPTOR ||
-       binding->stage == HID_INITIAL || binding->stage == HID_PROTOCOL_READBACK || feature_stage(binding->stage) ||
-       (binding->stage == HID_PROTOCOL && interface->protocol == USB_PROTOCOL_MOUSE));
-  if ((completion.result != USB_OK && !optional_stall) || (!setup.length && completion.bytes)) {
+  /* As in Linux usbhid, a refused or timed-out optional request (idle rate,
+   * report descriptor, initial report, protocol readback, wheel feature) does
+   * not cost the binding; the cancelled transfer left EP0 usable. */
+  bool optional = binding->stage == HID_IDLE ||
+      binding->stage == HID_KEYBOARD_DESCRIPTOR || binding->stage == HID_MOUSE_DESCRIPTOR ||
+      binding->stage == HID_INITIAL || binding->stage == HID_PROTOCOL_READBACK || feature_stage(binding->stage);
+  bool optional_failure = completion.result != USB_OK &&
+      (optional || (completion.result == USB_STALL && binding->stage == HID_PROTOCOL &&
+                    interface->protocol == USB_PROTOCOL_MOUSE));
+  if ((completion.result != USB_OK && !optional_failure) || (!setup.length && completion.bytes)) {
     return bind_failed(binding, completion.result == USB_OK ? USB_IO : completion.result);
   }
   switch (binding->stage) {
@@ -873,7 +877,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
     break;
   case HID_FEATURE_READ: {
     uint32_t pan, wheel;
-    if (completion.result == USB_STALL) {
+    if (completion.result != USB_OK) {
       disable_feature(binding);
     } else {
       bool confirmed = usb_hid_feature_confirm(&binding->mouse, binding->layout, binding->control,
@@ -901,7 +905,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
     break;
   case HID_FEATURE_CONFIRM: {
     uint32_t pan, wheel;
-    if (completion.result == USB_STALL ||
+    if (completion.result != USB_OK ||
         !usb_hid_feature_confirm(&binding->mouse, binding->layout, binding->control,
                                  completion.bytes, &pan, &wheel)) {
       disable_feature(binding);

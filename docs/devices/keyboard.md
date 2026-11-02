@@ -83,11 +83,12 @@ The worker waits for each transfer within its pass, at most 5 s, so no LED
 request is left on endpoint 0 for later identity checks. Report collection
 continues during that wait. While endpoint 0 has another client or the
 device's identity is held for verification, the report waits for a later pass.
-A refused report (STALL) keeps the keyboard bound; the
-first failure on each binding is logged at debug level, and a later lock change
-tries again. A timeout or transaction error follows the USB host rule for any
-uncertain control transfer: the device is retired, and a topology readmission
-sends the report again at bind.
+A failed report never costs input. A refusal (STALL) or a timeout keeps the
+keyboard bound: a timed-out transfer is cancelled on endpoint 0 (see
+[control timeouts](usb-enumeration.md#control-timeouts)), the first failure on
+each binding is logged at debug level, and a later lock change tries again, as
+Linux usbhid does. Only a cancellation the controller cannot complete retires
+the device.
 
 Space navigation, character mapping and userspace delivery belong to callers;
 the driver installs no bindings or consumer task.

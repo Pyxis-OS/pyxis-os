@@ -194,6 +194,16 @@ masking or disabling bus mastering alone cannot justify recycling backing; all o
 remain until reboot. Ordinary idle unbound leaf removal can also disable its
 slot independently.
 
+### Control timeouts
+
+A control request that passes its deadline is cancelled as Linux cancels an
+URB: Stop Endpoint on EP0, Clear TT Buffer when a hub's transaction translator
+carried it, and Set TR Dequeue past the TD. The request completes with
+`USB_TIMEOUT` and the device stays bound; its client decides what the failure
+means. A STALL racing the stop takes the stall recovery instead. Only a failed
+cancellation, or a timed-out request whose client already left, retires the
+device, because only then is EP0's ring position unknown.
+
 The runtime outer worker uses `usb_host_control_poll` before collecting an EP0
 ticket. An active request stays posted; an owned STALL uses the existing bounded
 Reset Endpoint/TT/dequeue retirement before collection. This does not authorize
