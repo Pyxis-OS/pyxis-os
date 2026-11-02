@@ -357,7 +357,7 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return uefi_call(rights, header.operation, request_address, request_size,
-        reply_capacity);
+        reply_address, reply_capacity);
   case OBJECT_SCREENSHOT_SAVER:
     if (header.protocol != PROTOCOL_SCREENSHOT_SAVER) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

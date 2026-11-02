@@ -55,8 +55,14 @@ Invalid descriptors or unavailable access report EBADF; an otherwise compatible
 existing association reports EBUSY. Position and read-ahead stay intact; `w` does not truncate or create. FILE access is narrowed:
 `r` cannot write even when the underlying descriptor is read/write. `a` enables
 shared append for every alias after a zero APPEND support probe, without moving
-the current cursor; other modes never clear the descriptor's append policy. `freopen` remains
-unsupported; output buffering is selected separately before stream I/O.
+the current cursor; other modes never clear the descriptor's append policy.
+`freopen(path, mode, stream)` closes the stream's file (ignoring an error),
+then opens `path` on the same FILE, so `freopen(path, "w", stdout)` redirects
+standard output and the FILE keeps its identity. Buffering mode, indicators,
+orientation and pushback reset; a failed open leaves the stream closed and
+returns NULL; a NULL path (changing the mode in place) and memory streams fail
+with ENOTSUP. The replacement is a new descriptor, taking the lowest free number.
+Output buffering is selected separately before stream I/O.
 
 `dup2(source, target)` shares the source object at the requested target number.
 It validates the source and reserves storage before closing the target; those
@@ -742,4 +748,4 @@ byte width reflected in ftell; this is independent of byte pushback. Malformed o
 truncated input sets EILSEQ/ferror. Incomplete input survives a native I/O error;
 EOF in an incomplete scalar resets it and reports an error. Wide writes reject
 invalid scalars before output and return WEOF for native or forced-buffer-flush
-failure. Wide scanning, full wide stdio and freopen remain unavailable.
+failure. Wide scanning and full wide stdio remain unavailable.

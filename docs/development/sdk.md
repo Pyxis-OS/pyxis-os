@@ -57,9 +57,9 @@ and [restartable conversion](../userland/libc-portability.md#regular-expressions
 are bounded native facilities.
 
 `inttypes.h` includes stdint.h and supplies PRId/PRIi/PRIo/PRIu/PRIx/PRIX
-output macros for the 8/16/32/64-bit, pointer and greatest-width types and
+output and SCNd/SCNi/SCNo/SCNu/SCNx input macros for the 8/16/32/64-bit, pointer and greatest-width types and
 declares `strtoimax`, the only conversion function. Other integer-type families
-and the SCN scanning macros are not supplied. `stdio.h` defines BUFSIZ as 8192,
+are not supplied. `stdio.h` defines BUFSIZ as 8192,
 the default size `setvbuf` and `setbuf` use when they enable stream buffering;
 output is unbuffered otherwise. Descriptor I/O headers include
 `fcntl.h`, `unistd.h` and the exported `sys/types.h` subdirectory; see

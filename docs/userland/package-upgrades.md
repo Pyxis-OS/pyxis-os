@@ -200,9 +200,8 @@ The manual reboot after staging is tracked in
 [debt #1511](https://git.internal/PyxisOS/pyxis-os/issues/1511), and the weaker
 first-contact floor for user-added signed roots in
 [debt #1510](https://git.internal/PyxisOS/pyxis-os/issues/1510).
-The typed UEFI grant does not yet expose boot-entry listing or `BootNext`;
-that post-0.0.10 tool and authority decision are tracked in
-[debt #1512](https://git.internal/PyxisOS/pyxis-os/issues/1512).
+Installed systems can list and edit the firmware boot entries, `BootNext`,
+`BootOrder` and `Timeout` with [`bootmgr`](bootmgr.md).
 
 Disposable QEMU/OVMF checks cover Classic 0.0.9 migration, owned Coexist
 Install/Update, first-boot set selection, refusal on damaged evidence, and the

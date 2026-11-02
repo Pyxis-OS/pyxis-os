@@ -9,6 +9,7 @@ return {
   kind = "data",
   depends = {
     { id = "acpidump" },
+    { id = "bootmgr" },
     { id = "cksum" },
     { id = "config" },
     { id = "date" },
