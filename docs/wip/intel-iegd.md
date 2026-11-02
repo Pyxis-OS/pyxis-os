@@ -91,6 +91,45 @@ an explicit handoff before driver effects. Task2 settles any new native MM,
 DMA or lifetime decisions before implementing them; acceptance of the overall
 milestone is not a silent change to kernel contracts.
 
+## Task2 decisions at the native-service boundary
+
+The four milestone decisions above are accepted. The following are new task2
+choices, **proposed, not accepted**; they shape the bootstrap/worker and memory
+contracts before their implementation.
+
+**5. Bootstrap-to-worker handoff — recommended default: keep boot presentation
+running while the fixed BSP Intel worker discovers and prepares the owned
+display.** Reserve the device/resources during bootstrap, but do not call the
+sleepable probe in pre-AP IF=0 context or stall all userspace behind it. The new
+driver's development image selects one Intel owner: the inherited flip writer
+does not run alongside it. At takeover, close and drain presenter frame leases
+before destructive hardware effects. Publish the new confirmed front/layout
+through the existing display generation/resize transaction; retain the previous
+layout until that commit. Preparation failure can leave untouched GOP copying;
+after effects, recovery must actually establish valid scanout before claiming
+fallback. This does not add a public source-resolution or modesetting right.
+The alternative is delaying normal presentation/user launch until driver probe
+finishes; that puts sleepable hardware discovery on the boot-visible path.
+
+**6. Runtime buffer support — recommended default: a native device-owned page
+vector in kernel/mm, with explicit WB or WC CPU mapping and the existing
+identity-DMA admission for the held requester.** CPU and device/GPU addresses
+remain distinct; this is an internal kernel service, not a userspace constructor
+or Linux `struct page` emulation. Prepare/zero/map through the existing PMM,
+cache-alias and shared-VM owner rules. GPU-visible publication retains the buffer;
+release requires the owner to have joined CPU borrowers and actual device
+retirement before unmapping/freeing. An uncertain VM/ACK or device outcome keeps
+the owned record/backing and fences reuse, as the existing VM/scanout contract
+requires. Do not silently broaden today's boot-only DMA helpers or introduce
+an arbitrary framebuffer cap. Allocation failure is reported; no eviction,
+IOMMU reprogramming or hidden blocking reserve. The alternative is retaining
+boot-prepared buffers for the whole boot, which would constrain runtime panel
+mode discovery and defer real allocation/reclamation rather than port it.
+
+Panic publication and exact hardware recovery are settled when task5 reaches
+those transitions, using the owned front and reference behavior; they are not
+silently inferred from the old GOP pointer or designed prematurely here.
+
 ## Ordered tasks
 
 Implement these sequentially. Each task records its own PRs, exact heads and
