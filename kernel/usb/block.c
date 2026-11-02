@@ -358,8 +358,8 @@ void usb_block_process(struct usb_block_pool *pool)
       }
       slot->state = USB_BLOCK_ACTIVE;
       cpu_restore_interrupts(flags);
-      uint64_t deadline = task_deadline_after_ms(slot->operation == BLOCK_FLUSH ?
-          USB_BOT_FLUSH_TIMEOUT_MS : USB_BOT_TIMEOUT_MS);
+      /* Each BOT attempt has its own deadline, as each Linux SCSI retry does. */
+      uint64_t deadline = UINT64_MAX;
       enum usb_bot_io_result outcome;
       if (slot->operation == BLOCK_READ) {
         outcome = usb_bot_read(device->bot, slot->first_block, slot->block_count,
