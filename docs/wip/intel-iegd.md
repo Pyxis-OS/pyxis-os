@@ -138,13 +138,16 @@ BAR sizing, preserves bus mastering, restores the BAR values and command, and
 performs no console writes while decode is disabled. It observes the applicable
 `mmio_always_on` quirk. Xe then enables the PCI device and bus mastering before
 its display probe. It does not require a reset or blanket bus-master shutdown
-as a prerequisite for display discovery.
+as a prerequisite for display discovery. Linux's capability initialization
+also disables inherited MSI/MSI-X before the driver's interrupt setup.
 
 **Recommended default:** add a separate native preserved-display resource
 handoff. During bootstrap, the reserved display owner performs Linux-style
 short BAR sizing with CPU framebuffer/MMIO writers excluded, preserving firmware
 bus mastering and restoring the assigned BARs/decoding before presentation
-continues. Retain the sized resource claim and prepare its mappings before AP
+continues. Include the native inherited-interrupt masking handoff rather than
+silently assuming the firmware left delivery disabled. Retain the sized
+resource claim and prepare its mappings before AP
 startup. The fixed runtime worker can then use those resources and prepare
 masked interrupt delivery without the ordinary reset-driver claim transition.
 Attach the software handler before delivery is enabled. Keep identity-DMA
