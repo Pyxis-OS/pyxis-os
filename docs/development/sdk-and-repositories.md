@@ -3,7 +3,8 @@
 Pyxis pins [pyxis-userland](https://git.internal/PyxisOS/pyxis-userland) as the
 `userspace` Git submodule and [pyxis-ports](https://git.internal/PyxisOS/pyxis-ports)
 as `ports`, [pyxis-lwip](https://git.internal/PyxisOS/pyxis-lwip) as
-`third_party/lwip`, and [pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) as `fs`.
+`third_party/lwip`, [pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) as `fs`, and
+[pyxis-iegd](https://git.internal/PyxisOS/pyxis-iegd) as `third_party/iegd`.
 The committed gitlinks select exact revisions;
 normal builds never follow a remote branch or update the pin automatically.
 
@@ -12,8 +13,8 @@ normal builds never follow a remote branch or update the pin automatically.
 For an existing checkout:
 
 ```sh
-git submodule update --init userspace ports third_party/lwip fs
-make image
+git submodule update --init userspace ports third_party/lwip fs third_party/iegd
+make -j12 image
 ```
 
 New clones can use `git clone --recurse-submodules`. Run the submodule update
@@ -75,6 +76,7 @@ the checked-out revision or dependency pins.
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 | pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
 | pyxis-fs | Native filesystem format codecs, shared FAT32 engine and Linux formatter, checker, inspector/extractor and read-only FUSE mount |
+| pyxis-iegd | Pinned Intel MIT driver source and reviewable native/eDP adaptations; Pyxis owns the kernel OAL/hardware integration |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime and target codecs, then installs startup, libraries,
@@ -112,6 +114,28 @@ The userland import preserves relevant source/vendor history, authors, dates
 and license notices from Pyxis. Its [import record](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/IMPORT.md)
 identifies the source revision and filtering operation. The original full
 history remains in Pyxis.
+
+## Intel driver source foundation
+
+`third_party/iegd` pins upstream alpha.1 commit
+`db7b38582c955269a38928dac5e36dd1a3998372` from the internal fork. The fork's
+`main` already contained this exact commit and its upstream history when checked;
+the annotated alpha.1 tag resolves to it. No base rewrite or forced fork push was
+performed. The complete upstream MIT notices remain in the submodule. Adaptations
+will be separate published commits, pinned through the normal main-ancestry check.
+
+This source foundation does not compile IEGD objects, install its Linux UAPI,
+load firmware, change device selection or activate a display driver. Existing
+kernel builds do not consume it yet; no kernel-bundle dependency is claimed until
+that build integration is implemented. No upstream source is fetched by the build.
+A clone may contain the upstream tests, but they are not admitted to product
+builds or installed images by this pin.
+
+The [Intel eDP milestone](../wip/intel-iegd.md) defines the native kernel/OAL
+boundary and ordered work. Later builds must explicitly admit the required
+source files and notices; do not import all Linux IAL/render objects merely to
+satisfy includes. Firmware is separately licensed and pinned when actually needed.
+This step changes no SDK/public ABI or compiler-container pin.
 
 ## Filesystem repository
 

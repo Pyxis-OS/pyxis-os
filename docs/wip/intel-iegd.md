@@ -91,6 +91,45 @@ an explicit handoff before driver effects. Task2 settles any new native MM,
 DMA or lifetime decisions before implementing them; acceptance of the overall
 milestone is not a silent change to kernel contracts.
 
+## Task2 decisions at the native-service boundary
+
+The four milestone decisions above are accepted. The following are new task2
+choices, **proposed, not accepted**; they shape the bootstrap/worker and memory
+contracts before their implementation.
+
+**5. Bootstrap-to-worker handoff — recommended default: keep boot presentation
+running while the fixed BSP Intel worker discovers and prepares the owned
+display.** Reserve the device/resources during bootstrap, but do not call the
+sleepable probe in pre-AP IF=0 context or stall all userspace behind it. The new
+driver's development image selects one Intel owner: the inherited flip writer
+does not run alongside it. At takeover, close and drain presenter frame leases
+before destructive hardware effects. Publish the new confirmed front/layout
+through the existing display generation/resize transaction; retain the previous
+layout until that commit. Preparation failure can leave untouched GOP copying;
+after effects, recovery must actually establish valid scanout before claiming
+fallback. This does not add a public source-resolution or modesetting right.
+The alternative is delaying normal presentation/user launch until driver probe
+finishes; that puts sleepable hardware discovery on the boot-visible path.
+
+**6. Runtime buffer support — recommended default: a native device-owned page
+vector in kernel/mm, with explicit WB or WC CPU mapping and the existing
+identity-DMA admission for the held requester.** CPU and device/GPU addresses
+remain distinct; this is an internal kernel service, not a userspace constructor
+or Linux `struct page` emulation. Prepare/zero/map through the existing PMM,
+cache-alias and shared-VM owner rules. GPU-visible publication retains the buffer;
+release requires the owner to have joined CPU borrowers and actual device
+retirement before unmapping/freeing. An uncertain VM/ACK or device outcome keeps
+the owned record/backing and fences reuse, as the existing VM/scanout contract
+requires. Do not silently broaden today's boot-only DMA helpers or introduce
+an arbitrary framebuffer cap. Allocation failure is reported; no eviction,
+IOMMU reprogramming or hidden blocking reserve. The alternative is retaining
+boot-prepared buffers for the whole boot, which would constrain runtime panel
+mode discovery and defer real allocation/reclamation rather than port it.
+
+Panic publication and exact hardware recovery are settled when task5 reaches
+those transitions, using the owned front and reference behavior; they are not
+silently inferred from the old GOP pointer or designed prematurely here.
+
 ## Ordered tasks
 
 Implement these sequentially. Each task records its own PRs, exact heads and
@@ -98,7 +137,7 @@ appropriate qualification; source, build, QEMU and native results stay distinct.
 
 | Task | Deliverable | Status |
 | --- | --- | --- |
-| 1. Source foundation | Verify the mirrored base/history/tag/notices; add the exact `third_party/iegd` pin, repository/provenance boundary and normal pin validation. Record the interim source baseline. No driver objects or hardware activation yet. | [ ] |
+| 1. Source foundation | Exact mirrored alpha.1 base/history/tag/notices verified; `third_party/iegd` pinned with the normal main-ancestry check and documented repository/build boundary. Interim source/kernel baseline recorded. No driver objects or hardware activation. | [x] |
 | 2. Native preparation and owner | Define the bootstrap-to-worker handoff and concrete OAL contracts, then implement required native MM/WC/DMA, timing, wait and IRQ/work lifetime support in focused PRs. No generic Linux emulation. | [ ] |
 | 3. Panel discovery | Reuse retained Fedora and boot evidence; collect missing VBT/OpRegion, EDID/DPCD, route/link, panel control and inherited firmware state through an orchestrator-scheduled read-only packet if needed. Implement Linux's real parsing/defaults. | [ ] |
 | 4. Display-only eDP port | Native device/context seam, deliberate display init/stop, exact timings and needed MIT eDP power/link/backlight behavior. Correct timed release and native IRQ/work integration. Keep GuC/engines/render UAPI out. | [ ] |
@@ -112,6 +151,16 @@ against zero-descriptor allocation as a contract, not native qualification of
 this driver or proof that every descriptor names a live consumer. Baseline
 measurements must identify the actual source/configuration and observer; no
 new timing result is implied by recording these facts.
+
+### Source-foundation validation
+
+The task1 baseline is source `ee47b765d1d702546e3e66fd10643a8ea4c663f4`
+(docs only over main `dda7c7e9b09932264f61b014fa9e572979c6ebd2`), normal kernel
+configuration, existing `pyxis-llvm23.1.3-b33ad74-r1` builder and explicit `-j12`.
+Kernel build passed. This is a correctness/source baseline, not a timing or
+native driver result. Two existing warnings remain in NPFS/lwIP; this task does
+not change those subsystems. No new hardware worker, mapping, frame, firmware
+load or source/object build rule is added by the pin.
 
 ## Code retained and replaced
 
