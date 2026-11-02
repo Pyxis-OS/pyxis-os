@@ -110,7 +110,9 @@ terminate their descendants. A child launched by Lua can outlive Lua's
 interruption, exit or fault.
 A child waiting on terminal input or doing unrelated work can keep the shell
 waiting indefinitely after peers finish. Pipes have no message boundaries,
-guaranteed atomic write size, strict fairness, nonblocking mode or wait sets.
+guaranteed atomic write size or strict fairness. Native programs can use
+`pipe_try_read()`, `pipe_try_write()` and `wait_many` ([pipes](../interfaces/pipes.md));
+libc streams have no `O_NONBLOCK` mode on a pipe.
 
 File creation/truncation before a launch failure is not rolled back. Redirecting
 output onto input can destroy the input, including through aliases. Independent

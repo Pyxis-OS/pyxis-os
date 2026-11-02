@@ -12,48 +12,53 @@ tar xf tmp://manuals.tar
 tar cf tmp://backup.tar system://project
 ```
 
-The supported forms are `tf ARCHIVE`, `xf ARCHIVE` and `cf ARCHIVE PATH...`,
-with an optional leading dash on the option word. Extraction uses the current
-directory. There is no compression, `-C`, member selection or archive
-stdin/stdout. Host archives must use `tar --format=ustar`.
+The forms are `tf ARCHIVE`, `xf ARCHIVE` and `cf ARCHIVE PATH...`, with an
+optional leading dash on the option word, `-f ARCHIVE`, `-C DIR`, `-v`, `-O`,
+`-k` and member operands. Archive `-` is stdin/stdout. Extraction uses the
+current directory or `-C DIR`. There is no compression or long option. Host
+archives must use `tar --format=ustar`.
 
 Archive and source paths use libc scheme resolution and only the caller's
 grants. A scheme creation operand stores the path beneath its root:
 `system://project/a.c` becomes `project/a.c`. A bare scheme root is refused;
 name a file/directory beneath it, or use `.` from the selected working directory.
-The reader accepts the ustar prefix field; creation member names are limited
-to 99 bytes, plus the trailing slash on directories.
+The reader accepts the ustar prefix field. A member name or link target over
+99 bytes is written as a GNU `././@LongLink` record and read back the same way,
+so no name length limits creation.
 
-## Validation before extraction
+## Members and extraction
 
-Only regular files and directories are supported. Links, devices, FIFOs,
-absolute paths, `..` components, scheme-qualified names and unsupported archive
-extensions fail clearly. Header checksums, octal fields, member data and padding,
-two end blocks and zero trailing blocks are checked. Conflicting file/directory
-member paths also fail.
+Regular files, directories and hardlinks are supported. Symlinks, devices and
+FIFOs cannot be created on native filesystems, and PAX extended headers are
+skipped. After BusyBox strips unsafe prefixes, a remaining absolute name,
+scheme-qualified name, empty name or `..` component is refused before any
+filesystem mutation. Header parsing and error handling follow upstream BusyBox
+([notes](../../ports/busybox/TAR.md)).
 
-The entire archive is captured and validated before any extraction write, and
-extraction uses that same byte snapshot. An unsafe member after valid files
-therefore leaves the destination unchanged. A read-only destination fails on
-its first required mutation without creating partial files.
+Listing and extraction stream the archive; there is no snapshot or preflight.
+An unsafe or malformed member after valid ones leaves the earlier files
+extracted and can leave a partially written current file. A read-only
+destination fails on its first required mutation.
 
-Extraction ignores owners, permissions and timestamps. Owner decision,
-2026-10-06: creation writes uid/gid zero, mode 0644 for files or 0755 for
-directories, and mtime zero; extraction ignores times. These archive values
+Extraction ignores owners, permissions and timestamps. Creation writes uid/gid
+zero and mode 0644 for files or 0755 for directories; the header time is the
+file's native modification time when valid, otherwise zero. These archive values
 create no native owners or permission bits.
 
-Extraction overwrites existing files. Later storage errors or differing rights
-inside a destination can leave earlier entries or a partial current file;
-there is no archive-wide rollback. Creation captures all source bytes before
-opening/truncating its output, so unsupported/unreadable sources fail before
-that write. Output writes are not atomic. Source enumeration is live, not a
-filesystem-wide snapshot. Memory holds the archive or all source file contents
-plus bookkeeping, and creation traverses directories recursively. See
+Extraction overwrites existing files (`-k` keeps them). Later storage errors or
+differing rights inside a destination can leave earlier entries; there is no
+archive-wide rollback. Creation streams each source through a bounded copy
+buffer, so a source that fails or shrinks after output has started leaves partial
+output; use a separate output path, because there is no pre-truncation alias
+guarantee. Output writes are not atomic. Source enumeration is live, not a
+filesystem-wide snapshot, and creation traverses directories recursively. See
 [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1409).
 
 ## Validation
 
-On 2026-10-06, `make -j16 image` and interactive QEMU used nested KVM, four CPUs,
+On 2026-10-06, for the first implementation (a snapshot design since replaced
+by the streaming BusyBox adaptation described above), `make -j16 image` and
+interactive QEMU used nested KVM, four CPUs,
 512 MiB, patched QEMU 10.2.2, virtio-net and virtio-fs. A Linux
 `tar --format=ustar` archive with an empty file, text file, binary file and
 nested directories listed/extracted into `tmp://`. Its SHA-256 sums matched
