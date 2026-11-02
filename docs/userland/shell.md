@@ -164,8 +164,8 @@ parser's quoting rules.
   quotes. A word that mixes quoted and unquoted pieces is written again in the
   quote state at the cursor.
 - **Not offered:** names with non-ASCII or control bytes, `http://` and
-  `https://` words (Tab never starts a network request), and the contents of a
-  directory with more than 4096 entries.
+  `https://` words (Tab never starts a network request). Completion has no count
+  limit on command names or directory entries.
 
 Matches behave the same for both kinds:
 

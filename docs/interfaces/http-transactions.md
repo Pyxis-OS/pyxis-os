@@ -102,7 +102,7 @@ GET snapshots have no provider-imposed byte budget for either RAM or npfs.
 Their private native files grow until actual backing capacity or representable
 file size is exhausted. Memory and storage failures are reported with their
 native cause; integer overflow still refuses without publishing a prefix,
-eviction or fallback. RAM POST bodies retain their separate 16 MiB upload policy.
+eviction or fallback. A RAM POST body is limited by free memory: a staging write that would leave less than an eighth of total memory free is refused with `CALL_LIMIT`, so one upload cannot starve the system and package volumes. `--staging-cap` adds a fixed cap.
 Metadata, copy buffers, TLS and bounded native error bodies use actual memory.
 
 Data spools in bounded chunks into the private backing. OPEN/COMMIT publishes only
