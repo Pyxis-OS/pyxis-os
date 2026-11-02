@@ -37,8 +37,9 @@ The owner builds and publishes
 consumers of that image; the tag names the release and the fork commit, and the
 image checks that commit. Normal workflows consume the image without rebuilding
 LLVM. WP6 updates the native MEMORY helper signature: rebuild the native
-LLVM producer and reached consumers against the WP6 SDK snapshot before this
-image's consumers merge. The existing cross compiler can still build ordinary
+LLVM producer and reached consumers against the final combined WP3/WP6/WP5
+SDK snapshot before these consumers merge. Coordinate one batched image build;
+this branch's intermediate SDK snapshot is not a separate build request. The existing cross compiler can still build ordinary
 local kernel/SDK checks, but an old native LLVM prefix must not be relabelled.
 The public image is pulled anonymously by CI; the Forgejo instance must
 allow anonymous registry access. Publishing still requires login with an
@@ -83,7 +84,7 @@ JOBS=16 toolchain/build-hosted.sh /absolute/sdk /absolute/payloads /absolute/wor
 ```
 
 The script pins the hosted source independently, currently
-`8bdf1360b8c47640c92eeeb515ee4a08814987e6`, and fetches only that commit from
+`c63fb8cd62afc90ddf9c2599c537219aad09496b`, and fetches only that commit from
 the internal mirror. `LLVM_SOURCE` may select a clean checkout of that same
 commit. Installed compiler provenance and builtins must still match the SDK.
 `CROSS_COMPILE` selects the installed compiler prefix;
