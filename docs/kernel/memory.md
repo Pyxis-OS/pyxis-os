@@ -184,11 +184,15 @@ their owners. Memory returns after actual cleanup, rather than at task-departure
 publication. A process that waits for exit sees that RAM reclaimed,
 but a concurrent large allocation elsewhere can briefly find it still in use.
 
-Range records of the kernel space come from a static array of 4096 entries
-(`VM_MAX_RANGES`), because early initialization cannot use the heap; each task
-stack and separately allocated DMA buffer takes one, and exhaustion returns
-`NO_MEMORY` (for example from task creation). Userspace spaces allocate their
-records from the heap. See [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1317).
+Range records of every space, the kernel's included, are heap allocations
+with no fixed count. The heap has its own arena and initializes before the
+kernel VM, so no VM/heap bootstrap cycle remains. Because the kernel registry
+guard spans no allocation, the kernel's structural owner keeps two spare
+records: a reservation refills them before taking the guard, refusing with
+`NO_MEMORY` before any change when the heap is exhausted, and a release frees
+spares beyond two after the guard. Each task stack and separately allocated DMA
+buffer takes one record. Lookups walk the address-ordered list, so they cost
+time proportional to the space's record count.
 
 Qualification and measured limits: [caller-CPU MEMORY](../development/experiments/memory-caller-cpu/README.md).
 

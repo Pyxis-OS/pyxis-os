@@ -67,6 +67,9 @@ struct vm_space {
 #define BACKING_RUN_PAGES 64
 _Static_assert(BACKING_RUN_PAGES <= PMM_FRAME_BATCH_MAX, "bounded PMM frame run");
 
+/* A split takes at most two records, one on each side of the reservation. */
+#define KERNEL_SPARE_RECORDS 2
+
 static struct vm_space kernel_space;
 /* Any-CPU reservation; never reused, even after failed provisional backing. */
 static atomic_uint_fast64_t next_wait_token = 1;
@@ -79,6 +82,11 @@ struct ram_retirement_queue {
 };
 static struct ram_retirement_queue *ram_retirement_queues;
 static size_t ram_retirement_cpu_count;
+/* Unlinked heap records, linked through next. Only the structural owner uses
+ * them: it fills them before the registry guard, because the guard spans no
+ * allocation, and frees any beyond the split reserve after the guard. */
+static struct vm_range *kernel_spares;
+static size_t kernel_spare_count;
 
 static void require_kernel_owner(const struct vm_space *space)
 {
@@ -115,10 +123,6 @@ static struct arch_address_space *page_space(struct vm_space *space)
 {
   return space == &kernel_space ? arch_kernel_space() : &space->arch;
 }
-
-/* Each space partitions its allocation area in address order. Only the kernel
- * needs fixed metadata to break the VM/heap bootstrap cycle. */
-static struct vm_range kernel_ranges[VM_MAX_RANGES];
 
 static bool permissions_valid(const struct vm_space *space, unsigned permissions)
 {
@@ -166,31 +170,56 @@ static void withdraw_wait_pages(struct vm_space *space, uintptr_t base, size_t b
   }
 }
 
+/* Each space partitions its allocation area into heap records in address
+ * order. Kernel records come from the owner's spares; see kernel_spares. */
 static struct vm_range *take_record(struct vm_space *space)
 {
-  if (space != &kernel_space) {
-    struct vm_range *range = kmalloc(sizeof(*range));
-    if (range) {
-      *range = (struct vm_range){.state = RANGE_RESERVED};
-    }
-    return range;
-  }
-
-  for (size_t i = 0; i < VM_MAX_RANGES; ++i) {
-    if (kernel_ranges[i].state == RANGE_UNUSED) {
-      kernel_ranges[i].state = RANGE_RESERVED;
-      return &kernel_ranges[i];
+  struct vm_range *range;
+  if (space == &kernel_space) {
+    range = kernel_spares;
+    KASSERT(range);
+    kernel_spares = range->next;
+    --kernel_spare_count;
+  } else {
+    range = kmalloc(sizeof(*range));
+    if (!range) {
+      return NULL;
     }
   }
-  return NULL;
+  *range = (struct vm_range){.state = RANGE_RESERVED};
+  return range;
 }
 
 static void drop_record(struct vm_space *space, struct vm_range *range)
 {
-  if (space == &kernel_space) {
-    *range = (struct vm_range){0};
-  } else {
+  if (space != &kernel_space) {
     kfree(range);
+    return;
+  }
+  *range = (struct vm_range){.state = RANGE_UNUSED, .next = kernel_spares};
+  kernel_spares = range;
+  ++kernel_spare_count;
+}
+
+/* Structural owner, before the registry guard. Exhaustion returns NO_MEMORY
+ * before any registry change; spares already allocated stay for the next call. */
+static enum mm_result fill_kernel_spares(void)
+{
+  while (kernel_spare_count < KERNEL_SPARE_RECORDS) {
+    struct vm_range *range = kmalloc(sizeof(*range));
+    if (!range) {
+      return MM_NO_MEMORY;
+    }
+    drop_record(&kernel_space, range);
+  }
+  return MM_OK;
+}
+
+/* Structural owner, after the registry guard: release merges add up to two. */
+static void trim_kernel_spares(void)
+{
+  while (kernel_spare_count > KERNEL_SPARE_RECORDS) {
+    kfree(take_record(&kernel_space));
   }
 }
 
@@ -254,12 +283,16 @@ void vm_init(void)
   KASSERT(base && !(base & (PAGE_SIZE - 1)) && bytes && !(bytes & (PAGE_SIZE - 1)));
   KASSERT(bytes <= UINTPTR_MAX - base);
 
+  struct vm_range *range = kmalloc(sizeof(*range));
+  if (!range) {
+    panic("cannot allocate the kernel VM range record");
+  }
   kernel_space.total_pages = bytes / PAGE_SIZE;
   atomic_init(&kernel_space.waiters, 0);
-  kernel_space.head = &kernel_ranges[0];
-  *kernel_space.head = (struct vm_range){
+  *range = (struct vm_range){
     .base = base, .pages = kernel_space.total_pages, .state = RANGE_FREE,
   };
+  kernel_space.head = range;
 }
 
 /* Allocate both split records before changing links. A metadata failure must
@@ -389,6 +422,12 @@ enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment
     uintptr_t *result)
 {
   require_kernel_owner(space);
+  if (space == &kernel_space && fill_kernel_spares() != MM_OK) {
+    if (result) {
+      *result = 0;
+    }
+    return MM_NO_MEMORY;
+  }
   registry_lock(space);
   enum mm_result status = reserve_range(space, bytes, alignment, result);
   registry_unlock(space);
@@ -398,6 +437,9 @@ enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment
 enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes)
 {
   require_kernel_owner(space);
+  if (space == &kernel_space && fill_kernel_spares() != MM_OK) {
+    return MM_NO_MEMORY;
+  }
   registry_lock(space);
   enum mm_result status = reserve_at(space, base, bytes);
   registry_unlock(space);
@@ -429,6 +471,9 @@ enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
   registry_lock(space);
   release_range(space, range);
   registry_unlock(space);
+  if (space == &kernel_space) {
+    trim_kernel_spares();
+  }
   return MM_OK;
 }
 
@@ -686,6 +731,9 @@ bool vm_free_step(struct vm_reclaim *reclaim, size_t budget)
   registry_lock(space);
   release_range(space, range);
   registry_unlock(space);
+  if (space == &kernel_space) {
+    trim_kernel_spares();
+  }
   *reclaim = (struct vm_reclaim){0};
   return true;
 }
