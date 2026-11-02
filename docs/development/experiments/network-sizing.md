@@ -22,6 +22,12 @@ test refused. Go (pyxis-go `8a8c61f116`, local build of the pinned toolchain): a
 clamped to 30), dials it, echoes five bytes and reads 221 UDP datagrams from the host burst server passed on the 4 GiB
 guest. The `LISTEN` checks needed `tcp_listen = true` in the development space, set for the test image only.
 
+Caddy v2.11.7 built with that toolchain served static files on the clamp image (4 GiB): the listener asked for 128
+and was clamped to 30, the body hash matched the source file, a missing path returned 404, and 40 concurrent
+clients with four requests each all received 200 (160 of 160). The site needs `bind 10.0.2.15`: Pyxis listens on an
+exact address, so a bare `:18080` fails with "unsupported operation" before any kernel call. A 50 MB `cat` from
+`http://10.0.2.2` into `home://` completed with the full 50,974,720 bytes on both the baseline and the clamp image.
+
 Not measured: receive throughput (the window is delta's, #1647, and unchanged), upload throughput and loss
 recovery. The send budget, the out-of-order buffer and the 32-packet budget were not changed because the QEMU user
 network has no latency or loss to show any gain; see the limits section.
