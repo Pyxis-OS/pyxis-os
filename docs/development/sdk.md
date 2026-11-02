@@ -45,11 +45,10 @@ remove obsolete files; unchanged headers and installed artifacts keep their
 timestamps so an unchanged build does not recompile consumers.
 
 Userland owns `stdint.h` and `limits.h` in the SDK. They define the current
-x86-64 LP64 model independently of the compiler's predefined type macros, which
-for Clang differ in the fast types: exact/least types
-use 8/16/32/64 bits, fast types use 32 bits through `int_fast32_t` and 64 bits
-for `int_fast64_t`, and pointer/max types use `long`/`unsigned long`. Limits and
-constant suffixes preserve the Pyxis choices first made with GCC. `MB_LEN_MAX` is 4
+x86-64 LP64 model: exact/least types use 8/16/32/64 bits, the fast types are the
+compiler's own predefined types (`__INT_FAST*_TYPE__`, so `signed char` and
+`short` for the 8- and 16-bit ones with Clang), and pointer/max types use
+`long`/`unsigned long`. Limits and constant suffixes follow the same choices. `MB_LEN_MAX` is 4
 for libc's UTF-8 conversion and bounded `iconv`; the limits headers add no
 runtime facilities. Signals remain absent. The C-only locale supplies
 `setlocale` and `localeconv`; [wide FILE I/O](../userland/stdio.md#wide-file-io)

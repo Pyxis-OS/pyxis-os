@@ -63,12 +63,14 @@ report and keeps each instant whose `localtime` offset matches:
 - **A fold** (the wall time occurs more than once): a nonnegative `tm_isdst`
   selects the only candidate whose daylight flag matches. Without one, and in
   folds where both candidates have the same flag, such as a standard-offset
-  change, `mktime` fails with `ENOTSUP`.
-- **A gap** (the wall time is skipped): `ENOTSUP`. Other libraries move the
-  time across the gap instead.
+  change, the earlier instant wins.
+- **A gap** (the wall time is skipped): the time is read with the offset in
+  effect before the gap, so it lands the same distance after it, as glibc and
+  musl do: 03:30 in a spring-forward gap of 03:00 to 04:00 is 04:30 daylight
+  time. `tm_isdst` is ignored. A wall time the zone data leaves unspecified
+  altogether (a table with no rule for it) still fails with `ENOTSUP`.
 
-These `ENOTSUP` cases are a stated profile restriction, not overflow. Zone
-errors are `localtime`'s. A result that cannot be represented fails with
+Zone errors are `localtime`'s. A result that cannot be represented fails with
 `EOVERFLOW`. Success stores the normalized `localtime` result, preserving
 errno; failure returns -1 and leaves the structure unchanged. Since -1 is also
 a valid time, callers distinguish failure by setting errno first.
@@ -112,6 +114,6 @@ Invalid formats report EINVAL; insufficient output space returns zero. Format
 flags and field widths are not supported. `difftime` subtracts timestamps before
 conversion to double, retaining small intervals at large timestamps.
 
-Ambiguous and nonexistent local input fail as described for `mktime`; locale,
+Ambiguous and nonexistent local input are resolved as described for `mktime`; locale,
 per-user policy and live configuration reload remain outside this interface. Firmware-clock precision and synchronization limits
 remain as described in [wall-clock support](../kernel/wall-clock.md).
