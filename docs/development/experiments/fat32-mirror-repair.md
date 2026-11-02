@@ -1,6 +1,6 @@
 # FAT32 mounted mirror repair qualification
 
-Owner accepted both [scope defaults](../../wip/fat32-preflight-cost.md#assigned-follow-up-fat-mirror-repair)
+Owner accepted both [scope defaults](../../devices/fat32-mounts.md#native-mutations-and-publication-intervals)
 on 2026-10-14. No real ESP writes are authorized.
 
 ## Baseline before implementation

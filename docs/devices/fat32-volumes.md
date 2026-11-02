@@ -127,6 +127,13 @@ retain exact revisions, control costs, disposable-image checks and QEMU/GDB
 results. They are nested-VM evidence. The workflow timing comparison remains
 inconclusive; it establishes no performance-neutrality claim.
 
+The [preflight-cost](../development/experiments/fat32-preflight-cost.md) and
+[mirror-repair](../development/experiments/fat32-mirror-repair.md) records also
+cover retained allocation proof, explicit CHECK, bounded mirror reconciliation
+and 128-MiB editor publication within the unchanged lease on disposable images.
+Native-media timing and physical power-loss behaviour remain
+[unqualified](https://git.internal/PyxisOS/pyxis-os/issues/1418).
+
 There is no MBR/bare-volume discovery, new SD driver, hotplug, external-writer
 snapshot, general filesystem repair or reconstruction, or filesystem/partition
 resizing. The one mounted repair is the bounded FAT2 mirror repair that a writable

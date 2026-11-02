@@ -86,6 +86,14 @@ mouse support.
 
 ## Limits
 
+- Host review covered every view and modal at three terminal sizes. Nested-KVM
+  QEMU covered installed-file editing and directory sync, a reboot applying the
+  change, restoration from the previous file, read-only access, changed-file
+  refusal and terminal resizing. Native edit/save/reboot/restore remains
+  unqualified and is tracked in
+  [#1678](https://git.internal/PyxisOS/pyxis-os/issues/1678).
+- The current frame palette is accepted; a later colour review at 1:1 on vela
+  is tracked in [#1582](https://git.internal/PyxisOS/pyxis-os/issues/1582).
 - Enter and Ctrl+J are the same key: the Pyxis keyboard sends LF for Enter.
 - tview marks a truncated table cell with `…`, which the Pyxis terminal draws as
   its replacement glyph. Layouts fit 80 columns with ordinary names.

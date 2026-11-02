@@ -206,8 +206,9 @@ archive cpio.
 
 Status: **implemented as the optional `spaces` package; hardware test pending
 (chronium, 2026-10-29).**
-Target: later. Covered by: [space editor](space-editor.md),
-[reference](../userland/spaces.md).
+Implemented usage: [space editor](../userland/spaces.md).
+The [native edit/save/reboot check](https://git.internal/PyxisOS/pyxis-os/issues/1678)
+remains open.
 
 
 A small curses tool that edits spaces graphically: pick a space, toggle its
@@ -427,7 +428,7 @@ to 2026-10-25).
   with a hint naming the new key, and there are no compatibility aliases.
 - **Next kernel push** (decided, chronium, 2026-10-24): removing BSP-owned
   allocation and VM mutation, the
-  [planned next kernel milestone](boot-sdk-ports.md#planned-next-kernel-milestone),
+  [allocation and VM ownership](../kernel/vm-ownership.md),
   leads the next kernel push, which starts Tuesday 2026-10-27, followed by the
   JIT grant and Mesa llvmpipe. The order decided in
   [Quake 3 on Mesa llvmpipe](quake3-llvmpipe.md#decided-by-chronium-round-1-2026-10-23)

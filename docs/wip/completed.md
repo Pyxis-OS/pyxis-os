@@ -41,6 +41,11 @@ and the remaining ranking is an SMP follow-up.
 [C++ in userspace](../development/cxx-userspace.md), 2026-10-08: libc++, libc++abi
 and libunwind in the SDK, with fmt as the first C++ port.
 
+[Capability core](../interfaces/output.md), 2026-10-15: typed OPEN/describe,
+transactions, environment exports, owned output handoff/retention and shell/libc
+integration. [Native after-A/C comparisons](https://git.internal/PyxisOS/pyxis-os/issues/1680)
+remain unrun; milestone C stays in the [active plan](capability-model-implementation.md#milestone-c-capability-pipes).
+
 [Cheaper timekeeping](../kernel/timekeeping.md#clock-reads-in-timer-handling),
 2026-10-10: fewer clock reads per timer event (#571) and the TSC with HPET
 fallback (#577), natively qualified; [measurements](../development/experiments/tsc-clock/README.md).
@@ -80,7 +85,11 @@ passed extraction, staging, verification and cleanup on the 32 GB SanDisk.
 engine, native RO/RW mounts and declared trusted workflow (#740, #747, #755, #764,
 #775). [Experiment records](../devices/fat32-volumes.md#qualification-and-remaining-limits)
 remain; [hardware qualification](https://git.internal/PyxisOS/pyxis-os/issues/1418),
-including the owner-present RO ESP check, is pending.
+including the owner-present RO ESP check, is pending. Retained allocation proof,
+explicit CHECK and bounded mirror reconciliation are implemented in the
+[mount contract](../devices/fat32-mounts.md#native-mutations-and-publication-intervals);
+[preflight](../development/experiments/fat32-preflight-cost.md) and
+[mirror](../development/experiments/fat32-mirror-repair.md) records preserve QEMU scope.
 
 [Graphics and terminal layers](../userland/space-layers.md), 2026-10-08:
 Super+Up/Down, [checked natively](https://git.internal/PyxisOS/pyxis-os/issues/1336).
@@ -111,6 +120,11 @@ public game package on it.
 [up to eight PCM sessions](../interfaces/audio.md), one per space. Open debt:
 [live jack switching](https://git.internal/PyxisOS/pyxis-os/issues/1477)
 and the [nested-QEMU limit](https://git.internal/PyxisOS/pyxis-os/issues/1391).
+
+[HID-over-I2C touchpad](../devices/hid-i2c-touchpad.md), 2026-10-16: retained
+ACPI/PCI/GPIO ownership, bounded polling and recovery, descriptor-derived contacts
+and native-qualified vela movement, buttons and scrolling. GPIO interrupts and
+non-spinning completion remain [deferred](https://git.internal/PyxisOS/pyxis-os/issues/1492).
 
 [Hosted Clang and LLD](../development/hosted-tools.md), 2026-10-13: Clang and LLD
 compile, link and run a C program inside Pyxis from pool-volume bundles, and the
@@ -246,6 +260,12 @@ and [poll-cost qualification](../development/experiments/renoir-poll-cost/README
 
 [Saved shell history](../userland/shell.md), 2026-10-10 (#609).
 
+[Rust cross-toolchains and first std profile](../development/rust-toolchain.md),
+2026-10-26: core+alloc, ordinary main, native workers/TLS/sync, files,
+directories, copy/removal and optional hexyl. [Qualification](../development/rust-toolchain.md#qualification-and-limits)
+remains QEMU-based; [native checks](https://git.internal/PyxisOS/pyxis-os/issues/1679)
+and [later Rust work](rust.md) stay separate.
+
 [Screenshots](../userland/screenshot.md), 2026-10-08: native CAPTURE and staged
 PNG output, [checked natively](../development/screenshot-qualification.md#native-thinkpad-check).
 
@@ -264,6 +284,12 @@ and [DevilutionX](../userland/devilutionx.md) as the first consumer;
 
 [Shell reverse history search](../userland/shell.md), 2026-10-10 (#696): Ctrl+R in
 the shared line editor.
+
+[Space editor](../userland/spaces.md), 2026-10-29: optional `spaces` package,
+unknown-key preservation, validation, reviewed synced replacement and backup
+restore. QEMU covered save/reboot/restore;
+[native persistence](https://git.internal/PyxisOS/pyxis-os/issues/1678) and
+[colour review](https://git.internal/PyxisOS/pyxis-os/issues/1582) remain open.
 
 [System layout](../userland/system-layout.md), 2026-10-07: `boot://`, `bin://`,
 boot init with a Lua configuration, and a persistent home.

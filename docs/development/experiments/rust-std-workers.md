@@ -1,6 +1,6 @@
 # Managed Rust std workers
 
-2026-10-26, gate 3 of the [std milestone](../../wip/rust-std.md).
+2026-10-26, gate 3 of the [std profile](../rust-toolchain.md#native-std-profile).
 This qualifies managed workers, TLS cleanup and contended synchronization.
 Writable files and directory mutation remain a separate gate.
 

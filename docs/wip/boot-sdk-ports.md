@@ -53,7 +53,7 @@ The 0.0.9 release merge gate is lifted; new consumers need bulk-capable kernels.
 [Capability model implementation](capability-model-implementation.md): owner-assigned
 2026-10-14; Codex beta owns integration, with Codex delta on the kernel tasks.
 A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
-C (general capability pipes) remains planned.
+C (general capability pipes) remains assigned to Codex delta.
 
 [Controller support](controller-support.md): Edge-only wired input assigned to
 Codex delta (chronium, 2026-10-26); descriptor-checked dedicated decoder, native
@@ -68,10 +68,6 @@ Developing inside Pyxis, the Java virtual machine: the owner, see
 userspace loader, `.pxl` libraries exported by packages, and the build split
 that removes pyxis-os's dependency on userland and ports builds. Release
 placement is open; no task has started.
-
-[FAT32 mutation preflight cost](fat32-preflight-cost.md): owner-assigned
-investigation (2026-10-13) before installed configuration publication; whole-volume
-read/workspace costs are proposed for reduction without extending the lease.
 
 [Git](../userland/git.md): the three CLI slices are implemented (chronium,
 2026-10-24): HTTPS clone/push/pull, init/remotes, local staging/commit/diff and
@@ -110,13 +106,6 @@ Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
 blocked on hardware semantics, not on evidence;
 [whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
 
-[Rust](rust.md): stage 1 core+alloc/tiny-skia delivered in
-[#1224](https://git.internal/PyxisOS/pyxis-os/pulls/1224).
-[Rust std](rust-std.md): stage-2 implementation assigned to Codex epsilon
-(chronium, 2026-10-25); fork compiler, std main and the read-only-file hexyl
-subset are delivered with recorded QEMU qualification. Full std profile, Rust
-workers and native hardware qualification remain open; hosted Rust remains later.
-
 [Script launch authority](../userland/script-authority.md): implemented for the
 exact held shell and standalone Lua 5.5/5.1, with shared source selection and
 shell-equivalent lifetime. Embeddings and captured jobs retain their profiles.
@@ -127,19 +116,10 @@ SDK/shared-min pass QEMU checks; the native vela consumer also passes. Hard-budg
 and exceptional qualification limits are linked from the reference. GPU/compositor
 work is separate.
 
-[Space editor](space-editor.md): accepted and assigned to claude (chronium,
-2026-10-29). A Go/tview `spaces` program edits installed `boot.lua` spaces,
-applied at next boot; host and QEMU screenshots precede hardware testing.
-
 [USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
 epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue
 kept, and the always-drain fix (#1008) is merged; the matched TX A/B waits for
 the owner's run on the ThinkPad's RTL8156BG.
-
-[Vela I2C touchpad](vela-i2c-touchpad.md): owner-assigned to Codex delta
-(2026-10-15): tasks 1–4 are merged and native-qualified (#894, #904, #910);
-task 5, GPIO interrupt delivery, needs its own go. Layers remain reusable for
-the Deck; its milestone stays on hold.
 
 [Packages and upgrades](packages.md): data and program packages, the installed
 command/SDK views, core archive and online Install are delivered. The
@@ -200,12 +180,17 @@ Broader physical GPU drivers remain separately assigned.
 [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture
 first, then remote input after the system pointer.
 
+[Rust follow-ups](rust.md): hosted rustc/Cargo, later ports, unwinding and tier-3
+upstreaming. The [implemented first profile](../development/rust-toolchain.md#native-std-profile)
+has separate [native qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1679).
+
 [SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
 
 [Steam Deck second hardware target](steam-deck.md): accepted PXE development
 direction, on hold by owner direction (2026-10-15). Task 9 dock Ethernet is
-merged; no task 2/3 scope or implementation is assigned. Reusable I2C work is
-assigned separately to [vela's touchpad](vela-i2c-touchpad.md).
+merged; no task 2/3 scope or implementation is assigned. Reusable
+[HID-over-I2C input](../devices/hid-i2c-touchpad.md) is implemented;
+GPIO interrupt delivery remains [separate work](https://git.internal/PyxisOS/pyxis-os/issues/1492).
 
 System layout follow-up: the
 [boot configuration checker](installer-tui.md#configuration-checker).

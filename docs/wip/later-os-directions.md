@@ -212,11 +212,11 @@ not comparable with earlier figures.
 
 [Hosted toolchains and language runtimes](toolchains-and-runtimes.md) records
 the chosen LLVM/Clang transition and hosted compiler direction, C++ userspace, a Go
-cross compiler and later hosted Go tools. [Rust stage 1](rust.md) delivers
-core+alloc and tiny-skia; the [std milestone](rust-std.md#qualified-delivery)
-records the fork compiler, std main and read-only-file hexyl subset. The complete
-std profile, Rust worker integration and native hardware qualification remain
-separate gates; hosted Rust remains later work.
+cross compiler and later hosted Go tools. The
+[Rust cross-toolchains](../development/rust-toolchain.md) supply core+alloc,
+tiny-skia and the first native std profile, including workers, filesystem
+operations and hexyl. [Native qualification](https://git.internal/PyxisOS/pyxis-os/issues/1679)
+remains open; [hosted Rust and later consumers](rust.md) are separate work.
 Tailscale has a concrete future [homelab administration target](toolchains-and-runtimes.md#homelab-administration-over-tailscale);
 Ladybird is the first planned full web browser (owner, 2026-10-16), much later:
 it needs hosted C++ tools, capability pipes for its multi-process design, its

@@ -1,9 +1,9 @@
 # Rust native directories
 
 2026-10-26. This directory stage delivers std enumeration, retained-parent entry
-queries, native create/remove/rename and checked recursive creation. It does not
-close the [first std profile](../../wip/rust-std.md) or implement recursive
-removal/copy. No kernel ABI, new grant, compiler-container change or native
+queries, native create/remove/rename and checked recursive creation. [Recursive removal and copy](rust-copy-remove.md)
+followed in a separate stage; the [profile reference](../rust-toolchain.md#native-std-profile)
+now describes their combined surface. No kernel ABI, new grant, compiler-container change or native
 hardware run is involved.
 
 ## Revisions and build

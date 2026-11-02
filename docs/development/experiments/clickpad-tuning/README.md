@@ -5,7 +5,7 @@ pair selection with <=100 ms touchdown separation, <=300 ms after later touchdow
 and <=1 mm initial displacement. A qualified pair allows <=3 mm per contact
 from its original qualification positions for later presses. These thresholds
 are Kconfig tuning. Primary fallback, immediate selection and latch-until-release;
-no public ABI change. The [native contract](../../../wip/vela-i2c-touchpad.md#native-qualification-owner-2026-10-16)
+no public ABI change. The [native contract](../../../devices/pointer-input-quality.md#precision-hid-over-i2c-integration)
 is separate from actual device qualification below.
 
 ## Baseline before implementation

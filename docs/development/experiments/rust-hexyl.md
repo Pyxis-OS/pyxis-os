@@ -1,6 +1,6 @@
 # Hexyl on native Rust std
 
-2026-10-25, the read-only consumer step of the [std milestone](../../wip/rust-std.md).
+2026-10-25, the read-only consumer step of the [std profile](../rust-toolchain.md#native-std-profile).
 The initial qualification preceded the 0.0.9 tag; the post-release recheck is
 recorded below.
 This qualifies hexyl, not managed Rust workers or the full filesystem profile.

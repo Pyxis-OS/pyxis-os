@@ -4,10 +4,10 @@ The original prebuilt profile uses pinned `nightly-2026-10-24`, the native users
 SDK and Pyxis Clang/LLD. It supplies `core` + `alloc`, not `std`, a hosted Rust
 compiler or Unix compatibility. [Qualification](experiments/rust-core-alloc.md)
 records the hello, local-exec TLS and unchanged tiny-skia checksum checks.
-The [fork-built profile](#fork-built-compiler-and-built-in-target) below adds
-native std main and a read-only hexyl profile. Its
-[milestone](../wip/rust-std.md) keeps worker, filesystem and first-port delivery
-separate.
+The [fork-built profile](#fork-built-compiler-and-built-in-target) below supplies
+the [first native std profile](#native-std-profile), including managed
+workers, native files and the optional hexyl port. Hosted rustc/Cargo and later
+ports remain [future work](../wip/rust.md).
 
 ## Host prefix and build
 
@@ -59,7 +59,7 @@ The [JSON target](../../toolchain/rust/x86_64-unknown-pyxis.json) identifies
 `target_os="pyxis"` without `unix` or `windows`. It uses x86-64 SysV C ABI/SSE2,
 small code model, static non-PIE relocation, no red zone, inline stack probes
 and executable local-exec TLS. CPU-specific AVX/FSGSBASE behavior is not assumed.
-Its settings transfer to the later built-in target; they are not copied from
+The built-in target retains these settings; they are not copied from
 Rust's kernel/soft-float bare-metal profile.
 
 The builder invokes the exact prefix's Cargo with `-Zjson-target-spec` and
@@ -110,13 +110,13 @@ remains in the host prefix, outside the target package.
 
 For another core+alloc program, retain the sample's panic-abort profile and
 libc startup contract, use the same target/link adapter and declare actual
-needed grants. Standard-library crates cannot be made supported by setting
-`cfg(unix)` or adding a successful stub. Paths, environment, threads, native
-network/process adapters and Rust unwinding remain later std work.
+needed grants. Programs needing std use the fork-built profile below.
+Standard-library crates cannot be made supported by setting `cfg(unix)` or
+adding a successful stub.
 
 ## Fork-built compiler and built-in target
 
-The [std milestone](../wip/rust-std.md) uses a separate Linux-host compiler
+The fork-built profile uses a separate Linux-host compiler
 with built-in `x86_64-unknown-pyxis`, installed Pyxis std/core/alloc and host
 std/proc_macro for build scripts. Gate 2's compiler revision is
 `5e85f86de5f7dc45a485fa8a3eb376487923bc0b`; hexyl adds the read-only File
@@ -291,30 +291,129 @@ authority; its read-only file regression uses its own bundle license through the
 existing `app://` grant. Missing grants must produce real failure;
 linking std adds no ambient authority.
 
-The read-only profile additionally supports native File open/read/seek/clone,
-regular-file length and reported metadata. The worker-enabled prefix also supplies
-managed spawn/join/detach, scoped threads, channels and contended synchronization
-through existing libc threads and native parking. See the
-[worker record](experiments/rust-std-workers.md). Request `threads/manage` and
-`memory/manage` for creation, plus clock rights for timed operations. Default
-worker stacks are 1 MiB, explicit requests round up within the 8 MiB ceiling,
-and real record/backing failures remain errors. Panic aborts the process; join
-workers before orderly main return. `yield_now` is a weak CPU hint without a
-forced reschedule or fairness promise; `available_parallelism` reports the
-startup CPU allowance described above. The native writable-file extension adds
-create/exclusive/truncate, read/write, resize and backend sync. `File::metadata` reports held rights;
-`fs::metadata(path)` reports authority obtainable through the captured path.
-Files use WRITE, directories use CREATE or REMOVE. Unknown provider facts
-and writable provider routes return Unsupported; no write request is
-prepared while querying permissions. `Permissions::set_readonly` changes only
-the local value; applying permissions remains Unsupported. Directory enumeration
-and mutation, child processes and network operations remain later work; hexyl
-delivery does not complete the std milestone.
+## Native std profile
+
+Ordinary Rust main enters `lang_start` through libc's C-main startup. Libc owns
+`_start`, FS/TLS, heap bootstrap and final native process exit. The std allocator
+preserves checked over-alignment, zeroing and realloc semantics. Arguments and
+TEXT environment snapshots own their bytes; snapshots include private and
+exported TEXT, never CAP. Native name/value limits and errors apply, and child
+export policy remains independent. Stdio uses the supplied libc descriptors,
+preserving short progress, EOF, real errors and actual terminal identity.
+
+Clocks, sleep and randomized collections use native clock and random grants.
+Fallible APIs preserve errors and native raw errno values. Infallible operations
+that cannot obtain required facts or authority diagnose the failure and
+terminate. There is no invented time, entropy, PID or permission fact.
+
+### Managed workers
+
+Managed libc threads supply spawn/join/detach, scoped threads, channels,
+contended synchronization and native parking. Creation requires `threads/manage`
+and `memory/manage`; timed operations require the corresponding clock rights.
+Workers use libc's guarded stack lifecycle. Stack admission preserves actual
+capacity, allocation and grant failures. Executable local-exec TLS and language
+destructors use libc's thread lifecycle; Rust runtime cleanup follows
+language/key drainage. See
+[libc threads](../userland/threads.md).
+
+Panic aborts the process; join workers before orderly main return. The existing
+live-worker exit limit does not promise worker finalization. `yield_now` is a
+weak processor hint without a forced reschedule or fairness promise; see
+[scheduling limits](https://git.internal/PyxisOS/pyxis-os/issues/1403).
+`available_parallelism()` reports the process's startup CPU allowance, without
+another grant or a live affinity query. Dynamic TLS, asynchronous cancellation
+and language unwinding are outside this profile.
+
+### Paths and file authority
+
+`OsStr` and `Path` preserve original bytes. `scheme://` is a native root;
+leading `/` is not. Lexical components include `Component::SchemeRoot` and
+normalize repeated separators and interior `.` for iteration, equality and
+hashing. Filesystem calls pass the original bytes and resolve components in
+order; lexical normalization is not applied to I/O, and `..` cannot escape the
+delegated boundary. Collecting components need not reproduce the stored spelling.
+`absolute()` preserves an already-absolute input or appends the original relative
+spelling to the captured cwd; it does not canonicalize, resolve provider names
+or prove object identity.
+
+Files support open/read/write/seek/clone, create/exclusive/truncate, resize and
+backend sync. Clones share the cursor. Writable opens and namespace mutations
+use native routes, refusing provider writer OPEN/STAGE before effects; existing
+provider reads remain supported. Forward-only streams do not gain a synthetic
+seekable length. `File::metadata` reports held authority; `fs::metadata(path)`
+reports authority obtainable through the captured path. FILE write and directory
+CREATE or REMOVE determine readonly status; directory WRITE_FILES alone does
+not permit namespace mutation. Unknown provider facts return Unsupported,
+without a writable OPEN probe. `Permissions::set_readonly` changes only its
+local value; applying permissions remains Unsupported.
+
+`ReadDir` and its entries retain one native parent. Entry metadata uses that
+parent and the saved name even after iterator drop, cwd change or root rebinding;
+`path()` remains display spelling. Names need not be UTF-8. Iteration is live:
+return an actual error once, then finish. Admission requires ENUMERATE; unknown
+types use typed lookup under the parent's existing LOOKUP authority. Entries
+may keep mount release BUSY until their last owner drops.
+
+Native create/remove/rename preserve backend and same-store limits without
+copy/delete fallback, retry or implicit sync. `create_dir_all` captures its
+root/cwd once and resolves the retained chain in order, including `..`; failure
+can leave created parents. File locking, permission-mode mutation, unreported
+timestamps, canonicalization and symlink creation/following are unsupported.
+Networking, DNS and child creation are also unsupported; real process exit and
+abort remain part of startup. Backtrace capture reports Unsupported.
+
+### Copy and recursive removal
+
+`fs::copy` overwrites an existing held FILE in place, preserving its identity
+and effects on other hardlinks/held handles. Existing objects require source
+READ and destination WRITE; absence uses exclusive CREATE. Known aliases fail
+before resize, and unprovable existing-object distinctness is Unsupported.
+Completed provider FILE sources can use read-only routes; targets are native
+only. Copy transfers the source's initial length and contents, without metadata
+propagation. Later growth is ignored; premature EOF fails. Concurrent changes
+can mix data, and sparse holes can consume destination backing.
+
+`remove_dir_all` walks through retained native parents and unlinks HOST symlinks
+without following them. Other special entries are unsupported. Root and final
+dot/dotdot operands are rejected. Traversal grows fallibly with actual resource
+limits. Eight consecutive CHANGED restarts without confirmed removal are
+allowed; the ninth returns EAGAIN. Progress resets this count. Final deletion
+remains name-based under external renames, and granted HOST submounts can be
+emptied before final BUSY. There is no one-filesystem or total-time promise.
+
+Both operations preserve partial effects and stop at the first substantive
+failure. Helper-owned closes are checked; cleanup preserves an earlier error.
+Public File/Dir destructors terminate on close failure. Helper-owned copy/removal
+closes instead return that error after otherwise successful work and preserve an
+earlier failure. Neither operation retries uncertain mutations or implies
+rollback or sync. See the
+[mutation limits](https://git.internal/PyxisOS/pyxis-os/issues/1404) and
+[native append contract](../interfaces/atomic-append.md).
+
+### Qualification and limits
+
+The historical [first-main](experiments/rust-std-main.md),
+[worker](experiments/rust-std-workers.md),
+[writable-file](experiments/rust-native-files.md),
+[directory](experiments/rust-directories.md) and
+[copy/removal](experiments/rust-copy-remove.md) records distinguish builds,
+one/four-CPU QEMU/GDB behavior and matched ordinary-program controls. The last
+stage rebuilt the compiler/std, SDK and consumers together and repeated earlier
+std, worker/TLS, file/directory, core+alloc, tiny-skia and hexyl regressions.
+[CPU allowance](experiments/startup-usable-cpus.md) and
+[append](../interfaces/atomic-append.md) have separate later evidence.
+
+Absent stdout/stderr and selected allocation/close/identity failure paths were
+source-inspected rather than exercised. The records do not establish general
+crate compatibility, Rust performance, power-loss behavior or native hardware
+qualification. The outstanding native-profile check is tracked in
+[#1679](https://git.internal/PyxisOS/pyxis-os/issues/1679).
 
 ## Optional hexyl package
 
-Use the read-only-file compiler prefix above, not gate 2's earlier stdio-only
-prefix. From a clean checkout with Pyxis Clang/LLD on PATH:
+Use the fork-built compiler/std prefix above. From a clean checkout with Pyxis
+Clang/LLD on PATH:
 
 ```sh
 make hexyl-package RUST_PREFIX=/absolute/fork-prefix REPOSITORY=/absolute/repository
@@ -325,8 +424,7 @@ The target builds the SDK, invokes the explicit ports recipe with the supplied
 Rust prefix, then packs and publishes the optional package using the existing
 repository signing controls. It never bootstraps Rust or adds hexyl to the base,
 rescue archive, default port aggregate or ordinary image CI. A source/SDK change
-still requires rebuilding its affected libraries and program. Rust is held out
-of the 0.0.9 release; this optional profile is separate from those release artifacts.
+still requires rebuilding its affected libraries and program.
 
 The recipe pins v0.17.0, vendors its locked graph through the closed Cargo proxy,
 then builds frozen/offline with panic-abort, LTO and embedded bitcode off. It
@@ -349,9 +447,11 @@ colour Always; Auto uses the supplied stdout, and NO_COLOR suppresses colour
 unless Force is selected. Width queries use supplied stdout, stderr, then stdin
 and retain the upstream 80-column fallback. Files use existing delegated roots;
 linking Rust grants no filesystem access. The
-[hexyl record](experiments/rust-hexyl.md) separates actual recipe/package/QEMU
-qualification from the unrun native and complete-profile work.
+[hexyl record](experiments/rust-hexyl.md) records recipe/package/QEMU
+qualification of the explicit ASCII byte-panel profile; it does not qualify
+every upstream byte glyph or CP437 character. Native qualification remains
+tracked in [#1679](https://git.internal/PyxisOS/pyxis-os/issues/1679).
 
 The port retains general upstream I/O behavior: persistent read errors can loop,
-and include-mode final buffer-drop errors can be unreported. See the
-[recorded limits](https://git.internal/PyxisOS/pyxis-os/issues/1405).
+and include-mode final buffer-drop errors can be unreported. This also occurs
+upstream on Linux; no generic error-handling patch is carried in the port.
