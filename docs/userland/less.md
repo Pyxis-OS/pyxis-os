@@ -37,12 +37,15 @@ cursor as they were.
 
 ## Limits
 
-Screen dimensions are measured at startup, and display is ASCII. Read display
+Display is ASCII. Read display
 lines remain in memory for backward paging, up to the configured 9,999,999-line
-limit; excess input and allocation failure report errors. Content reads block
-when filling a new page or searching beyond cached input. Cached navigation
-needs no further read, but a stalled producer can delay keys during a refill.
-There is no live refresh or nonblocking pipe readiness. Raw escape display,
+limit; excess input and allocation failure report errors. Content is read
+through upstream's poll loop with a nonblocking descriptor, so a stalled
+producer does not delay keys: a pipe from a command that prints a line and then
+sleeps shows the line at once and still takes `q`. The screen is re-measured
+and redrawn on SIGWINCH, as the [port notes](../../ports/busybox/README.md#less)
+describe (upstream's handler over libc's cooperative delivery; the resize path
+was not re-run for this note). Backing FILE reads may still wait. Raw escape display,
 shell commands, marks, bracket matching and log saving are disabled. Regex uses
 [libc's ASCII-only classes/folding and pinned back-reference limits](libc-portability.md#regular-expressions-and-utf-8-conversion).
 
