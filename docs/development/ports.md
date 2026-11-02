@@ -464,7 +464,7 @@ that Pyxis does not expose. Host archives use `tar --format=ustar`; the
 
 Its compiler, [TCC](../userland/tcc.md), is retired. Hosted Clang carries its own
 sysroot, and task 2c of package upgrades turns this tree into the `pyxis-dev`
-package of the [`sdk://` view](../wip/sdk-view.md).
+package of the [`sdk://` view](../interfaces/packages.md).
 
 ## Fastfetch
 
@@ -596,7 +596,7 @@ link libraries and other compiler flags remain (chronium, 2026-10-23).
 
 Every exported ports development prefix stages metadata under `lib/pkgconfig`.
 The SDK export supplies `pyxis.pc` and `libcxx.pc` beside its runtime archives;
-the package-backed [SDK view](../wip/sdk-view.md) owns their package selection.
+the package-backed [SDK view](../interfaces/packages.md) owns their package selection.
 `Requires` supplies transitive static dependencies, so raylib resolves before
 SDL2 and libpng before zlib. The compiler still owns startup and its default
 runtime link group. See the [recipe](../../ports/pkgconf/README.md) for options

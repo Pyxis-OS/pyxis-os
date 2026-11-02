@@ -24,7 +24,7 @@ UEFI x64. The firmware also offers UEFI PXE over IPv4 and IPv6 and an IOMMU opti
 | --- | --- | --- |
 | CPU | AMD Custom APU 0932, Zen 2 (family 17h, model 91h), 4 cores/8 threads | First boot (2026-10-09) showed 8 CPUs, HPET and uACPI working; the battery appears in the bar |
 | Panel/GPU | eDP 800x1280 portrait; AMD GPU `1002:1435`; DisplayPort from the dock | Limine's GOP framebuffer works at 800x1280, unrotated. No native GPU driver, as on the ThinkPad ([display](../kernel/display.md)) |
-| Storage | Phison PS5021-E21 NVMe (`1987:5021`), 954 GB, SteamOS GPT with eight partitions | Covered by the [NVMe driver task](nvme-coexistence.md); the Deck boots over PXE or from a USB stick meanwhile |
+| Storage | Phison PS5021-E21 NVMe (`1987:5021`), 954 GB, SteamOS GPT with eight partitions | Covered by the [NVMe driver task](../userland/nvme-coexistence.md); the Deck boots over PXE or from a USB stick meanwhile |
 | SD card | O2 Micro `1217:8621` reader | Later |
 | USB | `04:00.3` xHCI (dock hubs and ports) and `04:00.4` xHCI, internal, whose USB 2 port carries the Steam Controller; its USB 3 root has no ports | The [xHCI driver](../devices/usb-xhci.md) runs on `04:00.3`; whether `04:00.4` came up is not recorded; see [first boot](#first-boot-2026-10-09) |
 | Dock | VIA hubs `2109:2817` (USB 2) and `2109:0817` (USB 3); the keyboards used for the inventory sit on the USB 2 side | The same [USB 2 hub path](../devices/usb-hid.md) that works on the ThinkPad dock |

@@ -7,6 +7,16 @@ release upgrade is staged and takes effect only after a verified reboot. The
 the on-disk data, while the [installer](installer.md) owns live-media Install
 and Update.
 
+## Core archive and installed configuration
+
+The [core archive](../development/boot-archive.md) contains the rescue/installer
+runtime named by `boot/rescue.list`; other programs and development tools are
+packages. Install copies the booted archive verbatim and seeds the initial
+space, session and network files under `system://config/` once. Later Update
+does not replace those local settings. The installed boot entry selects its
+npfs partition with `mount.pool=N` beside the reviewed disk binding; rescue
+keeps the archive's independent defaults. See [boot configuration](init.md#boot-configuration).
+
 ## Package changes
 
 `pkg update` with no arguments resolves every installed package from its

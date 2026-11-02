@@ -109,7 +109,7 @@ list/state/sync/retire utility; it cannot alter its parent's bindings.
 
 **Boot ESP writes are deliberately permitted by an authorized RW factory**
 (owner-accepted default, 2026-10-13), supporting the accepted ESP `boot.lua` and
-[configuration-editor direction](../wip/installer-tui.md#accepted-configuration-contract--2026-10-11).
+[configuration-editor direction](../userland/configuration-editor.md).
 The boot-origin issuer/view stays RO. Fixed-mode drainage, explicit editor grants,
 extent exclusion and backend write qualification still apply. FAT support does
 not deliver the editor's ownership/adoption policy, coexistence installation or

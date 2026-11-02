@@ -117,7 +117,7 @@ an option only if a Pyxis machine needs sources away from the home LAN.
 ## Updates
 
 The original direction rebuilt programs for every kernel revision. The current
-[package ABI model](pkg-upgrade.md#decided) instead names supported release ABIs;
+[package ABI model](../interfaces/abi.md#release-and-development-identities) instead names supported release ABIs;
 development builds remain bound to their exact build. A future source-builder
 proposal must define when to rebuild against a changed SDK and how verified
 outputs enter the package set. Recipes must retain exact source pins rather

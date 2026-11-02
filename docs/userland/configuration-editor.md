@@ -19,6 +19,6 @@ when it would not. Mounted volumes, packaged timezone data and live network
 availability are reported as not checked.
 
 The ESP holds no configuration. Until task 2b of
-[package upgrades](../wip/pkg-upgrade.md) the installer also published an ESP
+[package upgrades](package-upgrades.md) the installer also published an ESP
 copy with a revision catalog, and `config plan`, `edit` and `apply` edited it;
 both are gone.

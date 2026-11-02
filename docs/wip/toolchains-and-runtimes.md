@@ -77,7 +77,7 @@ when a selected port such as DevilutionX or the Clang hosting milestone needs it
 
 ## Go cross compiler, then hosted Go toolchain
 
-The [initial Go runtime investigation](go-runtime.md) pins Go 1.26.7 and records
+The [initial Go runtime investigation](../development/go-toolchain.md) pins Go 1.26.7 and records
 host compile/conversion probes plus the native contract gaps. No Go executable
 has run on Pyxis. The key prerequisites are shared-process threads/TLS and
 parking, plus private-memory reservation/backing; LLVM is not required for the

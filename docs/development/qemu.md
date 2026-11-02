@@ -163,3 +163,45 @@ The failure recurred on an unchanged baseline image and during
 [xHCI bring-up](xhci-bringup.md). Keep it distinct from native USB access and
 from the AHCI CD-ROM crash above. Revisit with repeatable
 firmware/USB I/O diagnosis before claiming reliable physical boot.
+
+## Published installed image
+
+A release may publish `pyxis-VERSION.qcow2` beside the installer ISO. It is a
+real Classic installation produced by the unmodified release installer, not a
+host-formatted approximation. It contains the `base` set; install other packages
+with `pkg install`. The manual's [QEMU launcher](../manual/install.md) needs QEMU
+and a matching OVMF pair, copies firmware variables per VM and uses KVM when
+available or TCG otherwise. Verify the signed checksums before the first boot,
+because booting changes the image. QEMU's `-snapshot` is a throwaway run.
+
+New images have **128 GiB virtual capacity, sparse** (chronium, 2026-11-02).
+Compressed download size and allocated host size are separate values. Existing
+32 GiB images remain valid: verification reads their actual geometry, and this
+creation default never expands an existing partition or npfs pool. A non-sparse
+copy/raw conversion may allocate the full virtual size; guest writes can exhaust
+host storage.
+
+`tools/qemu-image.py build ISO OUT.qcow2 --sums SHA256SUMS` drives the installer through
+QMP, shuts it down, compresses its raw sparse intermediate using qcow2's zlib
+format, and verifies the result. `tools/qemu-image.py verify IMAGE` checks the
+image and boots a disposable copy. Build uses KVM by default (`--accel tcg` is
+explicit), `qemu-system-x86_64`, `qemu-img`, matching OVMF and the release's live
+signed package repository. The supplied ISO must match its checksum line.
+Verification checks actual disk geometry rather than demanding today's creation
+default. Installation leaves the normal journal default, Classic marker and
+`system://SAFE_TO_WIPE` in place; Update and the documented reinstall route remain
+available.
+
+Each published image is built once and has one shared install identity: all
+copies of that download carry the same disk/pool/install IDs and hostname.
+These are identities, not secrets or per-recipient authentication. A new build
+gets fresh generated identities; never replace a published immutable filename.
+
+The [release flow](release-process.md#the-qemu-image) first publishes the signed
+package/release repositories, then builds/verifies the image, signs its checksum
+alongside the ISO, and uploads checksum/signature last. An image-build failure is
+reported without blocking the ISO or repositories. Site links are enabled only
+when the release agent passes `--published-image`; that flag is an assertion that
+the image is live, not an upload detector. Fedora OVMF paths were exercised;
+other distribution paths come from the manual's table. A real release-to-release
+upgrade from a downloaded image remains a [qualification follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1696).

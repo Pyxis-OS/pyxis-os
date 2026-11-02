@@ -64,6 +64,6 @@ consumer such as DHCP re-announcing a rename; do not silently add polling.
 7. [ ] **DHCP option 12.** Offer the hostname through userspace policy; server
    registration remains the network's choice.
 
-Narrow writer grants, directory notification, user settings,
-`config validate` as Polaris's [configuration checker](installer-tui.md#configuration-checker),
+The current [configuration checker](../userland/configuration-editor.md) supplies
+`config validate`. Narrow writer grants, directory notification, user settings,
 mDNS `NAME.local` and Tailscale naming await their own proposals/assignment.

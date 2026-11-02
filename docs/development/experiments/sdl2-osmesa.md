@@ -1,6 +1,6 @@
 # SDL2 OpenGL through OSMesa
 
-2026-10-24, task 3 of [Quake 3/Mesa](../../wip/quake3-llvmpipe.md).
+2026-10-24, task 3 of [Quake 3/Mesa](../mesa.md).
 Base main `f265289a`, userland `1453c097`, baseline ports `bb3da8db`, changed
 ports `a3bfc58`; builder `pyxis-llvm23.1.3-3d69e83`. No kernel ABI, compiler pin,
 JIT or new runtime authority. `kernel.config` SHA-256

@@ -1,7 +1,7 @@
 # Package signing certificates
 
 Public certificates only; the private key never leaves chronium's 1Password
-vault ([decision 71](../../docs/wip/pkg-upgrade.md#decided)).
+vault ([signed indexes](../../docs/interfaces/packages.md#signed-indexes)).
 
 | File | Certificate | SHA-256 fingerprint |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ restores `current`. It uploads nothing.
 ## Signing the install ISOs and images
 
 `tools/sign-images.sh DIR` signs `DIR/SHA256SUMS` as `DIR/SHA256SUMS.sig`
-([decision 75](../../docs/wip/pkg-upgrade.md#decided)). The signature format is
+([image signing](../../docs/interfaces/packages.md#host-tool)). The signature format is
 the same as an index's: DER ECDSA P-256 over the SHA-256 of the file. Only
 chronium runs the script, as for a repository. Before signing, it checks:
 - `DIR/SHA256SUMS` keeps every line that

@@ -491,7 +491,7 @@ Keep the retry/reset recovery requirement before everyday use.
 
    The policy ABI names this domain as country `00` (`WIFI_COUNTRY_WORLD`),
    which Install applies on AX200 as well
-   ([decision 70](pkg-upgrade.md#decided)).
+   ([install policy](../interfaces/wifi.md#authority-and-startup)).
 
    Pinned source: **wireless-regdb 2026.09.03**, whose project documents an
    [ISC licence](https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/wireless-regdb.html).

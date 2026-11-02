@@ -103,7 +103,7 @@ that fails. It likewise creates the `packages` and `http-work` volumes when
 missing and seeds `system://config/packages.lua` from the boot archive only when
 that file is absent; an existing file is never replaced. It writes no programs:
 the core archive is copied to the ESP as built, and every other program is a
-package ([decision 18](../wip/pkg-upgrade.md)).
+package ([decision 18](package-upgrades.md)).
 
 This is an offline target update: pool-partition admission refuses a retained
 npfs instance on the selected extent. Held development directories are not
@@ -149,7 +149,7 @@ inputs before any program writes. Changed inputs refuse without automatic
 replanning. Update never touches the configuration: it lives in
 `system://config/` on the pool, and edits there apply at the next boot without
 an Update. A boot record written before task 2b of
-[package upgrades](../wip/pkg-upgrade.md) refuses Update; back up `home` and
+[package upgrades](package-upgrades.md) refuses Update; back up `home` and
 reinstall (decision 28). See [boot publication](installer.md#boot-publication).
 
 The installer opens the reviewed ESP as a native RW FAT view, leaving the pool

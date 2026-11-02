@@ -18,6 +18,29 @@ clang home://image.c -lpng -lz -o home://image.pxe
 no file, network, display or credential authority to a program; consumers still
 declare their grants. There are no package-named roots or shared objects.
 
+## SDK layout and pkg-config
+
+Development packages contribute `include/`, regular files directly in `lib/`,
+and `lib/pkgconfig/` to the view. Notices and other build metadata remain under `pkg://NAME-dev/`. Each path has one owner; `pkg` refuses
+conflicts before publishing a set. Existing held view directories pin their
+immutable set index; later lookups see the newly published set. The
+[package-view memory budget](../interfaces/packages.md#command-projection-and-bootstrap)
+is derived from installed RAM, with real memory exhaustion reported.
+
+pkgconf supplies the `pkg-config` alias and defaults to static output, including
+`Libs.private`. Its built-in module path is `sdk://lib/pkgconfig`, with
+`PKG_CONFIG_PATH` searched first for separately granted libraries. The view's
+include and library paths are treated as system paths, so redundant `-I` and
+`-L` flags are omitted. Module-specific subdirectories and defines remain.
+
+`.pc` files spell `includedir=sdk://include` and `libdir=sdk://lib` directly:
+appending `/include` to `prefix=sdk://` produces an invalid extra separator.
+A hosted Clang bundle holds `sdk://`, not arbitrary `pkg://` trees. Its nested
+LLD receives the same read-only captured view; neither gains ambient access.
+
+A future directory-capable userspace provider for these views is tracked in
+[package-view provider follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1700).
+
 ## Libraries and dependencies
 
 Every row depends on `pyxis-dev`, directly or through another named dependency;

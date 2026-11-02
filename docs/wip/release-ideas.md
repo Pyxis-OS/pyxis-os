@@ -48,12 +48,12 @@ Implemented behavior is in the [native installer](../userland/installer.md) and
   and boot-file publication.
 - Nothing can be installed beside another OS, for example vela's Fedora on half
   of the NVMe. The Coexist profile exists and appends a pool in a reviewed gap of a
-  disk that keeps its partitions ([NVMe coexistence](nvme-coexistence.md)), but
+  disk that keeps its partitions ([NVMe coexistence](../userland/nvme-coexistence.md)), but
   nothing makes that gap. Read-only native checks must explicitly use
   `nvme.write=0`; the kernel now enables writes by default.
 - Installer and updater output is hard for a human to parse. GPT names appear as
   raw UTF-16 with `\0000` runs, and each step prints long lists of lines. The
-  [TUI plan](installer-tui.md) already requires a progress bar rather than a log
+  [TUI plan](../userland/installer.md) already requires a progress bar rather than a log
   for the copy phases; this entry covers the rest of the output.
 
 ### Direction
@@ -73,7 +73,7 @@ session.
      partition change.
 3. **Install:**
    - create the ESP and pool (layers 1 and 2), then publish a release with the
-     same publisher that [`pkg upgrade`](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
+     same publisher that [`pkg upgrade`](../userland/package-upgrades.md)
      uses, targeting the chosen ESP instead of the booted one;
    - install and upgrade become the same act with a different target;
    - the `Install Pyxis` entry, `init-install` and `boot.install` retire once this
@@ -116,7 +116,7 @@ Readable-output rule for all three:
    - The partition manager first.
    - Then pool and volume management.
    - Then the live installer on the shared publisher, after `pkg upgrade`
-     ([packages](packages.md#staged-plan) stage 2).
+     ([packages](../userland/package-upgrades.md) stage 2).
    - All after 0.0.7.
 
 ### Open questions
@@ -136,8 +136,8 @@ Target: 0.1.0. Covered by: none yet.
 An installed system updates itself through `pkg`, with no separate boot entry or
 update path. The release is a package; `pkg` writes it to the ESP of the install
 that booted. Direction, trust rules and schedule are in the
-[upgrader section](packages.md#upgrader-pkg-upgrade-accepted-direction-owner-2026-10-20)
-of the packages plan. The [details](pkg-upgrade.md) and their three decisions are accepted
+[upgrader section](../userland/package-upgrades.md)
+of the packages plan. The [details](../userland/package-upgrades.md) and their three decisions are accepted
 (owner, 2026-10-20). Entry 1 builds its install layer on the same publisher.
 
 ## 3. Game packages: program and data together
@@ -147,7 +147,7 @@ Target: 0.1.0. Covered by: none yet.
 
 `doom` and `quake` become whole packages, program plus data, with no separate data
 packages. Stage 2 delivers them and the image carries no games; see
-[game packages](packages.md#the-boot-archive) in the packages plan.
+[game packages](../development/boot-archive.md) in the packages plan.
 
 ## 4. Personal programs by name
 
@@ -198,7 +198,7 @@ archive cpio.
 
 ### Prerequisites
 
-- Program packages per release (packages [stage 2](packages.md#staged-plan)).
+- Program packages per release (packages [stage 2](../userland/package-upgrades.md)).
 - A userland and ports CI job that publishes packages.
 - Signing, before the build trusts packages from outside the LAN.
 
@@ -226,7 +226,7 @@ What exists today:
   [space editor](../userland/spaces.md).
 - `config validate` checks that file and its neighbours the way boot reads them
   ([reference](../userland/configuration-editor.md)). The editor that edited the
-  retired ESP copy went with task 2b of [package upgrades](pkg-upgrade.md); an
+  retired ESP copy went with task 2b of [package upgrades](../userland/package-upgrades.md); an
   editing half of Polaris would start again from the pool files.
 
 The space editor turns the manual edit that lets `pkg` manage the
@@ -363,7 +363,7 @@ Porting GRUB or Limine tools to Pyxis is acceptable (chronium, 2026-10-21).
 
 The route being replaced is described in
 [GRUB and Limine chainloading](../userland/grub-limine-chainload.md); the
-coexistence rules are in [NVMe coexistence](nvme-coexistence.md).
+coexistence rules are in [NVMe coexistence](../userland/nvme-coexistence.md).
 
 ### Options to evaluate
 
@@ -402,9 +402,9 @@ to 2026-10-25).
 - **Interactive Wi-Fi join in the installer** (decided): choose a network and
   enter its key, as a step of the curses TUI installer. 0.0.8 and 0.0.9 have no
   Wi-Fi Install; use wired or dock Ethernet
-  ([decision 70](pkg-upgrade.md#decided)).
+  ([installer frontend](../userland/installer.md#frontend-boundary)).
 - **Curses ports** (decided): the remaining work of the
-  [terminal UI](terminal-ui.md) track, beyond ncursesw and hexcurse.
+  [terminal UI](../userland/terminal.md) track, beyond ncursesw and hexcurse.
 - **Remote on installed systems** (direction only): ship the Remote startup with
   the `remote-terminal` package. On 0.0.8 the core archive has no
   `boot://init-remote` or `init-remote-services`, and the package carries only
@@ -431,10 +431,10 @@ to 2026-10-25).
   [allocation and VM ownership](../kernel/vm-ownership.md),
   leads the next kernel push, which starts Tuesday 2026-10-27, followed by the
   JIT grant and Mesa llvmpipe. The order decided in
-  [Quake 3 on Mesa llvmpipe](quake3-llvmpipe.md#decided-by-chronium-round-1-2026-10-23)
+  [Quake 3 on Mesa llvmpipe](../development/mesa.md)
   is unchanged: the JIT grant comes after the BSP removal.
 - **RTL8922AE status additions** (decided, #1174): land as additive ABI after
   0.0.8; they are not in 0.0.9.
 - **Rust and bulk file reads** (not in 0.0.9, chronium, 2026-10-25): the Rust
   work and the bounded bulk FILE reads through providers
-  ([bulk file reads](bulk-file-reads.md)) merge after the 0.0.9 tag.
+  ([bulk file reads](../interfaces/file-providers.md)) merge after the 0.0.9 tag.

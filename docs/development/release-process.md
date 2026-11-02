@@ -258,7 +258,7 @@ record because check 2 reports them as `missing`.
 ## The QEMU image
 
 `tools/qemu-image.py` builds the release's ready-to-run image
-([plan](../wip/qemu-image.md)) from the release ISO. It runs in the release flow,
+([plan](qemu.md)) from the release ISO. It runs in the release flow,
 after `make release-image` has staged the ISO and its `SHA256SUMS` line, after
 the signed `public` and `releases` trees are uploaded, because the installer
 fetches `base` from the live `public`, and before `tools/sign-images.sh`:

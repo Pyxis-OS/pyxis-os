@@ -127,5 +127,5 @@ battery for native performance figures, and compare on AC.
   `__builtin_cpu_supports` links it, and libc's startup runs its constructor
   before `main`.
 - Go's linker output, converted by the removed `elf2pxe` in the
-  [Go investigation](../wip/go-runtime.md), now needs P1F output from Go's
+  [Go investigation](go-toolchain.md), now needs P1F output from Go's
   linker or a restored converter.

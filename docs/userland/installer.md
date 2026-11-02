@@ -8,11 +8,11 @@ It runs through trusted install init with the explicit
 already in RAM; installing does not require a driver for the live medium.
 
 Install copies the core archive and fetches every other program as the `base`
-package set ([decisions 63 and 67](../wip/pkg-upgrade.md)), from the repository
+package set ([decisions 63 and 67](package-upgrades.md)), from the repository
 the image names (`PACKAGE_REPOSITORY`, see [boot archive](../development/boot-archive.md)).
 The install space starts the network with the archive's `config/network.lua`:
 wired or dock Ethernet by DHCP. There is no Wi-Fi Install in 0.0.8; the Wi-Fi
-join comes with the curses TUI installer ([decision 70](../wip/pkg-upgrade.md#decided)). Before any
+join comes with the curses TUI installer ([installer frontend](installer.md#frontend-boundary)). Before any
 target is chosen Install runs `pkg check base`; without network, or without
 `base` for this revision, it refuses, writes nothing and returns to the action
 list, where Update remains. A Replay of an Install plan fetches `base` too and
@@ -31,7 +31,7 @@ refusal never authorizes an ESP rebuild.
 First choose **Install**, **Update**, **Replay a printed plan** or **Cancel**. Only Install then asks for
 **Coexist**, **Classic** or **Cancel**. Coexist preserves existing partitions,
 appends a pool in a reviewed gap and publishes an owned Limine menu and UEFI
-boot option; see [NVMe coexistence](../wip/nvme-coexistence.md). Classic provides
+boot option; see [NVMe coexistence](nvme-coexistence.md). Classic provides
 the whole-disk Install and existing ESP-rebuild recovery below. Update discovers
 recognized installations read-only and infers their layout; it never asks for a
 layout. The selected disk GUID and ESP/pool entries are rechecked by the child,
@@ -74,7 +74,7 @@ use. Review shows the gap, chosen pool and remaining tail: the pool cannot
 currently be resized. Update always preserves its existing partition.
 
 Choose **Install**, **Classic**, then a consent path
-([decision 76](../wip/pkg-upgrade.md#decided)):
+([reviewed plans](installer.md#plans)):
 - **Blank or marked disks**, the default, admits a blank disk (no partition
   table), or an npfs disk whose every live volume has a regular `SAFE_TO_WIPE`.
 - **Any disk (may erase data)** also admits a foreign or unrecognized GPT, GPT
@@ -142,7 +142,7 @@ corrupt-but-present one. A new install also copies
 only when missing, and Update never writes them; Update only creates a missing
 `system://config/` and seeds a missing `packages.lua`. Update refuses a Classic
 install whose ESP has no boot record, or one written before task 2b, with "back
-up home and reinstall" (decision 28 of [package upgrades](../wip/pkg-upgrade.md)). Boot init then reads that
+up home and reinstall" (decision 28 of [package upgrades](package-upgrades.md)). Boot init then reads that
 [installed configuration](init.md#installed-configuration): by default the
 `pyxis` space, whose `init-installed` receives the pool's system and home
 volumes read-write as `system://` and `home://`, starts in `home://` and starts
@@ -253,7 +253,7 @@ one file in `EFI/pyxis/config/`, `config.record`, which records the current boot
 attempt with its payload hashes and the owned menu's recovery
 copy. A record still marked prepared is an interrupted Update, below. A
 malformed record, or one written before task 2b of
-[package upgrades](../wip/pkg-upgrade.md), is refused, and that machine
+[package upgrades](package-upgrades.md), is refused, and that machine
 reinstalls (decision 28).
 
 Staging and program verification precede the final bounded publication
@@ -345,6 +345,21 @@ unreferenced partial attempt and never promises rollback of confirmed writes.
 [Scratch qualification](../development/experiments/esp-payload-stager/README.md)
 records QEMU staging/verification, capacity refusal and retained failure evidence.
 It does not qualify configuration activation or publication-interval headroom.
+
+## Frontend boundary
+
+The delivered interactive frontend uses action/list/default input over the same
+read-only planner and confirmed executor as printed-plan replay. The earlier ESP
+configuration-delta catalog/editor design was superseded by installed pool
+configuration; see [package upgrades](package-upgrades.md). Boot publication,
+recovery evidence and pending completion retain the contracts below.
+
+A full curses page/window frontend and its interactive Wi-Fi join are a
+[separate follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1686),
+not delivered by the text/list frontend or by the ncurses library port. It must
+reuse these planner/executor and authority boundaries rather than add a second
+write path. Native publication/firmware coverage remains tracked in the
+[release gate](https://git.internal/PyxisOS/pyxis-os/issues/1509).
 
 ## Progress
 

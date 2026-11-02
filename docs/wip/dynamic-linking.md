@@ -34,7 +34,7 @@ and the runtime libraries, not every port.
   63% of PR runs, with ports about 100 s of a 145–170 s build (CI measurement,
   2026-10-29).
 
-This replaces the outline in [packages](packages.md#owner-direction-2026-10-18),
+This replaces the outline in [packages](https://git.internal/PyxisOS/pyxis-os/src/commit/93bdcf03303655edd67874f8bca061f5418a23d7/docs/wip/packages.md#owner-direction-2026-10-18),
 which it refines, and serves the program side of
 [#1337](https://git.internal/PyxisOS/pyxis-os/issues/1337).
 

@@ -3,7 +3,7 @@
 Slice 1 task 6 deployed the repository on horse on 2026-10-19 from `880ff590` in
 `~/src/pyxis-pkgrepo` (luna preparation, owner enable/ufw), served read-only at
 `192.168.0.213:5245`. Stage 2 task 4 republished it in the current format on
-2026-10-21 ([record](../../docs/wip/packages.md#task-4-trees-on-horse-2026-10-21)).
+2026-10-21 ([record](../../docs/interfaces/packages.md#host-tool)).
 
 ## Trees
 

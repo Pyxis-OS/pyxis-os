@@ -61,7 +61,7 @@ and print/save their boot entries. Activation in this route is a separately
 reviewed Fedora-side replacement of only the Pyxis primary after independent
 kernel/archive and entry verification. Update keeps the GRUB target and EFI
 executable stable; earlier attempts and the independent rescue pair are retained.
-The [owned publisher](../wip/installer-tui.md) has not qualified automatic Coexist
+The [owned publisher](installer.md) has not qualified automatic Coexist
 configuration/menu activation; manual activation is not that contract.
 
 The accepted [Coexist install without a foreign OS direction](../wip/release-ideas.md#10-coexist-install-without-a-foreign-os)
@@ -102,8 +102,7 @@ throughput benchmark.
 
 Vela, Secure Boot, firmware-update interactions, interrupted writes and automatic
 Coexist publication are not qualified by this round. Native work on another
-target still needs its own approval. Limine becoming Fedora's front door remains
-[later work](../wip/nvme-coexistence.md#limine-as-fedoras-boot-manager).
+target still needs its own approval. A different firmware or boot-manager arrangement remains separate work.
 The Fedora-side steps above must be removed under
 [release-ideas entry 10](../wip/release-ideas.md#10-coexist-install-without-a-foreign-os);
 this qualification closes the manual route, not that accepted follow-up.

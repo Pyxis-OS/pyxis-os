@@ -2,7 +2,7 @@
 
 The `mesa` port builds Mesa 26.2.5 as a static `libOSMesa.a`, with the OSMesa
 context/render frontend restored from 25.0.7. Sources and signatures are pinned
-in the [Quake 3 plan](../wip/quake3-llvmpipe.md#source-cache). Upstream MIT and
+in the [source inventory](#source-cache). Upstream MIT and
 per-file terms, original reached-source/header notices, licence texts and
 provenance accompany the development prefix.
 
@@ -76,3 +76,31 @@ PPM. It has no display grant and declares optional JIT. See the original
 cover default/zero/four workers, absent/forced JIT and AVX-off selection; native
 game comparison is recorded in the
 [llvmpipe qualification](experiments/llvmpipe.md#native-vela-complete-stack-comparison-2026-10-28).
+
+## Source cache
+
+The native port retains Mesa 26.2.5 and the OSMesa frontend from 25.0.7. Sources
+are fetched through checked internal mirrors; the LLVM development libraries
+come from the compiler container's matching fork pin, not an image-time LLVM
+build. The combined ioquake3/OpenArena consumer uses these pins:
+
+| Input | Upstream | Cache | SHA-256 or commit |
+| --- | --- | --- | --- |
+| Mesa 26.2.5 | `https://archive.mesa3d.org/mesa-26.2.5.tar.xz` | `https://repo.internal/repository/raw-mesa/mesa-26.2.5.tar.xz` | `794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5` |
+| Mesa 25.0.7 | `https://archive.mesa3d.org/mesa-25.0.7.tar.xz` | `https://repo.internal/repository/raw-mesa/mesa-25.0.7.tar.xz` | `592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6` |
+| OpenArena 0.8.8 data | `https://download.tuxfamily.org/openarena/rel/088/openarena-0.8.8.zip` | `https://repo.internal/repository/raw-tuxfamily/openarena/rel/088/openarena-0.8.8.zip` | `5a8faf7f5b51f351b0a1618c06b6b98a5f1a6758f1d39818de2c87df2a0bac4a` |
+| ioquake3 | `https://github.com/ioquake/ioq3.git` | `https://git.internal/mirrors/ioq3` | `87a99d18206e878a20289f05ac3c16005dcae5c3` |
+
+On 2026-10-23, the Mesa detached signatures verified against release maintainer
+Eric Engestrom's RSA key, fingerprint
+`5755 1DE1 5B96 8F63 41C2 48F6 8D8E 31AF C324 28A6`. The key appears in Mesa's
+tagged `docs/release-maintainers-keys.asc` and Debian's upstream signing-key
+inventory. Recipes check archive SHA-256; the signature/provenance check occurred
+when the cache was admitted. This does not establish a web-of-trust endorsement.
+OpenArena provides an MD5 but no signed release or upstream SHA-2; its cached
+SHA-256 is recorded trust on first use. ioquake3's exact commit is the pin.
+
+Runtime limits and future work are separate from delivery: native game comparison
+is recorded in [llvmpipe](experiments/llvmpipe.md),
+[OpenArena](../userland/openarena.md) owns packaging/input behavior, and
+[renderer/engine extensions](https://git.internal/PyxisOS/pyxis-os/issues/1698) need their own decisions.

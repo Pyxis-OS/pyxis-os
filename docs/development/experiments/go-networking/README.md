@@ -21,7 +21,7 @@ virtualization and host scheduling; it is not a native hardware result.
 
 Private native callers use the current public SDK and existing trusted
 `session boot://netnative.pxe MODE` handoff. Ordinary bundle `service/create`
-provisioning follows the accepted [authority decision](../../../wip/go-runtime.md#additional-decision--ordinary-client-completion-authority-accepted),
+provisioning follows the accepted [authority decision](../../go-toolchain.md#networking),
 not a product feature supplied by this handoff. No fixtures, instrumentation or
 new benchmark framework are merged.
 

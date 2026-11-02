@@ -11,7 +11,7 @@ licenses and support files into `build/ports-root`. Host port tools stay out
 of the guest tree.
 
 `boot/initrd.lua` selects from those trees by `DISTRIBUTION`. The default,
-`core`, is the core archive ([decisions 18 and 64](../wip/pkg-upgrade.md)): the
+`core`, is the core archive ([decisions 18 and 64](../userland/package-upgrades.md)): the
 programs `boot/rescue.list` names, selected as for the recovery archive by
 `scripts/recovery-initrd.lua`, the archive's session, network and package
 configuration, and Install's `share/installer/system/` files. `full` takes both
@@ -34,7 +34,7 @@ Install and Rescue need `base` packed for the image's own version. The root
 Makefile only orchestrates assembly. New applications belong in userland's
 install selection; new port payload paths belong in the ports manifest.
 
-The [installer boot resources](../devices/installer-authority.md#boot-sources-and-handoff)
+The [installer boot resources](../devices/installer-authority.md)
 retain the original ELF and the whole archive as immutable FILE views. They borrow
 boot-reserved physical frames through kernel-lifetime read-only/NX mappings,
 without copying payloads. The archive view includes final padding and reuses the

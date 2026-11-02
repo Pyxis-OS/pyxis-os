@@ -140,7 +140,7 @@ read-only npfs mounts refuse a committed journal needing replay.
 
 For ordinary installation, use the `clang-hosted` package instead of this
 manual workflow. Repository production and deployment are tracked in
-[packages slice 1](../wip/packages.md#slice-1-data-packages).
+[packages slice 1](../interfaces/packages.md#literal-data).
 
 ## Compile, link, run
 

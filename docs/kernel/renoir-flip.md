@@ -214,3 +214,18 @@ optc blank helpers are not vendored.
 - Light polling is qualified on the ThinkPad, with whole-boot cost measurements.
   Per-game cost splits, the cause of the 48.121 ms confirmation-wait maximum and
   separately profiled CPU execution time are not established.
+
+## Hardware cursor status
+
+Renoir still composites its pointer in software. The accepted cursor design's
+first task performed a read-only native prerequisite/baseline inventory; it did
+not allocate cursor backing, program cursor registers or qualify hardware cursor
+motion. The [native inventory](../development/experiments/renoir-cursor-inventory/README.md#native-result--2026-10-10)
+found no transaction-correlated proof of cursor latch, disable or old-image fetch
+retirement. Linux setters and idle bits do not supply that proof.
+
+The unimplemented backend and matched qualification are parked in
+[the hardware-cursor follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1699), preserving the accepted
+opt-in authority, memory, capture and fallback design. Cursor-only hardware
+updates and any measured benefit remain unimplemented, not completed native
+checks. Existing software pointer behavior is unchanged.

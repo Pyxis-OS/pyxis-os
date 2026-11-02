@@ -135,3 +135,20 @@ commit `54f0746b130b3b75c195cf3bfb2d05877614888c`. Only the SVG wrapper adds
 accessibility attributes; CSS uses the bar's text size and palette. Pages do not
 fetch the mark or any script from GitHub. The complete upstream MIT notice is
 retained and published as [`/licenses/github-mark.txt`](themes/pyxis/static/licenses/github-mark.txt).
+
+## Publication policy and trust
+
+chronium reviews the look, generator and wording before publication; deployment
+and signing credentials remain his. Builds and previews do not prove deployment
+or upload. Keep the site plain and specific, with real screenshots, no marketing
+claims and no emojis.
+
+The public TLS certificate used by Cloudflare is separate from the Pyxis
+Software Signing CA used for packages and ISO verification. The homelab CA is
+not used for the public TLS name. The [signing reference](../packages/signing/README.md)
+owns the software trust chain.
+
+Serving these assets from Pyxis on the netcup node, including its origin TLS
+and deployment qualification, is a separate
+[self-hosting follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1701); the current generator and
+Cloudflare deployment do not establish that capability.
