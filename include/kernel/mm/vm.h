@@ -2,9 +2,6 @@
 #define KERNEL_MM_VM_H
 #include <kernel/mm/types.h>
 
-/* Only the kernel uses bounded metadata, to break the VM/heap bootstrap cycle. */
-#define VM_MAX_RANGES 4096
-
 struct vm_space;
 
 /* Boot-created permanent firmware/native mapping domain. The fixed BSP owner
@@ -52,13 +49,14 @@ void vm_kernel_quarantine(uintptr_t base, size_t bytes);
 
 struct vm_stats {
   size_t total_pages, reserved_pages, backed_pages;
-  size_t range_records;
+  size_t range_records; /* Linked records; the kernel's two spares are not counted. */
   /* Retained VM records/tokens, excluding heap headers and page tables. */
   size_t extent_records, metadata_bytes;
   /* Owned private root/lower tables; zero for kernel space, not its total tables. */
   size_t private_page_table_bytes;
 };
 
+/* Runs after heap_init(): the first kernel range record is a heap allocation. */
 void vm_init(void);
 struct vm_space *vm_kernel_space(void);
 /* Retained kernel-root actor, IF=1, structural owner held after SMP startup,

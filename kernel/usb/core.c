@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <kernel/input.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/bluetooth.h>
@@ -3342,6 +3343,21 @@ static bool runtime_descriptor_step(struct usb_discovery *discovery)
   return true;
 }
 
+/* Lights follow the input coordinator's lock state, including once after each
+ * binding. The transfer completes within this pass, between admissions, so no
+ * LED ticket is left for port or hub identity checks to find on EP0. */
+static bool keyboard_lights_step(struct usb_discovery *discovery)
+{
+  unsigned locks = input_keyboard_locks();
+  for (size_t index = 0; index < discovery->device_count + discovery->runtime_count + discovery->network_count; ++index) {
+    struct usb_device_record *device = live_record(discovery, index);
+    if (!device->retired && usb_hid_update_leds(&device->hid, locks)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static void runtime_start(struct usb_discovery *discovery, struct usb_device_record *hub,
                             unsigned root, unsigned port)
 {
@@ -3378,6 +3394,9 @@ void usb_topology_process(struct usb_discovery *discovery)
     return;
   }
   if (runtime->stage == USB_RUNTIME_IDLE) {
+    if (keyboard_lights_step(discovery)) {
+      return;
+    }
     unsigned root = discovery->next_root++ % discovery->port_count;
     struct usb_retry *retry = &discovery->root_retry[root];
     uint64_t generation = usb_host_port_generation(discovery->host, root);

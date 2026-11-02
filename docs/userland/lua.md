@@ -73,8 +73,8 @@ uses the inherited `TZ` and packaged [TZif data](timezones.md). Clock or zone
 failures raise errors. `os.difftime`, `os.getenv`, `os.remove`, `os.rename` and
 `os.exit` are available. `os.rename` uses libc's replacement policy where the
 filesystem and caller's authority permit it. Replacement requires matching
-kinds and an empty directory victim; directory moves require RAM or writable
-npfs. See [rename paths](paths.md#rename-paths).
+kinds and an empty directory victim; directory moves require RAM, writable
+npfs or host backing. See [rename paths](paths.md#rename-paths).
 
 `io.popen`, `os.execute` and `os.clock` remain unsupported. Locale selection
 uses libc's real fixed-C locale. Standard file buffering uses libc.

@@ -328,10 +328,10 @@ rebuilt against this ABI. Success has no reply.
 
 Source REMOVE and destination CREATE are required; REPLACE requires destination
 REMOVE even for an absent destination. File READ/WRITE and parent ENUMERATE/LOOKUP
-are unnecessary for the direct operation. RAM and writable npfs support files
-and directories within one store/mount instance. Different volumes or instances
-and mixed stores return BAD_OPERATION, without copying/deleting. FAT32/host
-retain file rename; directory moves there return BAD_OPERATION. Read-only backing
+are unnecessary for the direct operation. RAM, writable npfs and host support
+files and directories within one store/mount instance. Different volumes or
+instances and mixed stores return BAD_OPERATION, without copying/deleting. FAT32
+retains file rename; directory moves there return BAD_OPERATION. Read-only backing
 returns READ_ONLY after capability checks. Providers have no directory rename.
 
 Replacement requires matching kinds and an empty directory victim (NOT_EMPTY
@@ -341,8 +341,9 @@ parents return NOT_FOUND. NO_REPLACE refuses a distinct existing destination;
 the same existing entry succeeds under either policy without changing generations.
 For npfs, two distinct names of the same regular inode also succeed as a no-op
 under either policy, preserving both names and their count.
-Host files retain the documented external name/type races and same-name
-NO_REPLACE refusal. Type constraints do not turn host preflight into a snapshot.
+Host files and directories retain the documented external name/type races and
+same-name NO_REPLACE refusal. Type constraints do not turn host preflight into a
+snapshot.
 
 A directory move keeps the same object/inode and every descendant. The cycle
 check refuses a destination equal to or below the moved directory with BAD_REQUEST,
@@ -353,6 +354,15 @@ before releasing references/freeing the parent. No parent capability is exposed.
 The allocation-free walk is bounded to 1024 links; incomplete checks return LIMIT.
 npfs validates copied parent records with cycle detection under its worker, bounded
 to 1024 iterations; corrupt ancestry returns IO and retires the failed pool.
+
+Host directory moves (chronium, 2026-11-02) send one FUSE RENAME2 of the
+directory name. The guest keeps no host ancestry, so the host's rename performs
+the cycle check atomically with the edit; its EINVAL returns BAD_REQUEST, and a
+nonempty victim returns NOT_EMPTY. External host changes race guest moves with
+last writer wins: the guest neither locks host names nor detects that a host
+process moved, replaced or removed a name between preflight and RENAME2, or
+afterwards. Held host directories and files keep their host node IDs, so they
+follow the moved directory; the guest keeps no host path or name state to repair.
 
 RAM prepares name storage outside locks, then rechecks names, kind, ancestry,
 victim emptiness, detach state and generation/count capacity under the topology

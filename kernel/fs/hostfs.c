@@ -563,24 +563,26 @@ static enum call_status rename_child(struct hostfs_request *request)
   if (request->kind != DIRECTORY_KIND_ANY && request->kind != source_kind) {
     return CALL_WRONG_TYPE;
   }
-  if (kind == VIRTIO_FS_DIRECTORY) {
-    return CALL_BAD_OPERATION;
-  }
-  if (kind != VIRTIO_FS_FILE) {
+  if (kind != VIRTIO_FS_FILE && kind != VIRTIO_FS_DIRECTORY) {
     return CALL_WRONG_TYPE;
   }
   if (request->replace) {
+    enum virtio_fs_kind victim;
     result = lookup_kind(request->destination, request->destination_name,
-        request->destination_length, &kind);
+        request->destination_length, &victim);
     if (result != VIRTIO_FS_OK && result != VIRTIO_FS_NOT_FOUND) {
       return call_result(result);
     }
-    if (result == VIRTIO_FS_OK && kind != VIRTIO_FS_FILE) {
+    if (result == VIRTIO_FS_OK && victim != kind) {
       return CALL_WRONG_TYPE;
     }
   }
   /* NO_REPLACE is enforced by the host operation itself, including when a
-   * destination appears after preflight. Never emulate it with LOOKUP. */
+   * destination appears after preflight. Never emulate it with LOOKUP.
+   * Directory moves likewise leave the self/descendant check and nonempty
+   * victims to the host's atomic RENAME2 (EINVAL, ENOTEMPTY): this worker
+   * knows no host ancestry. Held wrappers keep their node IDs; no guest path
+   * or name state exists to repair. */
   return call_result(virtio_fs_rename(&request->node->node, request->name, request->count,
       &request->destination->node, request->destination_name, request->destination_length,
       request->replace));

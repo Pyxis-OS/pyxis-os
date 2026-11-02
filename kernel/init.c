@@ -47,10 +47,11 @@
 [[noreturn]] void kernel_init(const struct boot_info *boot)
 {
   clock_init(boot);
-  vm_init();
+  /* The heap has its own arena; kernel VM range records are heap allocations. */
   if (!heap_init()) {
     panic("cannot initialize the TLSF heap");
   }
+  vm_init();
   kinfo("mm: kernel VM and heap ready\n");
   arch_clock_maintain();
 
@@ -156,9 +157,9 @@
   struct vm_stats virtual = vm_get_stats(vm_kernel_space());
   struct heap_stats heap = heap_get_stats();
 
-  kinfo("VM: total=%zu reserved=%zu backed=%zu pages, records=%zu/%u\n",
+  kinfo("VM: total=%zu reserved=%zu backed=%zu pages, records=%zu\n",
         virtual.total_pages, virtual.reserved_pages, virtual.backed_pages,
-        virtual.range_records, VM_MAX_RANGES);
+        virtual.range_records);
   kinfo("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu; "
         "arena used=%zu retired=%zu bytes\n",
         heap.pools, heap.pool_bytes, heap.live_allocations, heap.arena_bytes,

@@ -139,9 +139,9 @@ otherwise the helper accepts either kind. Roots and final `.`/`..` are rejected.
 Intermediate components retain normal ordered traversal and boundary checks.
 Every temporary handle is closed; the context is unchanged.
 
-Directory moves require one RAM store or writable npfs mount. Replacement requires
-matching kinds and an empty directory victim; self/descendant moves refuse.
-FAT32 and host backing support file moves only. See
+Directory moves require one RAM store, writable npfs mount or host session.
+Replacement requires matching kinds and an empty directory victim;
+self/descendant moves refuse. FAT32 backing supports file moves only. See
 [filesystem mutations](../interfaces/filesystem-mutations.md) and [mv](mv.md).
 
 Source traversal requests REMOVE. Destination traversal requests CREATE and,

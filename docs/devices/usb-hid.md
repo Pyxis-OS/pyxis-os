@@ -23,14 +23,18 @@ endpoint. Boot keyboards require SET_PROTOCOL(boot); admitted boot mice select
 report protocol, and nonboot mice already use it. Configuration precedes bounded
 report admission and selected endpoint setup; receives start only after protocol,
 Feature negotiation and initial snapshots. Initial GET_REPORT queries every
-button-bearing report ID when supported; a STALL starts that ID all-up (or the
-boot keyboard all-up), without clearing another ID or rejecting its composite
-sibling. Before continuing, xHCI
-resets halted EP0, clears the owning transaction translator when applicable,
-and advances the dequeue pointer past the failed transfer. Failed recovery or
-other GET_REPORT errors still fail closed.
-Keyboard SET_IDLE(0) is required; a mouse may stall it. Report-protocol
-keyboards, tablets, gamepads, vendor protocols, media keys and keyboard LED updates
+button-bearing report ID when supported; a STALL or timeout starts that ID
+all-up (or the boot keyboard all-up), without clearing another ID or rejecting
+its composite sibling. Before continuing, xHCI
+resets halted EP0 or cancels the timed-out transfer, clears the owning
+transaction translator when applicable, and advances the dequeue pointer past
+the failed transfer; only failed recovery fails closed. As in Linux usbhid, the
+optional requests (SET_IDLE, report descriptors, the initial GET_REPORT,
+GET_PROTOCOL readback and wheel Feature reports) may be refused or time out
+without costing the binding; SET_CONFIGURATION and the keyboard's
+SET_PROTOCOL(boot) remain required. Bound boot keyboards
+receive [lock lights](keyboard.md#lock-lights) as boot Output reports.
+Report-protocol keyboards, tablets, gamepads, vendor protocols and media keys
 are unsupported.
 
 Boot admission covers low/full/high-speed leaves on roots or through at most

@@ -53,6 +53,8 @@ uint64_t input_last_typing_ns(void);
 bool input_policy_install(uint32_t mouse_direction, uint32_t touchpad_direction,
     int32_t touchpad_speed, bool num_lock);
 int32_t input_touchpad_speed(void);
+/* BSP. Caps, Num and Scroll Lock as KEY_MOD_* bits, shared by every keyboard. */
+unsigned input_keyboard_locks(void);
 void input_source_lost(struct input_source *source);
 bool input_pointer_available(void);
 uint32_t input_pointer_suppressed_buttons(void);

@@ -298,14 +298,14 @@ missing parent fails with ENOENT; parents are not created. The new directory's h
 ## Rename
 
 `rename(old_path, new_path)` calls native replacement rename for files and
-RAM/npfs directories. Same-kind empty directory replacement is allowed;
+RAM, npfs and host directories. Same-kind empty directory replacement is allowed;
 nonempty victims return ENOTEMPTY. A destination is the exact new name, including
 an existing directory; libc never treats it as a container. Trailing separators
 require directory operands atomically. Roots and final `.`/`..` refuse.
 
 Open handles, delegated roots and cwd chains keep their identities and rights;
 `getcwd` spelling may become stale. Cycles return EINVAL. Cross-store/mount and
-FAT32/host directory moves return ENOTSUP; no copy/delete fallback is attempted.
+FAT32 directory moves return ENOTSUP; no copy/delete fallback is attempted.
 Read-only backing returns EROFS after capability checks. Generic native kind
 mismatch currently maps to EINVAL, not exact POSIX EISDIR/ENOTDIR; EXDEV is not
 claimed. IO or uncertain completion returns EIO without an automatic retry.

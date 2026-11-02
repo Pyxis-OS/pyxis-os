@@ -82,7 +82,8 @@ _Static_assert(sizeof(struct xhci_trb) == XHCI_TRB_BYTES, "xHCI TRB hardware lay
 _Static_assert(sizeof(struct xhci_erst_entry) == XHCI_ERST_BYTES, "xHCI ERST hardware layout");
 
 enum port_state { PORT_ABSENT, PORT_UNSUPPORTED, PORT_CONNECTED, PORT_RESERVED, PORT_REMOVED };
-enum control_state { CONTROL_IDLE, CONTROL_ACTIVE, CONTROL_DONE, CONTROL_HALTED, CONTROL_HELD };
+/* EXPIRED: a client request passed its deadline; its owner cancels the TD. */
+enum control_state { CONTROL_IDLE, CONTROL_ACTIVE, CONTROL_EXPIRED, CONTROL_DONE, CONTROL_HALTED, CONTROL_HELD };
 struct xhci_bulk_endpoint {
   struct dma_buffer ring;
   struct usb_bulk_endpoint descriptor;
@@ -180,7 +181,7 @@ struct usb_host_device {
     phys_addr_t setup, data, status;
     size_t requested, actual;
     enum usb_result result;
-    bool client, inbound, short_packet;
+    bool client, inbound, short_packet, cancelling;
     struct usb_setup setup_packet;
   } request;
 };
@@ -201,6 +202,7 @@ struct xhci_port {
 static void controller_worker(void *argument);
 static void stop_controller(struct usb_host_controller *controller);
 static enum usb_result recover_control_stall(struct usb_host_device *device, uint64_t deadline);
+static void expire_control(struct usb_host_device *device);
 static bool device_present(const struct usb_host_device *device);
 static bool device_identity_held(const struct usb_host_device *device);
 static struct usb_host_interrupt *device_interrupt(const struct usb_host_device *device, unsigned dci);
@@ -1459,7 +1461,8 @@ static void mark_device_retiring(struct usb_host_device *device)
       interrupt->result = USB_IO;
     }
   }
-  if (device->request.state == CONTROL_ACTIVE || device->request.state == CONTROL_HALTED) {
+  if (device->request.state == CONTROL_ACTIVE || device->request.state == CONTROL_EXPIRED ||
+      device->request.state == CONTROL_HALTED) {
     device->request.state = CONTROL_HELD;
     device->request.result = USB_IO;
   }
@@ -1954,6 +1957,12 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
     device->stopped_trb = event->parameter;
     return true;
   }
+  if (stopped && endpoint == XHCI_ENDPOINT_ZERO && device->request.cancelling &&
+      controller->command.pending && controller->command.type == XHCI_TRB_STOP_ENDPOINT &&
+      controller->command.slot == slot) {
+    /* The cancelled TD stopped in place; cancellation moves the dequeue past it. */
+    return true;
+  }
   if (endpoint != XHCI_ENDPOINT_ZERO) {
     struct usb_host_interrupt *interrupt = device_interrupt(device, endpoint);
     if (interrupt) {
@@ -1965,7 +1974,7 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
     }
     return consume_bulk(controller, device, endpoint, event);
   }
-  if ((device->request.state != CONTROL_ACTIVE &&
+  if ((device->request.state != CONTROL_ACTIVE && device->request.state != CONTROL_EXPIRED &&
        !(device->retiring && device->request.state == CONTROL_HELD)) ||
       (event->parameter != device->request.setup && event->parameter != device->request.status &&
        (!device->request.requested || event->parameter != device->request.data))) {
@@ -2491,7 +2500,8 @@ static void stop_controller(struct usb_host_controller *controller)
         }
       }
     }
-    if (device->request.state == CONTROL_ACTIVE || device->request.state == CONTROL_HALTED) {
+    if (device->request.state == CONTROL_ACTIVE || device->request.state == CONTROL_EXPIRED ||
+        device->request.state == CONTROL_HALTED) {
       device->request.state = CONTROL_HELD;
       device->request.result = USB_IO;
     }
@@ -3418,9 +3428,14 @@ static bool control_deadlines(struct usb_host_controller *controller)
     }
     if (!device->retiring && device->request.state == CONTROL_ACTIVE &&
         task_deadline_expired(device->request.deadline)) {
-      device->request.state = CONTROL_HELD;
       device->request.result = USB_TIMEOUT;
-      mark_subtree_retiring(device);
+      if (device->request.client) {
+        /* Its owner cancels the TD at its next poll or wait. */
+        device->request.state = CONTROL_EXPIRED;
+      } else {
+        device->request.state = CONTROL_HELD;
+        mark_subtree_retiring(device);
+      }
     }
   }
   return async_bulk_deadlines(controller);
@@ -3461,6 +3476,9 @@ enum usb_result usb_host_control_poll(struct usb_host_device *device, struct usb
   if (!ticket_owned(device, ticket)) {
     return USB_STALE;
   }
+  if (device->request.state == CONTROL_EXPIRED) {
+    expire_control(device);
+  }
   if (device->request.state == CONTROL_HALTED && recover_control_stall(device, deadline) != USB_OK) {
     stop_controller(device->controller);
   }
@@ -3474,6 +3492,9 @@ enum usb_result usb_host_control_wait(struct usb_host_device *device, struct usb
   for (;;) {
     if (!ticket_owned(device, ticket)) {
       return USB_STALE;
+    }
+    if (device->request.state == CONTROL_EXPIRED) {
+      expire_control(device);
     }
     if (device->request.state == CONTROL_HALTED) {
       if (recover_control_stall(device, deadline) != USB_OK) {
@@ -3491,6 +3512,9 @@ enum usb_result usb_host_control_wait(struct usb_host_device *device, struct usb
       continue;
     }
     if (task_deadline_expired(deadline)) {
+      device->request.state = CONTROL_EXPIRED;
+      device->request.result = USB_TIMEOUT;
+      expire_control(device);
       return USB_TIMEOUT;
     }
     uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
@@ -3514,7 +3538,7 @@ enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb
   if (device_identity_held(device)) {
     return USB_BUSY;
   }
-  if (device->request.state == CONTROL_ACTIVE) {
+  if (device->request.state == CONTROL_ACTIVE || device->request.state == CONTROL_EXPIRED) {
     return USB_BUSY;
   }
   if (!completion || (device->request.result == USB_OK && device->request.inbound &&
@@ -3555,6 +3579,12 @@ void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket 
 {
   assert_device_owner(device);
   if (ticket_owned(device, ticket)) {
+    if (!device->retiring &&
+        (device->request.state == CONTROL_ACTIVE || device->request.state == CONTROL_EXPIRED)) {
+      device->request.state = CONTROL_EXPIRED;
+      device->request.result = USB_TIMEOUT;
+      expire_control(device);
+    }
     device->request.client = false;
     if (device->request.state == CONTROL_DONE) {
       device->request.state = CONTROL_IDLE;
@@ -3696,6 +3726,58 @@ static enum usb_result recover_control_stall(struct usb_host_device *device, uin
    * Recovery runs only after its stall event has left the event ring. */
   device->request.state = device->request.client ? CONTROL_DONE : CONTROL_IDLE;
   return USB_OK;
+}
+
+/* A timed-out control TD is cancelled as Linux cancels an URB: stop EP0,
+ * release a split transaction's TT buffer and move the dequeue pointer past
+ * the TD. The next publication is a SETUP. */
+static enum usb_result cancel_control(struct usb_host_device *device, uint64_t deadline)
+{
+  struct usb_host_controller *controller = device->controller;
+  if (!device_ready(device)) {
+    return USB_IO;
+  }
+  dma_read_barrier();
+  const uint32_t *context = output_endpoint(device, XHCI_ENDPOINT_ZERO);
+  if ((context[0] & XHCI_ENDPOINT_STATE_MASK) == XHCI_ENDPOINT_STATE_RUNNING) {
+    device->request.cancelling = true;
+    bool stopped = endpoint_command(device, XHCI_TRB_STOP_ENDPOINT, XHCI_ENDPOINT_ZERO, 0, deadline);
+    device->request.cancelling = false;
+    if (!stopped) {
+      controller->failure = "control cancellation stop failed";
+      return USB_IO;
+    }
+  }
+  if (device->request.state == CONTROL_HALTED) {
+    /* A STALL raced the stop; its result stands. */
+    return recover_control_stall(device, deadline);
+  }
+  if (device->request.state != CONTROL_EXPIRED) {
+    /* The TD completed before the stop took effect. */
+    return USB_OK;
+  }
+  dma_read_barrier();
+  if ((context[0] & XHCI_ENDPOINT_STATE_MASK) != XHCI_ENDPOINT_STATE_STOPPED ||
+      !clear_tt(device, 0, true, deadline) ||
+      !endpoint_command(device, XHCI_TRB_SET_DEQUEUE, XHCI_ENDPOINT_ZERO,
+                         (device->control_ring.physical + device->enqueue * XHCI_TRB_BYTES) |
+                         (device->cycle ? XHCI_TRB_CYCLE : 0), deadline)) {
+    controller->failure = "control cancellation dequeue failed";
+    return USB_IO;
+  }
+  device->request.state = device->request.client ? CONTROL_DONE : CONTROL_IDLE;
+  return USB_OK;
+}
+
+/* Only a failed cancellation leaves EP0 in an unknown state; that, and only
+ * that, retires the device. */
+static void expire_control(struct usb_host_device *device)
+{
+  if (cancel_control(device, task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS)) != USB_OK) {
+    device->request.state = CONTROL_HELD;
+    device->request.result = USB_TIMEOUT;
+    mark_subtree_retiring(device);
+  }
 }
 
 size_t usb_host_interrupt_capacity(void)

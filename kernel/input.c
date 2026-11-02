@@ -127,11 +127,21 @@ static bool repeatable(enum key_code key)
       key != KEY_PRINT_SCREEN;
 }
 
-/* The one place lock state changes, so every keyboard's lights follow it. */
+/* The one place lock state changes. PS/2 lights are pushed from here; USB
+ * keyboard lights are pulled by their controller worker. */
 static void set_locks(unsigned value)
 {
   locks = value;
   ps2_keyboard_set_leds(locks);
+}
+
+unsigned input_keyboard_locks(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  assert_input_owner();
+  unsigned value = locks;
+  cpu_restore_interrupts(flags);
+  return value;
 }
 
 static void reset_keyboard(unsigned retained_locks)

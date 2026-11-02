@@ -283,7 +283,7 @@ before either runs. Existing handles survive removal, and
 removing an empty directory makes it unavailable for new children even through
 an older handle. See [the directory contract](../interfaces/directories.md#removal).
 
-`mv [--] source... destination` renames files and RAM/npfs directories with
+`mv [--] source... destination` renames files and RAM, npfs and host directories with
 libc `rename`: to the destination path, replacing a same-kind file or empty
 directory, or, when the destination is a
 directory, into it under each source's last name. Several sources need a

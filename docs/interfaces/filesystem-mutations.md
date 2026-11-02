@@ -37,7 +37,7 @@ save, then atomically replace the selected slot under
 `home://doom/saves/<iwad-name>/`. Shareware and retail saves are separated.
 Configuration persistence remains independent and disabled.
 
-RAM/npfs directory moves retain the tree identity, reject self/descendant moves
+RAM, npfs and host directory moves retain the tree identity, reject self/descendant moves
 and replace only empty same-kind victims. Held cwd chains keep their granted
 ancestors, and delegated roots cannot escape to a new parent. Native npfs has a
 [regular-file LINK operation](directories.md#native-regular-file-links); libc

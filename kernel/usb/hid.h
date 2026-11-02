@@ -42,6 +42,9 @@ struct usb_hid_binding {
   bool initial_keys[KEY_COUNT];
   unsigned initial_buttons;
   bool ticket_active, claimed, active, lost, retirement_pending;
+  /* Last boot LED report attempted; none yet after binding. */
+  uint8_t leds;
+  bool leds_attempted, leds_failure_reported;
 };
 
 /* The core validates the complete configuration before selecting its first
@@ -59,6 +62,11 @@ enum usb_result usb_hid_bind_boot(struct usb_hid_binding *binding,
                                   struct usb_host_device *device, uint64_t deadline);
 /* No waits, commands or allocation. Source callbacks briefly disable IF. */
 void usb_hid_collect(struct usb_hid_binding *binding);
+/* Outer worker only, while no admission holds a control ticket. When the boot
+ * LED report for locks (KEY_MOD_* bits) differs from the last one attempted,
+ * sends it and waits for completion; a refusal keeps the binding. Returns
+ * whether a transfer was attempted. */
+bool usb_hid_update_leds(struct usb_hid_binding *binding, unsigned locks);
 void usb_hid_lost(struct usb_hid_binding *binding);
 
 #endif

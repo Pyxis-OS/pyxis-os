@@ -35,6 +35,7 @@
 #define USB_REQUEST_CLASS_INTERFACE_IN 0xa1
 #define USB_REQUEST_CLASS_INTERFACE_OUT 0x21
 #define USB_REPORT_INPUT 1
+#define USB_REPORT_OUTPUT 2
 #define USB_REPORT_FEATURE 3
 #define USB_MODIFIER_FIRST 0xe0
 #define USB_KEY_ERROR_LAST 3
@@ -50,6 +51,10 @@
 #define USB_HID_MALFORMED_DIAGNOSTIC_NS UINT64_C(5000000000)
 #define USB_HID_MOUSE_SAMPLES 4
 #define USB_HID_MOUSE_SAMPLE_BYTES 16
+/* Boot keyboard Output report: LED usage page bits. */
+#define USB_LED_NUM_LOCK (1u << 0)
+#define USB_LED_CAPS_LOCK (1u << 1)
+#define USB_LED_SCROLL_LOCK (1u << 2)
 
 enum hid_stage {
   HID_CONFIGURATION, HID_KEYBOARD_DESCRIPTOR, HID_MOUSE_DESCRIPTOR, HID_EDGE_DESCRIPTOR, HID_ENDPOINTS,
@@ -588,7 +593,7 @@ static enum usb_result initial_snapshot(struct usb_hid_binding *binding,
                                          const struct usb_completion *completion)
 {
   struct usb_hid_interface *interface = &binding->interfaces[binding->interface];
-  if (completion->result == USB_STALL) {
+  if (completion->result != USB_OK) {
     /* EP0 has been fenced before collection. Unknown attachment holds begin
      * empty; only this report's state is affected when IDs are present. */
     if (interface->protocol == USB_PROTOCOL_KEYBOARD) {
@@ -794,12 +799,16 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
   }
   binding->ticket_active = false;
   struct usb_hid_interface *interface = &binding->interfaces[binding->interface];
-  bool optional_stall = completion.result == USB_STALL &&
-      ((binding->stage == HID_IDLE && interface->protocol == USB_PROTOCOL_MOUSE) ||
-       binding->stage == HID_KEYBOARD_DESCRIPTOR || binding->stage == HID_MOUSE_DESCRIPTOR ||
-       binding->stage == HID_INITIAL || binding->stage == HID_PROTOCOL_READBACK || feature_stage(binding->stage) ||
-       (binding->stage == HID_PROTOCOL && interface->protocol == USB_PROTOCOL_MOUSE));
-  if ((completion.result != USB_OK && !optional_stall) || (!setup.length && completion.bytes)) {
+  /* As in Linux usbhid, a refused or timed-out optional request (idle rate,
+   * report descriptor, initial report, protocol readback, wheel feature) does
+   * not cost the binding; the cancelled transfer left EP0 usable. */
+  bool optional = binding->stage == HID_IDLE ||
+      binding->stage == HID_KEYBOARD_DESCRIPTOR || binding->stage == HID_MOUSE_DESCRIPTOR ||
+      binding->stage == HID_INITIAL || binding->stage == HID_PROTOCOL_READBACK || feature_stage(binding->stage);
+  bool optional_failure = completion.result != USB_OK &&
+      (optional || (completion.result == USB_STALL && binding->stage == HID_PROTOCOL &&
+                    interface->protocol == USB_PROTOCOL_MOUSE));
+  if ((completion.result != USB_OK && !optional_failure) || (!setup.length && completion.bytes)) {
     return bind_failed(binding, completion.result == USB_OK ? USB_IO : completion.result);
   }
   switch (binding->stage) {
@@ -868,7 +877,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
     break;
   case HID_FEATURE_READ: {
     uint32_t pan, wheel;
-    if (completion.result == USB_STALL) {
+    if (completion.result != USB_OK) {
       disable_feature(binding);
     } else {
       bool confirmed = usb_hid_feature_confirm(&binding->mouse, binding->layout, binding->control,
@@ -896,7 +905,7 @@ enum usb_result usb_hid_bind_step(struct usb_hid_binding *binding)
     break;
   case HID_FEATURE_CONFIRM: {
     uint32_t pan, wheel;
-    if (completion.result == USB_STALL ||
+    if (completion.result != USB_OK ||
         !usb_hid_feature_confirm(&binding->mouse, binding->layout, binding->control,
                                  completion.bytes, &pan, &wheel)) {
       disable_feature(binding);
@@ -1117,4 +1126,68 @@ void usb_hid_collect(struct usb_hid_binding *binding)
       }
     }
   }
+}
+
+static uint8_t boot_leds(unsigned locks)
+{
+  uint8_t report = 0;
+  if (locks & KEY_MOD_NUM_LOCK) {
+    report |= USB_LED_NUM_LOCK;
+  }
+  if (locks & KEY_MOD_CAPS_LOCK) {
+    report |= USB_LED_CAPS_LOCK;
+  }
+  if (locks & KEY_MOD_SCROLL_LOCK) {
+    report |= USB_LED_SCROLL_LOCK;
+  }
+  return report;
+}
+
+bool usb_hid_update_leds(struct usb_hid_binding *binding, unsigned locks)
+{
+  const struct usb_hid_interface *keyboard = &binding->interfaces[0];
+  if (!binding->active || keyboard->protocol != USB_PROTOCOL_KEYBOARD ||
+      !usb_host_device_present(binding->host)) {
+    return false;
+  }
+  uint8_t report = boot_leds(locks);
+  if (binding->leds_attempted && binding->leds == report) {
+    return false;
+  }
+  /* Admission confirmed boot protocol, whose Output report has no ID. */
+  struct usb_setup setup = {
+    .request_type = USB_REQUEST_CLASS_INTERFACE_OUT,
+    .request = USB_REQUEST_SET_REPORT,
+    .value = USB_REPORT_OUTPUT << 8,
+    .index = keyboard->number,
+    .length = sizeof(report),
+  };
+  uint64_t deadline = task_deadline_after_ms(USB_CONTROL_TIMEOUT_MS);
+  struct usb_ticket ticket;
+  enum usb_result result = usb_host_control_submit(binding->host, &setup, &report, deadline, &ticket);
+  if (result == USB_BUSY) {
+    /* Identity hold or another EP0 client; a later pass sends the latest state. */
+    return false;
+  }
+  if (result == USB_OK) {
+    struct usb_completion completion;
+    result = usb_host_control_wait(binding->host, ticket, deadline);
+    if (result == USB_OK) {
+      result = usb_host_control_take(binding->host, ticket, NULL, 0, &completion);
+    }
+    if (result != USB_OK) {
+      usb_host_control_abandon(binding->host, ticket);
+    } else {
+      result = completion.result;
+    }
+  }
+  /* A failure is retried only by a later lock change, like PS/2. */
+  binding->leds = report;
+  binding->leds_attempted = true;
+  if (result != USB_OK && !binding->leds_failure_reported) {
+    binding->leds_failure_reported = true;
+    kdebug("usb HID: %x:%x interface %u LED report not accepted (result %u); lights unchanged\n",
+           binding->vendor, binding->product, keyboard->number, (unsigned)result);
+  }
+  return true;
 }
