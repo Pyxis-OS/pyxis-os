@@ -64,7 +64,8 @@ for an existing installation, and changing it never resizes existing storage.
 The separate developer USB sample keeps its explicit image/ESP settings. These
 defaults do not change partition authority, publication ordering or journal policy.
 See the [installer](../userland/installer.md) and
-[QEMU image](../wip/qemu-image.md).
+[QEMU image](../wip/qemu-image.md), and the
+[disposable qualification record](../development/experiments/pool-sizing-defaults.md).
 
 ## Package indexes and fetching
 
