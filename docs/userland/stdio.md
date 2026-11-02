@@ -629,7 +629,7 @@ form, zero padding, infinities, NaNs and signed zero. The radix is always `.`;
 there is no locale state. Conversion uses the pinned musl algorithm with an
 approximately 8 KiB stack workspace, honors the active FP rounding mode, and
 does not allocate. Large padding on a bounded destination is counted without
-iterating through discarded bytes. Kernel formatting remains integer-only.
+iterating through discarded bytes; a stream receives the padding bytes. Kernel formatting remains integer-only.
 
 `sprintf` and `vsprintf` use the same formatter without a destination bound;
 the caller's buffer must hold the whole result and its NUL. Prefer `snprintf`.
@@ -643,10 +643,13 @@ and allocation failure ENOMEM. `vasprintf` copies and preserves the supplied
 va_list. If the second formatting pass fails, the unpublished buffer is freed
 and its error preserved; a length mismatch returns EINVAL.
 
-Output is staged completely before writing: a
-small stack buffer handles short results, with heap storage for larger ones.
-Formatting/allocation failures produce no output; output errors can leave a
-partial transfer. Failures set the stream error indicator and errno.
+`printf` and `fprintf` format twice at most. The first pass runs into a 256-byte
+stack buffer, validates the format and counts the result; a result that fits is
+written from that buffer. A longer result is formatted again and written to the
+stream in 256-byte chunks, so no memory grows with the output size and nothing
+allocates. A bad format produces no output (the first pass fails before any
+write); an output error can leave a partial transfer and the call returns EOF.
+Failures set the stream error indicator and errno.
 
 `strerror` returns static, nonmodifiable messages, including an unknown-error
 fallback. `perror` writes an optional prefix, the saved errno message and newline
