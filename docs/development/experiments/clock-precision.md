@@ -160,7 +160,8 @@ This changes no installed LLVM compiler or container.
 
 The final rebase onto main `454d2504` adds upstream package/Wi-Fi work. SDK
 headers and runtime sources remain identical to the qualified clock build; the
-new userland commits change only `pkg`. Main's `pxa.py` now reads the native
+new userland commits change only `pkg`. Main's host manifest check (then
+`tools/pxa.py`, now part of `tools/pxpkg.py`) reads the native
 grant table directly, so its duplicate static PRECISE entry is removed. Packing
 and checking the refreshed Go bundle passes with that single authority.
 

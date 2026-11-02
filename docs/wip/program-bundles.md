@@ -253,8 +253,9 @@ follow-up, not an implemented cache.
 
 ### ZIP tasks and owner assignment
 
-- **2a: compliant host packaging, implemented (#706).** The standalone
-  [host packer/checker](../development/pxa-packing.md) handles the stored-only
+- **2a: compliant host packaging, implemented (#706); its tool was removed on
+  2026-11-02** when the bundle manifest check moved into `tools/pxpkg.py`. Git
+  history keeps `tools/pxa.py` and its packing guide. The packer handled the stored-only
   manifest plus `app/` layout; independent Python ZIP and UnZip readers qualified
   records, CRCs, UTF-8 names and rejected inputs. Its host metadata accounting does
   not establish the native retained-index budget; task 2b must enforce and qualify

@@ -5,6 +5,7 @@ import argparse
 import fcntl
 import hashlib
 import io
+import json
 import math
 import os
 from pathlib import Path
@@ -14,8 +15,6 @@ import subprocess
 import sys
 import tempfile
 import time
-
-import pxa
 
 
 class PackageError(ValueError):
@@ -587,6 +586,205 @@ def commands_check(value):
     return commands
 
 
+# Bundle manifests (docs/userland/program-bundles.md), checked for every bundle a
+# package exports a command from. The grant table and the stack limits are read
+# from their only authorities, userland/lib/bundle.c and include/abi/launcher.h.
+P1F_MAGIC = b"PXE1FLAT"
+# Startup binding names a manifest may not take: source selectors' prefix, the
+# packages source, and the roots its "packages" list and "sdk" grant.
+BUNDLE_SOURCE_PREFIX = "source."
+BUNDLE_PACKAGE_SOURCE = "packages"
+BUNDLE_PACKAGES_ROOT = "pkg"
+BUNDLE_SDK_ROOT = "sdk"
+# The native bundle parser's nesting limit.
+BUNDLE_JSON_DEPTH = 16
+
+
+def native_source(relative):
+    path = Path(__file__).resolve().parent.parent / relative
+    try:
+        return path.read_text()
+    except OSError as error:
+        raise RuntimeError(f"cannot read {path}, the native bundle rules: {error}") from error
+
+
+def native_size(text, name):
+    """The value of a C #define built only from integers, UINT64_C and *."""
+    match = re.search(r"^#define " + name + r" (.+)$", text, re.M)
+    expression = re.sub(r"UINT64_C\((\d+)\)", r"\1", match.group(1)) if match else ""
+    if not re.fullmatch(r"[0-9 *()]+", expression):
+        raise RuntimeError(f"cannot read {name} from the native bundle rules")
+    return eval(expression)
+
+
+def native_rights(text):
+    """The resource/right rows of grant_rights[] in userland/lib/bundle.c."""
+    match = re.search(r"grant_rights\[\] = \{(.*?)\n\};", text, re.S)
+    rights = {}
+    for resource, right in re.findall(r'\{"([a-z_]+)", "([a-z_-]+)", ', match.group(1) if match else ""):
+        rights.setdefault(resource, set()).add(right)
+    if not rights:
+        raise RuntimeError("cannot read grant_rights from userland/lib/bundle.c")
+    return rights
+
+
+GRANT_RIGHTS = native_rights(native_source("userspace/lib/bundle.c"))
+LAUNCHER_ABI = native_source("include/abi/launcher.h")
+STACK_MIN = native_size(LAUNCHER_ABI, "LAUNCH_INITIAL_STACK_MIN_SIZE")
+STACK_MAX = native_size(LAUNCHER_ABI, "LAUNCH_INITIAL_STACK_MAX_SIZE")
+
+
+def manifest_text(text):
+    require(isinstance(text, str), "expected a string")
+    encoded = text.encode("utf-8", errors="strict")
+    require(b"\0" not in encoded, "NUL in string")
+    return encoded
+
+
+def manifest_name(name):
+    raw = manifest_text(name)
+    require(0 < len(raw) <= 255 and name not in (".", "..")
+            and not any(c <= 0x20 or c == 0x7f or c in b"/:\\" for c in raw),
+            f"invalid manifest name: {name!r}")
+
+
+def manifest_path(path):
+    raw = manifest_text(path)
+    require(0 < len(raw) <= 1024, "invalid manifest path length")
+    require(not path.startswith("/") and ":" not in path and "\\" not in path,
+            f"absolute, drive or backslash path: {path!r}")
+    require(all(part not in ("", ".", "..") and len(manifest_text(part)) <= 255
+                for part in path.split("/")), f"invalid path component: {path!r}")
+
+
+def manifest_fields(value, required, optional=()):
+    require(type(value) is dict, f"expected an object, got {value!r}")
+    missing = set(required) - set(value)
+    unknown = set(value) - set(required) - set(optional)
+    require(not missing, f"missing object fields: {sorted(missing)!r}")
+    require(not unknown, f"unknown object fields: {sorted(unknown)!r}")
+
+
+def json_unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, f"duplicate JSON key: {key!r}")
+        result[key] = value
+    return result
+
+
+def json_unsigned_integer(text):
+    require(not text.startswith("-"), "negative JSON integer")
+    value = int(text)
+    require(value <= (1 << 64) - 1, "JSON integer exceeds uint64")
+    return value
+
+
+def json_invalid_number(text):
+    raise PackageError(f"unsupported JSON number: {text}")
+
+
+def json_depth(value, depth=0):
+    require(depth <= BUNDLE_JSON_DEPTH, "JSON nesting limit")
+    if isinstance(value, str):
+        manifest_text(value)
+    elif type(value) is dict:
+        for key, child in value.items():
+            manifest_text(key)
+            json_depth(child, depth + 1)
+    elif type(value) is list:
+        for child in value:
+            json_depth(child, depth + 1)
+
+
+def bundle_manifest_check(data, directories, native_entry):
+    """DIRECTORIES holds the bundle's directory paths; NATIVE_ENTRY(path) says
+    whether that bundle path is a file starting with the P1F magic."""
+    require(len(data) > 0, "empty manifest")
+    value = json.loads(data.decode("utf-8", errors="strict"),
+                       object_pairs_hook=json_unique_object, parse_int=json_unsigned_integer,
+                       parse_float=json_invalid_number, parse_constant=json_invalid_number)
+    json_depth(value)
+    manifest_fields(value, ("format", "id", "entry", "commands", "resource_dirs", "grants"),
+                    ("stack_bytes", "packages", "sdk"))
+    require(type(value["format"]) is int and value["format"] == 1,
+            "unsupported manifest format")
+    manifest_name(value["id"])
+    if "stack_bytes" in value:
+        size = value["stack_bytes"]
+        require(type(size) is int and STACK_MIN <= size <= STACK_MAX
+                and size % 4096 == 0, "invalid stack_bytes")
+    commands, roots, grants = value["commands"], value["resource_dirs"], value["grants"]
+    require(type(commands) is dict, "invalid command map")
+    require(type(roots) is dict, "invalid resource map")
+    require(type(grants) is list, "invalid grant list")
+    for name in commands:
+        manifest_name(name)
+    for name, path in roots.items():
+        manifest_name(name)
+        require(re.fullmatch(r"[A-Za-z0-9_.+-]{1,63}", name),
+                f"invalid resource environment name: {name!r}")
+        manifest_path(path)
+        require(name not in ("app", BUNDLE_PACKAGES_ROOT, BUNDLE_SDK_ROOT),
+                f"resource root conflicts with {name}")
+        require("app/" + path in directories, f"missing resource directory: {path!r}")
+    seen = set(roots) | {"app", BUNDLE_PACKAGES_ROOT, BUNDLE_SDK_ROOT}
+    if "packages" in value:
+        # A read-only pkg:// holding just these packages (docs/wip/sdk-view.md).
+        packages = value["packages"]
+        require(type(packages) is list and packages and len(packages) == len(set(packages)),
+                "packages must be a nonempty list of distinct package IDs")
+        for package in packages:
+            require(type(package) is str and ID_PATTERN.fullmatch(package),
+                    f"invalid package ID in packages: {package!r}")
+    if "sdk" in value:
+        # A read-only sdk:// of the set the bundle's pkg:// comes from;
+        # "optional" launches without one when it is unavailable.
+        require(type(value["sdk"]) is bool or value["sdk"] == "optional",
+                'sdk must be true, false or "optional"')
+    for grant in grants:
+        manifest_fields(grant, ("name", "resource", "rights", "required"), ("source", "root"))
+        name, resource, rights = grant["name"], grant["resource"], grant["rights"]
+        manifest_name(name)
+        require(not name.startswith(BUNDLE_SOURCE_PREFIX), f"reserved source binding name: {name!r}")
+        require(name not in seen, f"duplicate startup binding: {name!r}")
+        seen.add(name)
+        require(type(resource) is str and resource in GRANT_RIGHTS,
+                f"unknown grant resource {resource!r} for {name!r}")
+        require(type(grant["required"]) is bool,
+                f"grant {name!r} field 'required' must be Boolean: {grant['required']!r}")
+        require(type(rights) is list and rights,
+                f"grant {name!r} field 'rights' must be a nonempty list: {rights!r}")
+        for right in rights:
+            require(type(right) is str and right in GRANT_RIGHTS[resource],
+                    f"unknown grant right {right!r} for resource {resource!r}")
+        require(len(set(rights)) == len(rights),
+                f"duplicate grant rights for {name!r}: {rights!r}")
+        external = resource in ("directory", "mount", "disks", "provider")
+        require(external == ("source" in grant),
+                f"grant {name!r}: external resources require a source selector")
+        if "source" in grant:
+            manifest_name(grant["source"])
+            require(grant["source"] != BUNDLE_PACKAGE_SOURCE,
+                    f"grant {name!r}: packages are read through the manifest's packages list")
+        if "root" in grant:
+            manifest_name(grant["root"])
+            require(resource == "directory" and "lookup" in rights,
+                    f"grant {name!r}: root requires a directory grant with lookup")
+    aliases = set()
+    for grant in grants:
+        if "root" not in grant:
+            continue
+        alias = grant["root"]
+        require(alias not in seen and alias not in aliases,
+                f"conflicting directory root alias: {alias!r}")
+        aliases.add(alias)
+    for path in [value["entry"], *commands.values()]:
+        manifest_path(path)
+        require(native_entry("app/" + path), f"entry is not a native P1F file: {path!r}")
+    return value
+
+
 def command_targets_check(commands, files, read_file):
     sizes = {path: size for path, size, _ in files}
     bundles = {}
@@ -594,30 +792,22 @@ def command_targets_check(commands, files, read_file):
         path = target["path"]
         if "command" not in target:
             require(path in sizes, f"missing command target: {path!r}")
-            require(read_file(path, len(pxa.P1F_MAGIC)) == pxa.P1F_MAGIC,
+            require(read_file(path, len(P1F_MAGIC)) == P1F_MAGIC,
                     f"command is not a native P1F file: {path!r}")
             continue
         if path not in bundles:
             prefix = path + "/"
-            entries, tree = {}, pxa.NameTree()
+            # Inventory admission already checked the member names.
+            members = {member[len(prefix):] for member in sizes if member.startswith(prefix)}
+            directories = {"/".join(member.split("/")[:depth]) for member in members
+                           for depth in range(1, member.count("/") + 1)}
+            manifest = prefix + "manifest.json"
+            require(manifest in sizes, f"missing bundle manifest: {path!r}")
             try:
-                for member, size in sizes.items():
-                    if not member.startswith(prefix):
-                        continue
-                    relative = member[len(prefix):]
-                    parts = relative.split("/")
-                    # Inventory admission already checks names; ZIP host budgets
-                    # do not apply to an unpacked package bundle.
-                    for depth in range(1, len(parts)):
-                        tree.nodes["/".join(parts[:depth])] = True
-                    tree.nodes[relative] = False
-                    entries[relative] = pxa.Entry(relative, relative.encode(), False, size,
-                                                 prefix=read_file(member, len(pxa.P1F_MAGIC)))
-                manifest_path = prefix + "manifest.json"
-                require(manifest_path in sizes, f"missing bundle manifest: {path!r}")
-                data = read_file(manifest_path, sizes[manifest_path])
-                bundles[path] = pxa.manifest_check(data, entries, tree)
-            except (pxa.ProfileError, ValueError, RecursionError) as error:
+                bundles[path] = bundle_manifest_check(
+                    read_file(manifest, sizes[manifest]), directories,
+                    lambda entry: entry in members and read_file(prefix + entry, len(P1F_MAGIC)) == P1F_MAGIC)
+            except (ValueError, RecursionError) as error:
                 raise PackageError(f"invalid command bundle {path!r}: {error}") from error
         require(target["command"] in bundles[path]["commands"],
                 f"bundle does not declare command {target['command']!r}: {path!r}")

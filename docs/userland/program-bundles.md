@@ -3,8 +3,9 @@
 A program bundle packages an executable with its own resources, a stack request
 and named grant requests. Only the unpacked form, a `.pxb` directory, is
 implemented on main. Single-file `.pxa` archives are a
-[parked direction](../wip/program-bundles.md); `tools/pxa.py` packs and checks
-them on the host only ([packing](../development/pxa-packing.md)). Introduced in
+[parked direction](../wip/program-bundles.md) with no tool on main. On the host,
+`tools/pxpkg.py` checks the manifest of every bundle a package exports a command
+from, under the rules below. Introduced in
 [#621](https://git.internal/PyxisOS/pyxis-os/pulls/621) (design),
 [#625](https://git.internal/PyxisOS/pyxis-os/pulls/625) (unpacked bundles),
 [#629](https://git.internal/PyxisOS/pyxis-os/pulls/629) (capture ceiling) and

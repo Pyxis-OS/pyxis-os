@@ -86,7 +86,7 @@ The third package (work package 9).
   commands, resource directories or grants; tables grow with what the manifest declares and
   duplicate keys are found by sorting. A path component stays at 255 bytes (NAME_MAX), the JSON depth at 16
   (recursion). What the launcher can carry in one request is the launch path's bound.
-  `tools/pxa.py` enforces only the ZIP32 format's own bounds.
+  The host check in `tools/pxpkg.py` applies the same rules.
 - **tar.** The BusyBox port writes and reads GNU long-name records, so no name length drops a
   member (see `ports/busybox/TAR.md`).
 - **Clipboard.** No constant limits an item. Stored text shares one budget, one 512th of installed
