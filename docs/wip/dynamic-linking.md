@@ -2,8 +2,8 @@
 
 Accepted by chronium (2026-11-02): the round-1 decisions and the grouped defaults
 below, then direct `.pxe` launches, declared library directories, the explicit
-`libs` source, the IMPORT directory right and IMPORT on Development's home.
-How bundles locate their libraries is an [open owner decision](#owner-actions).
+`libs` source, the IMPORT directory right, IMPORT on Development's home, and
+bundles declaring their library directories like any program.
 Release placement (0.0.11 or 0.0.12) is open. No task has started; each task
 starts when the owner says so.
 
@@ -178,18 +178,14 @@ records `../lib`.
 - Libraries record no directories of their own. Their needed names resolve in
   the same process-wide sources as the executable's.
 
-**Bundles: open owner decision, before task 3.** My recommendation is that
-bundles use the same declaration, with no fixed `app://lib/` convention.
-- A bundle program declares its library directory like any program, typically
-  `../lib` from `app/bin/` or `lib` beside an entry at the top of `app/`.
-- The declaration is resolved within `app/`, which already carries IMPORT.
-- The same binary then works run directly during development and inside its
-  bundle, without relinking or a manifest field.
-
-The alternatives are:
-- a fixed `app://lib/`, which every bundle program would search implicitly;
-- a manifest `library_dirs` field, which would let one binary be laid out
-  differently per bundle, at the cost of a second mechanism for the same job.
+**Bundles (accepted, chronium 2026-11-02).** There is no fixed `app://lib/`
+and no manifest `library_dirs` field: one mechanism serves both cases.
+- A bundle program declares its library directories like any program,
+  typically `../lib` from `app/bin/` or `lib` beside an entry at the top of
+  `app/`.
+- The declarations are resolved within `app/`, which carries IMPORT.
+- The same binary works run directly during development and inside its bundle,
+  without relinking.
 
 ### dlopen
 
@@ -309,6 +305,5 @@ document is removed.
 | When | Action |
 | --- | --- |
 | Open | Release placement (0.0.11 or 0.0.12) |
-| Before task 3 | Decide how bundles locate their libraries; recommended: declared relative directories as for any program, no fixed `app://lib/` ([library lookup](#library-lookup)) |
 | Task 1 | Build and publish the compiler container |
 | Before task 8 | Choose the artifact store; enable CI in pyxis-userland and pyxis-ports |
