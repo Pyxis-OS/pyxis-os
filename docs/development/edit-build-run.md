@@ -226,9 +226,9 @@ Check each compiler and sync result before proceeding. Successful save, close
 or compilation alone does not establish persistence. Native file/directory
 sync commits the current pool and completes the backend's ordered flush. A
 successful sync reaches durable COMMITTED; background checkpointing later makes
-the journal EMPTY. A failed compile may leave an older or partial output. vi's
-atomic replacement does not establish persistence across a power loss; the
-[atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407) still apply.
+the journal EMPTY. A failed compile may leave an older or partial output. vi
+saves in place, as upstream, so a crash during a save can leave a partial file;
+sync before relying on it.
 
 ### Restart and inspect read-only
 

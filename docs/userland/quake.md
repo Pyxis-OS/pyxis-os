@@ -80,12 +80,11 @@ and retail data share it. On a live boot `home://` is a RAM volume, so these fil
 survive quitting but not reboot. An installed system keeps `home://` on the pool
 (see [system layout](system-layout.md#roots)), so they persist across reboots.
 
-`config.cfg`, saves and screenshots are replaced atomically: the data goes to a
-random `NAME.XXXXXX` file beside the target, which is synced, closed and renamed
-over it. A failed write or rename keeps the old file, removes the temporary file
-and prints `Couldn't write NAME: reason`; a failed save omits `done.`. Demos are
-recorded in place. The [atomic-save limits](https://git.internal/PyxisOS/pyxis-os/issues/1407)
-cover what a crash can lose.
+`config.cfg`, saves, screenshots and demos are written in place with upstream's
+direct file writing and error handling (`fopen(path, "wb")`). There is no atomic
+replacement, previous-file preservation or crash-durability promise: a crash or a
+failing write during a save can leave a truncated or partial file. See the
+[port notes](https://git.internal/PyxisOS/pyxis-ports/src/branch/main/quake/README.md).
 
 ## Timedemo
 
