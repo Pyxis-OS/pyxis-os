@@ -1,7 +1,9 @@
 # Dynamic linking
 
 Accepted by chronium (2026-11-02): the round-1 decisions and the grouped defaults
-below. Release placement (0.0.11 or 0.0.12) is open. No task has started; each
+below, then direct `.pxe` launches, declared library directories, the explicit
+`libs` source and MAP_CODE on Development's home. The bundle lookup proposal in
+[library lookup](#library-lookup) awaits confirmation. Release placement (0.0.11 or 0.0.12) is open. No task has started; each
 task starts when the owner says so.
 
 ## Goal
@@ -42,9 +44,10 @@ which it refines, and serves the program side of
 - **P2F** is P1F plus an optional symbol section. Stripping it yields a valid
   P1F. Backtraces use it (#1337).
 - **P1D** is the dynamic form: P1F's segments plus a dynamic section with the
-  library name (`.pxl` only), needed library names, exports with a hash table,
-  imports, a RELRO range, the TLS template, init/fini arrays and the
-  `eh_frame_hdr` location. **P2D** is P1D with the P2F symbol section.
+  library name (`.pxl` only), needed library names, the program's declared
+  library directories (executables only, see [library lookup](#library-lookup)),
+  exports with a hash table, imports, a RELRO range, the TLS template, init/fini
+  arrays and the `eh_frame_hdr` location. **P2D** is P1D with the P2F symbol section.
   D means dynamic; 2 means with symbols.
 - Relocation kinds are a closed list: relative, absolute/GOT, jump slot and the
   TLS module/offset kinds. Text relocations and copy relocations are refused.
@@ -60,17 +63,30 @@ which it refines, and serves the program side of
   library. It reuses image capture, segment validation and W^X: text R/X, rodata
   R, data and GOT RW, no relocation. A second, one-way call seals the image's
   RELRO range from RW to R. There is no release operation.
-- **Authority:** mapping needs the FILE handle and a new MAP_CODE right on the
-  directory source it was opened from. The package view, the library view and a
-  bundle's `app://` carry MAP_CODE; home, tmp and host do not, unless a manifest
-  grant names a directory with code rights. Without JIT, a process runs only code
-  its launcher chose or code from a source that carries MAP_CODE.
+- **Authority:** mapping a library needs its FILE handle and a new MAP_CODE
+  right on the directory source it was opened from. The right attenuates like
+  any directory right: a directory opened from a source with MAP_CODE keeps it
+  only if the opener asks for it.
+- **Which sources carry MAP_CODE (accepted, chronium 2026-11-02):** the package
+  view, the library view and a bundle's `app://` always do. The Development
+  space's `home://` root does by default, for programs and libraries under
+  development. Hardened spaces (Read-only, and any space that does not set it)
+  grant MAP_CODE only on the package view, the library view and `app://`. tmp
+  and host never carry it by default. A manifest grant may name another
+  directory with code rights. Without JIT, a process runs only code its launcher
+  chose or code from a source that carries MAP_CODE.
+- **The executable itself** is authorized by its launch, as a P1F is today: the
+  launcher hands the loader the program's FILE handle as a one-shot image
+  capability. A dynamic program therefore runs wherever a static one would;
+  only its libraries need MAP_CODE.
 - **Loader:** `loader.pxe`, a static P1F at a fixed base away from `0x400000`,
   loaded by the kernel like any program. The launcher (libpyxis `program_open`)
-  starts it for a P1D/P2D image, with the program's FILE handle and the library
-  sources as startup capabilities. It maps the program and its libraries,
-  relocates eagerly, seals, builds the TLS block and enters the program. The file
-  names no interpreter.
+  starts it for a P1D/P2D image, both for bundle programs and for a `.pxe` run
+  directly by path, outside any bundle. It passes the program's image capability
+  and the library sources from [library lookup](#library-lookup) as startup
+  capabilities. The loader maps the program and its libraries, relocates eagerly,
+  seals, builds the TLS block and enters the program. The file names no
+  interpreter.
 - **Binding:** eager, no lazy PLT, full RELRO. Symbols resolve in one global
   scope in load order. There is no symbol versioning.
 - Library text is copied into each process, as program text is today. Sharing
@@ -93,8 +109,7 @@ library with TLS is refused with a clear error until a consumer needs it.
 - Packages export libraries explicitly, as they export commands:
   `libraries = { SDL2 = { path = "lib/SDL2.pxl" } }`. Set publication refuses
   duplicate names and writes `sets/N.libraries` beside `sets/N.commands`.
-- The loader resolves a needed name in `app://lib/` first, then in the set's
-  library view. It takes the view at launch and keeps it for the process's life,
+- The set's library view is taken at launch and kept for the process's life,
   `dlopen` included, so `pkg update` never mixes versions inside one process.
 - `pxpkg pack` refuses a program whose needed names its declared dependencies
   do not export. `-dev` packages keep headers and `.pc` files; the `.pxl` belongs
@@ -106,11 +121,67 @@ library with TLS is refused with a clear error until a consumer needs it.
   and changes only when they do. Program and library packages record the runtime
   ABI and their needed names, not the pyxis-os commit.
 
+### Library lookup
+
+Accepted (chronium, 2026-11-02). The loader searches only sources it was handed
+at launch, in this order, and the first source holding the name wins:
+
+1. **An explicit library source**, when the launch supplies one: a directory
+   capability under the reserved startup name `libs`, given by the launcher's
+   override helper (in the shell, a captured directory value passed to the
+   launch). It serves layouts the program does not declare, such as testing a
+   rebuilt library against an installed program. It is a capability, not a path
+   in an environment variable.
+2. **The program's declared library directories**, in their recorded order.
+3. **The set's library view.**
+
+Every source must carry MAP_CODE; a source without it is not searched. When a
+name is not found, the loader's error names the library and every source it
+skipped for lacking MAP_CODE, so a missing right is not mistaken for a missing
+file. There is no environment search path and no fixed directory convention.
+
+**Declared directories.** The executable records where its own libraries live,
+as paths relative to its own directory: the role ELF `RUNPATH` with `$ORIGIN`
+plays elsewhere. A game in development that vendors its libraries beside it
+links with a `lib` entry; a program in `bin/` with libraries in a sibling `lib/`
+records `../lib`.
+
+- LLD writes them from `-rpath` entries of the form `$ORIGIN` or
+  `$ORIGIN/PATH`, recorded as `.` and `PATH`; the familiar spelling keeps port
+  build systems working. Any other `-rpath` entry is refused at link time. The
+  Pyxis CMake platform file turns off CMake's automatic build and install rpaths,
+  which would otherwise add absolute host paths.
+- An entry is a relative native path: no scheme, no root, no empty component.
+  `..` is allowed but never climbs above the root through which the program was
+  reached; a bundle program never climbs above its `app/` directory.
+- The launcher resolves the entries, relative to the directory it opened the
+  executable from and within that root. It hands the loader exactly those
+  directories, opened with LOOKUP, READ_FILES and MAP_CODE when the source
+  carries MAP_CODE. The loader never receives the executable's directory itself
+  or its root.
+- **The executable's own directory is not searched unless declared** (an entry
+  of `.`). Programs often share a directory, such as a command list or a home
+  folder, with unrelated files; an implicit same-directory search would bind any
+  `.pxl` dropped there. Making it an explicit entry keeps the choice with the
+  program's author and visible in the binary.
+- Libraries record no directories of their own. Their needed names resolve in
+  the same process-wide sources as the executable's.
+
+**Bundles.** I propose that bundles use the same declaration instead of a fixed
+`app://lib/` convention. A bundle program declares its library directory like any
+program, typically `../lib` from `app/bin/` or `lib` beside an entry at the
+top of `app/`, resolved within `app/`, which already carries MAP_CODE. The same
+binary then works run directly during development and inside its bundle, without
+relinking or a manifest field. The alternative is a manifest `library_dirs` field:
+it would let one binary be laid out differently per bundle, at the cost of a
+second mechanism with the same purpose. Pending chronium's confirmation.
+
 ### dlopen
 
 libc provides `dlfcn.h`: `dlopen`, `dlsym`, `dlerror`, `dladdr` and a module
 iterator, which libunwind uses instead of linker-script bounds. A name without
-`/` or `:` resolves like a needed name; a URI needs MAP_CODE on its source.
+`/` or `:` resolves like a needed name, through the
+[same sources](#library-lookup); a URI needs MAP_CODE on its source.
 `RTLD_LOCAL` and `RTLD_GLOBAL` work, and `dlsym(RTLD_DEFAULT)` serves LLVM's
 process symbols. `dlclose` drops a reference and never unmaps.
 
@@ -160,22 +231,32 @@ added except the build split itself.
   native vela, matched configurations. Recorded in an experiment record.
 - [ ] **1. Formats and toolchain.** Format headers beside `p1f.h`; in the fork,
   LLD writes P2F/P1D/P2D and reads `.pxl`; the driver allows `-shared`, `-fPIC`,
-  GD/LD/IE/TLSDESC, `-z now -z relro` by default and no copy relocations; CMake
-  declares shared libraries supported. Validation: build a sample library and
-  executable, inspect both on the host, confirm refused relocation kinds and
-  stripped-P2F → P1F. **Owner action: build and publish the one compiler
+  GD/LD/IE/TLSDESC, `-z now -z relro` by default and no copy relocations; LLD
+  records `$ORIGIN` `-rpath` entries as declared library directories and refuses
+  other `-rpath` entries; CMake declares shared libraries supported and adds no
+  automatic rpaths. Validation: build a sample library and executable, inspect
+  both on the host, confirm refused relocation kinds and rpath forms, the
+  recorded directories, and stripped-P2F → P1F. **Owner action: build and publish the one compiler
   container** (new `pyxis-llvm` pin and image tag). No further rebuild unless the
   format changes later.
 - [ ] **2. Kernel map and seal.** The map operation, the one-way RELRO seal and
-  the MAP_CODE directory right, carried by the package and app views. Validation
-  in QEMU with the debugger: fixed and kernel-chosen placement, W^X on every
-  page, refusal without MAP_CODE or of an invalid image, seal irreversibility,
-  failure unwind and process-exit reclamation.
+  the MAP_CODE directory right, carried by the package and app views, and set on
+  the Development space's `home://` in the live and installed defaults.
+  Validation in QEMU with the debugger: fixed and kernel-chosen placement, W^X on
+  every page, refusal without MAP_CODE or of an invalid image, MAP_CODE present
+  on Development's home and absent on Read-only's, seal irreversibility, failure
+  unwind and process-exit reclamation.
 - [ ] **3. Loader and the C runtime.** `loader.pxe`; `libc.pxl` and
   `libpyxis.pxl`; the TLS block and loader-driven `libc_enter`; `dlfcn.h`; the
   module iterator for libunwind; the debugger module list; launcher selection in
-  `program_open`. One small userland command becomes dynamic. Validation: QEMU
-  launch, gdb with ELF side files, `dlopen`/`dlsym` from a sample, refused
+  `program_open`, for bundles and for a `.pxe` run directly; resolution of
+  declared library directories and the `libs` explicit source. One small
+  userland command becomes dynamic. Validation in QEMU: the same program run
+  directly from Development's home with vendored libraries in a declared
+  directory, and inside a bundle; a `libs` source overriding a set library; the
+  same launches from Read-only, where home libraries are skipped and the error
+  names the sources lacking MAP_CODE; `..` stopping at the program's root and at
+  `app/`; gdb with ELF side files; `dlopen`/`dlsym` from a sample; refused
   `dlopen` of a TLS library.
 - [ ] **4. C++ runtime and userland.** `libc++`, `libc++abi` and `libunwind` as
   `.pxl`; userland programs outside the rescue set become dynamic; the rescue set
@@ -213,5 +294,6 @@ document is removed.
 | When | Action |
 | --- | --- |
 | Open | Release placement (0.0.11 or 0.0.12) |
+| Before task 3 | Confirm that bundles use declared directories instead of `app://lib/` ([proposal](#library-lookup)) |
 | Task 1 | Build and publish the compiler container |
 | Before task 8 | Choose the artifact store; enable CI in pyxis-userland and pyxis-ports |
