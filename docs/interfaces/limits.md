@@ -234,3 +234,19 @@ it comes early, and it names what overflowed.
 | Wire fields | UDP 1,472, DNS names 255 / labels 63 / messages 512, TLS record 16,384 | Protocol widths | `include/abi/udp.h`, `common/dns.h` |
 | Hardware cursor | 64 px | Device plane | `kernel/display/virtio_gpu.c` |
 | Ports | LuaLS channel budgets, font and file-list arrays, Quake strings, `less` lines | Upstream defaults and tuning inside a port | `ports/` |
+
+## Libuv loop handles
+
+The native libuv backend uses one persistent readiness set per loop. There is no
+31-handle policy or transient wait-array ceiling. Registrations grow with actual
+storage, subject to the kernel's shared 16 MiB per-process readiness-metadata
+budget, source admission and representable identities. A reply contains at most
+64 events; that bounds a loop turn, not the number of handles. Long application
+deadlines retain their original absolute expiry across bounded native waits.
+
+Process observation is reserved before child publication. Native limit reasons
+are opt-in caller-owned data on Pyxis spawn helpers; standard uv_spawn returns
+its ordinary error. A refused spawn never invents child completion or retries
+an uncertain admission. Neovim reports an actual negative loop error and aborts
+that editor process; teardown does not spin on the same error. Existing swap
+recovery remains unchanged and is not a guarantee of saved recent edits.

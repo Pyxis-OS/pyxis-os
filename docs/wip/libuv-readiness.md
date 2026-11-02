@@ -7,7 +7,7 @@ following the [limits contract](../interfaces/limits.md).
 
 One persistent native set replaces libuv's 31-handle policy and transient wait
 arrays. PROCESS completion uses existing WAIT authority and the actual native
-retirement boundary. The final WP3 branch already supplies that source support.
+retirement boundary. Merged WP3 already supplies that source support.
 Stream and process registrations retain observation storage and revocable
 lineage, not logical I/O ownership or a child's VM. No new thread, grant, quota,
 regular-FILE or socket profile is added.
@@ -34,9 +34,13 @@ explicit; actual refusals propagate through caller-owned reasons and UV errors.
 - [x] Kernel/SDK observed-launch implementation builds; ordinary four-CPU QEMU
   observes 48 exact process completions and checks retirement, cleanup and
   missing-CONTROL refusal. No race/fault-injection or native claim.
-- [ ] Libuv backend, reached Lua/Neovim callers and explicit spawn detail.
-- [ ] Accepted Neovim outer-loop error policy, implementation/qualification.
-- [ ] Complete Neovim >31-handle qualification and matched comparison.
+- [x] Libuv backend, reached Lua/Neovim callers and explicit spawn detail.
+- [x] Accepted Neovim outer-loop error policy and implementation; ordinary builds
+  and successful loops qualified, without injecting an editor failure.
+- [x] Neovim 4/20/64 jobs, callback ownership, bounded batches and nested
+  matched comparison; see the [record](../development/experiments/libuv-readiness.md).
+- [ ] One coordinated native LLVM/container build, reached static consumers
+  and exact-head CI; native performance remains unmeasured.
 
 ## Neovim loop errors
 
