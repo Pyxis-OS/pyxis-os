@@ -17,6 +17,10 @@
                           DIRECTORY_RIGHT_READ_FILES | DIRECTORY_RIGHT_CREATE | \
                           DIRECTORY_RIGHT_WRITE_FILES | DIRECTORY_RIGHT_REMOVE)
 #define DIRECTORY_RIGHTS (DIRECTORY_CONTENT_RIGHTS | DIRECTORY_RIGHT_FILESYSTEM_INFO)
+/* Libraries reached through this directory may be imported into a process
+ * (FILE_RIGHT_IMPORT on its files). Outside DIRECTORY_RIGHTS: a directory or
+ * file opened from this one keeps IMPORT only when the opener asks for it. */
+#define DIRECTORY_RIGHT_IMPORT (UINT64_C(1) << 7)
 
 #define DIRECTORY_LOOKUP UINT64_C(1)
 #define DIRECTORY_ENUMERATE UINT64_C(2)

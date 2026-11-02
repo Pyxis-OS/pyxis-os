@@ -83,6 +83,17 @@ enum call_status private_jit_protect(struct process *process, uint64_t identity,
     size_t offset, size_t size, enum jit_state state);
 enum call_status private_jit_release(struct process *process, uint64_t identity, size_t *bytes);
 
+/* Caller CPU, IF=0, retained drained process mutation. BYTES is a validated
+ * image (image_dynamic_validate). Maps every segment with its final
+ * permissions and records one PRIVATE_IMAGE allocation that no release
+ * operation accepts. Failure unwinds every mapping and returns BAD_REQUEST
+ * for an occupied fixed range. Seal makes the image's RELRO segments
+ * read-only, once. */
+struct image_dynamic;
+enum call_status private_image_map(struct process *process, const void *bytes,
+    const struct image_dynamic *image, struct memory_image *result);
+enum call_status private_image_seal(struct process *process, uint64_t identity);
+
 /* Exclusive retired/preparing process owner, IF=0, after all private backing
  * is reclaimed. Frees records in bounded steps, yielding without a VM loan. */
 void private_memory_discard_records(struct process *process);

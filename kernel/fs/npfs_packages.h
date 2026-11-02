@@ -6,7 +6,13 @@
 /* Store access and name rules shared by the package command, roots and sdk
  * views of a packages volume; ROOT is that volume's root. */
 
+/* Package views (pkg://, command and root selections) carry IMPORT when the
+ * packages root does: installed package files may be imported. The SDK view
+ * holds build inputs and never does. */
 #define PACKAGE_VIEW_RIGHTS \
+  (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES | \
+   DIRECTORY_RIGHT_IMPORT)
+#define SDK_VIEW_RIGHTS \
   (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES)
 
 /* Bytes the package views and captured indexes may hold together, from

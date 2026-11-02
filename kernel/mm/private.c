@@ -1,7 +1,9 @@
 #include <arch/cpu.h>
 #include <arch/paging.h>
 #include <arch/smp.h>
+#include <kernel/image.h>
 #include <kernel/limit.h>
+#include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/private.h>
 #include <kernel/mm/vm.h>
@@ -15,6 +17,12 @@ enum private_kind {
   PRIVATE_GUARDED,
   PRIVATE_SPARSE,
   PRIVATE_JIT,
+  PRIVATE_IMAGE,
+};
+
+struct private_image_range {
+  uintptr_t address;
+  size_t size;
 };
 
 struct private_allocation {
@@ -24,6 +32,10 @@ struct private_allocation {
   uint64_t identity; /* Zero for ordinary address/size allocations. */
   enum private_kind kind;
   size_t jit_writable_pages, jit_executable_pages;
+  /* PRIVATE_IMAGE: its RELRO segments, sealed at most once. */
+  struct private_image_range *image_relro;
+  size_t image_relro_count;
+  bool image_sealed;
   atomic_bool pinned; /* Pin acquisition under VM owner; retirement release is any-CPU safe. */
 };
 
@@ -499,9 +511,202 @@ void private_memory_discard_records(struct process *process)
     struct private_allocation *allocation = process->allocations;
     KASSERT(!atomic_load_explicit(&allocation->pinned, memory_order_acquire));
     process->allocations = allocation->next;
+    kfree(allocation->image_relro);
     kfree(allocation);
     if (!(++released % 256) && task_current_actor()) {
       task_yield_masked();
     }
   }
+}
+
+/* Changes a range of one eager backing to final permissions in bounded steps,
+ * keeping the process transaction across yields. */
+static enum mm_result protect_range(struct process *process, uintptr_t base, size_t size,
+    unsigned permissions)
+{
+  struct vm_protection protection;
+  enum mm_result result = vm_protect_begin(process->address_space, base, size, permissions,
+      &protection);
+  if (result != MM_OK) {
+    return result;
+  }
+  while (!vm_protect_step(&protection, PRIVATE_MEMORY_STEP_PAGES)) {
+    task_yield_masked();
+    process_vm_require_mutation(process);
+  }
+  return protection.status;
+}
+
+/* Copies file bytes into freshly backed, still writable, non-executable pages
+ * through the kernel's frame alias. The process's threads are quiesced. */
+static void copy_segment(struct process *process, uintptr_t base, const uint8_t *bytes,
+    size_t size)
+{
+  for (size_t offset = 0; offset < size; offset += PAGE_SIZE) {
+    struct page_translation translation;
+    KASSERT(vm_query(process->address_space, base + offset, &translation) == MM_OK);
+    size_t count = size - offset < PAGE_SIZE ? size - offset : PAGE_SIZE;
+    void *page = arch_frame_map(translation.physical);
+    memcpy(page, bytes + offset, count);
+    arch_frame_unmap();
+    if (!((offset / PAGE_SIZE + 1) % PRIVATE_MEMORY_STEP_PAGES)) {
+      task_yield_masked();
+      process_vm_require_mutation(process);
+    }
+  }
+}
+
+struct image_reservation {
+  uintptr_t address;
+  size_t size;
+  bool backed;
+};
+
+static void unwind_image(struct process *process, struct image_reservation *reserved,
+    size_t count)
+{
+  while (count) {
+    struct image_reservation *range = &reserved[--count];
+    if (!range->backed) {
+      KASSERT(vm_release(process->address_space, range->address, range->size) == MM_OK);
+      continue;
+    }
+    struct vm_reclaim reclaim;
+    KASSERT(vm_free_begin(process->address_space, range->address, range->size,
+        &reclaim) == MM_OK);
+    while (!vm_free_step(&reclaim, PRIVATE_MEMORY_STEP_PAGES)) {
+      task_yield_masked();
+      process_vm_require_mutation(process);
+    }
+  }
+}
+
+static size_t page_round(uint64_t size)
+{
+  return (size + PAGE_SIZE - 1) & ~(size_t)(PAGE_SIZE - 1);
+}
+
+enum call_status private_image_map(struct process *process, const void *bytes,
+    const struct image_dynamic *image, struct memory_image *result)
+{
+  KASSERT(process && bytes && image && result);
+  process_vm_require_mutation(process);
+  *result = (struct memory_image){0};
+  size_t relro_count = 0;
+  for (size_t i = 0; i < image->segment_count; ++i) {
+    if (image_dynamic_segment(bytes, i).flags & P1D_RELRO) {
+      ++relro_count;
+    }
+  }
+  uint64_t identity = private_memory_identity();
+  if (!identity) {
+    return CALL_NO_MEMORY;
+  }
+  /* A library also reserves the gaps between its segments. */
+  size_t reserved_capacity = image->segment_count * (image->library ? 2 : 1);
+  struct private_allocation *allocation = kmalloc(sizeof(*allocation));
+  struct private_image_range *relro = relro_count ?
+      kmalloc(relro_count * sizeof(*relro)) : NULL;
+  struct image_reservation *reserved = kmalloc(reserved_capacity * sizeof(*reserved));
+  if (!allocation || (relro_count && !relro) || !reserved) {
+    kfree(allocation);
+    kfree(relro);
+    kfree(reserved);
+    return CALL_NO_MEMORY;
+  }
+
+  struct vm_space *space = process->address_space;
+  uintptr_t base = 0;
+  enum mm_result status = MM_OK;
+  if (image->library) {
+    /* Find room for the whole span, then reserve it piece by piece. The
+     * process transaction keeps every other mapping change out meanwhile. */
+    status = vm_reserve(space, image->span, PAGE_SIZE, &base);
+    if (status == MM_OK) {
+      KASSERT(vm_release(space, base, image->span) == MM_OK);
+    }
+  }
+
+  size_t reserved_count = 0;
+  size_t relro_index = 0;
+  size_t payload = image->payload;
+  uintptr_t previous_end = base;
+  uintptr_t first = 0;
+  for (size_t i = 0; status == MM_OK && i < image->segment_count; ++i) {
+    struct p1f_segment segment = image_dynamic_segment(bytes, i);
+    uintptr_t address = base + segment.virtual_address;
+    size_t size = page_round(segment.memory_size);
+    if (!i) {
+      first = address;
+    }
+    if (image->library && address > previous_end) {
+      status = vm_reserve_at(space, previous_end, address - previous_end);
+      if (status != MM_OK) {
+        break;
+      }
+      reserved[reserved_count++] = (struct image_reservation){previous_end,
+          address - previous_end, false};
+    }
+    status = vm_reserve_at(space, address, size);
+    if (status != MM_OK) {
+      break;
+    }
+    status = back_private(process, address, size);
+    if (status != MM_OK) {
+      KASSERT(vm_release(space, address, size) == MM_OK);
+      break;
+    }
+    reserved[reserved_count++] = (struct image_reservation){address, size, true};
+    copy_segment(process, address, (const uint8_t *)bytes + payload, segment.file_size);
+    payload += segment.file_size;
+    unsigned permissions = PAGE_USER |
+        ((segment.flags & P1F_WRITE) ? PAGE_WRITE : 0) |
+        ((segment.flags & P1F_EXECUTE) ? PAGE_EXEC : 0);
+    status = protect_range(process, address, size, permissions);
+    if (segment.flags & P1D_RELRO) {
+      relro[relro_index++] = (struct private_image_range){address, size};
+    }
+    previous_end = address + size;
+  }
+  if (status != MM_OK) {
+    unwind_image(process, reserved, reserved_count);
+    kfree(reserved);
+    kfree(relro);
+    kfree(allocation);
+    return jit_mm_status(status);
+  }
+  kfree(reserved);
+
+  *allocation = (struct private_allocation){.next = process->allocations,
+    .address = first, .size = previous_end - first, .identity = identity,
+    .kind = PRIVATE_IMAGE, .image_relro = relro, .image_relro_count = relro_count};
+  process->allocations = allocation;
+  *result = (struct memory_image){
+    .identity = identity,
+    .base = base,
+    .entry = image->entry,
+    .dynamic = base + image->dynamic_address,
+  };
+  return CALL_OK;
+}
+
+enum call_status private_image_seal(struct process *process, uint64_t identity)
+{
+  process_vm_require_mutation(process);
+  struct private_allocation *allocation = process->allocations;
+  while (allocation && (allocation->kind != PRIVATE_IMAGE || allocation->identity != identity)) {
+    allocation = allocation->next;
+  }
+  if (!identity || !allocation || allocation->image_sealed) {
+    return CALL_BAD_REQUEST;
+  }
+  for (size_t i = 0; i < allocation->image_relro_count; ++i) {
+    const struct private_image_range *range = &allocation->image_relro[i];
+    enum mm_result status = protect_range(process, range->address, range->size, PAGE_USER);
+    if (status != MM_OK) {
+      return jit_mm_status(status);
+    }
+  }
+  allocation->image_sealed = true;
+  return CALL_OK;
 }

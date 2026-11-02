@@ -274,7 +274,7 @@ static enum call_status lookup(struct npfs_store_context *context, struct npfs_j
   bool typed = job->kind == DIRECTORY_KIND_ANY;
   if (!npfs_package_component(job->name, job->count) ||
       (typed && ((job->child_rights & ~FILE_RIGHT_READ) ||
-      (job->directory_child_rights & ~PACKAGE_VIEW_RIGHTS)))) return CALL_BAD_REQUEST;
+      (job->directory_child_rights & ~SDK_VIEW_RIGHTS)))) return CALL_BAD_REQUEST;
   if (!typed && job->kind != DIRECTORY_KIND_FILE && job->kind != DIRECTORY_KIND_DIRECTORY) {
     return CALL_BAD_REQUEST;
   }
@@ -298,7 +298,7 @@ static enum call_status lookup(struct npfs_store_context *context, struct npfs_j
   if (!typed && job->kind != kind) return CALL_WRONG_TYPE;
   bool directory = kind == DIRECTORY_KIND_DIRECTORY;
   uint64_t requested = typed && directory ? job->directory_child_rights : job->child_rights;
-  uint64_t allowed = directory ? job->rights & PACKAGE_VIEW_RIGHTS :
+  uint64_t allowed = directory ? job->rights & SDK_VIEW_RIGHTS :
       (job->rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0;
   if (requested & ~allowed) return CALL_DENIED;
   if (directory) {
@@ -373,7 +373,7 @@ enum call_status npfs_sdk_perform(struct npfs_store_context *context, struct npf
         memcmp(volume.volume_name, PACKAGE_SDK_VOLUME, sizeof(PACKAGE_SDK_VOLUME) - 1)) {
       return CALL_BAD_OPERATION;
     }
-    return wrap_view(job, NULL, 0, true, "", 0, 0, job->rights & PACKAGE_VIEW_RIGHTS);
+    return wrap_view(job, NULL, 0, true, "", 0, 0, job->rights & SDK_VIEW_RIGHTS);
   }
   if (job->operation == NPFS_INFO) {
     npfs_package_view_info(node, &job->file_info);
@@ -382,7 +382,7 @@ enum call_status npfs_sdk_perform(struct npfs_store_context *context, struct npf
   if (job->operation == NPFS_COMMAND_CAPTURE) {
     if (!(job->rights & DIRECTORY_RIGHT_LOOKUP)) return CALL_DENIED;
     if (!view->live) return CALL_BAD_OPERATION;
-    uint64_t rights = job->rights & PACKAGE_VIEW_RIGHTS;
+    uint64_t rights = job->rights & SDK_VIEW_RIGHTS;
     uint64_t set;
     enum call_status status = CALL_OK;
     uint64_t current = 0;

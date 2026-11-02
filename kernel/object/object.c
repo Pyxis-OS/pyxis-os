@@ -1,3 +1,4 @@
+#include <kernel/object/directory.h>
 #include <kernel/object/wifi.h>
 #include <kernel/object/wifi_connection.h>
 #include <kernel/object/wifi_auth.h>
@@ -331,12 +332,14 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_CONSOLE:
     return console_hold_rights(rights) ||
         !(rights & ~(CONSOLE_RIGHTS | CONSOLE_RIGHT_INTERRUPT));
-  case OBJECT_FILE:
-    return !(rights & ~((((const struct file_object *)object)->immutable_snapshot ||
-        file_failure_status((const struct file_object *)object) != CALL_OK) ?
-        FILE_RIGHT_READ : FILE_RIGHTS));
+  case OBJECT_FILE: {
+    const struct file_object *file = (const struct file_object *)object;
+    uint64_t content = file->immutable_snapshot || file_failure_status(file) != CALL_OK ?
+        FILE_RIGHT_READ : FILE_RIGHTS;
+    return !(rights & ~(content | FILE_RIGHT_IMPORT | FILE_RIGHT_PROGRAM));
+  }
   case OBJECT_DIRECTORY:
-    return !(rights & ~DIRECTORY_RIGHTS);
+    return !(rights & ~DIRECTORY_HELD_RIGHTS);
   case OBJECT_MEMORY:
     return !(rights & ~(MEMORY_RIGHT_MANAGE | MEMORY_RIGHT_CREATE_SHARED));
   case OBJECT_SHARED_REGION:

@@ -11,6 +11,8 @@ struct kernel_object;
 struct process;
 struct launch_capture;
 struct execution_group;
+struct file_object;
+struct image_capture;
 
 enum launcher_action {
   LAUNCH_CREATE_EXECUTION_GROUP,
@@ -34,6 +36,9 @@ struct launcher_request {
   struct execution_group_create_reply execution_reply;
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[2];
+  /* LAUNCH_CAPTURE_RAM: the file, under its stable operation, and the output. */
+  struct file_object *ram_file;
+  struct image_capture *ram_captured;
 };
 
 /* BSP executor, IF=0. Local launch helpers never submit nested requests. */
@@ -53,5 +58,13 @@ bool launcher_grant_allowed(struct execution_group *group, struct kernel_object 
 struct syscall_result launcher_call(struct kernel_object *object, uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail);
+
+/* Current kernel task, IF=0, may sleep. Captures FILE's bytes as a launch
+ * does, through its provider. NPFS, FAT32, HOST and RAM files return a copy
+ * in CAPTURED. A boot-archive file returns with *OPERATION set instead: its
+ * immutable bytes are read in place and the caller ends the operation. RIGHTS
+ * are the caller's file rights. LIMIT receives provider limit detail. */
+enum call_status launcher_capture_file(struct file_object *file, uint64_t rights,
+    struct image_capture *captured, bool *operation, struct call_limit *limit);
 
 #endif

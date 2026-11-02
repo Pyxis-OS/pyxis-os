@@ -1679,7 +1679,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     uintptr_t reply_address, size_t reply_capacity)
 {
   if ((file->backing == FILE_NPFS || file->backing == FILE_FAT32) &&
-      (rights & ~FILE_RIGHTS)) {
+      (rights & ~(FILE_RIGHTS | FILE_RIGHT_IMPORT | FILE_RIGHT_PROGRAM))) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   uint64_t required;

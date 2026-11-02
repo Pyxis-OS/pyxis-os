@@ -9,6 +9,7 @@
 #include <kernel/object/capability.h>
 #include <kernel/object/mount.h>
 #include <kernel/object/disk.h>
+#include <kernel/object/directory.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
@@ -126,7 +127,7 @@ static enum call_status open_native(const struct gpt_guid *disk, block_device_id
   }
   if (!open.partition || open.partition > UINT32_MAX ||
       !open.name_length || open.name_length > MOUNT_VOLUME_NAME_MAX ||
-      (open.rights & ~DIRECTORY_RIGHTS) || !(open.rights & DIRECTORY_RIGHT_LOOKUP)) {
+      (open.rights & ~DIRECTORY_HELD_RIGHTS) || !(open.rights & DIRECTORY_RIGHT_LOOKUP)) {
     return CALL_BAD_REQUEST;
   }
   if ((open.rights & (DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
@@ -177,7 +178,7 @@ static enum call_status open_ram(uint64_t rights, uintptr_t request_address,
   if (request_size != sizeof(open)) return CALL_BAD_REQUEST;
   if (!copy_from_user(&open, request_address, sizeof(open))) return CALL_BAD_BUFFER;
   if (open.capacity % MOUNT_RAM_ALIGNMENT || !open.name_length ||
-      open.name_length > MOUNT_VOLUME_NAME_MAX || (open.rights & ~DIRECTORY_RIGHTS) ||
+      open.name_length > MOUNT_VOLUME_NAME_MAX || (open.rights & ~DIRECTORY_HELD_RIGHTS) ||
       !(open.rights & DIRECTORY_RIGHT_LOOKUP)) return CALL_BAD_REQUEST;
   if ((open.rights & DIRECTORY_RIGHT_FILESYSTEM_INFO) && !(rights & MOUNT_RIGHT_OBSERVE))
     return CALL_DENIED;

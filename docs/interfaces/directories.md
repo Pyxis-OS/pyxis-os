@@ -137,10 +137,13 @@ BAD_OPERATION. Enumeration still reports symlinks with their own kind.
 | WRITE_FILES | Grant WRITE on a file found through LOOKUP or CREATE |
 | CREATE | Add a directory or empty file to writable backing |
 | REMOVE | Remove a file or empty directory name from writable backing |
+| IMPORT | Grant IMPORT on a file, so a library it holds can be mapped into a process |
 
 Returned directory rights must be a subset of the parent's granted directory
-rights. Returned file READ requires READ_FILES; WRITE requires WRITE_FILES.
-Neither implies the other. Zero-rights grants are allowed. Enumeration is not
+rights. Returned file READ requires READ_FILES; WRITE requires WRITE_FILES;
+IMPORT requires IMPORT. None implies another. IMPORT is outside
+`DIRECTORY_RIGHTS` and `FILE_RIGHTS`, so a child keeps it only when the opener
+names it; see [image mapping](../kernel/program-loading.md#mapping-images-into-a-running-process). Zero-rights grants are allowed. Enumeration is not
 required to read a known name. CREATE and REMOVE are independent of LOOKUP,
 ENUMERATE and file rights; granting WRITE cannot make initrd backing mutable.
 

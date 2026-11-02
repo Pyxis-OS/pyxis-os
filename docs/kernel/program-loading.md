@@ -106,3 +106,39 @@ records matched QEMU launch, pipeline and executable-copy costs. Historical
 [capture](../development/experiments/program-bundles-capture/README.md)
 qualification describe the earlier chosen ceilings and why the default stack
 returned to 1 MiB. Their timings are historical, not qualification of WP3.
+
+## Mapping images into a running process
+
+`MEMORY_MAP_IMAGE` maps a P1D or P2D image (`include/pxe/p1d.h`) from a FILE
+into the calling process; `MEMORY_SEAL_IMAGE` makes its RELRO segments
+read-only once. The dynamic loader uses them; `include/abi/memory.h` has the
+call contract. Accepted in the
+[dynamic-linking milestone](../wip/dynamic-linking.md#loading-and-authority).
+
+- **Authority.** The FILE needs READ and, for a library, `FILE_RIGHT_IMPORT`,
+  which a file gets only from a directory with `DIRECTORY_RIGHT_IMPORT`. A dynamic
+  executable needs `FILE_RIGHT_PROGRAM`, which only a launch grant adds to a
+  readable file. IMPORT cannot map an executable and PROGRAM cannot map a
+  library, so launching a loader never imports a library from a directory
+  without IMPORT.
+- **Sources.** Package views (`pkg://` and command views) carry IMPORT when the
+  packages root does. Native and RAM npfs volume roots can be opened with it,
+  and boot init's RAM directory holds it so that a RAM volume root can ask for
+  it. The SDK view, `tmp://`, HOST and FAT32 roots never carry it.
+- **Capture and checks.** The file is captured as a launch image is, then
+  checked by the shared container rules: the header, segment order, W^X,
+  RELRO segments read-write and not executable, the dynamic section inside one
+  read-only segment, the entry rules and, for P2D, a symbol section ending the
+  file. The kernel never reads the dynamic tables.
+- **Placement.** An executable maps at its fixed addresses; any occupied range
+  fails the call with BAD_REQUEST. A library maps at a base the kernel chooses,
+  with the gaps between its segments reserved too.
+- **Mappings.** Each segment gets fresh zeroed frames, its file bytes copied
+  through the kernel alias while the process's threads are quiesced, and its
+  final permissions before the call returns. The pages count as committed
+  private memory. Nothing releases them before process exit, and failure
+  unwinds every mapping made by the call.
+- **Seal.** `MEMORY_SEAL_IMAGE` turns the image's RELRO segments read-only. A
+  second seal, or an identity that is not one of the process's images, is
+  BAD_REQUEST. No operation makes the pages writable again.
+
