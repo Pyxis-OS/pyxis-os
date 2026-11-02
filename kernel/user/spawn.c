@@ -32,6 +32,7 @@
 #include <kernel/task.h>
 #include <kernel/user.h>
 #include <kernel/user/launch.h>
+#include <kernel/user/readiness_set.h>
 #include <kernel/mm/heap.h>
 #include <kernel/limit.h>
 
@@ -526,6 +527,7 @@ static enum call_status launcher_batch_prepare_owned(struct launch_preparation *
 }
 
 enum call_status launcher_batch_publish(struct launch_preparation *group, handle_t *children,
+    struct readiness_process_watch *watch, struct readiness_set_registration *registration,
     struct call_limit *detail)
 {
   KASSERT(!cpu_interrupts_enabled() && group->count &&
@@ -539,7 +541,9 @@ enum call_status launcher_batch_publish(struct launch_preparation *group, handle
       group->observers, count);
   enum call_status status = capability_status(validated, detail);
   if (status == CALL_OK) {
-    status = execution_group_publish(group->execution_group, tasks, count, group->destinations,
+    status = watch ? execution_group_publish_observed(group->execution_group, tasks, count,
+        group->destinations, arch_cpu_count(), watch, registration, detail) :
+      execution_group_publish(group->execution_group, tasks, count, group->destinations,
         arch_cpu_count(), detail);
   }
   if (status != CALL_OK) {
@@ -650,7 +654,8 @@ static enum call_status launcher_start_owned(struct launch_capture *capture,
     struct process *parent,
     size_t parent_cpu, struct execution_group *execution_group,
     struct capability_reservation *reservation, struct capability_reserved_slot *slots,
-    handle_t *result, struct call_limit *detail)
+    handle_t *result, struct readiness_set_registration *registration,
+    struct call_limit *detail)
 {
   enum call_status status;
   struct launch_preparation *group = launcher_batch_create(1, &status, detail);
@@ -663,8 +668,15 @@ static enum call_status launcher_start_owned(struct launch_capture *capture,
   *result = HANDLE_INVALID;
   status = launcher_batch_prepare(group, capture, parent, parent_cpu,
       execution_group, detail);
+  if (status == CALL_OK && capture->watch) {
+    status = readiness_process_watch_bind(capture->watch, &group->observers[0], detail);
+  }
+  if (status == CALL_OK && capture->watch &&
+      !readiness_process_watch_start(capture->watch, task_forwarder_operation())) {
+    status = CALL_DENIED;
+  }
   if (status == CALL_OK) {
-    status = launcher_batch_publish(group, result, detail);
+    status = launcher_batch_publish(group, result, capture->watch, registration, detail);
   }
   if (status != CALL_OK) {
     launcher_batch_abort(group);
@@ -689,7 +701,7 @@ enum call_status launcher_prepare_space(struct launch_capture *capture,
   status = prepare_child(group, capture, parent,
       capture->target_space, SIZE_MAX, NULL, true, detail);
   if (status == CALL_OK) {
-    status = launcher_batch_publish(group, result, detail);
+    status = launcher_batch_publish(group, result, NULL, NULL, detail);
   }
   if (status != CALL_OK) {
     launcher_batch_abort(group);
@@ -709,9 +721,10 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
     size_t parent_cpu, struct execution_group *execution_group,
     struct capability_reservation *reservation, struct capability_reserved_slot *slots,
-    handle_t *result, struct call_limit *detail)
+    handle_t *result, struct readiness_set_registration *registration,
+    struct call_limit *detail)
 {
   KASSERT(task_vm_kernel_active());
   return launcher_start_owned(capture, parent, parent_cpu, execution_group,
-      reservation, slots, result, detail);
+      reservation, slots, result, registration, detail);
 }

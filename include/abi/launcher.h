@@ -5,11 +5,13 @@
 #include <abi/message.h>
 #include <abi/startup.h>
 #include <abi/environment.h>
+#include <abi/readiness_set.h>
 
 #define LAUNCHER_RIGHT_LAUNCH (UINT64_C(1) << 0)
 #define LAUNCHER_LAUNCH UINT64_C(1)
 #define LAUNCHER_LAUNCH_BATCH UINT64_C(2)
 #define LAUNCHER_CREATE_GROUP UINT64_C(3)
+#define LAUNCHER_LAUNCH_OBSERVED UINT64_C(4)
 #define LAUNCH_NO_STAGE UINT64_MAX
 #define LAUNCH_INITIAL_STACK_DEFAULT_SIZE (UINT64_C(1) * 1024 * 1024)
 
@@ -73,6 +75,21 @@ struct launch_request {
   uint64_t initial_stack_bytes;
 };
 
+/* An owned current-process set with CONTROL admits a WAIT_COMPLETE watch
+ * before the child is runnable. One reply publishes the ordinary child observer
+ * and watch key; source handles remain borrowed. Known admission failure
+ * publishes neither. An uncertain reply must never be replayed. */
+struct launch_observed_request {
+  struct launch_request request;
+  handle_t set;
+  uint64_t tag;
+};
+
+struct launch_observed_reply {
+  handle_t child;
+  struct readiness_set_registration registration;
+};
+
 struct launch_message {
   struct message_header header;
   struct launch_request body;
@@ -110,6 +127,8 @@ _Static_assert(sizeof(struct execution_group_create_reply) == 16, "group creatio
 _Static_assert(sizeof(struct launch_environment_entry) == 40, "launch environment entry layout");
 _Static_assert(sizeof(struct launch_request) == 88, "launch request layout");
 _Static_assert(sizeof(struct launch_message) == 104, "launch message layout");
+_Static_assert(sizeof(struct launch_observed_request) == 104, "observed launch request layout");
+_Static_assert(sizeof(struct launch_observed_reply) == 24, "observed launch reply layout");
 _Static_assert(sizeof(struct launch_batch_request) == 16, "launch batch request layout");
 _Static_assert(sizeof(struct launch_batch_message) == 32, "launch batch message layout");
 _Static_assert(sizeof(struct launch_batch_reply) == 16, "launch batch reply layout");

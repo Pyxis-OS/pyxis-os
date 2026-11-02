@@ -22,6 +22,7 @@
 #include <kernel/string.h>
 #include <kernel/task.h>
 #include <kernel/user/launch.h>
+#include <kernel/user/readiness_set.h>
 #include <kernel/user_memory.h>
 
 #include "launcher_internal.h"
@@ -351,7 +352,8 @@ static void discard_launch_capture(struct launch_capture *capture)
 
 static enum call_status launch_process(struct launch_capture *capture,
     struct execution_group *execution_group, struct capability_reservation *reservation,
-    struct capability_reserved_slot *slots, handle_t *child, struct call_limit *detail)
+    struct capability_reserved_slot *slots, handle_t *child,
+    struct readiness_set_registration *registration, struct call_limit *detail)
 {
   task_vm_kernel_enter();
   struct execution_group *previous = object_cleanup_enter(execution_group ?
@@ -359,7 +361,7 @@ static enum call_status launch_process(struct launch_capture *capture,
   enum call_status status;
   if (task_operation_start()) {
     status = launcher_start(capture, process_current(), arch_cpu_index(), execution_group,
-        reservation, slots, child, detail);
+        reservation, slots, child, registration, detail);
   } else {
     *child = HANDLE_INVALID;
     status = CALL_DENIED;
@@ -391,7 +393,7 @@ static enum call_status publish_launch_batch(struct launch_preparation *group, h
 {
   task_vm_kernel_enter();
   enum call_status status = task_operation_start() ?
-      launcher_batch_publish(group, children, detail) : CALL_DENIED;
+      launcher_batch_publish(group, children, NULL, NULL, detail) : CALL_DENIED;
   launcher_batch_discard(group);
   task_vm_kernel_leave();
   return status;
@@ -830,15 +832,18 @@ enum call_status launcher_request_space_devices(struct launch_capture *capture,
 }
 
 static struct syscall_result launch_one(struct execution_group *execution_group,
-    uintptr_t request_address, size_t request_size,
-                                        uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
-  struct launch_request request;
-  if (request_size != sizeof(request) || reply_capacity < sizeof(handle_t)) {
+  bool observed = operation == LAUNCHER_LAUNCH_OBSERVED;
+  struct launch_observed_request input = {0};
+  size_t input_size = observed ? sizeof(input) : sizeof(input.request);
+  size_t output_size = observed ? sizeof(struct launch_observed_reply) : sizeof(handle_t);
+  if (request_size != input_size || reply_capacity < output_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request, request_address, sizeof(request)) ||
-      !user_buffer_check(reply_address, sizeof(handle_t), USER_BUFFER_WRITE)) {
+  if (!copy_from_user(&input, request_address, input_size) ||
+      !user_buffer_check(reply_address, output_size, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
@@ -846,31 +851,54 @@ static struct syscall_result launch_one(struct execution_group *execution_group,
   struct capability_reserved_slot slot;
   enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
   if (reserved != CAP_OK) {
-    return (struct syscall_result){reserved == CAP_LIMIT ? call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING,
-        0, UINT64_C(1) << 32, CALL_LIMIT_HAS_LIMIT) : CALL_NO_MEMORY, 0};
+    return (struct syscall_result){reserved == CAP_LIMIT ? call_limit_set(detail,
+        CALL_LIMIT_HANDLE_ENCODING, 0, UINT64_C(1) << 32, CALL_LIMIT_HAS_LIMIT) : CALL_NO_MEMORY, 0};
   }
   if (task_stop_requested()) {
     capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
   struct launch_capture *capture;
-  enum call_status status = launcher_capture_request(&request, &capture, detail);
+  enum call_status status = launcher_capture_request(&input.request, &capture, detail);
   if (status != CALL_OK) {
     capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){status, 0};
   }
+  struct readiness_process_watch *watch = NULL;
+  if (observed) {
+    struct capability_reference reference = {0};
+    reserved = capability_acquire_with_limit(&process_current()->capabilities, input.set,
+        READINESS_SET_RIGHT_CONTROL, 0, &reference, detail);
+    if (reserved == CAP_OK) {
+      status = readiness_process_watch_prepare(process_current(), &reference, input.tag,
+          &watch, detail); /* Consumes the reference on every outcome. */
+    } else {
+      status = reserved == CAP_DENIED ? CALL_DENIED : reserved == CAP_LIMIT ? CALL_LIMIT :
+          reserved == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_HANDLE;
+    }
+    if (status != CALL_OK) {
+      capability_reservation_release(&reservation, &slot);
+      discard_launch_capture(capture);
+      return (struct syscall_result){status, 0};
+    }
+    capture->watch = watch;
+  }
 
-  /* Captured grants and the observer reservation survive source CLOSE and waits.
-   * The stable image operation ends before child publication. */
-  handle_t child;
-  status = launch_process(capture, execution_group, &reservation, &slot, &child, detail);
-  if (status != CALL_OK) {
-    return (struct syscall_result){status, 0};
+  /* Capture borrows WATCH. Keep its loan until the final reply is copied, so
+   * unknown admission never leaves an unclaimed registration behind. */
+  struct launch_observed_reply reply = {0};
+  status = launch_process(capture, execution_group, &reservation, &slot, &reply.child,
+      &reply.registration, detail);
+  bool published = status == CALL_OK;
+  if (published && !copy_returned_handles_to_user(reply_address, &reply, output_size,
+      &reply.child, 1)) {
+    status = CALL_BAD_BUFFER;
+    published = false; /* Observation only; the admitted child is not replayed or killed. */
   }
-  if (!copy_returned_handles_to_user(reply_address, &child, sizeof(child), &child, 1)) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  if (watch) {
+    readiness_process_watch_finish(watch, published);
   }
-  return (struct syscall_result){CALL_OK, sizeof(child)};
+  return (struct syscall_result){status, status == CALL_OK ? output_size : 0};
 }
 
 static struct syscall_result batch_failure(uintptr_t address, size_t count,
@@ -1085,7 +1113,7 @@ struct syscall_result launcher_call(struct kernel_object *object, uint64_t right
   struct process *parent = process_current();
   struct execution_group *group = launcher_execution_group(object);
   if (operation != LAUNCHER_CREATE_GROUP && operation != LAUNCHER_LAUNCH &&
-      operation != LAUNCHER_LAUNCH_BATCH) {
+      operation != LAUNCHER_LAUNCH_BATCH && operation != LAUNCHER_LAUNCH_OBSERVED) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & LAUNCHER_RIGHT_LAUNCH) ||
@@ -1112,7 +1140,7 @@ struct syscall_result launcher_call(struct kernel_object *object, uint64_t right
   }
   struct syscall_result result = operation == LAUNCHER_LAUNCH_BATCH ?
       launch_batch(group, request_address, request_size, reply_address, reply_capacity, detail) :
-      launch_one(group, request_address, request_size, reply_address, reply_capacity, detail);
+      launch_one(group, operation, request_address, request_size, reply_address, reply_capacity, detail);
   object_cleanup_leave(previous);
   execution_group_launch_end(group);
   return result;
