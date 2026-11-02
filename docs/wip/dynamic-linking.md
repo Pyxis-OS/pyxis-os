@@ -142,12 +142,15 @@ TLS is refused with a clear error until a consumer needs it.
 
 ### Names, packages and versions
 
-- A library's name is `NAME` or `NAME.N`, stored in the `.pxl`. Incompatible
-  versions are different names (`SDL2`/`SDL3`, `foo.1`/`foo.2`). There are no
-  `.pxl.REVISION` files or links to stable names.
+- A library's name is its file name, `libNAME.pxl` or `libNAME.N.pxl`, stored
+  in the `.pxl`, so `-lNAME` and build systems work unchanged. Incompatible
+  versions are different names (`libSDL2.pxl`/`libSDL3.pxl`,
+  `libfoo.1.pxl`/`libfoo.2.pxl`). There are no `.pxl.REVISION` files or links to
+  stable names.
 - Packages export libraries explicitly, as they export commands:
-  `libraries = { SDL2 = { path = "lib/SDL2.pxl" } }`. Set publication refuses
-  duplicate names and writes `sets/N.libraries` beside `sets/N.commands`.
+  `libraries = { ["libSDL2.pxl"] = { path = "lib/libSDL2.pxl" } }`. Set
+  publication refuses duplicate names and writes `sets/N.libraries` beside
+  `sets/N.commands`.
 - The set's library view is taken at launch and kept for the process's life,
   `dlopen` included, so `pkg update` never mixes versions inside one process.
 - `pxpkg pack` refuses a program whose needed names its declared dependencies
@@ -273,24 +276,18 @@ added except the build split itself.
   native vela rows wait for a scheduled run.
 - [ ] **1. Formats and toolchain.** Format headers beside `p1f.h`; in the fork,
   LLD writes P2F/P1D/P2D and reads `.pxl`; the driver allows `-shared`, `-fPIC`,
-  GD/LD/IE/TLSDESC, `-z now -z relro` by default and no copy relocations; LLD
-  records `$ORIGIN` `-rpath` entries as declared library directories and refuses
-  other `-rpath` entries; CMake declares shared libraries supported and adds no
-  automatic rpaths. Validation: build a sample library and executable, inspect
-  both on the host, confirm refused relocation kinds and rpath forms, the
-  recorded directories, and stripped-P2F → P1F. **Owner action: build and publish the one compiler
-  container** (new `pyxis-llvm` pin and image tag). No further rebuild unless the
-  format changes later.
+  GD/LD/IE, `-z now -z relro` by default and no copy relocations; LLD records
+  `$ORIGIN` `-rpath` entries as declared library directories and refuses other
+  `-rpath` entries. Libraries are `libNAME.pxl`, their stored name is the file
+  name, and `-lNAME` finds them. The pin update also teaches the kernel loader,
+  userland, `pxpkg` and the toolchain scripts to accept P2F, since every
+  unstripped program becomes P2F, and adds `-fdirect-access-external-data` to
+  the kernel, which keeps its code unchanged. Validation: build a sample library
+  and executable, inspect both on the host, confirm refused relocation kinds
+  and rpath forms, the recorded directories, and stripped-P2F → P1F. **Owner
+  action: build and publish the compiler container** (new `pyxis-llvm` pin and
+  image tag). No further rebuild unless the format changes later.
   Progress: the headers and pyxis-llvm #23 are in review, validated on the host.
-  Before the pin moves:
-  - Every unstripped program becomes P2F, so the kernel loader, the userland
-    magic checks, `pxpkg` and `stage-hosted.py` must accept P2F in the same
-    integration.
-  - The kernel adds `-fdirect-access-external-data`, which keeps its code
-    unchanged.
-  - The CMake change waits for `libc.pxl` (task 3). Ports such as SDL build
-    shared libraries whenever CMake allows them, and those links need a
-    position-independent libc.
 - [ ] **2. Kernel map and seal.** The map operation, the one-way RELRO seal and
   the IMPORT directory right, carried by the package and app views, and set on
   the Development space's `home://` in the live and installed defaults.
@@ -302,8 +299,10 @@ added except the build split itself.
   `libpyxis.pxl`; the TLS block and loader-driven `libc_enter`; `dlfcn.h`; the
   module iterator for libunwind; the debugger module list; launcher selection in
   `program_open`, for bundles and for a `.pxe` run directly; resolution of
-  declared library directories and the `libs` explicit source. One small
-  userland command becomes dynamic. Validation in QEMU: the same program run
+  declared library directories and the `libs` explicit source. CMake declares
+  shared libraries supported and adds no automatic rpaths; this waits for
+  `libc.pxl` because ports such as SDL build shared libraries whenever CMake
+  allows them. One small userland command becomes dynamic. Validation in QEMU: the same program run
   directly from Development's home with vendored libraries in a declared
   directory, and inside a bundle; a `libs` source overriding a set library; the
   same launches from Read-only, where home libraries are skipped and the error
