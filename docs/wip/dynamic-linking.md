@@ -42,16 +42,42 @@ which it refines, and serves the program side of
 
 ### Formats
 
-- **P2F** is P1F plus an optional symbol section. Stripping it yields a valid
-  P1F. Backtraces use it (#1337).
-- **P1D** is the dynamic form: P1F's segments plus a dynamic section with the
-  library name (`.pxl` only), needed library names, the program's declared
-  library directories (executables only, see [library lookup](#library-lookup)),
-  exports with a hash table, imports, a RELRO range, the TLS template, init/fini
-  arrays and the `eh_frame_hdr` location. **P2D** is P1D with the P2F symbol section.
-  D means dynamic; 2 means with symbols.
-- Relocation kinds are a closed list: relative, absolute/GOT, jump slot and the
-  TLS module/offset kinds. Text relocations and copy relocations are refused.
+`include/pxe/p1f.h` and `include/pxe/p1d.h` define the layouts; the kernel,
+the loader and LLD's writer follow them.
+
+- **Magics** name the format: `PXE1FLAT` (P1F), `PXE2FLAT` (P2F), `PXE1DYNM`
+  (P1D) and `PXE2DYNM` (P2D). D means dynamic; 2 means with symbols. There is no
+  separate version field; until a public release a change edits the layout in
+  place.
+- **P2F** is P1F followed by a symbol section that is never mapped: a count
+  header, the full `Elf64_Sym` table (locals included) and its strings.
+  Stripping truncates the file there and turns the magic's 2 into 1, which gives
+  a valid P1F. Backtraces read it (#1337).
+- **P1D** extends the P1F header with flags (library or executable) and the
+  address and size of a dynamic section. That section lies in a read-only
+  segment, so the loader reads the tables from the mapped image, never the file
+  again. It points to the library name (`.pxl` only), needed library names, the
+  program's declared library directories (executables only, see
+  [library lookup](#library-lookup)), the symbols with a GNU hash table over the
+  exports, RELR relative relocations, other relocations, init/fini arrays, the
+  TLS template and the `eh_frame_hdr` location. **P2D** is P1D with the P2F
+  symbol section.
+- Table records use ELF's encodings (`Elf64_Sym`, GNU hash, RELR,
+  `Elf64_Rela`); the container, the header and the rules are native. There are
+  no ELF files, program headers, `.dynamic` tags or interpreter.
+- RELRO is its own whole-page segment, flagged `P1D_RELRO`: mapped writable for
+  relocation, then sealed read-only. A library's addresses are offsets from a
+  base the kernel chooses.
+- Relocation kinds are a closed list of x86-64 types: `RELATIVE`, `64`,
+  `GLOB_DAT`, `JUMP_SLOT` (bound eagerly), `DTPMOD64`, `DTPOFF64` and
+  `TPOFF64`. Copy, `IRELATIVE`, TLSDESC and text relocations are refused, by
+  LLD and again by the loader.
+- The kernel checks the container, W^X, RELRO segments and that the dynamic
+  section lies in one read-only segment; it never reads the tables. The loader
+  checks every table range, string and relocation target.
+- **Symbols by default.** LLD writes P2F or P2D unless the link strips (`-s`).
+  Until 0.x, release and package builds keep their symbols too, for on-device
+  backtraces; nothing strips them.
 - `.pxl` libraries are position-independent and placed at load. Dynamic `.pxe`
   executables stay fixed at `0x400000` with imports; there is no PIE and no ASLR.
 - LLD writes P2F, P1D and P2D from its ELF dynamic-link layout and reads `.pxl`
@@ -108,9 +134,11 @@ which it refines, and serves the program side of
 
 The loader builds one static TLS block for the executable and every library
 loaded at startup, so every model resolves to a fixed FS offset. Libraries use
-general-dynamic or TLSDESC; executables keep local-exec. libc's bootstrap takes
-the layout from the loader; the FS and TCB rules are unchanged. `dlopen` of a
-library with TLS is refused with a clear error until a consumer needs it.
+general-dynamic, local-dynamic or initial-exec; executables keep local-exec for
+their own variables and use initial-exec for a library's. TLSDESC waits until a
+library needs it, as one more relocation type. libc's bootstrap takes the layout
+from the loader; the FS and TCB rules are unchanged. `dlopen` of a library with
+TLS is refused with a clear error until a consumer needs it.
 
 ### Names, packages and versions
 
@@ -253,6 +281,16 @@ added except the build split itself.
   recorded directories, and stripped-P2F → P1F. **Owner action: build and publish the one compiler
   container** (new `pyxis-llvm` pin and image tag). No further rebuild unless the
   format changes later.
+  Progress: the headers and pyxis-llvm #23 are in review, validated on the host.
+  Before the pin moves:
+  - Every unstripped program becomes P2F, so the kernel loader, the userland
+    magic checks, `pxpkg` and `stage-hosted.py` must accept P2F in the same
+    integration.
+  - The kernel adds `-fdirect-access-external-data`, which keeps its code
+    unchanged.
+  - The CMake change waits for `libc.pxl` (task 3). Ports such as SDL build
+    shared libraries whenever CMake allows them, and those links need a
+    position-independent libc.
 - [ ] **2. Kernel map and seal.** The map operation, the one-way RELRO seal and
   the IMPORT directory right, carried by the package and app views, and set on
   the Development space's `home://` in the live and installed defaults.
