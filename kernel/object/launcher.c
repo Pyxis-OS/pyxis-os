@@ -248,10 +248,10 @@ void launcher_request_execute(struct launcher_request *request)
     create_execution_group(request);
     break;
   case LAUNCH_CAPTURE_RAM:
-    KASSERT(request->capture && !request->parent);
-    request->result = file_ram_capture(request->capture->image,
-        &request->capture->captured_image, &request->capture->limit);
-    file_end_operation(request->capture->image);
+    KASSERT(request->ram_file && request->ram_captured && !request->parent);
+    request->result = file_ram_capture(request->ram_file, request->ram_captured,
+        &request->limit);
+    file_end_operation(request->ram_file);
     break;
   case LAUNCH_CREATE_SPACE:
     KASSERT(request->capture && !request->parent);
@@ -581,14 +581,39 @@ static struct process_environment_entry *capture_entries(struct launch_capture *
   return entries;
 }
 
+/* A launch may give the child FILE_RIGHT_PROGRAM on a file the caller can
+ * read: the child may then map it as its dynamic executable, which the caller
+ * could already launch. Any other grant only attenuates. */
+static enum capability_result acquire_launch_grant(struct launch_capture *capture,
+    const struct launch_grant *grant, struct capability_grant *owned)
+{
+  struct capability_table *table = &process_current()->capabilities;
+  enum capability_result status = capability_grant_acquire_with_limit(table, grant->source,
+      grant->rights, grant->transport, owned, &capture->limit);
+  if (status != CAP_DENIED || !(grant->rights & FILE_RIGHT_PROGRAM)) {
+    return status;
+  }
+  status = capability_grant_acquire_with_limit(table, grant->source,
+      grant->rights & ~FILE_RIGHT_PROGRAM, grant->transport, owned, &capture->limit);
+  if (status != CAP_OK) {
+    return status;
+  }
+  if (object_effective_type(owned->object) != OBJECT_FILE ||
+      !(owned->rights & FILE_RIGHT_READ)) {
+    capability_grant_release(owned);
+    return CAP_DENIED;
+  }
+  owned->rights |= FILE_RIGHT_PROGRAM;
+  return CAP_OK;
+}
+
 static void capture_startup(struct launch_capture *capture, const struct launch_request *source)
 {
   capture->grants = launcher_capture_array(capture, source->grants, source->grant_count,
       sizeof(*capture->grants));
   for (size_t i = 0; i < capture->grant_count && capture->error == CALL_OK; ++i) {
-    const struct launch_grant *grant = &capture->grants[i];
-    enum capability_result status = capability_grant_acquire_with_limit(&process_current()->capabilities,
-        grant->source, grant->rights, grant->transport, &capture->owned_grants[i], &capture->limit);
+    enum capability_result status = acquire_launch_grant(capture, &capture->grants[i],
+        &capture->owned_grants[i]);
     if (status != CAP_OK) {
       capture->error = status == CAP_LIMIT ? CALL_LIMIT :
           status == CAP_BAD_HANDLE ? CALL_BAD_HANDLE :
@@ -697,53 +722,71 @@ enum call_status launcher_capture_metadata(const struct launch_request *request,
   return CALL_OK;
 }
 
-enum call_status launcher_capture_image(struct launch_capture *capture)
+enum call_status launcher_capture_file(struct file_object *file, uint64_t rights,
+    struct image_capture *captured, bool *operation, struct call_limit *limit)
 {
-  KASSERT(capture->image && !capture->image_operation && !capture->captured_image.address);
-  if (capture->image->backing == FILE_NPFS || capture->image->backing == FILE_FAT32) {
+  KASSERT(file && !*operation && !captured->address);
+  if (file->backing == FILE_NPFS || file->backing == FILE_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_CAPTURE);
-    pending->job.node = capture->image->npfs;
-    pending->job.fat_node = capture->image->fat32;
-    pending->job.rights = capture->image_rights;
+    pending->job.node = file->npfs;
+    pending->job.fat_node = file->fat32;
+    /* IMPORT and PROGRAM authorize mapping, not reading: the provider sees
+     * only the content rights its node was opened with. */
+    pending->job.rights = rights & FILE_RIGHTS;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
-    capture->limit = pending->job.limit;
-    capture->captured_image = pending->job.captured;
+    *limit = pending->job.limit;
+    *captured = pending->job.captured;
     pending->job.captured = (struct image_capture){0};
     npfs_request_release(pending);
     if (status != CALL_OK) {
       return status;
     }
-  } else if (capture->image->backing == FILE_HOST) {
+  } else if (file->backing == FILE_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_CAPTURE);
-    pending->node = capture->image->host;
+    pending->node = file->host;
     hostfs_request_submit_and_wait(pending);
     if (pending->status != CALL_OK) {
       enum call_status error = pending->status;
-      capture->limit = pending->limit;
+      *limit = pending->limit;
       hostfs_request_release(pending);
       return error;
     }
-    capture->captured_image = pending->captured;
+    *captured = pending->captured;
     pending->captured = (struct image_capture){0};
     hostfs_request_release(pending);
-  } else if (!file_begin_operation(capture->image)) {
+  } else if (!file_begin_operation(file)) {
     return CALL_ENDPOINT_CLOSED;
-  } else if (capture->image->backing == FILE_RAM) {
-    capture->image_operation = true;
-    /* Lend the stable file operation. Copy and mapping access stay on the BSP. */
-    struct launcher_request *pending = request_launch_service(LAUNCH_CAPTURE_RAM,
-        capture, NULL);
+  } else if (file->backing == FILE_RAM) {
+    /* Lend the stable file operation. Copy and mapping access stay on the BSP,
+     * which ends the operation. */
+    struct launcher_request *pending =
+        (struct launcher_request *)bsp_request_prepare(BSP_SERVICE_LAUNCHER);
+    *pending = (struct launcher_request){
+      .request = pending->request,
+      .action = LAUNCH_CAPTURE_RAM,
+      .result = CALL_OK,
+      .ram_file = file,
+      .ram_captured = captured,
+    };
+    bsp_request_submit_and_wait(&pending->request);
     enum call_status status = pending->result;
-    capture->image_operation = false;
+    *limit = pending->limit;
     bsp_request_release(&pending->request);
     if (status != CALL_OK) {
       return status;
     }
   } else {
-    capture->image_operation = true;
+    *operation = true;
   }
   return task_stop_requested() ? CALL_ENDPOINT_CLOSED : CALL_OK;
+}
+
+enum call_status launcher_capture_image(struct launch_capture *capture)
+{
+  KASSERT(capture->image);
+  return launcher_capture_file(capture->image, capture->image_rights,
+      &capture->captured_image, &capture->image_operation, &capture->limit);
 }
 
 enum call_status launcher_capture_request(const struct launch_request *request,

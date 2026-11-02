@@ -90,6 +90,26 @@ the loader and LLD's writer follow them.
   library. It reuses image capture, segment validation and W^X: text R/X, rodata
   R, data and GOT RW, no relocation. A second, one-way call seals the image's
   RELRO range from RW to R. There is no release operation.
+- **Kernel interface (accepted by chronium, 2026-11-02):**
+  - **Calls:** `MEMORY_MAP_IMAGE` and `MEMORY_SEAL_IMAGE` on the MEMORY object,
+    under `MEMORY_RIGHT_MANAGE`, in the common caller-CPU VM transaction.
+  - **Map result:** identity, base, entry and the dynamic section's address.
+  - **Placement:** an executable maps at its fixed addresses and fails if any
+    is taken. A library gets a base the kernel chooses, with its whole span
+    reserved.
+  - **Rights:** IMPORT travels as `DIRECTORY_RIGHT_IMPORT` and
+    `FILE_RIGHT_IMPORT`, outside `DIRECTORY_RIGHTS` and `FILE_RIGHTS`, so it
+    is never carried unless named. A launch grant can add the kernel-only
+    `FILE_RIGHT_PROGRAM` to a file the caller can read. PROGRAM maps only an
+    executable; IMPORT maps only a library.
+  - **Memory:** image segments are private memory of their own kind, counted
+    as committed. Nothing releases them before exit.
+  - **Checks:** `kernel/image.c` validates the container and never reads the
+    tables. The whole file is captured, symbol section included.
+  - **Sources:** `pkg://` and `app://` always carry IMPORT. An init-config
+    root can ask for it with `import = true`, and the live and installed
+    Development homes do; `tmp`, `host` and Read-only's roots don't. IMPORT
+    through manifest grants waits for task 5 or 6.
 - **Authority: the IMPORT right** (name chosen by chronium, 2026-11-02).
   IMPORT is a directory right meaning that libraries reached through this
   directory may be imported into a process. Importing a library means the map
@@ -295,6 +315,9 @@ added except the build split itself.
   every page, refusal without IMPORT or of an invalid image, IMPORT present
   on Development's home and absent on Read-only's, seal irreversibility, failure
   unwind and process-exit reclamation.
+  Progress: the kernel PR comes first (map, seal, rights, launch grant). A
+  userspace PR follows: the init-config `import` key, IMPORT on the packages
+  volume, and the Development homes. Then the gitlink moves.
 - [ ] **3. Loader and the C runtime.** `loader.pxe`; `libc.pxl` and
   `libpyxis.pxl`; the TLS block and loader-driven `libc_enter`; `dlfcn.h`; the
   module iterator for libunwind; the debugger module list; launcher selection in

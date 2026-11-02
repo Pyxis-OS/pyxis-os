@@ -9,9 +9,11 @@
 #include <kernel/object/object.h>
 #include <kernel/object/capability.h>
 #include <kernel/service/request.h>
+#include <kernel/user/image_capture.h>
 
 struct process;
 struct shared_region;
+struct file_object;
 
 struct memory_request {
   struct bsp_request request;
@@ -32,6 +34,13 @@ struct memory_request {
   struct call_limit limit;
   bool profiled;
   uint64_t service_started_ns, service_ended_ns;
+  /* MAP_IMAGE: the source file and its capture, read and released by the
+   * executor on the kernel root, and the result. */
+  struct file_object *image_file;
+  uint64_t image_rights;
+  struct image_capture image_captured;
+  bool image_released;
+  struct memory_image image;
 };
 
 void memory_request_execute(struct memory_request *request);

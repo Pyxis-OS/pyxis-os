@@ -5,6 +5,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <pxe/p1d.h>
 #include <pxe/p1f.h>
 
 #define IMAGE_STEP_PAGES 64
@@ -188,4 +189,96 @@ enum image_result image_load(const void *bytes, size_t size,
   *space = loaded;
   *entry = header.entry;
   return IMAGE_OK;
+}
+
+struct p1f_segment image_dynamic_segment(const void *bytes, size_t index)
+{
+  struct p1f_segment segment;
+  memcpy(&segment, (const uint8_t *)bytes + sizeof(struct p1d_header) +
+      index * sizeof(segment), sizeof(segment));
+  return segment;
+}
+
+/* P2's symbol section must be exactly the remaining bytes. */
+static bool symbols_fill(const uint8_t *bytes, size_t remaining)
+{
+  struct p2_symbols symbols;
+  if (remaining < sizeof(symbols)) {
+    return false;
+  }
+  memcpy(&symbols, bytes, sizeof(symbols));
+  remaining -= sizeof(symbols);
+  return symbols.symbol_count <= remaining / P2_SYMBOL_SIZE &&
+      symbols.string_size == remaining - symbols.symbol_count * P2_SYMBOL_SIZE;
+}
+
+bool image_dynamic_validate(const void *bytes, size_t size, struct image_dynamic *image)
+{
+  *image = (struct image_dynamic){0};
+  struct p1d_header header;
+  if (!bytes || size < sizeof(header)) {
+    return false;
+  }
+  memcpy(&header, bytes, sizeof(header));
+  if ((header.magic != P1D_MAGIC && header.magic != P2D_MAGIC) ||
+      (header.flags & ~P1D_LIBRARY) || !header.segment_count ||
+      header.segment_count > (size - sizeof(header)) / sizeof(struct p1f_segment) ||
+      header.dynamic_size != sizeof(struct p1d_dynamic)) {
+    return false;
+  }
+  bool library = header.flags & P1D_LIBRARY;
+  if (library && header.entry) {
+    return false;
+  }
+
+  size_t payload = sizeof(header) + header.segment_count * sizeof(struct p1f_segment);
+  size_t remaining = size - payload;
+  /* Page zero is unavailable to fixed addresses; a library's are offsets. */
+  uint64_t previous_end = library ? 0 : P1F_PAGE_SIZE;
+  bool executable_entry = false;
+  bool dynamic_found = false;
+  for (size_t i = 0; i < header.segment_count; ++i) {
+    struct p1f_segment segment = image_dynamic_segment(bytes, i);
+    uint64_t flags = segment.flags;
+    if ((segment.virtual_address & (P1F_PAGE_SIZE - 1)) ||
+        segment.virtual_address < previous_end || segment.virtual_address >= P1F_USER_LIMIT ||
+        !segment.memory_size || segment.memory_size > P1F_USER_LIMIT - segment.virtual_address ||
+        segment.file_size > segment.memory_size || segment.file_size > remaining ||
+        (flags & ~(P1F_READ | P1F_WRITE | P1F_EXECUTE | P1D_RELRO)) || !(flags & P1F_READ) ||
+        (flags & (P1F_WRITE | P1F_EXECUTE)) == (P1F_WRITE | P1F_EXECUTE) ||
+        ((flags & P1D_RELRO) && !(flags & P1F_WRITE))) {
+      return false;
+    }
+    uint64_t end = segment.virtual_address + segment.memory_size;
+    previous_end = (end + P1F_PAGE_SIZE - 1) & ~(P1F_PAGE_SIZE - 1);
+    remaining -= segment.file_size;
+    if (!library && (flags & P1F_EXECUTE) && header.entry >= segment.virtual_address &&
+        header.entry < end) {
+      executable_entry = true;
+    }
+    /* The loader reads the dynamic section from initialized read-only bytes. */
+    if (flags == P1F_READ && header.dynamic_address >= segment.virtual_address &&
+        header.dynamic_address - segment.virtual_address <= segment.file_size &&
+        header.dynamic_size <= segment.file_size -
+            (header.dynamic_address - segment.virtual_address)) {
+      dynamic_found = true;
+    }
+  }
+  if ((!library && !executable_entry) || !dynamic_found) {
+    return false;
+  }
+  const uint8_t *trailer = (const uint8_t *)bytes + (size - remaining);
+  if (header.magic == P1D_MAGIC ? remaining != 0 : !symbols_fill(trailer, remaining)) {
+    return false;
+  }
+
+  *image = (struct image_dynamic){
+    .library = library,
+    .entry = header.entry,
+    .dynamic_address = header.dynamic_address,
+    .segment_count = header.segment_count,
+    .payload = payload,
+    .span = previous_end,
+  };
+  return true;
 }

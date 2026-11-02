@@ -1,9 +1,23 @@
 #ifndef KERNEL_DIRECTORY_H
 #define KERNEL_DIRECTORY_H
 
+#include <abi/directory.h>
+#include <abi/file.h>
 #include <abi/syscall.h>
 #include <kernel/fs/metadata.h>
 #include <kernel/object/object.h>
+
+/* Every right a directory or a child file opened from one may hold. */
+#define DIRECTORY_HELD_RIGHTS (DIRECTORY_RIGHTS | DIRECTORY_RIGHT_IMPORT)
+#define FILE_CHILD_RIGHTS (FILE_RIGHTS | FILE_RIGHT_IMPORT)
+
+/* The file rights a directory's rights allow its children to request. */
+static inline uint64_t directory_file_rights(uint64_t directory_rights)
+{
+  return ((directory_rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
+      ((directory_rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0) |
+      ((directory_rights & DIRECTORY_RIGHT_IMPORT) ? FILE_RIGHT_IMPORT : 0);
+}
 
 struct hostfs_node;
 struct npfs_node;

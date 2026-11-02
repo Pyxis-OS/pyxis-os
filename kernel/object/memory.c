@@ -3,12 +3,15 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
+#include <kernel/image.h>
 #include <kernel/mm/heap.h>
 #include <kernel/limit.h>
 #include <kernel/mm/private.h>
 #include <kernel/mm/shared.h>
 #include <kernel/mm/shared_view.h>
+#include <kernel/object/file.h>
 #include <kernel/object/forwarder.h>
+#include <kernel/object/launcher.h>
 #include <kernel/object/memory.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -120,6 +123,33 @@ static void record_memory_profile(struct profile_snapshot *profile, uint64_t ope
   profile_duration_add(&profile->flags, &stats->total, started_ns, ended);
 }
 
+/* Validates the captured image, checks the right its kind needs and maps it.
+ * The capture is read and released here, on the kernel root. */
+static enum call_status map_image(struct memory_request *request)
+{
+  struct file_object *file = request->image_file;
+  bool captured = file->backing != FILE_INITRD;
+  size_t size = captured ? request->image_captured.size : file->size;
+  const void *bytes = captured ? image_capture_read_begin(&request->image_captured) :
+      file->data;
+  struct image_dynamic image;
+  enum call_status status;
+  if (!image_dynamic_validate(bytes, size, &image)) {
+    status = CALL_BAD_REQUEST;
+  } else if (!(request->image_rights &
+      (image.library ? FILE_RIGHT_IMPORT : FILE_RIGHT_PROGRAM))) {
+    status = CALL_DENIED;
+  } else {
+    status = private_image_map(request->process, bytes, &image, &request->image);
+  }
+  if (captured) {
+    image_capture_read_end(&request->image_captured);
+    image_capture_release(&request->image_captured);
+  }
+  request->image_released = true;
+  return status;
+}
+
 void memory_request_execute(struct memory_request *request)
 {
   KASSERT(request->request.state == BSP_REQUEST_FORWARDED && request->process);
@@ -127,6 +157,7 @@ void memory_request_execute(struct memory_request *request)
   request->service_started_ns = request->profiled ? arch_monotonic_ns() : 0;
   size_t reply_size = request->shared_region ? sizeof(struct memory_reservation) :
       request->operation == MEMORY_CREATE_SHARED ? sizeof(struct shared_memory_created) :
+      request->operation == MEMORY_MAP_IMAGE ? sizeof(struct memory_image) :
       returns_memory(request->operation) ? allocation_reply_size(request->operation) : 0;
   if (reply_size &&
       !process_vm_buffer_check(request->process, request->reply_address,
@@ -137,7 +168,13 @@ void memory_request_execute(struct memory_request *request)
     request->process = NULL;
     return;
   }
-  if (request->shared_region) {
+  if (request->operation == MEMORY_MAP_IMAGE) {
+    request->status = map_image(request);
+    request->result = request->status == CALL_OK ? MM_OK : MM_INVALID;
+  } else if (request->operation == MEMORY_SEAL_IMAGE) {
+    request->status = private_image_seal(request->process, request->reservation.identity);
+    request->result = request->status == CALL_OK ? MM_OK : MM_INVALID;
+  } else if (request->shared_region) {
     request->status = shared_view_map(request->process, request->shared_region,
         request->shared_writable, &request->reservation);
     request->result = request->status == CALL_OK ? MM_OK : MM_NO_MEMORY;
@@ -241,6 +278,120 @@ static struct syscall_result create_shared_call(uint64_t rights,
   return reply;
 }
 
+/* Resolves FILE for MAP_IMAGE: READ plus IMPORT or PROGRAM. Which one the
+ * image needs is checked after validation. */
+static enum call_status acquire_image_file(handle_t handle, struct file_object **file,
+    uint64_t *rights)
+{
+  struct capability_reference reference;
+  enum capability_result result = capability_acquire(&process_current()->capabilities,
+      handle, FILE_RIGHT_READ, 0, &reference);
+  if (result == CAP_OK) {
+    result = capability_reference_resolve(&reference);
+    if (result != CAP_OK) {
+      capability_release(&reference);
+    }
+  }
+  if (result != CAP_OK) {
+    return result == CAP_BAD_HANDLE ? CALL_BAD_HANDLE :
+        result == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
+  }
+  if (reference.object->type != OBJECT_FILE) {
+    capability_release(&reference);
+    return CALL_WRONG_TYPE;
+  }
+  if (!(reference.rights & (FILE_RIGHT_IMPORT | FILE_RIGHT_PROGRAM))) {
+    capability_release(&reference);
+    return CALL_DENIED;
+  }
+  *rights = reference.rights;
+  *file = (struct file_object *)reference.object;
+  reference.object = NULL;
+  capability_release(&reference);
+  return CALL_OK;
+}
+
+static struct syscall_result map_image_call(uint64_t rights, uintptr_t request_address,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(rights & MEMORY_RIGHT_MANAGE)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (request_size != sizeof(union memory_payload)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (reply_capacity < sizeof(struct memory_image)) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
+  union memory_payload input;
+  if (!copy_from_user(&input, request_address, sizeof(input))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (input.map_image.reserved) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(struct memory_image), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct file_object *file;
+  uint64_t file_rights;
+  enum call_status status = acquire_image_file(input.map_image.file, &file, &file_rights);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  struct image_capture captured = {0};
+  bool operation = false;
+  struct call_limit limit = {0};
+  status = launcher_capture_file(file, file_rights, &captured, &operation, &limit);
+
+  struct process *process = process_current();
+  struct memory_image image = {0};
+  bool reply_owned = false;
+  bool released = false;
+  if (status == CALL_OK) {
+    struct memory_request *pending = (void *)bsp_request_prepare(BSP_SERVICE_MEMORY);
+    pending->process = process;
+    pending->operation = MEMORY_MAP_IMAGE;
+    pending->shared_region = NULL;
+    pending->image_file = file;
+    pending->image_rights = file_rights;
+    pending->image_captured = captured;
+    pending->image_released = false;
+    pending->image = (struct memory_image){0};
+    pending->reply_address = reply_address;
+    pending->profiled = false;
+    pending->status = CALL_BUSY;
+    pending->request.vm_process = process;
+    pending->request.vm_mutator = task_current_user();
+    process_vm_private_call(&pending->request);
+    status = pending->status;
+    image = pending->image;
+    released = pending->image_released;
+    captured = pending->image_captured;
+    reply_owned = pending->request.vm_reply_owned;
+    bsp_request_release(&pending->request);
+  }
+  if (!released && captured.address) {
+    /* The transaction never ran: retire the unread capture from the kernel root. */
+    task_vm_kernel_enter();
+    image_capture_release(&captured);
+    task_vm_kernel_leave();
+  }
+  if (operation) {
+    file_end_operation(file);
+  }
+  object_release(&file->object);
+  struct syscall_result reply = {status, 0};
+  if (status == CALL_OK) {
+    KASSERT(copy_to_user(reply_address, &image, sizeof(image)));
+    reply.reply_size = sizeof(image);
+  }
+  if (reply_owned) {
+    process_vm_reply_finish(process);
+  }
+  return reply;
+}
+
 struct syscall_result memory_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
@@ -250,16 +401,22 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
     return create_shared_call(rights, request_address, request_size,
         reply_address, reply_capacity);
   }
+  if (operation == MEMORY_MAP_IMAGE) {
+    return map_image_call(rights, request_address, request_size, reply_address,
+        reply_capacity);
+  }
   struct profile_snapshot *profile = profile_memory_current();
   /* Existing profiling totals describe eager operations, not sparse virtual
    * spans or repeated commits. Keep their layout and byte meaning unchanged. */
   bool profiled = (profile->flags & PROFILE_ACTIVE) &&
-      operation != MEMORY_RESERVE && !updates_memory(operation);
+      operation != MEMORY_RESERVE && operation != MEMORY_SEAL_IMAGE &&
+      !updates_memory(operation);
   uint64_t started_ns = profiled ? arch_monotonic_ns() : 0;
 
   if (operation != MEMORY_ALLOCATE && operation != MEMORY_RELEASE &&
       operation != MEMORY_ALLOCATE_GUARDED && operation != MEMORY_RELEASE_RESERVATION &&
-      operation != MEMORY_RESERVE && !updates_memory(operation)) {
+      operation != MEMORY_RESERVE && operation != MEMORY_SEAL_IMAGE &&
+      !updates_memory(operation)) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & MEMORY_RIGHT_MANAGE)) {
@@ -318,6 +475,11 @@ struct syscall_result memory_call(uint64_t rights, uint64_t operation,
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
     reservation.identity = request.release_reservation.identity;
+  } else if (operation == MEMORY_SEAL_IMAGE) {
+    if (!request.seal_image.identity || request.seal_image.reserved) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    reservation.identity = request.seal_image.identity;
   } else {
     region = request.release;
     if (!region.address || !region.size || (region.address & (PAGE_SIZE - 1)) ||

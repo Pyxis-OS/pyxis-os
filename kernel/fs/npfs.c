@@ -441,7 +441,7 @@ static enum call_status check_name(const char *name, size_t count)
 static enum call_status acquire_root(struct npfs_store_context *context, struct npfs_job *job)
 {
   enum call_status status = check_name(job->name, job->count);
-  if (status != CALL_OK || !job->partition || (job->rights & ~DIRECTORY_RIGHTS) ||
+  if (status != CALL_OK || !job->partition || (job->rights & ~DIRECTORY_HELD_RIGHTS) ||
       !(job->rights & DIRECTORY_RIGHT_LOOKUP)) {
     return status != CALL_OK ? status : CALL_BAD_REQUEST;
   }
@@ -460,7 +460,7 @@ static enum call_status acquire_ram_root(struct npfs_store_context *context,
 {
   enum call_status status = check_name(job->name, job->count);
   if (status != CALL_OK || !(job->rights & DIRECTORY_RIGHT_LOOKUP) ||
-      (job->rights & ~DIRECTORY_RIGHTS)) return status != CALL_OK ? status : CALL_BAD_REQUEST;
+      (job->rights & ~DIRECTORY_HELD_RIGHTS)) return status != CALL_OK ? status : CALL_BAD_REQUEST;
   bool automatic = job->offset == MOUNT_RAM_AUTO_CAPACITY;
   if (automatic) {
     uint64_t flags = cpu_save_interrupts();
@@ -526,14 +526,14 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
   if (!typed && job->kind != DIRECTORY_KIND_DIRECTORY && job->kind != DIRECTORY_KIND_FILE) {
     return CALL_BAD_REQUEST;
   }
-  uint64_t mask = !typed && job->kind == DIRECTORY_KIND_DIRECTORY ? DIRECTORY_RIGHTS : FILE_RIGHTS;
+  uint64_t mask = !typed && job->kind == DIRECTORY_KIND_DIRECTORY ? DIRECTORY_HELD_RIGHTS :
+      FILE_CHILD_RIGHTS;
   if ((job->child_rights & ~mask) || (typed &&
-      (job->directory_child_rights & ~DIRECTORY_RIGHTS))) {
+      (job->directory_child_rights & ~DIRECTORY_HELD_RIGHTS))) {
     return CALL_BAD_REQUEST;
   }
   uint64_t allowed = job->kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
-      ((job->rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
-      ((job->rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
+      directory_file_rights(job->rights);
   if (!typed && (job->child_rights & ~allowed)) {
     return CALL_DENIED;
   }
@@ -555,8 +555,7 @@ static enum call_status child(struct npfs_store_context *context, struct npfs_jo
     uint64_t child_rights = typed && kind == DIRECTORY_KIND_DIRECTORY ?
         job->directory_child_rights : job->child_rights;
     allowed = kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
-        ((job->rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
-        ((job->rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
+        directory_file_rights(job->rights);
     if (child_rights & ~allowed) {
       npfs_store_release(inode);
       return CALL_DENIED;
@@ -736,7 +735,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   }
   struct npfs_node *node = job->node;
   bool directory = node->kind == DIRECTORY_KIND_DIRECTORY;
-  uint64_t all = directory ? DIRECTORY_RIGHTS : FILE_RIGHTS;
+  uint64_t all = directory ? DIRECTORY_HELD_RIGHTS : FILE_CHILD_RIGHTS;
   if (job->rights & ~all) {
     return CALL_BAD_REQUEST;
   }
@@ -856,7 +855,7 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
     if (!destination || destination->kind != DIRECTORY_KIND_DIRECTORY) {
       return CALL_WRONG_TYPE;
     }
-    if ((job->destination_rights & ~DIRECTORY_RIGHTS) ||
+    if ((job->destination_rights & ~DIRECTORY_HELD_RIGHTS) ||
         (job->destination_rights & ~destination->rights) ||
         !(job->destination_rights & DIRECTORY_RIGHT_CREATE) ||
         (job->replace && !(job->destination_rights & DIRECTORY_RIGHT_REMOVE))) {

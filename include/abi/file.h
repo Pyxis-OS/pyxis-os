@@ -12,6 +12,14 @@
 #define FILE_RIGHT_READ (UINT64_C(1) << 0)
 #define FILE_RIGHT_WRITE (UINT64_C(1) << 1)
 #define FILE_RIGHTS (FILE_RIGHT_READ | FILE_RIGHT_WRITE)
+/* Image rights, outside FILE_RIGHTS so that asking for every content right
+ * never carries them. IMPORT maps a library (P1D/P2D with the library flag)
+ * into the holder through MEMORY_MAP_IMAGE; a file gets it only from a
+ * directory with DIRECTORY_RIGHT_IMPORT, and only when the opener asks.
+ * PROGRAM maps a dynamic executable at its fixed addresses; only a launch
+ * grant adds it (launcher.h). Neither right executes anything by itself. */
+#define FILE_RIGHT_IMPORT (UINT64_C(1) << 2)
+#define FILE_RIGHT_PROGRAM (UINT64_C(1) << 3)
 
 #define FILE_READ UINT64_C(1)
 #define FILE_SIZE UINT64_C(2)

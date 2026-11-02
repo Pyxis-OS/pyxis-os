@@ -45,6 +45,7 @@ struct p2_symbols {
   uint64_t symbol_count;
   uint64_t string_size;
 };
+#define P2_SYMBOL_SIZE UINT64_C(24) /* sizeof(Elf64_Sym) */
 
 _Static_assert(sizeof(struct p1f_header) == 24, "P1F header layout");
 _Static_assert(sizeof(struct p1f_segment) == 32, "P1F segment layout");

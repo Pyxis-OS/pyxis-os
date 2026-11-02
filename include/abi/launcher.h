@@ -26,6 +26,9 @@ struct execution_group_create_reply {
   handle_t launcher;
 };
 
+/* rights attenuate the source's, with one exception: a file the caller can
+ * READ may be granted FILE_RIGHT_PROGRAM, so the child can map it as its
+ * dynamic executable (memory.h). */
 struct launch_grant {
   handle_t source;
   uint64_t rights;

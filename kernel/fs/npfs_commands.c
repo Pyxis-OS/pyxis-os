@@ -1,5 +1,6 @@
 #include <abi/package_commands.h>
 #include <arch/cpu.h>
+#include <kernel/object/directory.h>
 #include <kernel/fs/metadata.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
@@ -397,7 +398,7 @@ static enum call_status lookup(struct npfs_store_context *context, struct npfs_j
 {
   bool typed = job->operation == NPFS_COMMAND_LOOKUP || job->kind == DIRECTORY_KIND_ANY;
   if (!npfs_package_component(job->name, job->count) || job->count > PACKAGE_COMMAND_NAME_MAX ||
-      (typed && ((job->child_rights & ~FILE_RIGHT_READ) ||
+      (typed && ((job->child_rights & ~(FILE_RIGHT_READ | FILE_RIGHT_IMPORT)) ||
       (job->directory_child_rights & ~PACKAGE_VIEW_RIGHTS)))) return CALL_BAD_REQUEST;
   if (!typed && job->kind != DIRECTORY_KIND_FILE && job->kind != DIRECTORY_KIND_DIRECTORY) {
     return CALL_BAD_REQUEST;
@@ -411,7 +412,7 @@ static enum call_status lookup(struct npfs_store_context *context, struct npfs_j
     uint64_t requested = typed && record->kind == DIRECTORY_KIND_DIRECTORY ?
         job->directory_child_rights : job->child_rights;
     uint64_t allowed = record->kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
-        (job->rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0;
+        directory_file_rights(job->rights);
     if (requested & ~allowed) return CALL_DENIED;
     /* Ordinary untyped DIRECTORY lookup uses its single child mask. */
     if (!typed && record->kind == DIRECTORY_KIND_DIRECTORY) job->directory_child_rights = requested;

@@ -257,7 +257,8 @@ static enum call_status check_child_request(struct directory_object *directory, 
     return CALL_BAD_REQUEST;
   }
   if (directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) {
-    uint64_t mask = request->kind == DIRECTORY_KIND_FILE ? FILE_RIGHTS : DIRECTORY_RIGHTS;
+    uint64_t mask = request->kind == DIRECTORY_KIND_FILE ? FILE_CHILD_RIGHTS :
+        DIRECTORY_HELD_RIGHTS;
     if (request->rights & ~mask) {
       return CALL_BAD_REQUEST;
     }
@@ -270,8 +271,7 @@ static enum call_status check_child_request(struct directory_object *directory, 
   }
   uint64_t allowed = rights;
   if (request->kind == DIRECTORY_KIND_FILE) {
-    allowed = ((rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
-              ((rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
+    allowed = directory_file_rights(rights);
   }
   if (request->rights & ~allowed) {
     return CALL_DENIED;
@@ -282,7 +282,7 @@ static enum call_status check_child_request(struct directory_object *directory, 
 static enum call_status check_typed_lookup(uint64_t file_rights, uint64_t directory_rights,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if ((file_rights & ~FILE_RIGHTS) || (directory_rights & ~DIRECTORY_RIGHTS) ||
+  if ((file_rights & ~FILE_CHILD_RIGHTS) || (directory_rights & ~DIRECTORY_HELD_RIGHTS) ||
       reply_capacity < sizeof(struct directory_typed_lookup_reply)) {
     return CALL_BAD_REQUEST;
   }
@@ -312,12 +312,6 @@ static enum call_status check_create_request(struct directory_object *directory,
     return CALL_BAD_OPERATION;
   }
   return CALL_OK;
-}
-
-static uint64_t allowed_file_rights(uint64_t rights)
-{
-  return ((rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
-      ((rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
 }
 
 static enum call_status child_capability_status(enum capability_result result)
@@ -678,7 +672,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
 
   uint64_t child_rights = typed && object->type == OBJECT_DIRECTORY ?
       directory_rights : request->rights;
-  uint64_t allowed = object->type == OBJECT_DIRECTORY ? rights : allowed_file_rights(rights);
+  uint64_t allowed = object->type == OBJECT_DIRECTORY ? rights : directory_file_rights(rights);
   if (directory->repository_parent && object->type != OBJECT_FILE) {
     status = CALL_DENIED;
   } else if (typed && (object->type != OBJECT_FILE && object->type != OBJECT_DIRECTORY)) {
@@ -1220,7 +1214,7 @@ static struct syscall_result rename_to_directory(struct directory_object *source
     const struct directory_rename_request *request)
 {
   if ((destination->backing == DIRECTORY_NPFS || destination->backing == DIRECTORY_FAT32) &&
-      (destination_rights & ~DIRECTORY_RIGHTS)) {
+      (destination_rights & ~DIRECTORY_HELD_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   bool native = source->backing == DIRECTORY_NPFS || source->backing == DIRECTORY_FAT32 ||
@@ -1809,7 +1803,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
         reply_address, reply_capacity);
   }
   if ((directory->backing == DIRECTORY_NPFS || directory->backing == DIRECTORY_FAT32) &&
-      (rights & ~DIRECTORY_RIGHTS)) {
+      (rights & ~DIRECTORY_HELD_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (directory->backing == DIRECTORY_FAT32 && operation == DIRECTORY_FILESYSTEM_INFO) {

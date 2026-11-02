@@ -1,6 +1,7 @@
 #ifndef ABI_MEMORY_H
 #define ABI_MEMORY_H
 
+#include <abi/handle.h>
 #include <abi/message.h>
 #include <stddef.h>
 
@@ -20,6 +21,8 @@
 #define MEMORY_COMMIT UINT64_C(6)
 #define MEMORY_DECOMMIT UINT64_C(7)
 #define MEMORY_CREATE_SHARED UINT64_C(8)
+#define MEMORY_MAP_IMAGE UINT64_C(9)
+#define MEMORY_SEAL_IMAGE UINT64_C(10)
 
 struct memory_region {
   uint64_t address;
@@ -55,6 +58,34 @@ union memory_payload {
     uint64_t size;
     uint64_t reserved;
   } create_shared;
+  struct {
+    handle_t file;
+    uint64_t reserved;
+  } map_image;
+  struct {
+    uint64_t identity;
+    uint64_t reserved;
+  } seal_image;
+};
+
+/* MAP_IMAGE (MANAGE) maps a P1D or P2D image (include/pxe/p1d.h) from FILE
+ * into the calling process and returns memory_image. FILE needs READ and:
+ * IMPORT for a library, which the kernel places at a base it chooses,
+ * reserving the whole span; PROGRAM for an executable, which goes at its
+ * fixed addresses, every one of which must be free. Segments get their final
+ * permissions (R, R/X or R/W; RELRO R/W until sealed); nothing is relocated.
+ * base is zero for an executable and entry zero for a library; dynamic is the
+ * dynamic section's address in this process. Image pages count as committed
+ * private memory. No operation releases them; process exit reclaims them.
+ * Failure maps nothing.
+ * SEAL_IMAGE (MANAGE) makes the image's RELRO segments read-only for the life
+ * of the process and returns no bytes. A second seal of the same image, or an
+ * identity that is not this process's image, is BAD_REQUEST. */
+struct memory_image {
+  uint64_t identity;
+  uint64_t base;
+  uint64_t entry;
+  uint64_t dynamic;
 };
 
 struct memory_subrange {
@@ -103,6 +134,7 @@ struct memory_subrange_message {
 
 _Static_assert(sizeof(struct memory_region) == 16, "memory region layout");
 _Static_assert(sizeof(struct memory_reservation) == 24, "memory reservation layout");
+_Static_assert(sizeof(struct memory_image) == 32, "memory image layout");
 _Static_assert(sizeof(union memory_payload) == 16, "memory payload layout");
 _Static_assert(offsetof(struct memory_message, body) == 16, "memory payload offset");
 _Static_assert(sizeof(struct memory_message) == 32, "memory message layout");
