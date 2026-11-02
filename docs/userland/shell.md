@@ -1481,9 +1481,8 @@ fallback. General capability pipes remain C9.
 
 ### Retired request syntax
 
-`=> name` and unquoted redirect-target `@name` are rejected during parsing,
-before side effects, with the replacement spelling. Use `reply=$(producer > $api)`
-and `cat $reply`; reading the retained reply performs no new GET. Quoted
-`"@name"` is a literal filename. The unquoted rejection is
-[transitional](https://git.internal/PyxisOS/pyxis-os/issues/1440).
+`=> name` is rejected during parsing, before side effects, with the replacement
+spelling. Use `reply=$(producer > $api)` and `cat $reply`; reading the retained
+reply performs no new GET. `@name` has no special meaning: as a redirect target
+it is an ordinary filename, quoted or not.
 `request` has no builtin meaning and uses ordinary command lookup.
