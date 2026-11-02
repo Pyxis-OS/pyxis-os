@@ -197,10 +197,9 @@ The fifth package (work package 10).
 
 - **`cp -r`.** No entry count or nesting limit; the level stack grows on the heap.
 - **Shell completion.** No limit on command names or directory entries.
-- **HTTP request bodies.** A RAM staging upload has no fixed limit: a write is refused with
-  `CALL_LIMIT` when it would leave less than an eighth of total memory free (the `system_info`
-  report, because the RAM volume is memory shared with every other volume), and a log line names
-  the numbers. `--staging-cap` adds a fixed cap; NPFS staging is bounded by its backing.
+- **HTTP request bodies.** A RAM staging upload has no fixed limit: a write that cannot be
+  allocated fails with the native `NO_MEMORY`. `--staging-cap` sets a fixed cap; NPFS staging is
+  bounded by its backing.
   A URL longer than 2,048 bytes (a split of the 4,096-byte request packet) is `CALL_LIMIT`.
 - **Process listing.** A call returns every record that exists; the kernel sizes its buffer to the
   count it takes just before, and `procs` asks again with room for the reported total.
