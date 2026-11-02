@@ -22,7 +22,7 @@ rights. Existing cwd chains remain usable, with potentially stale display text.
 Sources are attempted in order; a failure does not stop later sources. Any
 failure makes the exit status nonzero and reports the actual libc error. There
 is no recursive copy/delete fallback across stores or mounts. Cross-store and
-FAT32/host directory moves report “Operation not supported”; nonempty victims
+FAT32 directory moves report “Operation not supported”; nonempty victims
 report ENOTEMPTY. Read-only/insufficient authority refuses. An uncertain storage
 failure does not promise rollback or justify retry.
 

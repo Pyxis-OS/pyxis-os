@@ -5,7 +5,7 @@ directory/file capabilities. Init opens the selected export and delegates its
 root through the session launcher to the shell and ordinary children. Existing
 `ls` and `cat` use it without PCI, VirtIO or FUSE knowledge. Read-only grants
 can also launch native executables from host files. Read-write grants support
-file/directory creation, file writes and resize, removal and file
+file/directory creation, file writes and resize, removal and file/directory
 rename/replacement. Ordinary boot needs neither the device nor the daemon.
 
 The supported platform is QEMU Q35 with firmware-assigned PCI resources, modern
@@ -286,7 +286,7 @@ Wire errors become `enum virtio_fs_result`; Linux errno values do not escape the
 client. Ordinary errors such as a missing or inaccessible file leave the session
 usable. Truncated/inconsistent replies, invalid directory records, transport
 failures and failed RELEASE/FORGET cleanup stop it. Directory creation, removal,
-regular-file rename and synchronization use host FUSE operations. Symlink
+file and directory rename and synchronization use host FUSE operations. Symlink
 traversal, reconnection and unmount remain unimplemented.
 
 Storage errors retain their meaning through the native layer: ENOSPC becomes
@@ -309,13 +309,22 @@ name is deleted to undo it.
 
 Removal accepts native `FILE`, `DIRECTORY` and `ANY` requests, but preflight
 supports only regular files and directories; file removal uses UNLINK and
-directory removal uses RMDIR. Rename preflight supports only regular files and
-uses host atomic RENAME2, with its no-replace flag when requested. There is no
+directory removal uses RMDIR. Rename preflight supports regular files and
+directories, refuses a replacement of the other kind with WRONG_TYPE, and uses
+host atomic RENAME2, with its no-replace flag when requested. There is no
 delete-then-rename or local existence-check fallback. A host that lacks no-replace support returns its
 error. Replacement requires REMOVE and CREATE on the destination parent, and
 REMOVE on the source parent. No-replace rename to the same name follows the host
 operation and can return ALREADY_EXISTS rather than acting as a RAM same-entry
 no-op.
+
+Directory moves (chronium, 2026-11-02) are the same RENAME2 of a directory
+name, within or between held parents of one session. The host rejects a move of
+a directory into itself or its descendant with EINVAL (BAD_REQUEST) and a
+nonempty directory victim with ENOTEMPTY (NOT_EMPTY); the guest has no host
+ancestry to check first. Held wrappers keep their FUSE node IDs, so handles and
+cwd chains inside the moved tree keep working, and no guest path or name cache
+needs repair. Concurrent host-side changes race with last writer wins.
 
 Preflight and mutation are separate host requests. The host can change names or
 types between them, so these checks cannot guarantee the affected object or
@@ -323,8 +332,7 @@ type; even a directory or symlink can replace a preflighted entry. The guest
 does not follow symlinks. Open native file handles retain their host objects
 after unlink or replacement, subject to ordinary host permissions. This is a
 live view, with no snapshot or durability promise. Automatic creation of missing
-parents, recursive deletion, directory moves and cross-filesystem moves are
-unsupported.
+parents, recursive deletion and cross-filesystem moves are unsupported.
 
 ## Synchronization
 
