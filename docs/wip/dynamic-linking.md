@@ -240,6 +240,9 @@ added except the build split itself.
   package archive sizes (per package, base set) and ISO size; owned backing per
   process; CI build time per PR class with the 2026-10-29 phase method. QEMU and
   native vela, matched configurations. Recorded in an experiment record.
+  Progress: the QEMU, CI and size rows are in the
+  [baseline record](../development/experiments/dynamic-linking-baseline.md); the
+  native vela rows wait for a scheduled run.
 - [ ] **1. Formats and toolchain.** Format headers beside `p1f.h`; in the fork,
   LLD writes P2F/P1D/P2D and reads `.pxl`; the driver allows `-shared`, `-fPIC`,
   GD/LD/IE/TLSDESC, `-z now -z relro` by default and no copy relocations; LLD
