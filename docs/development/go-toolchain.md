@@ -206,6 +206,12 @@ HTTP/TLS qualification. `os/exec` builds, but
 `LookPath` returns an error matching both `exec.ErrNotFound` and
 `errors.ErrUnsupported` for every name or
 path, and subprocess launch remains unsupported. No PATH search is performed.
+Go stays without subprocesses for now; the planned later solution (chronium,
+2026-11-02) is to move command resolution and launch admission into the kernel
+launcher so libc, Go and every other runtime share one path, with no second
+resolver or broker in the Go runtime
+([#1307](https://git.internal/PyxisOS/pyxis-os/issues/1307); `git commit` without
+`-m`, [#1276](https://git.internal/PyxisOS/pyxis-os/issues/1276), waits on it).
 Age and subprocess execution remain unqualified. See the historical
 [adapter record](experiments/go-library-adapters/README.md) and the separate
 [Caddy delivery](experiments/caddy/README.md). Go's MIME package uses its builtin
