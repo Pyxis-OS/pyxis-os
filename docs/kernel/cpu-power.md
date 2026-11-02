@@ -64,7 +64,7 @@ from the stopped network debugger and does not depend on GS during recovery.
 
 No power-mode UI, AC/battery profile switch, dynamic utilization governor or AMD
 CPPC/P-state programming is provided. Intel hybrid/cache-aware placement is an
-[accepted later direction](../wip/cpu-layout.md), not implemented here. A CPU can
+[accepted later direction](smp.md), not implemented here. A CPU can
 deliver less than the requested maximum because of workload, contention,
 firmware or package power/thermal limits; a request is not a measured clock.
 

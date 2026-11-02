@@ -216,7 +216,7 @@ are source-derived, not measured attribution. Increasing read-window batching
 would not remove the quadratic append validation; contiguous regular-file read
 batching is already implemented.
 
-The [two write-cost decisions](../../../wip/installer-tui.md#write-cost-decisions--accepted-2026-10-15)
+The [two write-cost decisions](../../../userland/installer.md#shared-mounted-esp-payload-stager)
 were subsequently accepted by the owner. Their implementation and matched
 qualification are recorded below. The existing 30-second interval, both
 final payload checks and uncertainty handling remain unchanged. The earlier
@@ -401,7 +401,7 @@ Relevant sources: [FILE bounds](../../../../include/abi/file.h),
 [mutation planning](../../../../fs/fat32/mounted.c),
 [directory validation](../../../../fs/fat32/directory.c), and
 [payload copy loop](../../../../userspace/installer/esp_payload.c).
-The [accepted bulk-transfer decision](../../../wip/installer-tui.md#bulk-transfer-decision--accepted-2026-10-15)
+The [accepted bulk-transfer decision](../../../userland/installer.md#shared-mounted-esp-payload-stager)
 addresses mutation count and verification transport together; its measured
 implementation follows below. The deadline and both final hashes remain required.
 Raw traces, parser, counter snapshots and discarded debugger sample remain owner-local in

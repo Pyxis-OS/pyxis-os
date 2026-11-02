@@ -1,7 +1,7 @@
 # Hosted build flags
 
 The 2026-10-25 pre-decision nested QEMU investigation for the
-[hosted-flags proposal](../../wip/hosted-build-flags.md). used temporary compiler overrides with unchanged SDK and recipe defaults.
+[hosted-flags proposal](../hosted-build-flags.md). used temporary compiler overrides with unchanged SDK and recipe defaults.
 The implementation qualification below uses the delivered SDK split; neither
 record is native qualification.
 

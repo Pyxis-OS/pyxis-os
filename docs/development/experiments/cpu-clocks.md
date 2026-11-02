@@ -2,7 +2,7 @@
 
 2026-10-25, orchestrator-run hardware captures, analysed offline. Accepted
 response: [Intel HWP initialization](../../kernel/cpu-power.md), with
-[layout-aware placement](../../wip/cpu-layout.md) deferred as a separate change.
+[layout-aware placement](../../kernel/smp.md) deferred as a separate change.
 The original baseline and the matched native HWP-only qualification are
 recorded separately below.
 

@@ -63,7 +63,7 @@ names come from the archive, with numeric fallback if unavailable. Every other
 program is a package ([packages](../interfaces/packages.md)), one per tool.
 A `DISTRIBUTION=full` image keeps every program, the init scripts and the live
 spaces in the archive, for QEMU and stick work
-([decisions 20 and 64](../wip/pkg-upgrade.md)).
+([decisions 20 and 64](package-upgrades.md)).
 
 On an installed boot, boot init binds `bin://` to the live command view of the
 installed packages, so a package's commands appear there as soon as its set is

@@ -1,6 +1,6 @@
 # Renoir cursor inventory and software baseline
 
-Task 1 of the [accepted cursor track](../../../wip/renoir-hardware-cursor.md),
+Task 1 of the [accepted cursor track](../../../kernel/renoir-flip.md),
 2026-10-10. Read-only inventory, optional software counters and the owner-run native
 software baseline are complete. Hardware cursor support remains unimplemented. No cursor
 writes, cursor backing allocation or new GPU write allowlist is implemented.

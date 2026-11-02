@@ -49,4 +49,4 @@ owner-present vela check is pending; QEMU does not establish the native chord.
 
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
 [application ports](application-ports.md), and the boot configuration checker in
-[boot configuration checker](installer-tui.md#configuration-checker).
+[boot configuration checker](../userland/configuration-editor.md).

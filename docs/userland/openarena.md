@@ -10,8 +10,8 @@ interpreted: this grants no QVM compiler. External networking, native shared gam
 modules, OpenAL, HTTP downloads and voice chat are unavailable.
 
 The package install, default runtime path and separate source publication are
-qualified locally. See the [remaining milestone](../wip/quake3-llvmpipe.md)
-and [QEMU record](../development/experiments/ioquake3-softpipe.md).
+qualified locally. See the [QEMU record](../development/experiments/ioquake3-softpipe.md)
+and [native llvmpipe comparison](../development/experiments/llvmpipe.md#native-vela-complete-stack-comparison-2026-10-28).
 
 ## Package and input
 
@@ -62,3 +62,14 @@ the engine reports those and uses its normal fallback. The port does not fill
 in missing assets. Retail Quake 3/Team Arena data is private and unqualified;
 no such data is shipped. QEMU software-rendering results do not establish
 native performance or suitability for another game.
+
+The [source-cache inventory](../development/mesa.md#source-cache) records the
+engine/data provenance alongside Mesa's dependencies. The OpenArena 0.8.8 menu,
+map playback, installed-package path and corresponding-source export have local
+qualification. Native softpipe/HWP and llvmpipe observations are recorded in the
+linked experiments; broader sound and physical-device qualification remain
+[SDL game coverage](https://git.internal/PyxisOS/pyxis-os/issues/1401),
+[SDL audio latency](https://git.internal/PyxisOS/pyxis-os/issues/1397) and
+[the nested HDA guard issue](https://git.internal/PyxisOS/pyxis-os/issues/1193).
+Retail Quake 3/Team Arena data, compiled QVMs, opengl2 and networking remain
+[separate follow-ups](https://git.internal/PyxisOS/pyxis-os/issues/1698), not delivered by the public port.

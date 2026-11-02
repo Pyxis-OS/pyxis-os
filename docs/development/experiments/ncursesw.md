@@ -1,6 +1,6 @@
 # Native ncursesw qualification
 
-Gate 3 of [terminal UI](../../wip/terminal-ui.md), 2026-10-23. QEMU evidence;
+Gate 3 of [terminal UI](../../userland/terminal.md), 2026-10-23. QEMU evidence;
 no native run or compiler change. Raw inputs, build logs, ANSI captures,
 screenshots and debugger transcripts remain in
 `/shared/present/terminal-ui/ncursesw-probe/` and `ncursesw-qemu/` beside it.

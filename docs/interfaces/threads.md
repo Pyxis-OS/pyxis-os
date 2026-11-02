@@ -195,10 +195,10 @@ Remaining limits and consumers:
 - Consumer adapters need their own assignments: the libuv pool for
   [Neovim jobs](../wip/later-os-directions.md#neovim-follow-ups), the
   [Hax harness](../wip/claude-on-pyxis.md#track-2-hax-inventory-after-the-lua-harness) (timed conditions, drainers and a
-  qualified concurrent TLS transport) and [Go](../wip/go-runtime.md) (its own
+  qualified concurrent TLS transport) and [Go](../development/go-toolchain.md) (its own
   stack, GC and VM adaptation; `GOMAXPROCS=1` still uses OS threads).
-- Moving kernel services [off the BSP](../wip/scheduling-and-threads.md#serial-services-off-the-bsp)
+- Moving kernel services [off the BSP](../kernel/smp.md#remaining-serial-services-and-limits)
   is independent of this interface.
 - Native reservation of private VM (RESERVE then suffix COMMIT) would later
   subsume the eager guarded convenience under the same identity and authority
-  model; see the [Go runtime contract](../wip/go-runtime.md#accepted-private-vm-reservationcommit-contract).
+  model; see the [Go runtime contract](../development/go-toolchain.md#initial-limits).

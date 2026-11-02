@@ -26,8 +26,8 @@ TF-PSA-Crypto libraries; SSH remains deferred.
 | vi | [Implemented BusyBox vi port](../userland/vi.md), included in the core archive as the first modal editor before Neovim, with libc `ftruncate` and BRE search/substitution. |
 | Links | [Implemented Links 2.30 port](../userland/links.md), delivered as a program package as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
 | less | [Implemented BusyBox pager](../userland/less.md) for files and pipelines, with BRE search/highlighting and libterm console input independent of stdin. |
-| tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](in-pyxis-development.md), with whole-archive validation and regular files/directories only. |
-| ncursesw | [Accepted terminal UI milestone](terminal-ui.md): native raw access, `TERM=pyxis` terminfo and hexcurse first, followed by chronium’s candidate list. |
+| tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](../development/experiments/in-pyxis-development.md), with whole-archive validation and regular files/directories only. |
+| ncursesw | [Accepted terminal UI milestone](../userland/terminal.md): native raw access, `TERM=pyxis` terminfo and hexcurse first, followed by chronium’s candidate list. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts. The [awk probe](#awk-probe) (2026-10-16) recommends onetrue-awk; three decisions are open. |
 | uniq | [Implemented sbase port](../userland/uniq.md), delivered as a program package with libc `getline`/`isblank` and validated against host upstream output. |
@@ -41,7 +41,7 @@ TF-PSA-Crypto libraries; SSH remains deferred.
 
 Vi, Links and less (queued by the owner on 2026-10-04) are complete; they serve
 offline development on Pyxis, described in
-[developing inside Pyxis](in-pyxis-development.md). Each port still starts with
+[developing inside Pyxis](../development/experiments/in-pyxis-development.md). Each port still starts with
 its own investigation and decisions, as vi did.
 
 SDL2 means an upstream library port with a Pyxis platform backend, not a growing

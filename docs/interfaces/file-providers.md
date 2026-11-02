@@ -224,6 +224,17 @@ Direct execution of a provider-backed binary remains unsupported: the kernel
 image loader requires a native file. Script reading and ordinary byte I/O use
 the shared helpers.
 
+## Bulk-read qualification
+
+Explicit bulk readers include pkg's archive/member and installed-tree hash loops;
+ordinary libc/Go/port reads are not silently redirected or retried through bulk.
+Native RAM/initrd/npfs and httpfs completed FILE snapshots are implemented.
+The [matched package record](../development/experiments/bulk-file-reads/README.md)
+separates copied-transport/lifetime QEMU checks from vela's native live RAM-npfs
+qualification. The remaining [owned NVMe-npfs check](https://git.internal/PyxisOS/pyxis-os/issues/1687)
+is a physical-storage gate, not missing bulk-read implementation. Existing hashes,
+identity checks, cancellation and publication/sync barriers remain in force.
+
 ## Immutable text service
 
 The `textfs` program serves a fixed collection of immutable text files, including

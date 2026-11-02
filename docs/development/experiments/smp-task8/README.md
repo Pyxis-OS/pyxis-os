@@ -2,7 +2,7 @@
 
 Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
 
-Final matched record for the [runtime SMP milestone](../../../wip/scheduling-and-threads.md),
+Final matched record for the [runtime SMP milestone](../../../kernel/smp.md),
 recorded on 2026-10-06. It compares main `7748db5` (SMP tasks 1–7) with main
 `83c08d6`, the pre-milestone revision of the [task-1 baseline](../smp-task1-baseline/README.md).
 

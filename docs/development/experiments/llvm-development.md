@@ -1,6 +1,6 @@
 # LLVM development prefix qualification
 
-2026-10-23, task 1 of the [Quake 3/Mesa track](../../wip/quake3-llvmpipe.md).
+2026-10-23, task 1 of the [Quake 3/Mesa track](../mesa.md).
 Initial runtime/debugger qualification build `8984a853` on main `9caeaea9`,
 userland `6e0c6840`. Final rebuild and exported-prefix smoke use `18bc650a` on
 main `f7cfda2b`, userland `f057a600`; both use ports `5e4fba64` and lwIP

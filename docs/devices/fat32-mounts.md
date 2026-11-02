@@ -39,7 +39,7 @@ grants. The boot-origin issuer's ordinary view remains RO; fixed-mode drainage
 and extent exclusion still apply. Native ESP checks require owner approval and presence.
 
 The boot-origin issuer also carries the upgrade writer for the install that
-booted ([`pkg upgrade`](../wip/pkg-upgrade.md), decisions 2 and 5). `MOUNT_BOOT_OBSERVE`
+booted ([`pkg upgrade`](../userland/package-upgrades.md), decisions 2 and 5). `MOUNT_BOOT_OBSERVE`
 reports the disk and ESP partition GUIDs the boot loader named and the native
 pool's `mount.disk=` disk. `MOUNT_BOOT_ADMIT`, with `MOUNT_RIGHT_UPGRADE_BOOT_ESP`,
 takes the reviewed GUIDs and refuses DENIED unless they are still the boot origin

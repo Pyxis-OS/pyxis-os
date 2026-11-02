@@ -148,7 +148,7 @@ driver ([RTL8922AE](../wip/rtl8922ae-wifi.md)). On AX200 it is no country hint,
 so nothing is compared with LAR; NO_IR channels 12 and 13 transmit only where
 the LAR profile marks them active. Boot init installs `00` with channels 1-13
 on the Install entry only, which reads no configuration
-([decision 70](../wip/pkg-upgrade.md#decided)); an installed boot installs its
+([installer frontend](../userland/installer.md#frontend-boundary)); an installed boot installs its
 `wifi_policy`, whose country stays an explicit code.
 
 AX200 passive listening follows the current validated firmware LAR/MCC profile even

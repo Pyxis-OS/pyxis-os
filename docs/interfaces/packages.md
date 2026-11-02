@@ -1,20 +1,15 @@
 # Package formats
 
-The Pyxis package repository: the index, the package manifest, the
-file inventory and the archive, as accepted for
-[packages slice 1](../wip/packages.md#slice-1-data-packages) and extended with
-program packages that record the ABI they need
-([stage 2](../wip/packages.md#binding-a-build-to-a-system) and the
-[release ABI](abi.md)), and the installed
-`packages` volume that programs read them from.
+The repository index, package manifest, file inventory and archive describe data
+and executable program packages. Programs declare the [release ABI](abi.md) they
+need; installed programs read their files through the `packages` volume.
 
 There is one current form of each file and no version field. The set reader
 also accepts the previous `{ id, version }` entries as originless during the
 0.0.10 transition; other earlier or malformed data is refused. The host tool
 `tools/pxpkg.py`
 writes and checks the repository; the native `pkg` bundle installs and manages
-selected sets. The [slice 1 task record](../wip/packages.md#task-3-details-accepted-owner-2026-10-19)
-tracks its delivery and qualification.
+selected sets. See [package operation and qualification](../userland/package-upgrades.md).
 
 [Signed indexes](#signed-indexes) authenticate the repository index and bind
 package archives through their sizes and SHA-256 hashes. All files remain
@@ -130,7 +125,7 @@ repository.
 
 ## Signed indexes
 
-A signed repository ([decision 71](../wip/pkg-upgrade.md#decided)) carries
+A signed repository carries
 `index/N.lua.sig`, a DER ECDSA P-256 signature over the SHA-256 of
 `index/N.lua`'s exact bytes, made by the certificate `signer` names. Archives
 are covered by the sizes and hashes in the signed index. pkg accepts the index
@@ -445,7 +440,7 @@ grants = {
 
 Every installed package with files is read as `pkg://ID/...` through one live,
 read-only view of the volume (`package_roots_open`); there are no per-package
-`ID://` roots ([decisions 30 and 39](../wip/sdk-view.md)). Each lookup reads the
+`ID://` roots. Each lookup reads the
 `current` selector active at that moment and returns the package's tree with
 lookup, enumerate and read-files. The worker shares one validated immutable
 projection keyed by mounted-volume domain and set; it still reads `current`
@@ -455,7 +450,7 @@ including delayed diagnostics for unsupported same-set index edits. The
 small through near-limit projections.
 
 **Spaces** get the view as a root in `boot.lua`, only where the `packages`
-volume is defined (decision 47):
+volume is defined:
 
 ```lua
 roots = { pkg = { view = "pkg", optional = true } },
@@ -469,8 +464,8 @@ keeps its tree after a switch or removal; trees are immutable and collected
 only at the next boot.
 
 **`sdk://`** is the development view: the `include/`, `lib/` and
-`lib/pkgconfig/` files of every installed `dev` package, merged into one tree
-(decisions 32 and 45), such as `sdk://include/stdio.h` from `pyxis-dev` and
+`lib/pkgconfig/` files of every installed `dev` package, merged into one tree,
+such as `sdk://include/stdio.h` from `pyxis-dev` and
 `sdk://include/c++/v1/vector` from `libcxx-dev`. A space gets it as a root
 named `sdk`, from `DIRECTORY_PACKAGE_SDK` (`package_sdk_open`) on the volume named
 `packages`; the kernel refuses the view on any other volume:
@@ -488,23 +483,23 @@ an older set reads that set's index without replacing it. A directory or file
 opened through the view belongs to the set read at that lookup, and an open
 directory, such as a shell's current directory in `sdk://include`, keeps that
 whole index in memory until it is closed. Without `dev` packages, `sdk://`
-is empty; live boots have no SDK until `pkg install pyxis-dev`
-(decision 54). The shipped installed and live configurations give both views to
-every space that holds the `packages` source; `pkg` and `sdk` name only these
+is empty; live boots have no SDK until `pkg install pyxis-dev`. The shipped
+installed and live configurations give both views to every space that holds the
+`packages` source; `pkg` and `sdk` name only these
 view roots.
 
 The views' own directories, `pkg://`, a command view such as `bin://`, and
 `sdk://` and each directory under it, are synthetic, with identity in one
 package-view domain, so `stat` and `realpath` work on them and hosted Clang
-can search them ([file metadata](file-metadata.md#identity-and-lifetime),
-decision 62). Each view root opened is an object of its own. A directory under
+can search them ([file metadata](file-metadata.md#identity-and-lifetime)). Each
+view root opened is an object of its own. A directory under
 `sdk://` has the same identity on every lookup through the same index, so
 across lookups that read the same set. Files, and the package trees `pkg://ID`
 returns, keep their store identity.
 
 **Bundles** inherit neither the space's `pkg://` nor the `packages` source.
 A bundle's manifest lists the packages it reads, and its `pkg://` holds only
-those (decision 48):
+those:
 
 ```json
 "packages": ["doom"],
@@ -515,7 +510,7 @@ those (decision 48):
 `"sdk": "optional"` launches it without one when none is available. A bundle
 launched by another bundle, which holds no packages source, receives that
 bundle's own `sdk://`, read-only, so it sees the set captured when its
-launcher started (decision 59).
+launcher started.
 
 The launcher captures the set once per launch through the launching process's
 `source.packages`, so one launch never mixes two sets, and selects each listed
@@ -651,7 +646,7 @@ The image's list holds `public` at the build's `PACKAGE_REPOSITORY`
 ([boot archive](../development/boot-archive.md)); Install seeds it into the
 installed system. At most eight entries are accepted, each a table
 holding exactly `name` and `url`, plus `signed = false` for an unsigned
-development repository ([decision 72](../wip/pkg-upgrade.md#decided)).
+development repository.
 Only development images write `signed = false`: the build writes it unless
 `PACKAGE_REPOSITORY_SIGNED=1`. An index without a signature is refused unless
 its entry says so; the entry is the only way to read one. Names follow the package ID rules, so
@@ -753,7 +748,7 @@ selection, review and reboot semantics and
 [checkpoint publication](../development/release-process.md#declaring-release-checkpoints)
 for the author's declaration and preservation rules.
 
-A `release` entry ([decision 73](../wip/pkg-upgrade.md#decided)) carries no
+A `release` entry carries no
 `abi` and is the only kind with `provides`, the non-empty list of ABIs that
 release runs:
 
@@ -768,7 +763,7 @@ release runs:
 Its archive holds `caelum.elf`, `initrd.cpio` and `os-release` exactly as a
 tagged build produced them. Release entries are never offered to `install`,
 and only `pkg upgrade` reads the repository configured as `releases`, which is
-always verified ([decision 74](../wip/pkg-upgrade.md#decided)).
+always verified.
 
 `pkg upgrade [VERSION]` refuses without the space's boot ESP grant and boot
 evidence ([init](../userland/init.md)), so live media, rescue boots and spaces
@@ -911,7 +906,7 @@ for the commands and release fallback boundary.
 `packages/programs/` holds one recipe per program built in this tree (variant
 `1`), with the licenses of the third-party code it carries; a bundle that carries
 its own licenses needs nothing more. `packages/base.lua` names the base set
-([pkg upgrade](../wip/pkg-upgrade.md#base-package-set)); every other recipe there
+([core archive](../development/boot-archive.md)); every other recipe there
 is a development program. From a build directory:
 
 ```sh
@@ -933,7 +928,7 @@ publish; `tools/sign-repository.sh releases DIR` does.
 
 `release-image` (`pxpkg image`) copies the same build's `pyxis.iso` to
 `DIR/pyxis-VERSION.iso` and adds its line to `DIR/SHA256SUMS`, keeping the
-lines of earlier releases ([decision 75](../wip/pkg-upgrade.md#decided)). A
+lines of earlier releases. A
 name already listed with other bytes is refused. `tools/sign-images.sh DIR`
 then signs `SHA256SUMS`
 ([signing](../../packages/signing/README.md#signing-the-install-isos-and-images)).

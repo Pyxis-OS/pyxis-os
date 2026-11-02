@@ -1,6 +1,6 @@
 # Mesa softpipe qualification
 
-2026-10-23, task 2 of [Quake 3/Mesa](../../wip/quake3-llvmpipe.md).
+2026-10-23, task 2 of [Quake 3/Mesa](../mesa.md).
 Mesa 26.2.5 with the 25.0.7 OSMesa context/render restoration; both cached
 archives and signatures were checked in task 1. Builder
 `pyxis-llvm23.1.3-3d69e83`; development LLVM is not used in this configuration.

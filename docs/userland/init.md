@@ -278,7 +278,7 @@ alone: its `bin://` is the archive and its command list holds no installed
 packages. On an installed boot it also receives the pool's `system://`
 read-write, so it can repair the configuration, and package management of the
 pool's `packages` volume, so `pkg` can reinstall or remove packages
-([decision 18](../wip/pkg-upgrade.md)); without that volume it starts without
+([decision 18](package-upgrades.md)); without that volume it starts without
 `pkg`. It also gets HTTP staging on the pool's `http-work` volume. To fetch,
 start DHCP and the HTTP provider from the archive's copy of the services script:
 
@@ -347,7 +347,7 @@ configuration whose spaces all fail to start also starts the rescue space.
 
 Menus written before `mount.pool` existed lack it. Update does not recognize
 their entries as its own, so it refuses or leaves boot activation pending:
-those machines reinstall (decision 28 of [package upgrades](../wip/pkg-upgrade.md)).
+those machines reinstall (decision 28 of [package upgrades](package-upgrades.md)).
 
 The installed disk's second boot entry, **Pyxis OS (rescue)**, passes
 `boot.default_config=1` and starts the rescue space without reading the pool
@@ -361,7 +361,7 @@ A development build with `MOUNT_DISK` binds a disk but names no pool. It reads
 ### Development builds
 
 Live spaces exist only in `DISTRIBUTION=full` images; the default core image
-boots Install and Rescue only ([decision 64](../wip/pkg-upgrade.md)). In a full
+boots Install and Rescue only ([decision 64](package-upgrades.md)). In a full
 image, edit `userspace/config/live.lua`, also for builds with `MOUNT_DISK`, to
 change spaces, CPU sets and roots. `INIT`, `LIVE_CONFIG`, `HOSTNAME` and
 `GO_HELLO` need `DISTRIBUTION=full`. `INIT` names one host file,
@@ -395,14 +395,14 @@ hostname right, which the kernel issues only off this entry, it applies no
 machine settings.
 
 Holding `disks`, boot init reads no configuration and starts one built-in
-`install` space ([decisions 63 and 66-70](../wip/pkg-upgrade.md)). Its init is
+`install` space ([decisions 63 and 66-70](package-upgrades.md)). Its init is
 `boot://installer-init.pxe`, the network owner for the archive's
 `config/network.lua`, with HTTP staging in a RAM `http-work` directory and Wi-Fi
 READ and CONNECT when the radio exists. Boot init installs the world-domain Wi-Fi
 channel policy (country `00`, channels 1-13; [Wi-Fi](../interfaces/wifi.md#authority-and-startup))
 for that boot, since the install entry reads no configuration. Nothing joins
 Wi-Fi in 0.0.8; they are there for the TUI installer's join
-([decision 70](../wip/pkg-upgrade.md#decided)). It alone receives the installer
+([installer frontend](installer.md#frontend-boundary)). It alone receives the installer
 capability as private resources: `disks` with every installer disk right,
 `boot_kernel`, `boot_archive`, `power` narrowed to restart,
 `installer_diagnostics` (a WRITE copy of the Caelum console) and
@@ -875,7 +875,7 @@ receiving only selected data do not receive that factory.
 A space's optional `package_upgrade = true` delegates the boot-origin ESP
 issuer with only OBSERVE and UPGRADE_BOOT_ESP as `source.boot_esp_upgrade`, and
 boot init's READ-only boot evidence as `source.boot_esp_evidence`, for
-[`pkg upgrade`](../wip/pkg-upgrade.md). The evidence is
+[`pkg upgrade`](package-upgrades.md). The evidence is
 `PYXIS-BOOT-EVIDENCE 1` followed by `kernel`, `archive` and `record` lines of size
 and SHA-256: the kernel and archive this boot loaded, hashed from the kernel-issued
 FILEs, and the committed boot record (`EFI/pyxis/config/config.record`) the early
@@ -885,7 +885,7 @@ when that record was read and hashed on an entry naming its pool, never on
 rescue or live boots, and records
 what was loaded, not which configuration was selected. Without it neither source
 is delegated. The installed `pyxis` space opts in
-([decision 74](../wip/pkg-upgrade.md#decided)); only the `pkg` bundle declares
+([boot ownership](package-upgrades.md#boot-ownership-and-trust)); only the `pkg` bundle declares
 the two sources.
 
 Separately named `grants` supply selected sources outside ambient URI roots:

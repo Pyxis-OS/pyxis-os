@@ -1,7 +1,12 @@
 # Hardware-assumption audit
 
-Source audit of `origin/main` at `a3efad31` (2026-10-18). This is a list of
-remaining boot and device-coverage risks, not authorization to change drivers.
+Historical source audit of `origin/main` at `a3efad31` (2026-10-18). The table
+records that revision, not current implementation status. It is not authority to
+change drivers. Current coverage and re-audit work are tracked in
+[the hardware-assumption issue](https://git.internal/PyxisOS/pyxis-os/issues/1335).
+In particular, the common MSI helper now supports both address widths and
+per-vector masking; its historical row below is superseded by
+[current PCI behavior](../../devices/pci.md) and `kernel/pci/msi.c`.
 Severity ranks the consequence on a machine that exercises the condition; it
 does not claim that every listed machine has that firmware configuration. All
 code paths below were verified by reading. Hardware examples without a native
@@ -9,7 +14,7 @@ or QEMU observation are explicitly **suspected**.
 
 | Rank | Source and assumption | Breaking configuration and consequence | Suggested check or fix | Evidence |
 | --- | --- | --- | --- | --- |
-| High | `arch/x86_64/acpi.c:380-417`, `arch/x86_64/clock.c:116-121`: ACPI must expose a page-aligned, memory-mapped HPET, even when a usable invariant TSC exists. | A machine without the HPET table panics before PCI or userspace. A dormant or badly gated HPET may also fail boot calibration. The table-absent case is reproduced by the recorded QEMU `q35,hpet=off` boot in [hardware recovery](../development/experiments/hardware-recovery/README.md). | Select and validate a clock source without requiring HPET first; keep a bounded calibration fallback and qualify all CPUs before selecting TSC. | source-verified, QEMU table-absent case recorded. |
+| High | `arch/x86_64/acpi.c:380-417`, `arch/x86_64/clock.c:116-121`: ACPI must expose a page-aligned, memory-mapped HPET, even when a usable invariant TSC exists. | A machine without the HPET table panics before PCI or userspace. A dormant or badly gated HPET may also fail boot calibration. The table-absent case is reproduced by the recorded QEMU `q35,hpet=off` boot in [hardware recovery](hardware-recovery/README.md). | Select and validate a clock source without requiring HPET first; keep a bounded calibration fallback and qualify all CPUs before selecting TSC. | source-verified, QEMU table-absent case recorded. |
 | High | `arch/x86_64/acpi.c:460-476`, `arch/x86_64/pci.c:26-37`: exactly one MCFG allocation, segment zero, beginning at bus zero. | A valid multi-aperture MCFG or segment with a nonzero first bus disables **all** PCI discovery. NVMe, xHCI, NIC and any assignable GPU then disappear even if one aperture was usable. This is suspected on more complex laptops/workstations; [PCI-SIG explicitly permits multiple bases in one segment](https://pcisig.com/PCIFirmware/ECN/Firmware/EnablingMultipleBaseAddressesperPCISegmentGroup). | Retain separate verified segment/bus apertures and enumerate each; refuse only ambiguous or unsafe ranges, with per-aperture diagnostics. | source-verified, hardware trigger suspected. |
 | High | `kernel/display/display.c:78-112`, `boot/limine/entry.c:359-365`: an exposed linear framebuffer or one of the supported GPU drivers is mandatory. | Headless systems and a GOP `PixelBltOnly` mode have no linear framebuffer; without a supported PCI GPU, boot panics. UEFI [defines `PixelBltOnly` as lacking a linear framebuffer](https://uefi.org/specs/UEFI/2.10/12_Protocols_Console_Support.html). A laptop whose NVIDIA dGPU owns the output may still boot from GOP, but cannot rely on native mode setting here. | Make display optional for boot/service operation, with an explicit console or remote diagnostic path; add GPU support separately. | source-verified, hardware trigger suspected. |
 | Medium | `arch/x86_64/acpi.c:105-116,295-305,350-356`: early MADT/FADT/HPET/MCFG scans fully validate **every** XSDT entry before testing its signature. | One unrelated optional table with a bad checksum, truncated extent or bad pointer panics before the relevant table is found. A firmware with a malformed SSDT is a suspected trigger; this is a boot failure rather than only loss of that feature. | For early discovery, validate the root and required target tables strictly, but diagnose and skip an invalid unrelated entry where its identity can be safely established; keep all reads within the firmware map. | source-verified, hardware trigger suspected. |

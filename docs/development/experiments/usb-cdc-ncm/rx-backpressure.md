@@ -4,7 +4,7 @@
 
 ThinkPad, RTL8156BG over SuperSpeed, horse at 2500 Mb/s full duplex, the
 same private explicit NCM selection and rotated TX64/RX4/RX64 packet as
-[the baseline](../../../wip/usb-ncm-throughput.md#measured-baseline).
+[the baseline](../../../devices/usb-cdc-ncm.md#limits-and-qualification).
 Frozen private diagnostic `4732028a` is based on main `2ed89a24`; compiler
 `pyxis-llvm23.1.3-abc00d0`, matching main SDK/userland/ports bundles, debug
 logging. No game payloads or disk writes. The uninstrumented baseline uses

@@ -28,7 +28,7 @@ meaning: `-basedir` replaces `pkg://quake` and `-writedir` replaces
 Live and installed systems use the same package root. Live package installs
 last until reboot; there is no archive fallback or local seed repository.
 Legacy image data inputs still exist pending the
-[archive cut](../wip/packages.md#tasks), but do not supply this bundle's data root.
+[archive cut](../interfaces/packages.md#package-client), but do not supply this bundle's data root.
 
 ## Controls and resources
 

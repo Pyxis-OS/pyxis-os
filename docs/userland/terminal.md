@@ -41,11 +41,10 @@ Uncertain mode operations are never replayed or reported as restored.
 Native input loss, EOF and hangup remain distinct read outcomes. There is no
 signal emulation or presentation reset in this API. It shares mode ownership
 with the [raw termios subset](#raw-termios-subset). Cooperative signal
-compatibility remains a [parked proposal](../wip/terminal-ui.md#libc-compatibility-follow-up),
-to be considered only for a real consumer. Full-screen
-programs still need their supervisor's retirement/restoration boundary. See
-[qualification](../development/experiments/terminal-raw.md) and the
-[terminal UI milestone](../wip/terminal-ui.md).
+compatibility is documented separately in [cooperative signals](cooperative-signals.md);
+it does not replace the native raw/resize API. Full-screen programs still need
+their supervisor's retirement/restoration boundary. See
+[qualification](../development/experiments/terminal-raw.md).
 
 The [Go fork](../development/go-toolchain.md) provides the corresponding
 `syscall.Terminal*` adapter on actual `os.File.Fd()` native handles and a Pyxis
@@ -551,3 +550,43 @@ report inserted bytes, cancellation and native status, with a notice in nonquiet
 editors. Pending older input refuses Paste rather than being flushed or deferred.
 See the [receiver contract](../interfaces/clipboard.md#safe-receiver) and
 [delivery limits](https://git.internal/PyxisOS/pyxis-os/issues/1395).
+
+## Curses applications and restoration
+
+The native ncursesw port supplies `ncursesw-dev` and `ncurses-demo`, with one
+embedded terminfo entry for `TERM=pyxis`. External database and HOME searches are
+disabled, so there is no implicit terminfo filesystem authority. Other terminal
+names refuse. The entry advertises the supported 16/default colours, keys and
+single-cell repertoire, not full xterm behavior or unsupported mouse/probe
+controls. A wide library does not enlarge the renderer's glyph or cell support.
+Pins, notice-preserving licence and build integration live in the
+[port reference](../../ports/ncursesw/README.md).
+
+`raw()` acquires its owned PASSTHROUGH request; Ctrl+C becomes byte 3.
+`cbreak()` uses native byte input without acquiring PASSTHROUGH, so ordinary
+foreground cooperative/forceful interruption applies unless another holder owns
+PASSTHROUGH. `noraw()`/`nocbreak()` do not create a kernel line discipline.
+Ncurses keeps software echo, line editing and timed/nonblocking input; native
+SIZE/RESIZED generates `KEY_RESIZE` while preserving partial key decoding.
+Input loss, closure, mode restoration and output failure remain real errors.
+Signal-triggered queue flush controls are unsupported. See
+[ncursesw qualification](../development/experiments/ncursesw.md) and the first
+application, [Hexcurse](hexcurse.md).
+
+Interactive foreground commands own a cleanup subgroup. Their supervisor waits
+for actual subtree retirement, including descendants, before normalizing the
+held terminal output after raw use or abnormal completion. It does not reset a
+live child's screen or write controls to redirected files/pipes. The observation
+is sticky across raw release: a currently empty PASSTHROUGH count is insufficient.
+Normal non-raw output intentionally retains its styles/cursor state. `reset`
+normalizes on demand; `clear` clears the supported screen/scrollback and homes the
+cursor. A failed normalization is reported. Restoration makes the terminal
+usable; it does not recover arbitrary screen contents or edits.
+
+Local/mux/plain Remote/remote mux lifecycle and resize are QEMU-qualified in the
+[raw](../development/experiments/terminal-raw.md),
+[lifecycle](../development/experiments/terminal-lifecycle.md), ncursesw and
+[Hexcurse](../development/experiments/hexcurse.md) records. Native cross-terminal
+qualification and remaining matched size/memory/input checks are tracked in
+[the qualification issue](https://git.internal/PyxisOS/pyxis-os/issues/1695); these records do not claim
+that native gate passed. Future terminal applications are separate assignments.

@@ -551,7 +551,7 @@ retains the QEMU limit, deferred batching, reboot-only recovery from engine
 failure, startup and jack-switching limits. Eight periods remain starting tuning. SDL2 and Quake
 adapters are separate consumer work: conversion/resampling stays in userspace;
 SDL2 needs real callback/thread execution under the
-[threads direction](../wip/scheduling-and-threads.md). Recording, HDMI/DP,
+[threads direction](../kernel/smp.md). Recording, HDMI/DP,
 USB/dock and Bluetooth audio, ACP, suspend/resume and general device selection
 remain outside this analog playback implementation.
 

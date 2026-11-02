@@ -1,6 +1,6 @@
 # ioquake3/OpenArena on softpipe
 
-2026-10-24, task 4 of [Quake 3/Mesa](../../wip/quake3-llvmpipe.md).
+2026-10-24, task 4 of [Quake 3/Mesa](../mesa.md).
 Base main `0f4153cb`, ports base `a3bfc58`, userland base `1453c097`;
 changed userland `434b6cb`, ports `589bbce`. Builder
 `pyxis-llvm23.1.3-3d69e83`; no compiler rebuild or kernel/ABI change.

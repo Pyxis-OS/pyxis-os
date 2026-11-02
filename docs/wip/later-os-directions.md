@@ -11,7 +11,7 @@ and [subsystems per space](subsystems-per-space.md).
 
 The native `pkg` client, data/program/development packages and installed command
 views are delivered ([formats](../interfaces/packages.md)). The
-[ABI/core/updater milestone](pkg-upgrade.md) records the core archive, online
+[ABI/core/updater milestone](../userland/package-upgrades.md) records the core archive, online
 Install and signed `pkg upgrade`: QEMU upgrade/new/previous/rescue boots are
 qualified; the native ThinkPad upgrade check remains open. Dynamic linking and
 the [source-build direction](source-builds.md) remain future work.
@@ -44,7 +44,7 @@ Upgrading the system through the package manager, without booting the installer
 limits above. The installer retains [Update](../userland/system-updates.md).
 
 Historical program-store direction (owner, 2026-10-17), before
-[package upgrades](pkg-upgrade.md) removed the interim revision directories:
+[package upgrades](../userland/package-upgrades.md) removed the interim revision directories:
 each program version is written once into a store (`bin/store/NAME-HASH/`), a
 generation maps stable names to store entries, one atomic step switches the
 current generation, and cleanup removes only store entries no kept generation
@@ -114,17 +114,17 @@ or interface discovery. This note schedules no refactor and introduces no APIs.
 
 Direction stated by chronium (2026-10-23); a candidate for a later milestone,
 not scheduled and not an interface proposal. It has higher priority than the
-[cgo candidate](go-runtime.md#cgo-for-go-programs-that-wrap-c-libraries--candidate-chronium-2026-10-23).
+[cgo candidate](../development/go-toolchain.md#further-profiles).
 Today the bundle-admission, grant and ABI policy of
 [command search](../interfaces/command-search.md) is code inside libc's command
 selection. Go cannot call it without cgo, so `exec.LookPath` is unsupported today
-and the [Go runtime](go-runtime.md) would have to duplicate the policy or link C.
+and the [Go runtime](../development/go-toolchain.md) would have to duplicate the policy or link C.
 
 The direction: move that policy behind a typed native interface served by a
 restartable userland service. libc and the Go runtime then share one
 implementation, without cgo and without a second copy of the policy to keep in
 step. The accepted, not yet implemented `exec.LookPath` contract
-([decision 3](go-runtime.md#standard-library-adapter-delivery--decided)) stays in
+([decision 3](../development/go-toolchain.md#standard-library-platform-adapters)) stays in
 force until chronium changes it.
 
 - **Userland rather than kernel**, by chronium's preference: a crashed service is
@@ -231,7 +231,7 @@ The shared [C configuration helper](../userland/lua.md#embedding-and-session-con
 serves session and network settings. Further consumers keep their own schemas,
 defaults and application policy; a generic schema framework is not needed.
 
-Build scripting for [in-Pyxis development](in-pyxis-development.md#tooling)
+Build scripting for [in-Pyxis development](../development/experiments/in-pyxis-development.md)
 and the implemented behavior are in the [runtime reference](../userland/lua.md).
 Remaining interpreter directions include `os.clock` (process CPU time), dynamic
 modules, live configuration reload and per-user/space settings policy. Native
@@ -377,7 +377,7 @@ Owner ideas, 2026-10-07; none is scheduled.
     hermetic builds become a need, for example with
     [nested execution groups](nested-execution-groups.md), native package builds
     or CI on Pyxis. Package versions and upgrades are in
-    [`pkg upgrade`](pkg-upgrade.md).
+    [`pkg upgrade`](../userland/package-upgrades.md).
 
 ## Full-screen space
 
@@ -588,7 +588,7 @@ Ideas recorded when npfs was planned, none of them agreed:
 - **NVMe.** The [NVMe driver](../devices/nvme.md) is merged (#710) and read-only;
   native writes await qualification. With it, the Fedora disk would appear
   under Any disk (formerly Read the room) as a foreign disk, which the owner accepted. The
-  [coexistence proposal](nvme-coexistence.md) develops the driver, FAT32 and a
+  [coexistence proposal](../userland/nvme-coexistence.md) develops the driver, FAT32 and a
   non-destructive installer mode beside Fedora.
 
 Boot payload ideas (owner, 2026-10-15), compared with other systems' updates:

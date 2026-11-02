@@ -27,4 +27,4 @@ existing [terminal repertoire](terminal.md) remain unchanged.
 
 [Source and QEMU qualification](../development/experiments/hexcurse.md) cover the
 first packaged application. Native checks and terminal-track measurements remain
-in [gate 5](../wip/terminal-ui.md#delivery-gates-assigned-in-order-chronium-2026-10-23).
+in [gate 5](terminal.md#curses-applications-and-restoration).

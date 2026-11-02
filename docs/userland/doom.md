@@ -26,7 +26,7 @@ accessible WAD once the bundle's required grants are available.
 Live and installed systems use the same package root. Live package installs
 last until reboot; there is no archive fallback or local seed repository.
 Legacy image data inputs still exist pending the
-[archive cut](../wip/packages.md#tasks), but do not supply this bundle's data root.
+[archive cut](../interfaces/packages.md#package-client), but do not supply this bundle's data root.
 
 `-playdemo path` plays an accessible demo and returns to the shell when it ends.
 `-timedemo demo1` plays the IWAD's first demo as fast as possible and exits with

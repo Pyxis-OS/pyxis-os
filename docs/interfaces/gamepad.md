@@ -70,8 +70,7 @@ SDL's analog fallback. Physical correspondence is checked in the task 1 viewer.
 Existing USB record retention and possible controller quarantine still bound
 reconnects. Exhausted attachment/catalog/sequence identities refuse rather than
 wrap. Mouse and I2C touchpad behavior is unchanged. Generic HID, Ultimate 2,
-Bluetooth and output effects remain later work in the
-[controller milestone](../wip/controller-support.md).
+Bluetooth and output effects remain [separate profiles](https://git.internal/PyxisOS/pyxis-os/issues/1692).
 
 ## Visualizer
 
@@ -86,5 +85,25 @@ input/readiness and display-resize handling.
 Task 1 qualification is chronium's brief Edge plug-and-control check on vela.
 No exhaustive host capture or every-trigger-stop matrix is required. A no-pad
 QEMU check verifies presentation, empty acquisition and launch/exit, not physical
-control correspondence or native USB behavior. SDL and LUS/SoH consumers follow
-in separately assigned tasks.
+control correspondence or native USB behavior. The SDL and LUS/SoH consumers below are implemented.
+
+## SDL and game consumers
+
+Both ordinary SDL and OSMesa profiles have the native joystick backend and
+automatic Edge GameController mapping. Gamepad readiness participates in the
+existing event wait. The backend exposes no output capabilities and refuses real
+LED/rumble/sensor requests; upstream repeated-LED and zero-rumble shortcuts remain
+upstream behavior, not evidence that Pyxis implements output.
+
+LUS and SoH use their existing controller manager and binding editor, including
+fresh SDL defaults, preservation of existing keyboard mappings and saved binding
+changes. QEMU exercised mapped input, simultaneous controls, focus/reset, removal
+and replug with a fresh SDL instance, plus save/quit/reopen. These synthetic-input
+checks do not establish physical game latency, aiming or start-to-end usability.
+
+Chronium's native vela Edge check exercised buttons, sticks, triggers and
+connected-at-boot. Paddles remapped in the onboard profile did not qualify their
+independent report bits. [Physical consumer/reboot qualification](https://git.internal/PyxisOS/pyxis-os/issues/1691)
+remains separate, including multiple devices/root/hub coverage and native game
+use when rendering permits it. Generic HID and other controller profiles are
+not implied by this input implementation.

@@ -88,7 +88,7 @@ Other package-data grants require separately held authority from that volume.
 Neovim reads server resource views from the process selection it actually
 launched. Open header buffers retain their selected resources after server exit
 or package replacement. Conflicting active server roots refuse as ambiguous.
-Package/toolchain consumer delivery remains in the [packages milestone](../wip/packages.md).
+Package/toolchain consumer delivery remains in the [packages milestone](../interfaces/packages.md).
 
 ## Ports and limits
 

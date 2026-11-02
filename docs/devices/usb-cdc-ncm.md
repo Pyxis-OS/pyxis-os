@@ -166,5 +166,11 @@ by these checks. ThinkPad/RTL8156BG native receive qualification reaches
 for measured TX limits. Never run a USB gadget on the shared development VM;
 use a disposable guest or real hardware.
 
-The [RTL8156 receive-throughput work](../wip/usb-ncm-throughput.md) records the
-implemented retained handoff, native result and separate backlog/TX follow-ups.
+The production queue remains 16 frames with retained NTB handoff, 16 KiB NTBs
+and two posted IN TDs. A separate 1024-frame native candidate was slower and
+was not adopted; see the [depth comparison](../development/experiments/usb-cdc-ncm/rx-depth.md).
+The [uninstrumented TX comparison](https://git.internal/PyxisOS/pyxis-os/issues/1693)
+and [per-CPU receive-backlog direction](https://git.internal/PyxisOS/pyxis-os/issues/1694)
+are separate follow-ups, not reasons to enlarge this queue implicitly. Existing
+[QEMU post-burst recovery](https://git.internal/PyxisOS/pyxis-os/issues/1289)
+remains an independently recorded limitation.

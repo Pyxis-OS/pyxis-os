@@ -96,3 +96,9 @@ process reclamation and DISPLAY mapping work share the
 change fixed device/control owners. No native
 hardware qualification or enabled LLVM consumer is implied by the manual
 generated-code example.
+
+Deferred dual views, executable FILE mappings, sparse regions and strict-near
+placement are tracked as [JIT extensions](https://git.internal/PyxisOS/pyxis-os/issues/1697), not implied by
+this interface. The [LLVM adapter](../development/llvm-development.md#explicit-jit-sections)
+and [MCJIT/ORC record](../development/experiments/llvm-jit.md) describe its real
+consumer; [Mesa](../development/mesa.md) consumes that path for llvmpipe.

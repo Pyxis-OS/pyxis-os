@@ -4,8 +4,7 @@ The [pyxis-go fork](https://git.internal/PyxisOS/pyxis-go) adds a static
 `pyxis/amd64` target to Go 1.27.3. Its linker writes P1F directly; no converter,
 libc or Linux syscall layer is involved. This first profile supports native
 runtime bootstrap, parallel Ps, native files/streams and IPv4 TCP/UDP/DNS,
-fmt/time and HTTP/TLS clients, with normal multi-M/GC and cooperative Go preemption. See the [runtime milestone](../wip/go-runtime.md)
-and the [startup](experiments/go-native-hello/README.md) and
+fmt/time and HTTP/TLS clients, with normal multi-M/GC and cooperative Go preemption. See the [startup](experiments/go-native-hello/README.md) and
 [parallel](experiments/go-parallel/README.md) and
 [files/time](experiments/go-files-time/README.md) and
 [readiness/capacity](experiments/go-readiness-set/README.md) records for limits.
@@ -58,10 +57,13 @@ file or virtual-span ceilings; the native loader's allocations remain fallible.
 
 ## Initial limits
 
-The target defaults to one P and `runtime.NumCPU()` reports one; there is no
-automatic native CPU-count discovery. An exported `GOMAXPROCS=4` or `8`, or
-`runtime.GOMAXPROCS(n)`, enables parallel Ps independently. These settings and
-dynamic changes are qualified on four/eight-vCPU nested guests. Native thread
+`runtime.NumCPU()` and default `GOMAXPROCS` use the process's grant-free startup
+CPU allowance; they do not report every CPU in the machine. The
+[startup CPU record](experiments/startup-usable-cpus.md) qualifies one-, two- and
+four-CPU allowances. An exported `GOMAXPROCS` or `runtime.GOMAXPROCS(n)` can select
+parallel Ps explicitly; native admission still determines whether their Ms can
+be created. Parallel execution and dynamic changes also have four/eight-vCPU
+nested qualification. Native thread
 admission still includes sysmon and blocked Ms in addition to active Ps. Required
 thread/memory exhaustion reports the native operation/status and terminates the
 process; the runtime does not promise a P count beyond native admission.
@@ -82,8 +84,8 @@ See [FP ownership](../kernel/userspace.md#floating-point).
 Runtime diagnostics use blocking writes to the supplied console, pipe or FILE,
 including under debuglock. Native calls carry up to 4096 bytes (4080 data bytes
 for inline FILE writes); backpressure retains that P and can stall a one-P
-program. Networking, hosted compilation, profiling and a complete standard-library
-build remain later work. Runtime bootstrap entropy retries QUEUE_FULL within one
+program. Hosted compilation, profiling and a complete standard-library build
+remain outside this profile. Runtime bootstrap entropy retries QUEUE_FULL within one
 five-second deadline;
 other failure is fatal, with no predictable fallback. Before g/m, bootstrap
 failures report a typed terminal startup result; the launching parent names its
@@ -159,8 +161,8 @@ Absent/empty `TZ` retains the existing UTC default. `time.LoadLocation` uses the
 same archive; there is no embedded copy or host timezone-path fallback.
 
 The readiness and thread-sizing prerequisites and native network adapters are
-qualified on four-vCPU nested QEMU. Native hardware qualification remains open;
-The optional [Caddy package](../userland/caddy.md) is QEMU-qualified for the
+qualified on four-vCPU nested QEMU. The separate [native runtime/networking gate](https://git.internal/PyxisOS/pyxis-os/issues/1689)
+remains open. The optional [Caddy package](../userland/caddy.md) is QEMU-qualified for the
 recorded HTTP/supplied-TLS profile.
 
 ## Standard-library platform adapters
@@ -199,8 +201,8 @@ CertPools or register upstream SetFallbackRoots (including through an
 x509roots/fallback import). A registered pool is used after a failed system-root
 load; GODEBUG=x509usefallbackroots=1 forces it even when system roots are valid.
 Thus fail-closed describes the default loader, not an application-chosen trust
-policy. Pyxis embeds no fallback pool. Target X.509 qualification waits on Go
-networking. `os/exec` builds, but
+policy. Pyxis embeds no fallback pool. The [networking record](experiments/go-networking/README.md) includes target
+HTTP/TLS qualification. `os/exec` builds, but
 `LookPath` returns an error matching both `exec.ErrNotFound` and
 `errors.ErrUnsupported` for every name or
 path, and subprocess launch remains unsupported. No PATH search is performed.
@@ -266,3 +268,10 @@ deadline-change cancellation. CONNECT/SEND never replay after uncertainty.
 The [networking record](experiments/go-networking/README.md) separates QEMU
 functional/authority checks, native task observations and nested timings. It does
 not establish native hardware behavior, Caddy/HTTP3 support or service throughput.
+
+## Further profiles
+
+The delivered runtime and Caddy profile do not include cgo, hosted compilation,
+profiling or a complete standard-library promise. Broader integration remains a
+[separate follow-up](https://git.internal/PyxisOS/pyxis-os/issues/1690),
+with a concrete consumer and native authority contract before implementation.

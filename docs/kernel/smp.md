@@ -842,8 +842,11 @@ retirement uses its recorded actor. Fixed device/session hooks retain the BSP.
 Final display backing transfers to the preparation CPU's existing RAM reaper
 after its actual final consumer releases it. Unconfirmed retirement retains the
 backing and joined cleanup, without parking that RAM actor behind one process.
-Moving a worker off the BSP is a later step; see the
-[follow-ups](../wip/scheduling-and-threads.md#serial-services-off-the-bsp).
+Moving a worker off the BSP remains a separate ownership task; see
+[BSP worker follow-ups](https://git.internal/PyxisOS/pyxis-os/issues/1318).
+A service move must preserve single-owner access, IRQ notification and joined
+retirement; neither CPU-neutral kernel VM nor caller-CPU user operations
+authorizes migrating a device worker.
 
 Accepted limits are recorded in [technical debt](https://git.internal/PyxisOS/pyxis-os/issues?type=all&state=all&labels=4):
 
@@ -858,7 +861,10 @@ Accepted limits are recorded in [technical debt](https://git.internal/PyxisOS/py
 - [historical IPC CALL residuals](https://git.internal/PyxisOS/pyxis-os/issues/1310)
 
 Topology breaks placement ties only; load balancing still counts SMT siblings
-as separate CPUs.
+as separate CPUs. [Hybrid/cache-aware placement](https://git.internal/PyxisOS/pyxis-os/issues/1461)
+is an accepted later direction, not part of HWP initialization. It requires
+truthful per-CPU core/cache/cluster/capability metadata; no fixed vela CPU-index
+policy or new affinity API is supplied.
 
 ## Measurements
 

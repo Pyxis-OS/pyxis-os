@@ -2,7 +2,7 @@
 
 Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
 
-Pre-implementation baseline for the [runtime SMP milestone](../../../wip/scheduling-and-threads.md),
+Pre-implementation baseline for the [runtime SMP milestone](../../../kernel/smp.md),
 recorded on 2026-10-05 before any SMP code change. Later tasks repeat the matched
 workloads below and compare against these numbers.
 

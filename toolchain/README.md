@@ -62,9 +62,10 @@ podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74-r1
 The opt-in [Rust cross profile](../docs/development/rust-toolchain.md) installs a
 pinned host nightly separately and links ordinary ELF objects with this SDK and
 Clang/LLD. It adds no Rust dependency to normal images or this compiler build.
-The [std milestone](../docs/wip/rust-std.md#qualified-delivery) now records the
-fork-built compiler, std main and read-only-file hexyl subset. Workers, the full
-std profile and native hardware qualification remain open.
+The [native std profile](../docs/development/rust-toolchain.md#native-std-profile)
+records the fork-built compiler, workers, files/directories and hexyl. Its
+[qualification limits](../docs/development/rust-toolchain.md#qualification-and-limits)
+keep the native hardware gate separate.
 
 ## Native hosted payloads
 
@@ -108,7 +109,7 @@ bundles include the full installed
 compiler resource directory and the SDK notices, with host symlinks expanded
 into regular files. They carry no SDK: they declare `"sdk": true` and read
 headers and libraries from `sdk://`, the installed dev packages
-([the `sdk://` view](../docs/wip/sdk-view.md)); the `clang-hosted` package
+([the `sdk://` view](../docs/interfaces/packages.md)); the `clang-hosted` package
 depends on `pyxis-dev` and `libcxx-dev`. On Pyxis the driver's default sysroot
 is `sdk://`, with `include/` and `lib/` at its root and no `usr/`. They request
 an 8 MiB stack and required

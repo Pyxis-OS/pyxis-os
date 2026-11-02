@@ -421,7 +421,7 @@ additional confinement beyond directory authority.
 
 A `file` request admits only `read` and receives one native FILE, such as boot
 init's boot evidence for the `pkg` bundle in a `package_upgrade` space
-([`pkg upgrade`](../wip/pkg-upgrade.md)).
+([`pkg upgrade`](package-upgrades.md)).
 
 A manifest's top-level `"packages": ["ID", ...]` gives the bundle a read-only
 `pkg://` holding only those packages, selected at each launch through its
@@ -430,7 +430,7 @@ cannot be resolved fails with its ID as the missing resource. `"sdk": true` adds
 a read-only `sdk://` of the same set; `"sdk": "optional"` launches without it
 when it is unavailable. A bundle launched by a bundle, which holds no packages
 source, receives its launcher's own `sdk://` instead
-([decision 59](../wip/sdk-view.md)). A bundle never inherits its launcher's
+([decision 59](../interfaces/packages.md)). A bundle never inherits its launcher's
 `pkg://`, nor an undeclared `sdk://`, and no grant or resource directory may be
 named or aliased `pkg` or `sdk`. See
 [reaching package files](../interfaces/packages.md#reaching-package-files).

@@ -7,33 +7,11 @@ Everyday use for simple tasks guides the order; website hosting is one future
 application, not the completion target. Fixes for major problems found on the
 ThinkPad remain allowed in any track.
 
-**Planning freeze lifted (owner, 2026-10-17):** proposals and investigations for
-concrete problems are allowed again. Larger new milestones still wait until the
-owner starts that planning; ideas keep going in
-[later OS directions](later-os-directions.md).
-
-**Sequencing (owner, 2026-10-14):** the [capability model](capabilities-and-providers.md)
-is settled and its [implementation](capability-model-implementation.md) is assigned.
-Libc, shell, web/HTTP and Git work happens only through that milestone until the
-task owning the area is delivered; independent tracks (storage and drivers,
-kernel) continue alongside.
-
-**Releases (owner, 2026-10-20):** 0.0.7 is released when the work in flight since
-0.0.6 reaches its milestone boundaries, never by date: [packages slice 1](packages.md#slice-1-data-packages)
-closed; [explicit durability](../devices/explicit-durability.md) closed, including its
-task 4 native measurement (2026-10-20); [Wi-Fi](wifi.md) stage 3 closed, a stable
-2.4 GHz open-AP connection with data; the [capability pipes](capability-model-implementation.md#task-9-first-slice-decisions-accepted-owner-2026-10-20)
-first slice (tasks 1-3) merged; and a clean native install and update on the
-green reference stick, the [installer](installer-tui.md) task 5 gate
-(owner-run vela pass, 2026-10-20). 0.0.8 brings
-the [public package mirror](packages.md#later-ideas) (`pkg.pyxis.nexus`, with retention and index
-and package signing), the first tester ISO, a short technical manual, and the
-[project website](website.md) at `pyxis.nexus` (domain registered 2026-10-20;
-chronium, 2026-10-20). Tags and history are in [releases](../releases.md). 0.1.0 direction (owner, 2026-10-20): Pyxis manages its own disks and the live image is the installer ([disk management](release-ideas.md#1-disk-management-the-live-image-is-the-installer)); more items may join.
+Release history and publication state live in [releases](../releases.md).
 
 Implemented behavior lives in the subsystem references listed in the
 [documentation index](../README.md). Completed milestones keep no WIP document
-and are listed in [completed milestones](completed.md).
+and are listed in [completed milestones](../development/completed-milestones.md).
 
 **Rule: task PRs never edit this index.** Edit it only when a milestone is
 assigned, completes or the owner changes the plan. Progress, checkboxes,
@@ -46,22 +24,10 @@ without conflict.
 
 Chosen by the owner, each starting with a proposal.
 
-[Bulk FILE reads](bulk-file-reads.md): accepted and assigned (chronium, 2026-10-25),
-with bounded provider/npfs reads preserving authority and owned lifetimes.
-The 0.0.9 release merge gate is lifted; new consumers need bulk-capable kernels.
-
 [Capability model implementation](capability-model-implementation.md): owner-assigned
 2026-10-14; Codex beta owns integration, with Codex delta on the kernel tasks.
 A (core) and [B (HTTP)](../interfaces/http-transactions.md) are complete;
 C (general capability pipes) remains assigned to Codex delta.
-
-[Controller support](controller-support.md): Edge-only wired input assigned to
-Codex delta (chronium, 2026-10-26); descriptor-checked dedicated decoder, native
-keyboard-style gamepad authority/focus and Pyxis SDL backend. Task 0 closes the
-actual-device contract before task 1. Ultimate 2 and generic HID are later.
-
-Developing inside Pyxis, the Java virtual machine: the owner, see
-[developing inside Pyxis](in-pyxis-development.md).
 
 [Dynamic linking](dynamic-linking.md): claude's design, accepted by chronium
 (2026-11-02): P2F/P1D/P2D formats, a kernel map-and-seal operation with a
@@ -69,77 +35,12 @@ userspace loader, `.pxl` libraries exported by packages, and the build split
 that removes pyxis-os's dependency on userland and ports builds. Release
 placement is open; no task has started.
 
-[Git](../userland/git.md): the three CLI slices are implemented (chronium,
-2026-10-24): HTTPS clone/push/pull, init/remotes, local staging/commit/diff and
-held-root identity/credentials. QEMU Forgejo qualification and host/nested clone
-measurements are recorded; native media cost and credential-manager work remain
-outside this milestone.
-
-[Go runtime investigation](go-runtime.md): chronium-assigned to Codex alpha,
-2026-10-21. Fresh source audit and proposal; fast startup is required. No
-implementation is assigned.
-
-[Hosted build flags](hosted-build-flags.md): chronium-assigned investigation
-(2026-10-25) for 0.0.10: hosted C boundaries, explicit Mesa optimization and the
-userspace red-zone convention. Measured prototype and decisions precede SDK defaults.
-
-[Installer TUI and configuration delta editor](installer-tui.md): tasks 1–4
-are delivered ([#786](https://git.internal/PyxisOS/pyxis-os/pulls/786)). Task 5
-[#797](https://git.internal/PyxisOS/pyxis-os/pulls/797) has the owner-run Classic
-native gate; corrected action/completion and owned Coexist Install/Update have
-QEMU qualification. The current publication and package-set behavior is in
-[package upgrades](../userland/package-upgrades.md); native Coexist firmware
-and release-upgrade checks remain [open](https://git.internal/PyxisOS/pyxis-os/issues/1509).
-Later tasks need separate go-aheads.
-
-[NVMe coexistence](nvme-coexistence.md): tasks 1–3 delivered (task 3 in
-[#878](https://git.internal/PyxisOS/pyxis-os/pulls/878), 2026-10-16). The
-[GRUB → Limine milestone](../userland/grub-limine-chainload.md) is complete:
-ThinkPad manual Coexist Install/Update and normal/rescue boots passed
-[native qualification](../development/experiments/grub-limine-native.md),
-2026-10-21. Owned Coexist publication is now implemented and QEMU-qualified
-through [package upgrades](../userland/package-upgrades.md); vela's native
-firmware gate remains [open](https://git.internal/PyxisOS/pyxis-os/issues/1509).
-
-[Renoir hardware cursor](renoir-hardware-cursor.md): Codex alpha (2026-10-10), the
-Fedora evidence was captured and analysed on 2026-10-11 (#685, draft). Task 2 is
-blocked on hardware semantics, not on evidence;
-[whole-frame skipping](../kernel/presenter-frame-skipping.md) is merged.
-
-[Script launch authority](../userland/script-authority.md): implemented for the
-exact held shell and standalone Lua 5.5/5.1, with shared source selection and
-shell-equivalent lifetime. Embeddings and captured jobs retain their profiles.
-
-[Shared memory](../kernel/shared-memory.md): implemented fixed native RAM regions,
-declared creation authority, branch-local mapping withdrawal and origin accounting.
-SDK/shared-min pass QEMU checks; the native vela consumer also passes. Hard-budget
-and exceptional qualification limits are linked from the reference. GPU/compositor
-work is separate.
-
-[USB NCM receive throughput](usb-ncm-throughput.md): owner-assigned to Codex
-epsilon (2026-10-18). The retained RX handoff is merged with the 16-frame queue
-kept, and the always-drain fix (#1008) is merged; the matched TX A/B waits for
-the owner's run on the ThinkPad's RTL8156BG.
-
-[Packages and upgrades](packages.md): data and program packages, the installed
-command/SDK views, core archive and online Install are delivered. The
-[0.0.10 package and release upgrades](../userland/package-upgrades.md) are
-implemented: whole-set updates, one active release, verified first-boot set
-selection, owned Classic/Coexist publication and reviewed signed-index floors.
-The release-day vela native gate remains [open](https://git.internal/PyxisOS/pyxis-os/issues/1509).
-The earlier [updater record](pkg-upgrade.md) is historical;
-[dynamic linking](dynamic-linking.md) has its own milestone, and on-device source
-builds remain later work.
-
 [Wi-Fi](wifi.md): stages 1–4 complete; the [AX200 reference](../devices/ax200-wifi.md)
 covers firmware, passive scan, legacy open and WPA2-CCMP links with independent
 DHCP/verified data and recorded qualification limits. Next: vela RTL8922AE, then
 WPA3. AX200 5 GHz and the Deck remain deferred.
 
 ## Open
-
-[Developing inside Pyxis](in-pyxis-development.md): the extra-spaces check on the
-installed ThinkPad is open.
 
 [Everyday gaps](everyday-gaps.md): small things noticed in use.
 
@@ -153,7 +54,7 @@ alphabetical.
 1. [Command-resolution service](later-os-directions.md#command-resolution-service):
    libc's command-selection policy behind a typed, restartable userland service
    shared by libc and Go. Higher priority than the next one.
-2. [Go cgo](go-runtime.md#cgo-for-go-programs-that-wrap-c-libraries--candidate-chronium-2026-10-23):
+2. [Go cgo](https://git.internal/PyxisOS/pyxis-os/issues/1690):
    Go programs that wrap C libraries, with external linking through LLD and the
    Go runtime and libc in one process.
 
@@ -167,13 +68,14 @@ Each delivery task needs a separate go-ahead.
 [Developer tools](later-os-directions.md#developer-tools): a capability inspector,
 `top` and the network debugger's unassigned task 4.
 
-[Raw terminals and curses applications](terminal-ui.md): native raw access,
-ncursesw with `TERM=pyxis`, then hexcurse (0.0.9; assigned, delta).
 [SQLite](application-ports.md#libraries-and-terminal-tools) through a native VFS.
 
 [Intel inherited scanout](intel-inherited-scanout.md): vela tearing investigation
 assigned to Codex alpha (chronium, 2026-10-28); ordinary inherited-state startup/readout accepted; plane/GGTT writes await evidence.
 Broader physical GPU drivers remain separately assigned.
+
+[Installer curses frontend](https://git.internal/PyxisOS/pyxis-os/issues/1686): unassigned UI/Wi-Fi join
+follow-up over the delivered planner and executor.
 
 [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).
 
@@ -184,16 +86,13 @@ first, then remote input after the system pointer.
 upstreaming. The [implemented first profile](../development/rust-toolchain.md#native-std-profile)
 has separate [native qualification debt](https://git.internal/PyxisOS/pyxis-os/issues/1679).
 
-[SMP follow-ups](scheduling-and-threads.md), including serial services off the BSP.
+[SMP follow-ups](../kernel/smp.md), including serial services off the BSP.
 
 [Steam Deck second hardware target](steam-deck.md): accepted PXE development
 direction, on hold by owner direction (2026-10-15). Task 9 dock Ethernet is
 merged; no task 2/3 scope or implementation is assigned. Reusable
 [HID-over-I2C input](../devices/hid-i2c-touchpad.md) is implemented;
 GPIO interrupt delivery remains [separate work](https://git.internal/PyxisOS/pyxis-os/issues/1492).
-
-System layout follow-up: the
-[boot configuration checker](installer-tui.md#configuration-checker).
 
 [Terminal applications](terminal-applications.md): a single-panel file navigator,
 then operations between navigators.
@@ -248,15 +147,17 @@ the broader required direction is parked.
 owner on 2026-10-11; `.pxb` meets current needs. Stored launch is implemented and
 qualified on draft #717/#213/#98, with authority and admission fixes required
 before any merge. Revisit for package distribution or the Clang build loop.
-The merged host packer/checker (2a, #706) stays; bin placement is merged
-([reference](../userland/program-bundles.md)) and its
+Current bundle placement is documented in the
+[reference](../userland/program-bundles.md); the
 [future command index](program-bundles.md#future-command-index) awaits a separate go.
 
 [Release ideas](release-ideas.md): ideas and directions collected for 0.1.0 and
 later releases, each with its status and target; the first is disk management.
 
-[Ready-to-run QEMU image](qemu-image.md): a qcow2 with the release installed, built in the
-release flow beside the ISO; plan accepted in part (2026-10-29), tasks not started.
+[Renoir hardware cursor](https://git.internal/PyxisOS/pyxis-os/issues/1699): implementation remains
+parked pending latch/disable/fetch-retirement proof; only its read-only inventory
+is delivered. The [current route](../kernel/renoir-flip.md#hardware-cursor-status)
+uses software composition.
 
 [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
 [filesystems and namespaces](vfs.md): working drafts.
@@ -268,38 +169,9 @@ personality such as NT per space; revisit before a second loader or format.
 and [credentials and biometric unlock](credentials-and-biometrics.md), parked after
 local users.
 
-## Agreed boundaries
+## Boundaries and completion
 
-- Init performs setup and hands off to the shell. General service supervision
-  and restart policy remain deferred; remote terminal execution groups have the
-  explicit lifetime contract in their milestone. Start with a shebang shell
-  script, fail on script errors and use an explicit session launch; `exec` comes
-  later.
-- Userspace owns libc, libpyxis, libterm, startup and applications. Pyxis owns
-  the public ABI headers and toolchain integration, and assembles the SDK,
-  kernel and boot image.
-- Export headers, build runtime libraries, assemble the SDK, then build apps and
-  ports. Initially pin the new userspace/ports repositories as submodules.
-- The owner handles repository creation, dispatch integration and compiler
-  container publication. Ordinary builds consume the prebuilt compiler and
-  evolving SDK; they do not rebuild the toolchain.
-- Init mounts optional `host://` before launching the shell and passes the
-  selected directory grant to the session.
-
-## User and permission design checkpoint
-
-Multiple users with restricted permissions are a requirement. The
-[users and authority notes](users-and-authority.md) record stable principals,
-policy-based acquisition, runtime capabilities and prospective permission changes.
-They retain the unresolved enforcement and lifecycle decisions before persistent
-ownership is implemented. External login and account UI are separate work.
-The [credentials and biometric unlock direction](credentials-and-biometrics.md)
-is parked after local users; it adds no tasks to current milestones.
-
-## Completing a milestone
-
-Rewrite the completed milestone document around the implemented behavior and
-useful interface/usage guidance, then move it from `docs/wip` to `docs` and update
-links. Remove the planning history and completed checklist; the original remains
-in Git history. Carry forward relevant deferred work into another WIP document
-or a `debt` issue. Do not retain a duplicate archive of the old plan.
+Repository ownership and build order live in [SDK and repositories](../development/sdk-and-repositories.md).
+Follow [AGENTS.md](../../AGENTS.md) for task authorization and close-out: delivered
+contracts belong in subject references; residual limitations and native checks
+belong in labelled issues. Future directions do not authorize implementation.

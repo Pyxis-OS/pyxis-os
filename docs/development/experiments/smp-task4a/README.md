@@ -2,7 +2,7 @@
 
 Raw captures, transcripts, patches, scripts and screenshots once kept in this directory were removed from the tree; Git history keeps them at `d6733033`.
 
-Matched before/after record for [SMP task 4a](../../../wip/scheduling-and-threads.md),
+Matched before/after record for [SMP task 4a](../../../kernel/smp.md),
 recorded on 2026-10-05. These are nested-VM measurements: the development host is itself a
 KVM guest (Fedora 44, Linux 6.19.10, 8 vCPUs, virtualized i9-12900K) with
 `halt_poll_ns=200000`. They are not owner-host or ThinkPad results (the ThinkPad check is
