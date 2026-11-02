@@ -176,8 +176,7 @@ static enum call_status open_ram(uint64_t rights, uintptr_t request_address,
   if (!(rights & MOUNT_RIGHT_WRITE)) return CALL_DENIED;
   if (request_size != sizeof(open)) return CALL_BAD_REQUEST;
   if (!copy_from_user(&open, request_address, sizeof(open))) return CALL_BAD_BUFFER;
-  if (open.capacity < MOUNT_RAM_MIN_BYTES || open.capacity > MOUNT_RAM_MAX_BYTES ||
-      open.capacity % MOUNT_RAM_ALIGNMENT || !open.name_length ||
+  if (open.capacity % MOUNT_RAM_ALIGNMENT || !open.name_length ||
       open.name_length > MOUNT_VOLUME_NAME_MAX || (open.rights & ~DIRECTORY_RIGHTS) ||
       !(open.rights & DIRECTORY_RIGHT_LOOKUP)) return CALL_BAD_REQUEST;
   if ((open.rights & DIRECTORY_RIGHT_FILESYSTEM_INFO) && !(rights & MOUNT_RIGHT_OBSERVE))

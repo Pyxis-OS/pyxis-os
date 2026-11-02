@@ -44,6 +44,17 @@ property of a device, a format or the memory the machine has, and says so.
 Accepted by chronium on 2026-11-02. A creation default is not an admission limit
 for an existing installation, and changing it never resizes existing storage.
 
+- **Live npfs RAM pool: allocator RAM capacity**, rounded down to 4 KiB,
+  without a reserve fraction. Stock `ram_npfs_bytes = "auto"` and omission select
+  this mode; positive aligned numeric settings remain available. Allocator
+  capacity excludes permanent reservations, and is not currently free RAM or
+  installed hardware RAM. Logical capacity is sparse: metadata and touched pages
+  compete with programs, so writes can return `NO_MEMORY` before logical space
+  runs out. The chosen capacity and source are logged once at initialization;
+  filesystem information reports pool capacity and free space. There is no
+  64 GiB policy ceiling or chosen 8 MiB floor: the real layout must fit its
+  headers, bitmap, volume table, journal and initial root. Too-small layouts
+  return `LIMIT` before backing allocation. Capacity stays fixed until reboot.
 - **Classic ESP: 1 GiB** for a new install, at the existing 1 MiB offset. This
   gives staging and recovery more headroom at another 512 MiB of disk cost.
   Update uses the reviewed existing GPT extents, including older 512 MiB ESPs;
