@@ -536,16 +536,19 @@ all 240,000 requested PCM frames but included **58.667 ms of startup silence**
 after the first 21.33 ms of PCM. No zero-gap startup or latency promise follows.
 The [profiling report](../development/experiments/audio-task2/profiling.md) records
 BSP costs before/after notification gating and one clock snapshot per readiness
-scan. Sustained eight-session playback still fails closed in nested QEMU; the
-longer run failed its 1 ms WALCLK commit guard after **112.227 s** of output.
+scan. Sustained eight-session playback trips timing guards in nested QEMU; the
+longer run, measured 2026-10-09 before [timing recovery](#timing-recovery), failed
+its 1 ms WALCLK commit guard after **112.227 s** of output. Such a trip now
+restarts output with a counted discontinuity; no record shows whether long nested
+runs stay below the repeated-failure rule.
 A transient nested-host scheduling/VM-exit delay during a roughly 5–6 µs mix is
 the most likely cause, not a proven trace. This is a QEMU limitation, not the
 native result. [Task 5's QEMU record](../development/experiments/audio-task5/README.md)
 contains matched presenter measurements and regression evidence.
 
 [Technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1391)
-retains the QEMU limit, deferred batching, reboot-only failure recovery, startup
-and jack-switching limits. Eight periods remain starting tuning. SDL2 and Quake
+retains the QEMU limit, deferred batching, reboot-only recovery from engine
+failure, startup and jack-switching limits. Eight periods remain starting tuning. SDL2 and Quake
 adapters are separate consumer work: conversion/resampling stays in userspace;
 SDL2 needs real callback/thread execution under the
 [threads direction](../wip/scheduling-and-threads.md). Recording, HDMI/DP,

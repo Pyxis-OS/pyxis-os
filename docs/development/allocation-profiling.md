@@ -79,17 +79,18 @@ runs expose pool count/bytes acquired during the window; freeing libc blocks doe
 not release those pools. Existing pools and fragmentation are not inspected.
 
 Each private-memory operation that reaches the address space records three
-boundaries. After threads task 4, total is caller-scoped and service runs on BSP:
+boundaries. Total is caller-scoped and service runs on the caller CPU (see
+[VM ownership](../kernel/vm-ownership.md)):
 
 1. Syscall entry, before validation.
 2. Immediately before and after the address-space change: this interval is
    service.
 3. After the reply is copied, before the counters are updated.
 
-Service includes BSP output revalidation, private allocation bookkeeping, pages,
+Service includes output revalidation, private allocation bookkeeping, pages,
 zeroing, mappings and any kernel heap growth it causes. Total runs from syscall entry through reply
-copying, so total minus service includes validation/copying, deferred BSP
-handoff, any VM drainage, and caller resumption. It does not split those phases.
+copying, so total minus service includes validation/copying, VM transaction
+admission, any VM drainage, and caller resumption. It does not split those phases.
 Early validation failures before submission are not counted; admitted precommit
 refusals count as failures. No additional clock reads
 occur for unprofiled memory requests.

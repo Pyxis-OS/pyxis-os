@@ -188,8 +188,8 @@ threshold or pulling. Initial publication can spread four compute tasks over
 four cores, then a transient queued task can make the existing push consolidate
 compute onto siblings. Equal logical loads do not trigger a corrective move.
 The [core-placement measurements](../development/experiments/core-placement/README.md)
-record both initial placement and this observed limit; native ThinkPad timing
-confirmation remains owner-run.
+record both initial placement and this observed limit, and the owner's native
+ThinkPad timing confirmation on 2026-10-07.
 
 Only a user task outside a syscall moves. It is either new or was preempted in
 user mode, so its whole continuation is on its own kernel stack. Dispatch on the
@@ -857,7 +857,8 @@ Accepted limits are recorded in [technical debt](https://git.internal/PyxisOS/py
 - [extended timeout/retirement-race coverage](https://git.internal/PyxisOS/pyxis-os/issues/1601)
 - [historical IPC CALL residuals](https://git.internal/PyxisOS/pyxis-os/issues/1310)
 
-Placement is not topology-aware: SMT siblings count as separate CPUs.
+Topology breaks placement ties only; load balancing still counts SMT siblings
+as separate CPUs.
 
 ## Measurements
 

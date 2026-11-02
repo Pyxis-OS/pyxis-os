@@ -19,8 +19,9 @@ Accepted by the owner 2026-10-08:
   Without path-MTU discovery, a connection whose peer is reached through a
   gateway is capped at `TCP_ROUTED_MSS`, 536.
 - **Windows.** `NET_TCP_RECEIVE_BYTES` and `NET_TCP_SEND_BYTES` in
-  `include/kernel/net/tcp.h` are 65,535, the largest without window scaling.
-  lwIP's `TCP_SND_QUEUELEN` formula gives 180 pbufs at these values.
+  `include/kernel/net/tcp.h` were 65,535, the largest without window scaling.
+  lwIP's `TCP_SND_QUEUELEN` formula gives 180 pbufs at that send size. #1647
+  later added receive window scale 4; the send budget is still 65,535.
 - **Nagle off** on every connection. Native writes already hand lwIP up to
   4 KiB at once; with Nagle on, request/response framing waited for the
   peer's delayed ACK.
@@ -178,4 +179,5 @@ bytes in flight and gaps. It reads Ethernet and Linux cooked captures.
 [TCP throughput limits](https://git.internal/PyxisOS/pyxis-os/issues/1437) records the
 remaining per-segment and per-call send cost, the retransmission-timeout stall,
 the consumer-bound RAM-file receive and the clock reads per packet. Path-MTU
-discovery, window scaling, SACK and IPv6 were out of scope.
+discovery, window scaling, SACK and IPv6 were out of scope; receive window
+scaling later landed in #1647.

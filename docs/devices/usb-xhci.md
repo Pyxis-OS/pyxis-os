@@ -119,14 +119,16 @@ or logging. Event, command, DMA and class progress stay BSP-owned. See the
 
 ## Root-port and failure ownership
 
-The worker powers controllable ports, allows 20 ms after a power change and takes
-one startup connection snapshot. Recognized USB 2 ports are reset when required;
+The worker powers controllable ports, waits through the bounded
+[root-port settle](usb-enumeration.md#root-port-startup-boundary) of 100–400 ms
+whether or not a port-power write occurred, and takes one startup connection
+snapshot. Recognized USB 2 ports are reset when required;
 USB 3 ports use their enabled link state. Setup shares a thirty-second deadline.
 Connected unknown protocol versions remain explicitly unsupported. This snapshot
 has only been qualified in QEMU. There is no explicit USB 2 connect debounce
-before reset or startup link-settling wait when no port-power write occurred,
-including on controllers without port power control. A physical USB 3 link can
-still be initializing after controller reset and miss reservation for this boot.
+before reset; the settle extends only for active reset or USB 3 link training.
+A physical USB 3 link that trains beyond the settle cap can still miss
+reservation for this boot.
 See [qualification limits](https://git.internal/PyxisOS/pyxis-os/issues/1464).
 
 USB 2 root reset completion is followed by at least 10 ms of recovery before
