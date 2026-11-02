@@ -233,9 +233,33 @@ ring-zero software interrupt is not PCI/MSI or Intel register qualification;
 the diagnostic task is absent from product code. Native source review found
 no remaining queue/cancellation/record-lifetime defect.
 
-Normal boot starts no new worker and attaches no handler yet. The accepted bootstrap PCI
-resource handoff (decision7), requester-specific DMA admission and the concrete
-fork OAL/display consumer remain. Task2 stays unchecked until that integration.
+Normal boot starts no new worker and attaches no handler yet. The accepted
+bootstrap PCI handoff below follows this software foundation; task2 stays
+unchecked until the concrete OAL/display integration.
+
+### Task2: preserved-display PCI resources
+
+The native PCI path now exposes the explicit **claimed, display preserved**
+contract from decision7. It keeps inherited BME separate from driver DMA,
+restores assigned BARs/decoding after a quiet bootstrap sizing window, masks
+inherited interrupt delivery, and admits owned CPU mappings and masked IRQ
+preparation. Ordinary reset, cancellation/release and BAR reassignment remain
+separate. An incomplete handoff retains its record and blocks further setup.
+See [the PCI contract](../devices/pci.md#claimed-display-preserved).
+
+The `-j12` kernel build passed. Disposable QEMU controls passed VGA with BME off
+(1 vCPU), VGA with BME on (4 vCPUs), VirtIO-GPU with inherited MSI-X enabled
+(4 vCPUs), and the ordinary Bochs claim/size/map path with an explicit mode
+request (4 vCPUs). They checked BAR and command preservation, owned mappings,
+MSI-X masking/preparation, unchanged driver-DMA state, and refused reassignment.
+Constructor checks run before AP startup as required. Pure metadata controls
+cover the reference 32/64-bit, 1M/unknown and invalid-individual-resource cases.
+Temporary device setup and diagnostic entrypoints are not product code.
+
+Normal boot does not select this path yet. Native GOP continuity, real Intel
+interrupts and hardware-failure retention are unqualified. Power/decoding
+enablement, requester DMA admission and the concrete fork OAL/display consumer
+still belong to the remaining task2 integration; no eDP activation is claimed.
 
 ## Code retained and replaced
 
