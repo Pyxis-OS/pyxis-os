@@ -19,8 +19,6 @@
 #define PROCESS_VIEW_LIST UINT64_C(1)
 
 #define PROCESS_LIST_VERSION 1u
-/* At most this many reply bytes are produced per call, header included. */
-#define PROCESS_LIST_REPLY_MAX 65536u
 #define PROCESS_LIST_LABEL_MAX 32u
 #define PROCESS_LIST_SPACE_MAX 32u
 

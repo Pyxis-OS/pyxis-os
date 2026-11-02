@@ -31,8 +31,11 @@
 #define TERMINAL_INPUT_CAPACITY 4096
 #define TERMINAL_OUTPUT_CAPACITY 65536
 #define TERMINAL_TRANSFER_MAX 4096
-#define TERMINAL_COLUMNS_MAX 512
-#define TERMINAL_ROWS_MAX 256
+/* Each dimension is a POSIX `struct winsize` field (`unsigned short`), which libc
+ * reports to programs; that width is the only bound. The kernel stores two numbers;
+ * the cells are the multiplexer's memory. A larger request fails CALL_LIMIT. */
+#define TERMINAL_COLUMNS_MAX UINT64_C(65535)
+#define TERMINAL_ROWS_MAX UINT64_C(65535)
 #define TERMINAL_RECORD_DATA UINT64_C(1)
 #define TERMINAL_RECORD_FRESH_LINE UINT64_C(2)
 #define TERMINAL_RECORD_TAB_WIDTH UINT64_C(3)

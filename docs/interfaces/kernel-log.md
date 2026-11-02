@@ -82,7 +82,9 @@ the rows marked done.
   holds it, forwards it to each space's init, and a session handoff keeps it for
   the shell. Programs a shell launches inherit READ only. Nothing else writes,
   except the allocator's `LOG_PUTCHAR`.
-- **`LOG_WRITE`.** One call is one line: a level and up to 255 text bytes. Control
+- **`LOG_WRITE`.** One call is a level and up to 4,096 text bytes, logged as lines of
+  at most 255 bytes: a longer text continues on the next line and nothing is cut;
+  more than 4,096 bytes fails `CALL_LIMIT` and logs nothing. Control
   bytes other than tab are logged as `?`. The kernel stamps the caller's space, so
   the line reads `NAME: text`, the space's fixed name and `: `. The ring header
   carries the space's index (a record's `source`; 0 is the kernel), so readers

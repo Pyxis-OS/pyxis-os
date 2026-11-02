@@ -59,12 +59,12 @@ With `-r` a directory source is copied as a new tree. File operands behave as ab
   operands run after an ordinary failure; an unconfirmed outcome stops the command.
   Enumeration reporting CHANGED fails the operand and is not restarted, since a
   restart would revisit names already created. The copy is not a snapshot.
-- **Bounds:** 32 levels below the root, 65,536 entries per operand and names up to 255
-  bytes, cp settings rather than ABI. The pre-copy walk enforces them and rejects
-  symbolic links, special and unknown entries (reported, never followed or skipped), so
-  these failures normally leave nothing behind; the copy pass checks again because
-  enumeration is live. Traversal is iterative over a fixed stack of about 10 KiB with
-  no per-entry heap; traversal does not recurse on the native stack.
+- **Bounds:** no limit on entries or nesting depth; names up to 255 bytes. The pre-copy
+  walk rejects symbolic links, special and unknown entries (reported, never followed or
+  skipped), so these failures normally leave nothing behind; the copy pass checks again
+  because enumeration is live. Traversal is iterative over a level stack that grows on
+  the heap, two directory handles per level, and does not recurse on the native stack.
+  Running out of memory fails the operand and names the nesting level.
 - **Authority:** unchanged. Source directories need LOOKUP, ENUMERATE and READ_FILES;
   the destination needs the rights below, which created directories request again.
 - **Interruption:** killing cp during the pre-copy walk leaves the new empty root

@@ -190,3 +190,47 @@ libraries and hosted tools. Go's copied adapters and native linker are updated;
 Rust consumers relink through SDK/libc. See [program loading](../kernel/program-loading.md),
 [batch launch](processes.md#batch-launch), [native jobs](../userland/native-jobs.md)
 and the [diagnostic ABI](abi.md#limit-diagnostics) for ownership and error rules.
+
+## The remaining numbers
+
+The fifth package (work package 10).
+
+- **`cp -r`.** No entry count or nesting limit; the level stack grows on the heap.
+- **Shell completion.** No limit on command names or directory entries.
+- **HTTP request bodies.** A RAM staging upload has no fixed limit: a write is refused with
+  `CALL_LIMIT` when it would leave less than an eighth of total memory free (the `system_info`
+  report, because the RAM volume is memory shared with every other volume), and a log line names
+  the numbers. `--staging-cap` adds a fixed cap; NPFS staging is bounded by its backing.
+  A URL longer than 2,048 bytes (a split of the 4,096-byte request packet) is `CALL_LIMIT`.
+- **Process listing.** A call returns every record that exists; the kernel sizes its buffer to the
+  count it takes just before, and `procs` asks again with room for the reported total.
+- **Endpoint exports.** No count limit. Exports share one kernel budget, one 1,024th of RAM and at
+  least 4 MiB, and are found through a hash index. The 16 delivery records stay: a backpressure bound.
+- **Terminal geometry.** Up to 65,535 columns and rows, the width of the POSIX `winsize` fields.
+  The remote terminal protocol keeps its own 512 x 256.
+- **Log writes.** Text longer than 255 bytes continues on the next line; a call takes up to 4,096.
+
+## Limits that stay
+
+A number that is not removed above is a device or format field, a protocol width, a safety bound on
+what one process can make the kernel allocate, or an upstream default. Each is listed with its source
+so that the next audit starts from here. Rules 1 to 5 still apply: where a refusal can be known early
+it comes early, and it names what overflowed.
+
+| Limit | Value | Why it stays | Where |
+|---|---|---|---|
+| Endpoint delivery records | 16 per endpoint | Backpressure bound, `QUEUE_FULL` is retryable; each record embeds two 4 KiB buffers | `include/abi/endpoint.h` |
+| Readiness metadata | 16 MiB per process | Bounds kernel memory one process can pin; `INFO` reports ceiling and use (about 65,000 registrations) | `kernel/user/readiness_set.c` |
+| Native completion metadata | 16 MiB per process | Same, per process | `kernel/service/completion.c` |
+| Execution groups | depth 16, 256 per space | Admission policy, not ABI | `kernel/object/execution_group.c` |
+| JIT backing | 256 MiB, 4,096 regions per process | Initial per-process policy; moves with the memory work | `kernel/mm/private.c` |
+| File and I/O envelope | 4,096 bytes (reads 4,088, writes 4,080) | ABI envelope; large transfers use bulk paths | `include/abi/file.h` |
+| Shell `$(...)` capture | 64 MiB per value, 512 MiB per session | Reported ("too large to retain"); a file is the answer | `kernel/object/retention.c` |
+| USB admissions | 32 HID, 4 storage, 32 topology per controller | Lifetime budgets until recycling lands (debt #1293) | `kernel/usb/settings.h` |
+| Boot tables | 256 memory regions, 32 KiB EFI map, 64 GiB of RAM, 256 CPUs | Static arrays sized at build time; RAM above 64 GiB is ignored with a warning | `include/kernel/boot.h`, `kernel/mm/pmm.h` |
+| GPT, queue depths, redirects | 256 partitions, small device queues, 10 redirects | Format and tuning bounds | installer, drivers, `libhttp` |
+| NPFS and FAT32 layout | 64 volumes per pool, 255-byte names, 4 GiB - 1 per FAT32 file | On-disk formats | `fs/` |
+| USTAR | 8 GiB - 1 per file, 250-byte paths | The package archive format | `pkg/metadata.h` |
+| Wire fields | UDP 1,472, DNS names 255 / labels 63 / messages 512, TLS record 16,384 | Protocol widths | `include/abi/udp.h`, `common/dns.h` |
+| Hardware cursor | 64 px | Device plane | `kernel/display/virtio_gpu.c` |
+| Ports | LuaLS channel budgets, font and file-list arrays, Quake strings, `less` lines | Upstream defaults and tuning inside a port | `ports/` |

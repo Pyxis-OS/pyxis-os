@@ -23,7 +23,6 @@
 #define ENDPOINT_DATA_MAX 4096
 #define ENDPOINT_GRANTS_MAX 4
 #define ENDPOINT_DELIVERIES_MAX 16
-#define ENDPOINT_EXPORTS_MAX 64
 
 struct endpoint_grant {
   handle_t handle;

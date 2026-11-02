@@ -24,9 +24,26 @@ struct kernel_object *process_view_create(void)
   return object;
 }
 
+/* Records one listing would hold. Each space is its own pass, as in the listing. */
+static uint64_t count_records(struct space *only)
+{
+  uint64_t total = 0;
+  struct space *space = only ? only : space_caelum();
+  while (space) {
+    uint64_t space_total;
+    execution_group_list(space, NULL, 0, &space_total);
+    total += space_total;
+    space = only ? NULL : __atomic_load_n(&space->next, __ATOMIC_ACQUIRE);
+  }
+  return total;
+}
+
 /* ONLY lists one space; NULL lists every published space in registry order.
  * Each space is one consistent pass; the reply is copied out after all guards
- * drop. */
+ * drop. The record buffer is sized to what exists (counted just before), not to
+ * the caller's capacity: a caller that asks for more than there is gets no more
+ * memory allocated, and records created after the count are reported by `total`
+ * with PROCESS_LIST_TRUNCATED. */
 static struct syscall_result list_processes(struct space *only, uintptr_t reply_address,
     uint64_t reply_capacity)
 {
@@ -34,10 +51,10 @@ static struct syscall_result list_processes(struct space *only, uintptr_t reply_
   if (reply_capacity < sizeof(struct process_list_header)) {
     return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
   }
-  size_t bytes = reply_capacity > PROCESS_LIST_REPLY_MAX ? PROCESS_LIST_REPLY_MAX :
-      (size_t)reply_capacity;
-  size_t room = (bytes - sizeof(struct process_list_header)) /
+  uint64_t room_wanted = (reply_capacity - sizeof(struct process_list_header)) /
       sizeof(struct process_list_record);
+  uint64_t existing = count_records(only);
+  size_t room = room_wanted < existing ? (size_t)room_wanted : (size_t)existing;
   size_t used = sizeof(struct process_list_header) + room * sizeof(struct process_list_record);
   if (!user_buffer_check(reply_address, used, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};

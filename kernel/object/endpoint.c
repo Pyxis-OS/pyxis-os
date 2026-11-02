@@ -10,7 +10,9 @@
 #include <kernel/bulk.h>
 #include <kernel/completion.h>
 #include <kernel/memory.h>
+#include <kernel/log.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/pmm.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/object/describe.h>
 #include <kernel/object/file.h>
@@ -50,7 +52,7 @@ struct endpoint_export {
   struct kernel_object client;
   struct kernel_object storage;
   struct endpoint_state *endpoint;
-  struct endpoint_export *next;
+  struct endpoint_export *next, **previous, *hash_next;
   struct endpoint_description *description;
   uint64_t object_id, protocol, rights, transport;
   size_t in_flight, clients, caretakers;
@@ -97,7 +99,11 @@ struct endpoint_state {
   struct endpoint caller, receiver;
   struct endpoint_delivery_record deliveries[ENDPOINT_DELIVERIES_MAX];
   struct endpoint_delivery_record *head, *tail;
-  struct endpoint_export *exports;
+  /* Every export is in the list and in a hash chain keyed by object ID. The index
+   * grows before an export is linked, never while the lock is held for more than a
+   * rehash of the existing chains. */
+  struct endpoint_export *exports, **export_buckets;
+  size_t export_bucket_count, retire_pending_count;
   struct endpoint_description *released_descriptions;
   size_t export_count;
   struct task_wait *waiting_receiver;
@@ -138,10 +144,8 @@ static uint64_t receiver_events(struct endpoint_state *state)
       return WAIT_READABLE;
     }
   }
-  for (struct endpoint_export *export = state->exports; export; export = export->next) {
-    if (export->retire_pending) {
-      return WAIT_READABLE;
-    }
+  if (state->retire_pending_count) {
+    return WAIT_READABLE;
   }
   return 0;
 }
@@ -295,6 +299,7 @@ static void retire_export(struct endpoint_export *export)
       (export->withdrawn || !export->client_live) &&
       !export->retire_pending && !export->retire_delivered) {
     export->retire_pending = true;
+    ++export->endpoint->retire_pending_count;
     wake_waiter(&export->endpoint->waiting_receiver);
   }
 }
@@ -306,9 +311,12 @@ static void destroy_endpoint_storage(struct kernel_object *object)
   if (state->execution_group) {
     object_release(&state->execution_group->object);
   }
+  kfree(state->export_buckets);
   memzero_explicit(state, sizeof(*state));
   kfree(state);
 }
+
+static void uncharge_export(void);
 
 static void destroy_export_storage(struct kernel_object *object)
 {
@@ -320,6 +328,7 @@ static void destroy_export_storage(struct kernel_object *object)
   bool destroy = --state->storage_references == 0;
   unlock_endpoint(state);
   kfree(export);
+  uncharge_export();
   if (destroy) {
     object_release(&state->storage);
   }
@@ -841,9 +850,16 @@ static void close_endpoint(struct endpoint_state *state)
   struct endpoint_export *export = state->exports;
   state->exports = NULL;
   state->export_count = 0;
+  state->retire_pending_count = 0;
+  if (state->export_bucket_count) {
+    memset(state->export_buckets, 0,
+        state->export_bucket_count * sizeof(*state->export_buckets));
+  }
   while (export) {
     struct endpoint_export *next = export->next;
     export->next = NULL;
+    export->previous = NULL;
+    export->hash_next = NULL;
     export->linked = false;
     export->withdrawn = true;
     export->retire_pending = false;
@@ -1019,14 +1035,144 @@ static enum call_status endpoint_create(struct endpoint_create_request *request)
   return grant_status(result);
 }
 
+static size_t export_bucket(uint64_t id, size_t bucket_count)
+{
+  return (size_t)((id * UINT64_C(0x9e3779b97f4a7c15)) >> 40) & (bucket_count - 1);
+}
+
 static struct endpoint_export *find_export(struct endpoint_state *state, uint64_t id)
 {
-  for (struct endpoint_export *export = state->exports; export; export = export->next) {
+  if (!state->export_bucket_count) {
+    return NULL;
+  }
+  for (struct endpoint_export *export =
+           state->export_buckets[export_bucket(id, state->export_bucket_count)];
+       export; export = export->hash_next) {
     if (export->object_id == id) {
       return export;
     }
   }
   return NULL;
+}
+
+/* Exports are metadata the receiver's process makes the kernel hold, so they
+ * share one budget: one ENDPOINT_EXPORT_BUDGET_RAM_DIVISOR-th of installed RAM,
+ * at least ENDPOINT_EXPORT_BUDGET_MIN_BYTES. Each export is charged its record
+ * and its share of the index. */
+#define ENDPOINT_EXPORT_BUDGET_MIN_BYTES ((size_t)4 * 1024 * 1024)
+#define ENDPOINT_EXPORT_BUDGET_RAM_DIVISOR 1024
+#define ENDPOINT_EXPORT_BUCKETS_MIN 16
+#define ENDPOINT_EXPORT_CHARGE (sizeof(struct endpoint_export) + 2 * sizeof(void *))
+
+static atomic_size_t export_bytes;
+static atomic_bool export_limit_logged;
+
+static size_t export_budget(void)
+{
+  uint64_t share = (uint64_t)pmm_get_stats().total_frames * PAGE_SIZE /
+      ENDPOINT_EXPORT_BUDGET_RAM_DIVISOR;
+  return share > ENDPOINT_EXPORT_BUDGET_MIN_BYTES ? (size_t)share :
+      ENDPOINT_EXPORT_BUDGET_MIN_BYTES;
+}
+
+static bool charge_export(void)
+{
+  size_t budget = export_budget();
+  size_t used = atomic_load_explicit(&export_bytes, memory_order_relaxed);
+  do {
+    if (used > budget || ENDPOINT_EXPORT_CHARGE > budget - used) {
+      if (!atomic_exchange_explicit(&export_limit_logged, true, memory_order_relaxed)) {
+        kwarn("endpoint: exports use %zu of %zu bytes of the export budget (one "
+            "%u-th of installed RAM, at least %zu); refusing further exports\n",
+            used, budget, (unsigned)ENDPOINT_EXPORT_BUDGET_RAM_DIVISOR,
+            ENDPOINT_EXPORT_BUDGET_MIN_BYTES);
+      }
+      return false;
+    }
+  } while (!atomic_compare_exchange_weak_explicit(&export_bytes, &used,
+      used + ENDPOINT_EXPORT_CHARGE, memory_order_relaxed, memory_order_relaxed));
+  return true;
+}
+
+static void uncharge_export(void)
+{
+  size_t before = atomic_fetch_sub_explicit(&export_bytes, ENDPOINT_EXPORT_CHARGE,
+      memory_order_relaxed);
+  KASSERT(before >= ENDPOINT_EXPORT_CHARGE);
+}
+
+/* Keeps chains short (at most two exports per bucket on average). The new table is
+ * allocated with no lock held; only the move of the existing exports is under it,
+ * bounded by the export budget. Called before a link, so linking cannot fail on it. */
+static enum call_status reserve_export_index(struct endpoint_state *state)
+{
+  for (;;) {
+    lock_endpoint(state);
+    size_t have = state->export_bucket_count, wanted = have ? have : ENDPOINT_EXPORT_BUCKETS_MIN;
+    while (state->export_count + 1 > wanted * 2) {
+      wanted *= 2;
+    }
+    unlock_endpoint(state);
+    if (have >= wanted && have) {
+      return CALL_OK;
+    }
+    struct endpoint_export **buckets = kmalloc(wanted * sizeof(*buckets));
+    if (!buckets) {
+      return CALL_NO_MEMORY;
+    }
+    memset(buckets, 0, wanted * sizeof(*buckets));
+    lock_endpoint(state);
+    if (state->export_bucket_count >= wanted) {
+      unlock_endpoint(state);
+      kfree(buckets);
+      continue;
+    }
+    for (struct endpoint_export *export = state->exports; export; export = export->next) {
+      size_t bucket = export_bucket(export->object_id, wanted);
+      export->hash_next = buckets[bucket];
+      buckets[bucket] = export;
+    }
+    struct endpoint_export **old = state->export_buckets;
+    state->export_buckets = buckets;
+    state->export_bucket_count = wanted;
+    unlock_endpoint(state);
+    kfree(old);
+  }
+}
+
+static void link_export(struct endpoint_state *state, struct endpoint_export *export)
+{
+  export->next = state->exports;
+  export->previous = &state->exports;
+  if (state->exports) {
+    state->exports->previous = &export->next;
+  }
+  state->exports = export;
+  if (state->export_bucket_count) {
+    size_t bucket = export_bucket(export->object_id, state->export_bucket_count);
+    export->hash_next = state->export_buckets[bucket];
+    state->export_buckets[bucket] = export;
+  }
+  ++state->export_count;
+}
+
+static void unlink_export(struct endpoint_state *state, struct endpoint_export *export)
+{
+  *export->previous = export->next;
+  if (export->next) {
+    export->next->previous = export->previous;
+  }
+  export->next = NULL;
+  export->previous = NULL;
+  struct endpoint_export **link =
+      &state->export_buckets[export_bucket(export->object_id, state->export_bucket_count)];
+  while (*link != export) {
+    KASSERT(*link);
+    link = &(*link)->hash_next;
+  }
+  *link = export->hash_next;
+  export->hash_next = NULL;
+  --state->export_count;
 }
 
 
@@ -1225,14 +1371,20 @@ static enum call_status endpoint_export_create(struct endpoint_export_request *r
   struct endpoint_state *state = receiver->state;
   lock_endpoint(state);
   enum call_status status = state->closed ? CALL_ENDPOINT_CLOSED :
-      find_export(state, input->object_id) ? CALL_ALREADY_EXISTS :
-      state->export_count == ENDPOINT_EXPORTS_MAX ? CALL_LIMIT : CALL_OK;
+      find_export(state, input->object_id) ? CALL_ALREADY_EXISTS : CALL_OK;
   unlock_endpoint(state);
+  if (status == CALL_OK) {
+    status = reserve_export_index(state);
+  }
+  if (status == CALL_OK && !charge_export()) {
+    status = CALL_LIMIT;
+  }
   if (status != CALL_OK) {
     return status;
   }
   struct endpoint_export *export = kmalloc(sizeof(*export));
   if (!export) {
+    uncharge_export();
     return CALL_NO_MEMORY;
   }
   memset(export, 0, sizeof(*export));
@@ -1266,12 +1418,9 @@ static enum call_status endpoint_export_create(struct endpoint_export_request *r
     lock_endpoint(state);
     status = state->closed ? CALL_ENDPOINT_CLOSED :
         find_export(state, input->object_id) ? CALL_ALREADY_EXISTS :
-        state->export_count == ENDPOINT_EXPORTS_MAX ? CALL_LIMIT :
         !task_operation_start() ? CALL_DENIED : CALL_OK;
     if (status == CALL_OK) {
-      export->next = state->exports;
-      state->exports = export;
-      ++state->export_count;
+      link_export(state, export);
       export->linked = true;
       handle_t handles[2];
       capability_install_reserved(&request->reservation, request->slots, grants, 2, handles);
@@ -1420,16 +1569,10 @@ static struct syscall_result acknowledge_export(struct endpoint *receiver,
     end_endpoint_update(state, ready_before);
     return (struct syscall_result){CALL_BUSY, 0};
   }
-  struct endpoint_export **link = &state->exports;
-  while (*link != export) {
-    link = &(*link)->next;
-  }
-  *link = export->next;
-  export->next = NULL;
+  unlink_export(state, export);
   export->linked = false;
   export->withdrawn = true;
   defer_description(export);
-  --state->export_count;
   end_endpoint_update(state, ready_before);
   object_release(&export->storage);
   return (struct syscall_result){CALL_OK, 0};
@@ -2262,7 +2405,8 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
       capability_reservation_release(&reservation, slots);
       return write_packet(reply_address, &output, NULL, CALL_OK);
     }
-    for (struct endpoint_export *export = state->exports; export; export = export->next) {
+    for (struct endpoint_export *export = state->retire_pending_count ? state->exports : NULL;
+         export; export = export->next) {
       if (export->retire_pending) {
         enum call_status status = ordinary_receive_output(reply_address, reply_capacity);
         if (status != CALL_OK) {
@@ -2278,6 +2422,7 @@ static struct syscall_result receive_endpoint_owned(struct endpoint *endpoint,
         struct packet_header output = {.kind = ENDPOINT_MESSAGE_RETIRE,
           .object_id = export->object_id, .protocol = export->protocol};
         export->retire_pending = false;
+        --state->retire_pending_count;
         export->retire_delivered = true;
         end_endpoint_update(state, ready_before);
         capability_reservation_release(&reservation, slots);

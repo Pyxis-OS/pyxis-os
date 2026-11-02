@@ -11,8 +11,10 @@
 #define LOG_WRITE UINT64_C(3)
 #define LOG_STREAM UINT64_C(4)
 #define LOG_READ_MAX UINT64_C(1024)
-/* Longest text of one written line; a longer write is cut at this length. */
+/* Longest text of one logged line; a longer write continues on the next line. */
 #define LOG_WRITE_MAX UINT64_C(255)
+/* Most text one LOG_WRITE call accepts: one 4 KiB message, about sixteen lines. */
+#define LOG_WRITE_CALL_MAX UINT64_C(4096)
 /* A space may write this many lines per second, with this burst. Lines beyond
  * it are dropped and the kernel logs one warning per second counting them. */
 #define LOG_RATE_LINES_PER_SECOND UINT64_C(1000)
@@ -81,10 +83,12 @@ struct log_record {
   uint8_t source;
 };
 
-/* LOG_WRITE needs LOG_RIGHT_WRITE. One call is one line: level (enum log_level)
- * and up to LOG_WRITE_MAX text bytes at address. Control bytes other than tab are
- * logged as '?'; the kernel stamps the caller's space, whatever the text says. A
- * line beyond the space's rate is dropped and still returns success.
+/* LOG_WRITE needs LOG_RIGHT_WRITE. One call logs level (enum log_level) and up to
+ * LOG_WRITE_CALL_MAX text bytes at address, as lines of at most LOG_WRITE_MAX bytes
+ * (a longer text continues on the next line, nothing is cut; more than
+ * LOG_WRITE_CALL_MAX fails CALL_LIMIT and logs nothing). Control bytes other than
+ * tab are logged as '?'; the kernel stamps the caller's space, whatever the text
+ * says. A line beyond the space's rate is dropped and still returns success.
  * No reply. */
 struct log_write_request {
   struct message_header header;
