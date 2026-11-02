@@ -98,7 +98,7 @@ struct xhci_bulk {
   size_t requested, actual;
   enum control_state state;
   enum usb_result result;
-  bool configured;
+  bool configured, cancelling;
 };
 enum interrupt_receive_state { INTERRUPT_FREE, INTERRUPT_POSTED, INTERRUPT_HELD };
 struct xhci_interrupt_receive {
@@ -1466,7 +1466,8 @@ static void mark_device_retiring(struct usb_host_device *device)
     device->request.state = CONTROL_HELD;
     device->request.result = USB_IO;
   }
-  if (device->bulk && (device->bulk->state == CONTROL_ACTIVE || device->bulk->state == CONTROL_HALTED)) {
+  if (device->bulk && (device->bulk->state == CONTROL_ACTIVE || device->bulk->state == CONTROL_EXPIRED ||
+                       device->bulk->state == CONTROL_HALTED)) {
     device->bulk->state = CONTROL_HELD;
     device->bulk->result = USB_IO;
   }
@@ -1853,7 +1854,7 @@ static bool consume_bulk(struct usb_host_controller *controller, struct usb_host
                          unsigned endpoint, const struct xhci_trb *event)
 {
   struct xhci_bulk *bulk = device->bulk;
-  if (!bulk || (bulk->state != CONTROL_ACTIVE &&
+  if (!bulk || (bulk->state != CONTROL_ACTIVE && bulk->state != CONTROL_EXPIRED &&
                !(device->retiring && bulk->state == CONTROL_HELD)) || !bulk->active ||
       endpoint != bulk->active->dci || event->parameter != bulk->trb) {
     controller->failure = "unowned bulk transfer event";
@@ -1882,13 +1883,18 @@ static bool consume_bulk(struct usb_host_controller *controller, struct usb_host
     bulk->state = CONTROL_HALTED;
     return true;
   }
-  bulk->result = USB_IO;
-  bulk->state = CONTROL_HELD;
   if (residue <= bulk->requested &&
       (completion == XHCI_EVENT_TRANSACTION_ERROR || completion == XHCI_EVENT_BABBLE)) {
-    mark_subtree_retiring(device);
+    /* Both halt the endpoint. As in Linux, the class driver sees a transport
+     * error and its reset recovery clears the halt (usb-storage: BOT reset). */
+    bulk->actual = bulk->requested - residue;
+    bulk->result = USB_IO;
+    bulk->active->halted = true;
+    bulk->state = CONTROL_HALTED;
     return true;
   }
+  bulk->result = USB_IO;
+  bulk->state = CONTROL_HELD;
   controller->failure = "failed or invalid bulk transfer completion";
   return false;
 }
@@ -1957,7 +1963,10 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
     device->stopped_trb = event->parameter;
     return true;
   }
-  if (stopped && endpoint == XHCI_ENDPOINT_ZERO && device->request.cancelling &&
+  bool cancelling = endpoint == XHCI_ENDPOINT_ZERO ? device->request.cancelling :
+    device->bulk && device->bulk->cancelling && device->bulk->active &&
+    endpoint == device->bulk->active->dci;
+  if (stopped && cancelling &&
       controller->command.pending && controller->command.type == XHCI_TRB_STOP_ENDPOINT &&
       controller->command.slot == slot) {
     /* The cancelled TD stopped in place; cancellation moves the dequeue past it. */
@@ -3780,6 +3789,53 @@ static void expire_control(struct usb_host_device *device)
   }
 }
 
+/* A timed-out bulk TD is cancelled as Linux's xhci_urb_dequeue does: stop the
+ * endpoint, release a split transaction's TT buffer and move the dequeue
+ * pointer past the TD, so the captured buffer can be reused. A TD that
+ * completed or halted before the stop keeps its result. */
+static enum usb_result cancel_bulk(struct usb_host_device *device,
+    struct xhci_bulk_endpoint *endpoint, uint64_t deadline)
+{
+  struct usb_host_controller *controller = device->controller;
+  struct xhci_bulk *bulk = device->bulk;
+  if (!device_ready(device)) {
+    return USB_IO;
+  }
+  if (!controller_healthy(controller) || !drain_events(controller)) {
+    stop_controller(controller);
+    return USB_IO;
+  }
+  if (bulk->state != CONTROL_EXPIRED) {
+    return USB_OK;
+  }
+  dma_read_barrier();
+  const uint32_t *context = output_endpoint(device, endpoint->dci);
+  if ((context[0] & XHCI_ENDPOINT_STATE_MASK) == XHCI_ENDPOINT_STATE_RUNNING) {
+    bulk->cancelling = true;
+    bool stopped = endpoint_command(device, XHCI_TRB_STOP_ENDPOINT, endpoint->dci, 0, deadline);
+    bulk->cancelling = false;
+    if (!stopped) {
+      controller->failure = "bulk cancellation stop failed";
+      return USB_IO;
+    }
+  }
+  if (bulk->state != CONTROL_EXPIRED) {
+    return USB_OK;
+  }
+  dma_read_barrier();
+  if ((context[0] & XHCI_ENDPOINT_STATE_MASK) != XHCI_ENDPOINT_STATE_STOPPED ||
+      !clear_tt(device, endpoint->descriptor.address, false, deadline) ||
+      !endpoint_command(device, XHCI_TRB_SET_DEQUEUE, endpoint->dci,
+                         (endpoint->ring.physical + endpoint->enqueue * XHCI_TRB_BYTES) |
+                         (endpoint->cycle ? XHCI_TRB_CYCLE : 0), deadline)) {
+    controller->failure = "bulk cancellation dequeue failed";
+    return USB_IO;
+  }
+  bulk->result = USB_TIMEOUT;
+  bulk->state = CONTROL_IDLE;
+  return USB_OK;
+}
+
 size_t usb_host_interrupt_capacity(void)
 {
   return USB_INTERRUPT_BYTES;
@@ -4640,11 +4696,17 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
       break;
     }
     if (timed_out) {
-      mark_subtree_retiring(device);
+      bulk->state = CONTROL_EXPIRED;
       break;
     }
     uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
     wait_activity(controller, poll < deadline ? poll : deadline);
+  }
+  /* Only a failed cancellation leaves the endpoint in an unknown state; that,
+   * and only that, retires the device. */
+  if (bulk->state == CONTROL_EXPIRED &&
+      cancel_bulk(device, endpoint, task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS)) != USB_OK) {
+    mark_subtree_retiring(device);
   }
   if (device_identity_held(device) && !controller->ports[device->port].identity_hold) {
     usb_hub_resolve_identity(controller->discovery, device, deadline);
@@ -4652,7 +4714,7 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
   if (!device_ready(device) || device_identity_held(device)) {
     return USB_IO;
   }
-  enum usb_result result = timed_out ? USB_TIMEOUT : bulk->result;
+  enum usb_result result = bulk->result;
   if (bulk->state == CONTROL_DONE) {
     if (inbound) {
       dma_read_barrier();
