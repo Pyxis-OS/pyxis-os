@@ -362,9 +362,11 @@ struct syscall_result terminal_service_call(uint64_t rights, uint64_t operation,
       !user_buffer_check(reply_address, sizeof(struct terminal_create_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (!input.columns || input.columns > TERMINAL_COLUMNS_MAX ||
-      !input.rows || input.rows > TERMINAL_ROWS_MAX) {
+  if (!input.columns || !input.rows) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (input.columns > TERMINAL_COLUMNS_MAX || input.rows > TERMINAL_ROWS_MAX) {
+    return (struct syscall_result){CALL_LIMIT, 0};
   }
   struct capability_reservation reservation;
   struct capability_reserved_slot slots[4];
@@ -1079,9 +1081,11 @@ static struct syscall_result attachment_resize(struct terminal_session *session,
   if (!copy_from_user(&request.columns, request_address, payload_size)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (!request.columns || request.columns > TERMINAL_COLUMNS_MAX ||
-      !request.rows || request.rows > TERMINAL_ROWS_MAX) {
+  if (!request.columns || !request.rows) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (request.columns > TERMINAL_COLUMNS_MAX || request.rows > TERMINAL_ROWS_MAX) {
+    return (struct syscall_result){CALL_LIMIT, 0};
   }
   enum call_status status = CALL_OK;
   bool changed = false;

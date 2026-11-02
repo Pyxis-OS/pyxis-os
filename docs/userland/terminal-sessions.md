@@ -15,7 +15,8 @@ handle, or no handles on failure. The normal session launcher does not delegate
 the service. An opted-in local multiplexer receives CREATE separately through trusted
 startup. An opted-in remote daemon retains CREATE and brokers terminal creation
 for mux; remote mux and its pane shells receive no creation service. Creation
-accepts 1–512 columns and 1–256 rows. Allocation and
+accepts 1–65,535 columns and 1–65,535 rows (the POSIX `winsize` field width); a larger
+request fails `CALL_LIMIT`, zero fails `CALL_BAD_REQUEST`. Allocation and
 failure unwinding remain BSP-owned.
 
 The application input handle permits CONSOLE READ and SIZE, plus

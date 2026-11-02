@@ -97,8 +97,9 @@ Split admission uses the current geometry snapshot, independently of cached
 render buffers. An empty outer view retains sessions and defers presentation.
 Visible panes receive [session resize](terminal-sessions.md#resize), with the
 existing SIZE generation and RESIZED event. Apps that observe resize redraw;
-other apps retain their own existing behavior. The presentation uses at most
-512 columns and 258 rows, reflecting the native session bounds plus headings.
+other apps retain their own existing behavior. The presentation uses the whole
+outer view; a pane is bounded by the native session geometry (65,535 columns and rows)
+and by memory.
 
 Remote mux observes host character-window changes within 512×256. Explicit
 host-client dimensions are ceilings; tiny windows clip the retained panes and
