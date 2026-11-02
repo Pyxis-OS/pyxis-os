@@ -167,4 +167,13 @@ struct syscall_result forwarder_create_call(uintptr_t request, uintptr_t reply,
 struct syscall_result forwarder_controller_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t request, size_t size);
 
+enum call_status forwarder_resolve_with_limit(struct kernel_object *object,
+    uint64_t rights, uint64_t transport, struct forwarder_operation *operation,
+    struct capability_reference *target, struct call_limit *detail);
+enum capability_result forwarder_snapshot_with_limit(struct kernel_object *object,
+    struct kernel_object **target, uint64_t *restrictions, struct call_limit *detail);
+
+enum capability_result forwarder_derive_grant_with_limit(struct capability_grant *grant,
+    const struct forwarder_operation *lineage, struct call_limit *detail);
+
 #endif

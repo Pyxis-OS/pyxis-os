@@ -9,6 +9,8 @@
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/mm/heap.h>
+#include <kernel/limit.h>
+#include <kernel/object/environment.h>
 #include <kernel/mm/kernel_owner.h>
 #include <kernel/memory.h>
 #include <kernel/object/file.h>
@@ -23,6 +25,11 @@
 #include <kernel/user_memory.h>
 
 #include "launcher_internal.h"
+
+struct launch_capture_block {
+  struct launch_capture_block *next;
+  _Alignas(uint64_t) unsigned char data[];
+};
 
 struct launcher {
   struct kernel_object object;
@@ -65,7 +72,8 @@ static void destroy_launcher(struct kernel_object *object)
   kfree(object);
 }
 
-static struct kernel_object *create_launcher(struct execution_group *group)
+static struct kernel_object *create_launcher(struct execution_group *group,
+    struct call_limit *detail)
 {
   KASSERT(arch_cpu_index() == 0);
   struct launcher *launcher = kmalloc(sizeof(*launcher));
@@ -73,6 +81,7 @@ static struct kernel_object *create_launcher(struct execution_group *group)
     return NULL;
   }
   if (group && !object_retain(&group->object)) {
+    call_limit_reference(detail);
     kfree(launcher);
     return NULL;
   }
@@ -83,7 +92,7 @@ static struct kernel_object *create_launcher(struct execution_group *group)
 
 struct kernel_object *launcher_create(void)
 {
-  return create_launcher(NULL);
+  return create_launcher(NULL, NULL);
 }
 
 static void create_execution_group(struct launcher_request *request)
@@ -92,12 +101,15 @@ static void create_execution_group(struct launcher_request *request)
   KASSERT(parent);
   request->result = CALL_NO_MEMORY;
   struct execution_group *group;
-  request->result = execution_group_create(parent->space, request->execution_group, &group);
+  request->result = execution_group_create(parent->space, request->execution_group, &group, &request->limit);
   if (request->result != CALL_OK) {
     return;
   }
   request->result = CALL_NO_MEMORY;
-  struct kernel_object *launcher = create_launcher(group);
+  struct kernel_object *launcher = create_launcher(group, &request->limit);
+  if (!launcher && request->limit.reason) {
+    request->result = CALL_LIMIT;
+  }
   if (launcher) {
     struct capability_grant grants[2] = {0};
     enum capability_result result = capability_grant_retain(&group->object,
@@ -106,10 +118,10 @@ static void create_execution_group(struct launcher_request *request)
       result = capability_grant_retain(launcher, LAUNCHER_RIGHT_LAUNCH, 0, &grants[1]);
     }
     if (result == CAP_OK) {
-      result = forwarder_derive_grant(&grants[0], task_forwarder_operation());
+      result = forwarder_derive_grant_with_limit(&grants[0], task_forwarder_operation(), &request->limit);
     }
     if (result == CAP_OK) {
-      result = forwarder_derive_grant(&grants[1], task_forwarder_operation());
+      result = forwarder_derive_grant_with_limit(&grants[1], task_forwarder_operation(), &request->limit);
     }
     if (result == CAP_OK) {
       result = capability_validate_grants(&parent->capabilities, grants, 2);
@@ -123,7 +135,9 @@ static void create_execution_group(struct launcher_request *request)
         request->execution_reply = (struct execution_group_create_reply){handles[0], handles[1]};
       }
     } else {
-      request->result = result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
+      request->result = result == CAP_LIMIT ?
+          (request->limit.reason ? CALL_LIMIT : call_limit_reference(&request->limit)) :
+          result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_DENIED;
     }
     for (size_t i = 0; i < 2; ++i) {
       capability_grant_release(&grants[i]);
@@ -142,8 +156,18 @@ static void discard_capture(struct launch_capture *capture)
     capability_grant_release(&capture->owned_grants[i]);
   }
   kfree(capture->owned_grants);
+  kfree(capture->startup_storage.buffer);
+  kfree(capture->space_entries);
+  while (capture->blocks) {
+    struct launch_capture_block *block = capture->blocks;
+    capture->blocks = block->next;
+    kfree(block);
+  }
   image_capture_release(&capture->captured_image);
   if (capture->image) {
+    if (capture->image_operation) {
+      file_end_operation(capture->image);
+    }
     object_release(&capture->image->object);
   }
   kfree(capture);
@@ -225,7 +249,7 @@ void launcher_request_execute(struct launcher_request *request)
   case LAUNCH_CAPTURE_RAM:
     KASSERT(request->capture && !request->parent);
     request->result = file_ram_capture(request->capture->image,
-        &request->capture->captured_image);
+        &request->capture->captured_image, &request->capture->limit);
     file_end_operation(request->capture->image);
     break;
   case LAUNCH_CREATE_SPACE:
@@ -236,7 +260,7 @@ void launcher_request_execute(struct launcher_request *request)
     KASSERT(request->capture && request->capture->prepared_child);
     request->result = launcher_install_space_devices(request->capture->prepared_child,
         request->capture->target_space, &request->capture->startup,
-        &request->capture->space_entries);
+        &request->capture->space_entries, &request->capture->limit);
     break;
   case LAUNCH_SPACE_FINISH:
     KASSERT(request->capture && request->capture->target_space);
@@ -327,7 +351,7 @@ static void discard_launch_capture(struct launch_capture *capture)
 
 static enum call_status launch_process(struct launch_capture *capture,
     struct execution_group *execution_group, struct capability_reservation *reservation,
-    struct capability_reserved_slot *slots, handle_t *child)
+    struct capability_reserved_slot *slots, handle_t *child, struct call_limit *detail)
 {
   task_vm_kernel_enter();
   struct execution_group *previous = object_cleanup_enter(execution_group ?
@@ -335,13 +359,10 @@ static enum call_status launch_process(struct launch_capture *capture,
   enum call_status status;
   if (task_operation_start()) {
     status = launcher_start(capture, process_current(), arch_cpu_index(), execution_group,
-        reservation, slots, child);
+        reservation, slots, child, detail);
   } else {
     *child = HANDLE_INVALID;
     status = CALL_DENIED;
-    if (capture->image->backing == FILE_INITRD) {
-      file_end_operation(capture->image);
-    }
   }
   capability_reservation_release(reservation, slots);
   discard_capture(capture);
@@ -350,30 +371,27 @@ static enum call_status launch_process(struct launch_capture *capture,
   return status;
 }
 
-static struct launch_preparation *create_launch_batch(void)
-{
-  return launcher_batch_create();
-}
-
 static enum call_status prepare_launch_batch(struct launch_preparation *group,
-    struct launch_capture *capture, struct execution_group *execution_group)
+    struct launch_capture *capture, struct execution_group *execution_group,
+    struct call_limit *detail)
 {
   task_vm_kernel_enter();
   struct execution_group *previous = object_cleanup_enter(execution_group ?
       execution_group : task_cleanup_group());
   enum call_status status = launcher_batch_prepare(group, capture, process_current(),
-      arch_cpu_index(), execution_group);
+      arch_cpu_index(), execution_group, detail);
   discard_capture(capture);
   object_cleanup_leave(previous);
   task_vm_kernel_leave();
   return status;
 }
 
-static enum call_status publish_launch_batch(struct launch_preparation *group, handle_t *children)
+static enum call_status publish_launch_batch(struct launch_preparation *group, handle_t *children,
+    struct call_limit *detail)
 {
   task_vm_kernel_enter();
   enum call_status status = task_operation_start() ?
-      launcher_batch_publish(group, children) : CALL_DENIED;
+      launcher_batch_publish(group, children, detail) : CALL_DENIED;
   launcher_batch_discard(group);
   task_vm_kernel_leave();
   return status;
@@ -386,45 +404,146 @@ static void discard_launch_batch(struct launch_preparation *group)
   task_vm_kernel_leave();
 }
 
-/* Arrays use at most 8-byte alignment. All pointer/count arithmetic is bounded
- * by this one capture budget before user addresses are indexed. */
+static void *capture_allocate(struct launch_capture *capture, size_t bytes)
+{
+  if (capture->error != CALL_OK || !bytes) {
+    return NULL;
+  }
+  if (bytes > SIZE_MAX - sizeof(struct launch_capture_block)) {
+    capture->error = call_limit_encoding(&capture->limit);
+    return NULL;
+  }
+  struct launch_capture_block *block = kmalloc(sizeof(*block) + bytes);
+  if (!block) {
+    capture->error = CALL_NO_MEMORY;
+    return NULL;
+  }
+  block->next = capture->blocks;
+  capture->blocks = block;
+  return block->data;
+}
+
+/* Each input byte is copied once, without retaining a mapping lease across an
+ * allocation or a bounded-work yield. Published capture pointers never move. */
 void *launcher_capture_array(struct launch_capture *capture, uintptr_t address,
     size_t count, size_t item_size)
 {
   if (!count || capture->error != CALL_OK) {
     return NULL;
   }
-  size_t offset = (capture->used + 7) & ~(size_t)7;
-  if (offset > sizeof(capture->data) ||
-      count > (sizeof(capture->data) - offset) / item_size) {
-    capture->error = CALL_BAD_REQUEST;
+  if (!item_size || count > SIZE_MAX / item_size) {
+    capture->error = call_limit_encoding(&capture->limit);
     return NULL;
   }
   size_t bytes = count * item_size;
-  void *array = capture->data + offset;
-  if (!copy_from_user(array, address, bytes)) {
+  if (bytes > UINTPTR_MAX - address) {
     capture->error = CALL_BAD_BUFFER;
     return NULL;
   }
-  capture->used = offset + bytes;
+  uint8_t *array = capture_allocate(capture, bytes);
+  if (!array) {
+    return NULL;
+  }
+  for (size_t offset = 0; offset < bytes;) {
+    size_t step = bytes - offset;
+    if (step > PAGE_SIZE) {
+      step = PAGE_SIZE;
+    }
+    if (!copy_from_user(array + offset, address + offset, step)) {
+      capture->error = CALL_BAD_BUFFER;
+      return NULL;
+    }
+    offset += step;
+    if (!(offset % (64 * PAGE_SIZE))) {
+      task_yield_masked();
+    }
+  }
   return array;
 }
 
-static const char *capture_string(struct launch_capture *capture, uintptr_t address)
+static bool measure_user_string(struct launch_capture *capture, uintptr_t source,
+    size_t *length)
+{
+  *length = 0;
+  for (size_t pages = 0;; ++pages) {
+    if (*length > UINTPTR_MAX - source) {
+      capture->error = CALL_BAD_BUFFER;
+      return false;
+    }
+    uintptr_t address = source + *length;
+    size_t bytes = PAGE_SIZE - (address & (PAGE_SIZE - 1));
+    struct user_buffer_lease lease;
+    if (!user_buffer_lease_acquire(&lease)) {
+      capture->error = CALL_BAD_BUFFER;
+      return false;
+    }
+    bool valid = user_buffer_check_leased(&lease, address, bytes, USER_BUFFER_READ);
+    size_t step = 0;
+    if (valid) {
+      while (step < bytes && ((const char *)address)[step]) {
+        ++step;
+      }
+    }
+    user_buffer_lease_release(&lease);
+    if (!valid) {
+      capture->error = CALL_BAD_BUFFER;
+      return false;
+    }
+    if (*length > SIZE_MAX - step - (step < bytes ? 1 : 0)) {
+      capture->error = call_limit_encoding(&capture->limit);
+      return false;
+    }
+    *length += step;
+    if (step < bytes) {
+      ++*length;
+      return true;
+    }
+    if ((pages + 1) % 64 == 0) {
+      task_yield_masked();
+    }
+  }
+}
+
+static const char *capture_string(struct launch_capture *capture, uintptr_t source)
 {
   if (capture->error != CALL_OK) {
     return NULL;
   }
-  char *text = (char *)capture->data + capture->used;
-  size_t remaining = sizeof(capture->data) - capture->used;
-  size_t copied;
-  enum user_string_result result = copy_string_from_user(text, address, remaining, &copied);
-  if (result != USER_STRING_OK) {
-    capture->error = result == USER_STRING_BAD_BUFFER ? CALL_BAD_BUFFER : CALL_BAD_REQUEST;
+  size_t length;
+  if (!measure_user_string(capture, source, &length)) {
     return NULL;
   }
-  capture->used += copied;
-  return text;
+  char *text = capture_allocate(capture, length);
+  if (!text) {
+    return NULL;
+  }
+  for (size_t offset = 0, pages = 0; offset < length; ++pages) {
+    size_t step = PAGE_SIZE - ((source + offset) & (PAGE_SIZE - 1));
+    if (step > length - offset) {
+      step = length - offset;
+    }
+    size_t copied;
+    enum user_string_result result = copy_string_from_user(text + offset,
+        source + offset, step, &copied);
+    if (result == USER_STRING_BAD_BUFFER) {
+      capture->error = CALL_BAD_BUFFER;
+      return NULL;
+    }
+    if (result == USER_STRING_OK) {
+      if (offset + copied != length) {
+        capture->error = CALL_BAD_REQUEST;
+        return NULL;
+      }
+      return text;
+    }
+    offset += step;
+    if ((pages + 1) % 64 == 0) {
+      task_yield_masked();
+    }
+  }
+  /* The input grew after measurement. No partial string becomes usable. */
+  capture->error = CALL_BAD_REQUEST;
+  return NULL;
 }
 
 static struct process_environment_entry *capture_entries(struct launch_capture *capture,
@@ -466,8 +585,8 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
       sizeof(*capture->grants));
   for (size_t i = 0; i < capture->grant_count && capture->error == CALL_OK; ++i) {
     const struct launch_grant *grant = &capture->grants[i];
-    enum capability_result status = capability_grant_acquire(&process_current()->capabilities,
-        grant->source, grant->rights, grant->transport, &capture->owned_grants[i]);
+    enum capability_result status = capability_grant_acquire_with_limit(&process_current()->capabilities,
+        grant->source, grant->rights, grant->transport, &capture->owned_grants[i], &capture->limit);
     if (status != CAP_OK) {
       capture->error = status == CAP_LIMIT ? CALL_LIMIT :
           status == CAP_BAD_HANDLE ? CALL_BAD_HANDLE :
@@ -481,7 +600,9 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
   startup->working_directories = launcher_capture_array(capture, source->working_directories,
       source->working_directory_count, sizeof(handle_t));
   for (size_t i = 0; i < source->working_directory_count && capture->error == CALL_OK; ++i) {
-    if (startup->working_directories[i] >= source->grant_count) {
+    size_t index = startup->working_directories[i];
+    if (index >= source->grant_count ||
+        object_effective_type(capture->owned_grants[index].object) != OBJECT_DIRECTORY) {
       capture->error = CALL_BAD_REQUEST;
     }
   }
@@ -497,25 +618,36 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
   }
 }
 
-enum call_status launcher_capture_request(const struct launch_request *request,
-    struct launch_capture **result)
+enum call_status launcher_capture_metadata(const struct launch_request *request,
+    struct launch_capture **result, struct call_limit *detail)
 {
   *result = NULL;
-  if (request->grant_count > LAUNCH_CAPTURE_MAX_SIZE / sizeof(struct launch_grant)) {
-    return CALL_BAD_REQUEST;
+  enum call_status policy = environment_seed_admit(request->entry_count, 0, detail);
+  if (policy != CALL_OK) {
+    return policy;
   }
   size_t initial_stack_bytes;
-  if (user_initial_stack_size(request->initial_stack_bytes, &initial_stack_bytes) != MM_OK) {
-    return CALL_BAD_REQUEST;
+  enum call_status admitted = user_initial_stack_size(request->initial_stack_bytes,
+      &initial_stack_bytes, detail);
+  if (admitted != CALL_OK) {
+    return admitted;
+  }
+  if (capability_count_admit(request->grant_count, detail) != CAP_OK) {
+    return CALL_LIMIT;
+  }
+  size_t per_grant = sizeof(struct capability_grant) +
+      sizeof(struct capability_reserved_slot) + sizeof(handle_t);
+  if (request->grant_count > SIZE_MAX / per_grant) {
+    return call_limit_encoding(detail);
   }
   struct capability_reference image;
-  enum capability_result lookup = capability_acquire(&process_current()->capabilities,
-      request->image, FILE_RIGHT_READ, 0, &image);
+  enum capability_result lookup = capability_acquire_with_limit(&process_current()->capabilities,
+      request->image, FILE_RIGHT_READ, 0, &image, detail);
   if (lookup != CAP_OK) {
     return lookup == CAP_LIMIT ? CALL_LIMIT :
         lookup == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
   }
-  lookup = capability_reference_resolve(&image);
+  lookup = capability_reference_resolve_with_limit(&image, detail);
   if (lookup != CAP_OK) {
     capability_release(&image);
     return lookup == CAP_LIMIT ? CALL_LIMIT : lookup == CAP_NOT_FOUND ? CALL_NOT_FOUND : CALL_DENIED;
@@ -530,7 +662,7 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     capability_release(&image);
     return CALL_NO_MEMORY;
   }
-  uint64_t image_rights = image.rights;
+  capture->image_rights = image.rights;
   capture->image = (struct file_object *)image.object;
   image.object = NULL;
   capability_release(&image);
@@ -540,23 +672,44 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     return CALL_ENDPOINT_CLOSED;
   }
   capture_startup(capture, request);
+  if (capture->error == CALL_OK) {
+    capture->error = process_startup_measure(&capture->startup,
+        &capture->startup_storage, &capture->limit);
+  }
+  if (capture->error == CALL_OK) {
+    size_t bytes = capture->startup_storage.metadata + capture->startup_storage.arguments;
+    capture->startup_storage.buffer = kmalloc(bytes);
+    if (!capture->startup_storage.buffer) {
+      capture->error = CALL_NO_MEMORY;
+    }
+  }
   if (capture->error != CALL_OK) {
     enum call_status error = capture->error;
+    if (detail) {
+      *detail = capture->limit;
+    }
     discard_launch_capture(capture);
     return error;
   }
+  *result = capture;
+  return CALL_OK;
+}
+
+enum call_status launcher_capture_image(struct launch_capture *capture)
+{
+  KASSERT(capture->image && !capture->image_operation && !capture->captured_image.address);
   if (capture->image->backing == FILE_NPFS || capture->image->backing == FILE_FAT32) {
     struct npfs_request *pending = npfs_request_prepare(NPFS_CAPTURE);
     pending->job.node = capture->image->npfs;
     pending->job.fat_node = capture->image->fat32;
-    pending->job.rights = image_rights;
+    pending->job.rights = capture->image_rights;
     npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
+    capture->limit = pending->job.limit;
     capture->captured_image = pending->job.captured;
     pending->job.captured = (struct image_capture){0};
     npfs_request_release(pending);
     if (status != CALL_OK) {
-      discard_launch_capture(capture);
       return status;
     }
   } else if (capture->image->backing == FILE_HOST) {
@@ -565,37 +718,47 @@ enum call_status launcher_capture_request(const struct launch_request *request,
     hostfs_request_submit_and_wait(pending);
     if (pending->status != CALL_OK) {
       enum call_status error = pending->status;
+      capture->limit = pending->limit;
       hostfs_request_release(pending);
-      discard_launch_capture(capture);
       return error;
     }
     capture->captured_image = pending->captured;
     pending->captured = (struct image_capture){0};
     hostfs_request_release(pending);
   } else if (!file_begin_operation(capture->image)) {
-    discard_launch_capture(capture);
     return CALL_ENDPOINT_CLOSED;
   } else if (capture->image->backing == FILE_RAM) {
+    capture->image_operation = true;
     /* Lend the stable file operation. Copy and mapping access stay on the BSP. */
     struct launcher_request *pending = request_launch_service(LAUNCH_CAPTURE_RAM,
         capture, NULL);
     enum call_status status = pending->result;
+    capture->image_operation = false;
     bsp_request_release(&pending->request);
     if (status != CALL_OK) {
-      discard_launch_capture(capture);
       return status;
     }
+  } else {
+    capture->image_operation = true;
   }
-  if (task_stop_requested()) {
-    if (capture->image->backing == FILE_INITRD) {
-      file_end_operation(capture->image);
-    }
-    discard_launch_capture(capture);
-    return CALL_ENDPOINT_CLOSED;
-  }
+  return task_stop_requested() ? CALL_ENDPOINT_CLOSED : CALL_OK;
+}
 
-  *result = capture;
-  return CALL_OK;
+enum call_status launcher_capture_request(const struct launch_request *request,
+    struct launch_capture **result, struct call_limit *detail)
+{
+  enum call_status status = launcher_capture_metadata(request, result, detail);
+  if (status == CALL_OK) {
+    status = launcher_capture_image(*result);
+    if (status != CALL_OK) {
+      if (detail) {
+        *detail = (*result)->limit;
+      }
+      discard_launch_capture(*result);
+      *result = NULL;
+    }
+  }
+  return status;
 }
 
 struct launch_capture *launcher_capture_empty(void)
@@ -605,13 +768,11 @@ struct launch_capture *launcher_capture_empty(void)
 
 void launcher_capture_discard(struct launch_capture *capture)
 {
-  if (capture->image && capture->image->backing == FILE_INITRD) {
-    file_end_operation(capture->image);
-  }
   discard_launch_capture(capture);
 }
 
-enum call_status launcher_submit_space(struct launch_capture *capture, handle_t *child)
+enum call_status launcher_submit_space(struct launch_capture *capture, handle_t *child,
+    struct call_limit *detail)
 {
   *child = HANDLE_INVALID;
   struct capability_reservation reservation = {0};
@@ -620,7 +781,8 @@ enum call_status launcher_submit_space(struct launch_capture *capture, handle_t 
     enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
     if (reserved != CAP_OK) {
       launcher_capture_discard(capture);
-      return reserved == CAP_LIMIT ? CALL_LIMIT : CALL_NO_MEMORY;
+      return reserved == CAP_LIMIT ? call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING,
+          0, UINT64_C(1) << 32, CALL_LIMIT_HAS_LIMIT) : CALL_NO_MEMORY;
     }
   }
   if (task_stop_requested()) {
@@ -634,14 +796,15 @@ enum call_status launcher_submit_space(struct launch_capture *capture, handle_t 
   enum call_status status = request->result;
   bsp_request_release(&request->request);
   if (status == CALL_OK && capture->image) {
-    status = launcher_prepare_space(capture, process_current(), &reservation, &slot, child);
+    status = launcher_prepare_space(capture, process_current(), &reservation, &slot, child, detail);
     capture->space_status = status;
     request = request_launch_service(LAUNCH_SPACE_FINISH, capture, NULL);
     bsp_request_release(&request->request);
-  } else if (capture->image && capture->image->backing == FILE_INITRD) {
-    file_end_operation(capture->image);
   }
   capability_reservation_release(&reservation, &slot);
+  if (status == CALL_LIMIT && detail && !detail->reason) {
+    *detail = capture->limit;
+  }
   discard_capture(capture);
   task_vm_kernel_leave();
   return status;
@@ -651,7 +814,7 @@ enum call_status launcher_request_space_devices(struct launch_capture *capture,
     struct process *child, struct process_startup *startup,
     struct process_environment_entry **entries)
 {
-  KASSERT(task_vm_kernel_active() && !capture->prepared_child && !capture->space_entries);
+  KASSERT(task_vm_kernel_active() && !capture->prepared_child && capture->space_entries);
   process_prepare_require(child);
   capture->prepared_child = child;
   capture->startup = *startup;
@@ -668,7 +831,7 @@ enum call_status launcher_request_space_devices(struct launch_capture *capture,
 
 static struct syscall_result launch_one(struct execution_group *execution_group,
     uintptr_t request_address, size_t request_size,
-                                        uintptr_t reply_address, size_t reply_capacity)
+                                        uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
   struct launch_request request;
   if (request_size != sizeof(request) || reply_capacity < sizeof(handle_t)) {
@@ -683,14 +846,15 @@ static struct syscall_result launch_one(struct execution_group *execution_group,
   struct capability_reserved_slot slot;
   enum capability_result reserved = capability_request_reservation(1, &reservation, &slot);
   if (reserved != CAP_OK) {
-    return (struct syscall_result){reserved == CAP_LIMIT ? CALL_LIMIT : CALL_NO_MEMORY, 0};
+    return (struct syscall_result){reserved == CAP_LIMIT ? call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING,
+        0, UINT64_C(1) << 32, CALL_LIMIT_HAS_LIMIT) : CALL_NO_MEMORY, 0};
   }
   if (task_stop_requested()) {
     capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
   }
   struct launch_capture *capture;
-  enum call_status status = launcher_capture_request(&request, &capture);
+  enum call_status status = launcher_capture_request(&request, &capture, detail);
   if (status != CALL_OK) {
     capability_reservation_release(&reservation, &slot);
     return (struct syscall_result){status, 0};
@@ -699,7 +863,7 @@ static struct syscall_result launch_one(struct execution_group *execution_group,
   /* Captured grants and the observer reservation survive source CLOSE and waits.
    * The stable image operation ends before child publication. */
   handle_t child;
-  status = launch_process(capture, execution_group, &reservation, &slot, &child);
+  status = launch_process(capture, execution_group, &reservation, &slot, &child, detail);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -709,79 +873,175 @@ static struct syscall_result launch_one(struct execution_group *execution_group,
   return (struct syscall_result){CALL_OK, sizeof(child)};
 }
 
-static struct syscall_result batch_reply(uintptr_t address,
-    const struct launch_batch_reply *reply, enum call_status status)
+static struct syscall_result batch_failure(uintptr_t address, size_t count,
+    uint64_t failed_index, enum call_status status)
 {
-  if (!copy_returned_handles_to_user(address, reply, sizeof(*reply),
-      reply->children, LAUNCH_BATCH_MAX)) {
+  struct launch_batch_reply header = {.failed_index = failed_index};
+  if (!copy_to_user(address, &header, sizeof(header))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  return (struct syscall_result){status, sizeof(*reply)};
+  handle_t empty[64] = {0};
+  for (size_t offset = 0; offset < count;) {
+    size_t step = count - offset;
+    if (step > sizeof(empty) / sizeof(empty[0])) {
+      step = sizeof(empty) / sizeof(empty[0]);
+    }
+    if (!copy_to_user(address + sizeof(header) + offset * sizeof(handle_t),
+        empty, step * sizeof(handle_t))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    offset += step;
+    if (!(offset % (64 * 64))) {
+      task_yield_masked();
+    }
+  }
+  return (struct syscall_result){status, sizeof(header) + count * sizeof(handle_t)};
 }
 
 static struct syscall_result launch_batch(struct execution_group *execution_group,
     uintptr_t request_address, size_t request_size,
-                                          uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
-  if (reply_capacity < sizeof(struct launch_batch_reply) ||
-      !user_buffer_check(reply_address, sizeof(struct launch_batch_reply), USER_BUFFER_WRITE)) {
+  size_t header_bytes = sizeof(struct launch_batch_reply);
+  if (reply_capacity < header_bytes) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
+  if (!user_buffer_check(reply_address, header_bytes, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-
-  struct launch_batch_reply reply = {.failed_index = LAUNCH_NO_STAGE};
   if (request_size != sizeof(struct launch_batch_request)) {
-    return batch_reply(reply_address, &reply, CALL_BAD_REQUEST);
+    return batch_failure(reply_address, 0, LAUNCH_NO_STAGE, CALL_BAD_REQUEST);
   }
   struct launch_batch_request batch;
   if (!copy_from_user(&batch, request_address, sizeof(batch))) {
-    return batch_reply(reply_address, &reply, CALL_BAD_BUFFER);
+    return batch_failure(reply_address, 0, LAUNCH_NO_STAGE, CALL_BAD_BUFFER);
   }
-  if (!batch.count || batch.count > LAUNCH_BATCH_MAX) {
-    return batch_reply(reply_address, &reply, CALL_BAD_REQUEST);
+  if (!batch.count) {
+    return batch_failure(reply_address, 0, LAUNCH_NO_STAGE, CALL_BAD_REQUEST);
+  }
+  if (batch.count > (SIZE_MAX - header_bytes) / sizeof(handle_t) ||
+      batch.count > SIZE_MAX / sizeof(struct launch_request) ||
+      batch.count > SIZE_MAX / sizeof(struct launch_capture *)) {
+    return batch_failure(reply_address, 0, LAUNCH_NO_STAGE, call_limit_encoding(detail));
+  }
+  if (capability_count_admit(batch.count, detail) != CAP_OK) {
+    return batch_failure(reply_address, 0, LAUNCH_NO_STAGE, CALL_LIMIT);
+  }
+  size_t reply_bytes = header_bytes + batch.count * sizeof(handle_t);
+  if (reply_capacity < reply_bytes) {
+    return (struct syscall_result){CALL_BUFFER_TOO_SMALL, 0};
+  }
+  if (!user_buffer_check(reply_address, reply_bytes, USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  struct launch_request requests[LAUNCH_BATCH_MAX];
-  if (!copy_from_user(requests, batch.requests,
-      batch.count * sizeof(*requests))) {
-    return batch_reply(reply_address, &reply, CALL_BAD_BUFFER);
+  struct launch_batch_reply *reply = kmalloc(reply_bytes);
+  struct launch_capture **captures = kmalloc(batch.count * sizeof(*captures));
+  struct launch_capture *request_owner = allocate_launch_capture(0);
+  enum call_status status = CALL_NO_MEMORY;
+  uint64_t failed_index = LAUNCH_NO_STAGE;
+  struct launch_preparation *group = NULL;
+  size_t captured = 0;
+  if (!reply || !captures || !request_owner) {
+    goto done;
   }
-
-  struct launch_preparation *group = create_launch_batch();
+  memset(reply, 0, reply_bytes);
+  reply->failed_index = LAUNCH_NO_STAGE;
+  struct launch_request *requests = launcher_capture_array(request_owner, batch.requests,
+      batch.count, sizeof(*requests));
+  if (!requests) {
+    status = request_owner->error;
+    if (detail) {
+      *detail = request_owner->limit;
+    }
+    goto done;
+  }
+  group = launcher_batch_create(batch.count, &status, detail);
   if (!group) {
-    return batch_reply(reply_address, &reply, CALL_NO_MEMORY);
+    goto done;
   }
-
-  enum capability_result reserved = launcher_batch_reserve(group, batch.count);
-  if (reserved != CAP_OK) {
-    discard_launch_batch(group);
-    return batch_reply(reply_address, &reply,
-        reserved == CAP_LIMIT ? CALL_LIMIT : CALL_NO_MEMORY);
+  /* Every stage's owned metadata and serialization scratch exists before the
+   * first source payload is read. Never hold multiple FILE operations. */
+  for (; captured < batch.count; ++captured) {
+    status = launcher_capture_metadata(&requests[captured], &captures[captured], detail);
+    if (status != CALL_OK) {
+      failed_index = captured;
+      goto done;
+    }
   }
-  if (task_stop_requested()) {
-    discard_launch_batch(group);
-    return batch_reply(reply_address, &reply, CALL_ENDPOINT_CLOSED);
+  status = launcher_batch_reserve(group, batch.count, detail);
+  if (status != CALL_OK) {
+    goto done;
   }
   for (size_t i = 0; i < batch.count; ++i) {
-    struct launch_capture *capture;
-    enum call_status status = launcher_capture_request(&requests[i], &capture);
+    if (task_stop_requested()) {
+      status = CALL_ENDPOINT_CLOSED;
+    } else {
+      status = launcher_capture_image(captures[i]);
+    }
     if (status == CALL_OK) {
-      /* Preparation releases this stage's image operation before the next stage
-       * acquires one, including repeated reads of the same file object. */
-      status = prepare_launch_batch(group, capture, execution_group);
+      struct launch_capture *capture = captures[i];
+      captures[i] = NULL;
+      status = prepare_launch_batch(group, capture, execution_group, detail);
+    } else if (detail) {
+      *detail = captures[i]->limit;
     }
     if (status != CALL_OK) {
-      reply.failed_index = i;
-      discard_launch_batch(group);
-      return batch_reply(reply_address, &reply, status);
+      failed_index = i;
+      goto done;
     }
   }
+  status = publish_launch_batch(group, reply->children, detail);
+  group = NULL;
+  if (status == CALL_OK) {
+    reply->child_count = batch.count;
+    struct syscall_result result = {CALL_OK, reply_bytes};
+    for (size_t offset = 0; offset < batch.count;) {
+      size_t step = batch.count - offset;
+      if (step > 64) {
+        step = 64;
+      }
+      if (!copy_to_user(reply_address + header_bytes + offset * sizeof(handle_t),
+          reply->children + offset, step * sizeof(handle_t))) {
+        result = (struct syscall_result){CALL_BAD_BUFFER, 0};
+        break;
+      }
+      offset += step;
+      if (offset < batch.count && !(offset % (64 * 64))) {
+        task_yield_masked();
+      }
+    }
+    if (result.status == CALL_OK && !copy_to_user(reply_address, reply, header_bytes)) {
+      result = (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (result.status != CALL_OK) {
+      capability_close_returned(&process_current()->capabilities, reply->children, batch.count);
+    }
+    discard_launch_capture(request_owner);
+    kfree(captures);
+    kfree(reply);
+    return result;
+  }
 
-  enum call_status status = publish_launch_batch(group, reply.children);
-  return batch_reply(reply_address, &reply, status);
+done:
+  if (group) {
+    discard_launch_batch(group);
+  }
+  for (size_t i = 0; i < captured; ++i) {
+    if (captures[i]) {
+      launcher_capture_discard(captures[i]);
+    }
+  }
+  if (request_owner) {
+    discard_launch_capture(request_owner);
+  }
+  kfree(captures);
+  kfree(reply);
+  return batch_failure(reply_address, batch.count, failed_index, status);
 }
 
 static struct syscall_result create_group(struct execution_group *parent_group, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
   if (request_size || reply_capacity < sizeof(struct execution_group_create_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -793,7 +1053,8 @@ static struct syscall_result create_group(struct execution_group *parent_group, 
   struct capability_reserved_slot slots[2];
   enum capability_result reserved = capability_request_reservation(2, &reservation, slots);
   if (reserved != CAP_OK) {
-    return (struct syscall_result){reserved == CAP_LIMIT ? CALL_LIMIT : CALL_NO_MEMORY, 0};
+    return (struct syscall_result){reserved == CAP_LIMIT ? call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING,
+        0, UINT64_C(1) << 32, CALL_LIMIT_HAS_LIMIT) : CALL_NO_MEMORY, 0};
   }
   if (task_stop_requested()) {
     capability_reservation_release(&reservation, slots);
@@ -802,6 +1063,9 @@ static struct syscall_result create_group(struct execution_group *parent_group, 
   struct launcher_request *request = request_launch_service_reserved(
       LAUNCH_CREATE_EXECUTION_GROUP, NULL, parent_group, &reservation, slots);
   enum call_status status = request->result;
+  if (status == CALL_LIMIT && detail) {
+    *detail = request->limit;
+  }
   struct execution_group_create_reply reply = request->execution_reply;
   bsp_request_release(&request->request);
   if (status != CALL_OK) {
@@ -816,7 +1080,7 @@ static struct syscall_result create_group(struct execution_group *parent_group, 
 
 struct syscall_result launcher_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
   struct process *parent = process_current();
   struct execution_group *group = launcher_execution_group(object);
@@ -833,7 +1097,7 @@ struct syscall_result launcher_call(struct kernel_object *object, uint64_t right
   if (group && group->space != parent->space) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  enum call_status status = execution_group_launch_begin(group, parent->space);
+  enum call_status status = execution_group_launch_begin(group, parent->space, detail);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -841,14 +1105,14 @@ struct syscall_result launcher_call(struct kernel_object *object, uint64_t right
    * preparation starts. Its cleanup must join this launcher's scope too. */
   struct execution_group *previous = object_cleanup_enter(group ? group : task_cleanup_group());
   if (operation == LAUNCHER_CREATE_GROUP) {
-    struct syscall_result result = create_group(group, request_size, reply_address, reply_capacity);
+    struct syscall_result result = create_group(group, request_size, reply_address, reply_capacity, detail);
     object_cleanup_leave(previous);
     execution_group_launch_end(group);
     return result;
   }
   struct syscall_result result = operation == LAUNCHER_LAUNCH_BATCH ?
-      launch_batch(group, request_address, request_size, reply_address, reply_capacity) :
-      launch_one(group, request_address, request_size, reply_address, reply_capacity);
+      launch_batch(group, request_address, request_size, reply_address, reply_capacity, detail) :
+      launch_one(group, request_address, request_size, reply_address, reply_capacity, detail);
   object_cleanup_leave(previous);
   execution_group_launch_end(group);
   return result;

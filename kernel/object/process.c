@@ -116,6 +116,7 @@ void process_control_complete(struct process_control *control, struct process_re
     task_wait_wake(wait);
   }
   unlock_control(control);
+  readiness_source_notify(&control->readiness);
   readiness_notify();
 }
 

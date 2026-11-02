@@ -100,3 +100,40 @@ entire stock index before filtering ABI offers. A new field or unsupported ABI
 syntax there could prevent an old client from reaching its checkpoint. See
 [package upgrades](../userland/package-upgrades.md#sparse-development-repositories)
 for the sparse repository and recorded-origin flow.
+
+## Limit diagnostics
+
+Accepted on 2026-10-30: CALL_LIMIT is the common limit refusal. The optional
+32-byte `call_limit` record in [limit.h](../../include/abi/limit.h) names the
+quantity and limiting source, with requested/maximum values when known. Flags
+identify valid numeric fields and saturated request arithmetic. Kernel pointers
+and formatted strings never cross this interface. Unknown numeric quantities
+are omitted, not fabricated as zero. The SDK formatter produces
+`<what>: <N> exceeds the limit of <M> (<source>)` when both values are known.
+
+Status-returning syscalls take a nullable diagnostic address in R9 (argument six).
+A nonzero range must be writable and disjoint from ordinary request/reply ranges;
+it is validated before dispatch and revalidated when copied out. Only CALL_LIMIT
+writes it. Other results leave it untouched, so callers initialize it before each
+call. Successful operations acquire no new failure from a diagnostic write.
+RAX remains status and RDX ordinary reply bytes; syscall_result remains 16 bytes.
+There is no sticky last-error state, TLS getter or extra authority. Unknown calls,
+log output and terminal exit/start-failure calls do not interpret the pointer.
+
+Launcher admission preserves explicit detail through preparation and cleanup,
+including environment, handle/reference and group refusals. Other pre-existing
+limit producers may return reason NONE until their own audit work package
+migrates them; this is not a claim that every refusal already has full detail.
+Actual memory exhaustion remains CALL_NO_MEMORY. Libc maps CALL_LIMIT to E2BIG;
+operation-specific fd-table EMFILE and thread-creation EAGAIN mappings remain.
+
+The coordinated WP3 ABI break changes the R9 convention, startup_info to an
+88-byte record with 64-bit version/size, variable-size batch replies and libc
+pipeline result views. Rebuild the kernel, SDK and every program/port, including
+Go's copied raw adapters. Rust uses SDK/libc wrappers and must relink. The Go
+prefix rebuild includes its native linker. LLVM's native Pyxis process adapter
+also uses the changed job API: rebuild the native LLVM development libraries
+and hosted tools against the matching SDK, including prebuilt target libraries
+distributed in a compiler image. The Linux cross-compiler uses its Unix adapter
+and needs no semantic change. No old-layout reader or fake release tag is used.
+Automatic main stack growth remains deferred.

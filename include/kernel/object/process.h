@@ -6,6 +6,7 @@
 #include <kernel/object/object.h>
 #include <kernel/service/request.h>
 #include <kernel/wait.h>
+#include <kernel/user/readiness_source.h>
 
 struct process;
 struct process_interrupt;
@@ -17,6 +18,7 @@ struct process_control {
   struct kernel_object object;
   atomic_bool locked;
   bool complete;
+  struct readiness_source readiness;
   struct process_result result;
   struct task_wait_link *waiters;
   struct process *process;

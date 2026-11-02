@@ -1815,7 +1815,7 @@ static enum call_status data_operation(struct npfs_job *job, struct fat32_mount 
     if (status != CALL_OK) {
       return status;
     }
-    status = image_capture_allocate_wait(entry.file_bytes, &job->captured);
+    status = image_capture_allocate_wait(entry.file_bytes, &job->captured, &job->limit);
     if (status != CALL_OK) {
       return status;
     }

@@ -19,8 +19,9 @@ property of a device, a format or the memory the machine has, and says so.
 3. **One status.** A size or count refusal is `CALL_LIMIT`, with a reason. No
    second status (`BAD_REQUEST`, `FILE_TOO_LARGE`, `IO`) stands for the same
    thing, and no new `E2BIG` status is added: libc maps `CALL_LIMIT` to `E2BIG`
-   where POSIX callers need it. The reason field is defined with the launcher
-   work that introduces it; until then the reason travels as text.
+   where POSIX callers need it. The launcher work defines the
+   [structured reason ABI](abi.md#limit-diagnostics); producers migrate in
+   their own work packages, retaining existing text diagnostics meanwhile.
 4. **Name the overflow.** The message says what overflowed, by how much and
    where the limit comes from:
    `<what>: <N> exceeds the limit of <M> (<source>)`.
@@ -123,3 +124,30 @@ The fourth package (work package 8, on top of the receive window of #1647).
 Not changed here: the send budget (65,535 bytes), the out-of-order buffer (16 segments) and the
 32-packet software budget. They need a latency and loss rig that the QEMU user network does not
 provide; see [the experiment record](../development/experiments/network-sizing.md).
+
+## Launcher capacity
+
+Chronium accepted WP3.1–WP3.7 on 2026-10-30. Launch metadata and startup mappings
+are measured from the request; executable snapshots follow the actual file size.
+The 64 KiB capture/startup, 128 MiB serialized-image, 256 MiB virtual-span and
+eight-child batch ceilings are removed. Batch replies and kernel, shell, libc
+and Lua stage storage are variable-size; scalable waits use existing readiness
+sets. Physical allocation failure stays CALL_NO_MEMORY. P1F layout, address
+encoding, capability authority and atomic child publication remain enforced.
+
+The default main stack remains 1 MiB with eager backing. Explicit positive
+page-aligned stacks are bounded by their actual stack/guard address layout,
+without the former 1–8 MiB policy. **Automatic growth is deferred**: runtime
+stack exhaustion can still fault, and fault handlers gain no VM authority.
+Environment-table, group and readiness admission policies remain separate;
+known launcher refusals name that owner and preserve their quantities. This does
+not claim the rest of the audit is complete or change those remaining policies.
+
+The reason carrier is a nullable 32-byte numeric record selected in syscall R9;
+RAX/RDX retain status/reply-byte meanings. Only CALL_LIMIT writes the record.
+This, the 88-byte startup record and variable batch/pipeline results require
+coordinated kernel/SDK/program rebuilds, including native LLVM development
+libraries and hosted tools. Go's copied adapters and native linker are updated;
+Rust consumers relink through SDK/libc. See [program loading](../kernel/program-loading.md),
+[batch launch](processes.md#batch-launch), [native jobs](../userland/native-jobs.md)
+and the [diagnostic ABI](abi.md#limit-diagnostics) for ownership and error rules.

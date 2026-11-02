@@ -1,7 +1,7 @@
 # Program bundles: ZIP archives and command index
 
 Implemented behavior (unpacked `.pxb` manifests, per-program `app://`, grants,
-stack requests, the 128 MiB selected-image ceiling and bin placement) is in the
+stack requests, file-sized selected-image capture and bin placement) is in the
 [program bundles reference](../userland/program-bundles.md). This page keeps the
 parked ZIP work, the future command index and the consent direction.
 
@@ -149,8 +149,8 @@ The owner amended preparation authority/admission on 2026-10-11 as recorded abov
    their bounded CRC scan before publication; decoded resources finish exactly at
    declared sizes and pass CRC before import, which checks CRC again over the
    owned copy. Stored executable views carry entry offset, length and expected CRC:
-   BSP copies only the selected entry through the existing 128 MiB capture
-   allocation, checks its CRC over the captured bytes, then runs the eager loader;
+   BSP copies only the selected entry into an allocation sized from that entry,
+   checks its CRC over the captured bytes, then runs the eager loader;
    failure discards capture and prepared children. This is eager preparation with
    offset reads afterward, not extraction to a writable tree or per-read provider
    RPC. Lazy decoding is deferred.
@@ -185,10 +185,11 @@ inside either form.
 
 ### Bounds, ownership and qualification
 
-Draft limits above are qualification inputs, per revision, not an aggregate budget
-or physical-memory guarantee. Parser staging uses the bounded ZIP metadata and
-existing JSON budgets, not an archive-sized allocation; decode one resource at a
-time with bounded zlib allocations. Account for workspace, copied metadata and
+The retained draft's limits are historical qualification inputs, per revision,
+not current native limits or a physical-memory guarantee. A resumed ZIP design
+must follow the [limits policy](../interfaces/limits.md): checked ZIP format
+fields and JSON depth remain, while metadata/node/count storage follows the
+input and actual allocation. Decode one resource at a time. Account for workspace, copied metadata and
 decoded-import overlap, page rounding, indexes, and heap pools retained after free.
 
 Archive/decoded backing creation, import and retirement stay BSP-owned. An indexed
@@ -204,12 +205,12 @@ Peak includes source backing/cache, the frozen archive, metadata/parser/decoder
 staging, decoded data, selected-entry capture, eager child image/stack/startup and
 other live processes. The catalog retains up to eight prepared views while
 checking registrations; include that overlap and unwind earlier views on failure.
-Capture is 128 MiB per selected executable, not per archive; no whole-archive
-allocation uses or enlarges that budget. Boot's uncopied executable path is
-unchanged.
+Selected-executable capture follows its actual size, without a separate quota;
+it is distinct from any whole-archive backing in this draft. Boot's uncopied
+executable path is unchanged.
 
 Estimated repeated-open cost (not measured): the
-[Linux proxy sizes](../development/hosted-tools.md#qualified-capacity) sum to about
+[Linux proxy sizes](../development/hosted-tools.md#capacity-and-historical-measurements) sum to about
 169 MiB (Clang 85.94, LLD 54.59, headers 8.2, sysroot 20), so 170 MiB is the
 planning archive size. With no cache every independent open copies it even when
 selecting only Clang; a 100-source build would copy about 16.6 GiB. Whole-view CRC

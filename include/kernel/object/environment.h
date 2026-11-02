@@ -2,6 +2,7 @@
 #define KERNEL_ENVIRONMENT_H
 
 #include <abi/environment.h>
+#include <abi/limit.h>
 #include <abi/syscall.h>
 #include <abi/command_search.h>
 #include <kernel/object/capability.h>
@@ -52,12 +53,17 @@ struct environment_request {
  * preparation keeps the table live. Destroy only after activity drains.
  * Seed helpers borrow names/text; seed_owned moves the logical grant only on
  * success. They are for exclusive child/bootstrap preparation. */
+/* Pure child/bootstrap admission, using the same charge as live cells. */
+enum call_status environment_seed_measure(const char *name, uint64_t kind,
+    uint64_t flags, size_t length, size_t *bytes, struct call_limit *detail);
+enum call_status environment_seed_admit(size_t entries, size_t bytes,
+    struct call_limit *detail);
 struct environment_table *environment_table_create(void);
 void environment_table_destroy(struct environment_table *table);
 enum call_status environment_table_seed_owned(struct environment_table *table,
-    const char *name, uint64_t flags, struct capability_grant *grant);
+    const char *name, uint64_t flags, struct capability_grant *grant, struct call_limit *detail);
 enum call_status environment_table_seed_text(struct environment_table *table,
-    const char *name, uint64_t flags, const char *text, size_t length);
+    const char *name, uint64_t flags, const char *text, size_t length, struct call_limit *detail);
 /* Caller-bound stateless handle: copying this cannot reach another table. */
 struct kernel_object *environment_create(void);
 

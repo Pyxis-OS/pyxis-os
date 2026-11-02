@@ -643,7 +643,7 @@ static enum call_status capture_file(struct npfs_store_context *context, struct 
 {
   uint64_t size = npfs_store_size(job->node->inode);
   struct image_capture captured = {0};
-  enum call_status status = image_capture_allocate_wait(size, &captured);
+  enum call_status status = image_capture_allocate_wait(size, &captured, &job->limit);
   if (status != CALL_OK) {
     return status;
   }

@@ -19,6 +19,6 @@ struct kernel_object *space_factory_create(void);
  * space and its first process. May sleep, with no held spinlocks. */
 struct syscall_result space_factory_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity);
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail);
 
 #endif

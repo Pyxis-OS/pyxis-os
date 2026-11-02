@@ -2,6 +2,7 @@
 #define KERNEL_USER_IMAGE_CAPTURE_H
 
 #include <abi/syscall.h>
+#include <abi/limit.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -34,17 +35,19 @@ struct image_capture {
 const void *image_capture_read_begin(struct image_capture *capture);
 void image_capture_read_end(struct image_capture *capture);
 
-/* BSP, IF=0. Empty output required. Admits the shared per-image byte ceiling,
- * then allocates eager RW/NX whole pages. Failure leaves output empty and frees
- * any partial data backing/reservation. LIMIT for excess, BAD_REQUEST for zero,
+/* BSP, IF=0. Empty output required. Allocates actual-size eager RW/NX whole
+ * pages after checked rounding. Failure leaves output empty and frees
+ * any partial data backing/reservation. LIMIT for encoding overflow, BAD_REQUEST for zero,
  * NO_MEMORY for backing, metadata or virtual-range exhaustion; BUSY on shared
  * structural-owner admission expiry. Waiting may temporarily enable interrupts;
  * the retained producer must hold no short lock. */
-enum call_status image_capture_allocate(uint64_t size, struct image_capture *capture);
+enum call_status image_capture_allocate(uint64_t size, struct image_capture *capture,
+    struct call_limit *detail);
 
 /* BSP worker, IF=1. Bounded shared-owner admission before allocation;
  * release ownership before returning to storage I/O. */
-enum call_status image_capture_allocate_wait(uint64_t size, struct image_capture *capture);
+enum call_status image_capture_allocate_wait(uint64_t size, struct image_capture *capture,
+    struct call_limit *detail);
 
 /* IF=0. Producer failures on CPU0 retain the existing fixed-owner cleanup.
  * A closed read phase releases on its preparation CPU; an unread descriptor

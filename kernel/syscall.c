@@ -45,6 +45,7 @@
 #include <kernel/object/forwarder.h>
 #include <kernel/object/describe.h>
 #include <kernel/log.h>
+#include <kernel/limit.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/object/power.h>
@@ -109,7 +110,7 @@ static struct syscall_result handle_info(handle_t handle, uintptr_t destination,
 }
 
 static struct syscall_result copy_handle(handle_t source, uint64_t rights,
-    uint64_t transport, uint64_t flags, uintptr_t destination)
+    uint64_t transport, uint64_t flags, uintptr_t destination, struct call_limit *detail)
 {
   struct process *process = process_current();
   if (!process) {
@@ -125,8 +126,8 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
 
   struct capability_grant grant;
   enum capability_result result = flags & HANDLE_COPY_SAME_RIGHTS ?
-      capability_grant_acquire_same(&process->capabilities, source, &grant) :
-      capability_grant_acquire(&process->capabilities, source, rights, transport, &grant);
+      capability_grant_acquire_same_with_limit(&process->capabilities, source, &grant, detail) :
+      capability_grant_acquire_with_limit(&process->capabilities, source, rights, transport, &grant, detail);
   if (result != CAP_OK) {
     KASSERT(result == CAP_BAD_HANDLE || result == CAP_DENIED || result == CAP_LIMIT);
     enum call_status status = result == CAP_LIMIT ? CALL_LIMIT :
@@ -143,7 +144,8 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
     capability_grant_release(&grant);
     KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT || result == CAP_DENIED);
     enum call_status status = result == CAP_NO_MEMORY ? CALL_NO_MEMORY :
-        result == CAP_LIMIT ? CALL_LIMIT : CALL_DENIED;
+        result == CAP_LIMIT ? call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING, 0,
+            UINT64_C(1) << 32, CALL_LIMIT_HAS_LIMIT) : CALL_DENIED;
     return (struct syscall_result){status, 0};
   }
   if (task_stop_requested()) {
@@ -161,7 +163,7 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
 
 static struct syscall_result dispatch_object(handle_t handle, struct kernel_object *object,
     uint64_t rights, uint64_t transport, uintptr_t message_address, size_t message_size,
-    uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t reply_address, size_t reply_capacity, struct call_limit *detail)
 {
   struct message_header header;
   if (message_size < sizeof(header)) {
@@ -344,7 +346,7 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return space_factory_call(rights, header.operation, request_address, request_size,
-        reply_address, reply_capacity);
+        reply_address, reply_capacity, detail);
   case OBJECT_POWER:
     if (header.protocol != PROTOCOL_POWER) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -435,7 +437,7 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return readiness_set_call(object, rights, header.operation,
-        request_address, request_size, reply_address, reply_capacity);
+        request_address, request_size, reply_address, reply_capacity, detail);
   case OBJECT_TCP_SERVICE:
     if (header.protocol != PROTOCOL_TCP_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -561,7 +563,7 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return launcher_call(object, rights, header.operation, request_address, request_size,
-        reply_address, reply_capacity);
+        reply_address, reply_capacity, detail);
   case OBJECT_COMMAND_LIST:
     if (header.protocol != PROTOCOL_COMMAND_LIST) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -605,21 +607,21 @@ static struct syscall_result dispatch_object(handle_t handle, struct kernel_obje
 
 static struct syscall_result call_object(handle_t handle,
     uintptr_t message_address, size_t message_size, uintptr_t reply_address,
-    size_t reply_capacity)
+    size_t reply_capacity, struct call_limit *detail)
 {
   struct process *process = process_current();
   if (!process) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
   struct capability_reference reference;
-  enum capability_result lookup = capability_acquire(&process->capabilities,
-      handle, 0, 0, &reference);
+  enum capability_result lookup = capability_acquire_with_limit(&process->capabilities,
+      handle, 0, 0, &reference, detail);
   if (lookup != CAP_OK) {
     KASSERT(lookup == CAP_BAD_HANDLE || lookup == CAP_LIMIT || lookup == CAP_DENIED);
     return (struct syscall_result){lookup == CAP_LIMIT ? CALL_LIMIT :
       lookup == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE, 0};
   }
-  lookup = capability_reference_resolve(&reference);
+  lookup = capability_reference_resolve_with_limit(&reference, detail);
   if (lookup != CAP_OK) {
     fat32_note_call_failure(reference.object);
     capability_release(&reference);
@@ -629,7 +631,7 @@ static struct syscall_result call_object(handle_t handle,
   }
   struct syscall_result result = dispatch_object(handle, reference.object,
       reference.rights, reference.transport, message_address, message_size,
-      reply_address, reply_capacity);
+      reply_address, reply_capacity, detail);
   if (result.status == CALL_OK && !task_operation_start()) {
     result = (struct syscall_result){CALL_DENIED, 0};
   }
@@ -645,22 +647,21 @@ static struct syscall_result call_object(handle_t handle,
 
 static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
                          uint64_t arg3, uint64_t arg4, uint64_t arg5,
-                         uint64_t arg6)
+                         struct call_limit *detail)
 {
-  (void)arg6;
   switch (number) {
   case SYSCALL_CALL:
-    return call_object(arg1, arg2, arg3, arg4, arg5);
+    return call_object(arg1, arg2, arg3, arg4, arg5, detail);
   case SYSCALL_CLOSE:
     return close_handle(arg1);
   case SYSCALL_HANDLE_INFO:
     return handle_info(arg1, arg2, arg3);
   case SYSCALL_COPY:
-    return copy_handle(arg1, arg2, arg3, arg4, arg5);
+    return copy_handle(arg1, arg2, arg3, arg4, arg5, detail);
   case SYSCALL_WAIT_MANY:
     return user_wait_many(arg1, arg2, arg3, arg4);
   case SYSCALL_READINESS_SET_CREATE:
-    return readiness_set_create_call(arg1, arg2);
+    return readiness_set_create_call(arg1, arg2, detail);
   case SYSCALL_PROCESS_INTERRUPT_CREATE:
     return process_interrupt_create_call(arg1, arg2);
   case SYSCALL_FORWARDER_CREATE:
@@ -684,11 +685,101 @@ static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t a
   }
 }
 
+static bool status_call(uint64_t number)
+{
+  switch (number) {
+  case SYSCALL_CALL:
+  case SYSCALL_CLOSE:
+  case SYSCALL_COPY:
+  case SYSCALL_HANDLE_INFO:
+  case SYSCALL_WAIT_MANY:
+  case SYSCALL_READINESS_SET_CREATE:
+  case SYSCALL_PROCESS_INTERRUPT_CREATE:
+  case SYSCALL_FORWARDER_CREATE:
+  case SYSCALL_DESCRIBE:
+  case SYSCALL_SPACE_PROCESSES:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool overlaps(uintptr_t a, size_t a_size, uintptr_t b, size_t b_size)
+{
+  return a_size && b_size && (a <= b ? b - a < a_size : a - b < b_size);
+}
+
+static enum call_status check_limit_output(uint64_t number, uint64_t arg1,
+    uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uintptr_t address)
+{
+  if (!user_buffer_check(address, sizeof(struct call_limit), USER_BUFFER_WRITE)) {
+    return CALL_BAD_BUFFER;
+  }
+  uintptr_t reply = 0;
+  size_t capacity = 0;
+  switch (number) {
+  case SYSCALL_CALL:
+    if (overlaps(address, sizeof(struct call_limit), arg2, arg3)) {
+      return CALL_BAD_REQUEST;
+    }
+    reply = arg4;
+    capacity = arg5;
+    break;
+  case SYSCALL_COPY:
+    reply = arg5;
+    capacity = sizeof(handle_t);
+    break;
+  case SYSCALL_HANDLE_INFO:
+  case SYSCALL_DESCRIBE:
+    reply = arg2;
+    capacity = arg3;
+    break;
+  case SYSCALL_FORWARDER_CREATE:
+    if (overlaps(address, sizeof(struct call_limit), arg1, sizeof(struct forwarder_create))) {
+      return CALL_BAD_REQUEST;
+    }
+    reply = arg2;
+    capacity = arg3;
+    break;
+  case SYSCALL_WAIT_MANY:
+    if (arg2 > SIZE_MAX / sizeof(struct wait_interest)) {
+      return CALL_BAD_REQUEST;
+    }
+    if (overlaps(address, sizeof(struct call_limit), arg1,
+        arg2 * sizeof(struct wait_interest))) {
+      return CALL_BAD_REQUEST;
+    }
+    reply = arg4;
+    capacity = arg2 * sizeof(uint64_t);
+    break;
+  case SYSCALL_READINESS_SET_CREATE:
+  case SYSCALL_PROCESS_INTERRUPT_CREATE:
+  case SYSCALL_SPACE_PROCESSES:
+    reply = arg1;
+    capacity = arg2;
+    break;
+  default:
+    break;
+  }
+  return overlaps(address, sizeof(struct call_limit), reply, capacity) ?
+      CALL_BAD_REQUEST : CALL_OK;
+}
+
 struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
     uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6)
 {
   task_syscall_enter();
-  struct syscall_result result = dispatch(number, arg1, arg2, arg3, arg4, arg5, arg6);
+  uintptr_t detail_address = status_call(number) ? arg6 : 0;
+  struct call_limit detail = {0};
+  enum call_status checked = detail_address ?
+      check_limit_output(number, arg1, arg2, arg3, arg4, arg5, detail_address) : CALL_OK;
+  struct syscall_result result = checked == CALL_OK ?
+      dispatch(number, arg1, arg2, arg3, arg4, arg5, &detail) :
+      (struct syscall_result){checked, 0};
+  if (detail_address && result.status == CALL_LIMIT &&
+      !copy_to_user(detail_address, &detail, sizeof(detail))) {
+    result = (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   task_forwarder_finish();
   task_syscall_leave();
   return result;

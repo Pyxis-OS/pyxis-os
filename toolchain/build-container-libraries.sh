@@ -33,6 +33,6 @@ test "$#" -eq 1 && test -d "$1"
 mkdir "$prefix/llvm-development"
 cp -a "$1". "$prefix/llvm-development/"
 ln -s ../llvm-development/bin/llvm-config "$prefix/bin/x86_64-unknown-pyxis-llvm-config"
-cp "$toolchain/llvm-development/sdk-revision" \
+install -m 644 "$toolchain/llvm-development/sdk-revision" \
   "$prefix/share/pyxis-toolchain/llvm-development-sdk-revision"
 "$prefix/bin/x86_64-unknown-pyxis-llvm-config" --host-target

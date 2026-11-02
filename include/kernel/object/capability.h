@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <abi/handle.h>
+#include <abi/limit.h>
 #include <kernel/service/request.h>
 #include <kernel/spinlock.h>
 
@@ -205,5 +206,25 @@ void capability_table_destroy(struct capability_table *table);
  * is harmless. This does not undo external effects that created the objects. */
 void capability_close_returned(struct capability_table *table,
     const handle_t *handles, size_t count);
+
+enum capability_result capability_count_admit(size_t count, struct call_limit *detail);
+enum capability_result capability_install_with_limit(struct capability_table *table,
+    struct kernel_object *object, uint64_t rights, uint64_t transport,
+    handle_t *handle, struct call_limit *detail);
+
+/* Selected admission paths retain their exact source limit through cleanup. */
+enum capability_result capability_acquire_with_limit(struct capability_table *table,
+    handle_t handle, uint64_t rights, uint64_t transport,
+    struct capability_reference *reference, struct call_limit *detail);
+enum capability_result capability_grant_acquire_with_limit(struct capability_table *source,
+    handle_t handle, uint64_t rights, uint64_t transport,
+    struct capability_grant *grant, struct call_limit *detail);
+enum capability_result capability_grant_acquire_same_with_limit(struct capability_table *source,
+    handle_t handle, struct capability_grant *grant, struct call_limit *detail);
+enum capability_result capability_reference_resolve_with_limit(
+    struct capability_reference *reference, struct call_limit *detail);
+enum capability_result capability_reference_resolve_for_with_limit(
+    struct capability_reference *reference, struct forwarder_operation *operation,
+    struct call_limit *detail);
 
 #endif

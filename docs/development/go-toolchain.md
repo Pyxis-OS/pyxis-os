@@ -47,6 +47,15 @@ Package it in a bundle with the same explicit grants as
 native startup/TLS; never link libc startup into it. Exported text entries become
 Go environment strings, while capability entries stay native held values.
 
+The runtime reads the 88-byte native startup record, including 64-bit `version`
+and `size`, directly. Cwd metadata is bounded by its actual read-only mapping.
+Raw syscall adapters clear R9 to decline optional limit details and retain
+RAX=status/RDX=reply size. Rebuild the Go prefix and relink Go programs when
+these copied native contracts change; rebuilding the C SDK alone cannot update
+them. This does not require rebuilding the LLVM compiler container. The P1F
+writer checks address layout and encoding without imposing separate serialized
+file or virtual-span ceilings; the native loader's allocations remain fallible.
+
 ## Initial limits
 
 The target defaults to one P and `runtime.NumCPU()` reports one; there is no

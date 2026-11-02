@@ -71,9 +71,9 @@ launch, but already delivered bytes are not rolled back. Descriptor lookup
 reports `CALL_BAD_HANDLE` for EBADF and `CALL_IO` for other descriptor errors.
 Native operation errors otherwise retain their statuses.
 
-Arrays/strings obey the existing 64 KiB launch-capture bound and separately
-page-padded 64 KiB startup bound, checked before output flushing. The initial
-stack uses the existing zero/default or page-aligned 1–8 MiB contract. Kernel
+Arrays/strings use request-sized owned storage; startup is measured and
+page-rounded before output flushing. A zero stack request keeps the 1 MiB
+default; explicit positive page-aligned sizes must fit the stack/guard layout. Kernel
 image capture and environment admission can still refuse later.
 An uncertain launch returns `CALL_OUTCOME_UNKNOWN`; never replay it automatically.
 
@@ -193,8 +193,8 @@ after a clock-policy failure; operation failures return a result snapshot.
 
 ## Native pipelines and the event pump
 
-[`pyxis/pipeline.h`](../../userspace/libc/include/pyxis/pipeline.h) accepts one
-to eight explicit `pyxis_job_options` stages and a native PIPE service. Stage
+[`pyxis/pipeline.h`](../../userspace/libc/include/pyxis/pipeline.h) accepts
+a checked-size nonempty array of explicit `pyxis_job_options` stages and a native PIPE service. Stage
 streams must all be `-1`: the library installs directional pipes for adjacent
 stages, the last stdout and a shared stderr. It uses the capture profile's
 private-root audit, clock, deadline, limits and optional sole-CONTROL fresh group.
@@ -212,8 +212,9 @@ and combined stderr drain into two separate private unlinked RAM FILEs. Stderr
 has no stage attribution, writer atomicity or cross-stream chronology guarantee.
 
 `start` returns an owned record; `step` performs one bounded concurrent round,
-and `wait` advances rounds until cleanup, using `wait_many` when immediate
-progress ends. Each round observes all stages, drains both outputs with bounded
+and `wait` advances rounds until cleanup, using a native readiness set when
+immediate progress ends. Every process/group and directional pipe is registered;
+the bounded event reply batch does not limit the stage count. Each round observes all stages, drains both outputs with bounded
 try reads and appends, and try-writes input. A full input or output pipe never
 causes a serial blocking drain. Native short writes retain their unwritten suffix;
 unknown mutation outcomes are never replayed. Waits share one absolute deadline
@@ -337,3 +338,13 @@ prevent a native latency/speedup claim. Screens/logs/consumers remain under
 `build/adapters-baseline` and `build/adapters-qualification`. All owned QEMU,
 debugger and remote-client processes are stopped after qualification. No native
 hardware, Git/Neovim integration or full guest recipe execution is claimed.
+
+### Dynamic stage results and limit detail
+
+Pipeline result `stage_valid` and `stages` are borrowed pointer/count views of
+pipeline-owned storage, valid until the next operation on that pipeline or close.
+Copying a result does not transfer storage ownership. Admission APIs accept
+nullable structured limit outputs; preserve the refusal before cleanup, since
+closing a provisional handle cannot replace the original cause. See the
+[limit diagnostic ABI](../interfaces/abi.md#limit-diagnostics). Source handles,
+working-directory authority and capture grants retain their existing rules.

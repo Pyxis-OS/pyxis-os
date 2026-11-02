@@ -9,9 +9,10 @@
 
 struct file_object;
 struct space;
+struct launch_capture_block;
 
 /* Space creation only. Text is NUL-terminated and validated by the caller;
- * cpus points into the capture's data and covers cpu_count boot CPUs. */
+ * cpus points into an owned capture block and covers cpu_count boot CPUs. */
 struct launch_space {
   char name[SPACE_NAME_MAX + 1];
   char title[SPACE_TITLE_MAX + 1];
@@ -37,14 +38,17 @@ struct launch_capture {
   size_t initial_stack_bytes; /* Validated, with the default resolved. */
   struct file_object *image; /* Owned storage reference until capture discard. */
   struct image_capture captured_image;
-  size_t used;
+  struct launch_capture_block *blocks;
+  struct process_startup_storage startup_storage;
+  bool image_operation;
+  uint64_t image_rights;
   enum call_status error;
+  struct call_limit limit;
   struct launch_space space;
   struct space *target_space; /* Boot-lifetime fixed-owner setup result. */
   struct process *prepared_child; /* Lent only through SPACE_DEVICES completion. */
   struct process_environment_entry *space_entries; /* Owned device startup additions. */
   enum call_status space_status;
-  _Alignas(uint64_t) unsigned char data[LAUNCH_CAPTURE_MAX_SIZE];
 };
 
 /* Retained caller kernel root, IF=0. Transfer a reservation and stable image
@@ -53,42 +57,52 @@ struct launch_capture {
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
     size_t parent_cpu, struct execution_group *execution_group,
     struct capability_reservation *reservation, struct capability_reserved_slot *slots,
-    handle_t *result);
+    handle_t *result, struct call_limit *detail);
 /* Fixed BSP device provisioning borrows the inactive child while its preparation
  * actor waits. All shared inputs/results live in the owned heap capture. */
+enum call_status launcher_preflight_space(struct launch_capture *capture,
+    struct call_limit *detail);
 enum call_status launcher_install_space_devices(struct process *child, struct space *space,
-    struct process_startup *startup, struct process_environment_entry **owned);
+    struct process_startup *startup, struct process_environment_entry **owned,
+    struct call_limit *detail);
 enum call_status launcher_request_space_devices(struct launch_capture *capture,
     struct process *child, struct process_startup *startup,
     struct process_environment_entry **entries);
 enum call_status launcher_prepare_space(struct launch_capture *capture,
     struct process *parent, struct capability_reservation *reservation,
-    struct capability_reserved_slot *slots, handle_t *result);
+    struct capability_reserved_slot *slots, handle_t *result, struct call_limit *detail);
 
 /* Current user task, IF=0. Caller-side capture for space creation. capture_request
  * resolves the image and captures the request like LAUNCHER_LAUNCH; capture_empty
  * allocates storage for a space without a child. capture_array copies COUNT
- * items into the capture's data, or returns NULL and records the error.
+ * items into stable owned blocks, or returns NULL and records the error.
  * submit_space retains fixed space/device setup around caller-owned preparation
  * and consumes the capture. */
 enum call_status launcher_capture_request(const struct launch_request *request,
-    struct launch_capture **result);
+    struct launch_capture **result, struct call_limit *detail);
+enum call_status launcher_capture_metadata(const struct launch_request *request,
+    struct launch_capture **result, struct call_limit *detail);
+enum call_status launcher_capture_image(struct launch_capture *capture);
 struct launch_capture *launcher_capture_empty(void);
 void *launcher_capture_array(struct launch_capture *capture, uintptr_t address,
     size_t count, size_t item_size);
-enum call_status launcher_submit_space(struct launch_capture *capture, handle_t *child);
+enum call_status launcher_submit_space(struct launch_capture *capture, handle_t *child,
+    struct call_limit *detail);
 void launcher_capture_discard(struct launch_capture *capture);
 
 /* Retained caller preparation. A group owns prepared processes and task stacks until
  * publication; observers stay private until publication. Abort releases all
  * reserved slots, observer grants and child grants. */
-struct launch_preparation *launcher_batch_create(void);
+struct launch_preparation *launcher_batch_create(size_t count, enum call_status *status,
+    struct call_limit *detail);
 /* Current user task, before preparing another BSP request. */
-enum capability_result launcher_batch_reserve(struct launch_preparation *group, size_t count);
+enum call_status launcher_batch_reserve(struct launch_preparation *group, size_t count,
+    struct call_limit *detail);
 enum call_status launcher_batch_prepare(struct launch_preparation *group,
     struct launch_capture *capture, struct process *parent, size_t parent_cpu,
-    struct execution_group *execution_group);
-enum call_status launcher_batch_publish(struct launch_preparation *group, handle_t *children);
+    struct execution_group *execution_group, struct call_limit *detail);
+enum call_status launcher_batch_publish(struct launch_preparation *group, handle_t *children,
+    struct call_limit *detail);
 void launcher_batch_discard(struct launch_preparation *group);
 
 #endif

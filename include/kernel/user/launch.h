@@ -2,6 +2,8 @@
 #define KERNEL_USER_LAUNCH_H
 
 #include <kernel/mm/types.h>
+#include <abi/limit.h>
+#include <abi/syscall.h>
 
 struct boot_options;
 struct process;
@@ -15,10 +17,12 @@ bool launcher_ram_retire_pending(void);
 void launcher_reap_prepared_ram(void);
 
 /* Pure admission: zero selects the default; explicit sizes obey launcher ABI
- * bounds and page alignment. Clears SIZE on failure. No allocation or VM work. */
-enum mm_result user_initial_stack_size(uint64_t requested, size_t *size);
+ * address layout and page alignment. Clears SIZE on failure. No allocation or VM work. */
+enum call_status user_initial_stack_size(uint64_t requested, size_t *size,
+    struct call_limit *detail);
 
-/* BSP, IF=0. Stable kernel image bytes; creates an owned, inactive process and
+/* Retained kernel-root preparation actor, IF=0. Stable kernel image bytes;
+ * creates an owned, inactive process and
  * its eagerly backed initial stack with a reserved unmapped lower guard.
  * INITIAL_STACK_BYTES uses the same admission as user_initial_stack_size.
  * Returns the actual stack top; no growth, startup/grants or task submission.

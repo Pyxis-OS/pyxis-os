@@ -495,7 +495,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     .argc = argument_count,
     .argv = arguments,
   };
-  if (process_prepare_startup(process, &startup) != MM_OK) {
+  if (process_prepare_startup(process, &startup, NULL, NULL) != CALL_OK) {
     goto fail;
   }
   process_set_label(process, argument_count ? arguments[0] : image_uri);

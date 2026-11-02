@@ -1,4 +1,5 @@
 #include <arch/paging.h>
+#include <kernel/limit.h>
 #include <kernel/object/wifi.h>
 #include <abi/startup.h>
 #include <arch/smp.h>
@@ -16,119 +17,167 @@
 
 #define STARTUP_STEP_PAGES 64
 
-struct startup_sizes {
-  size_t metadata;
-  size_t arguments;
-};
-
-static bool add_string_size(const char *text, size_t *size)
+static void startup_yield(void)
 {
-  if (!text || *size >= STARTUP_MAX_SIZE) {
-    return false;
+  if (task_current_actor()) {
+    task_yield_masked();
   }
-  size_t remaining = STARTUP_MAX_SIZE - *size;
-  size_t length = strnlen(text, remaining);
-  if (length == remaining) {
-    return false;
-  }
-  *size += length + 1;
-  return true;
 }
 
-static bool entry_name_valid(const char *name)
+static size_t startup_string_length(const char *text)
 {
-  if (!name || !*name) {
-    return false;
-  }
   size_t length = 0;
-  for (; name[length] && length <= ENVIRONMENT_NAME_MAX; ++length) {
-    char c = name[length];
-    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-          (c >= '0' && c <= '9') || c == '_' || c == '+' || c == '-' || c == '.')) {
-      return false;
+  size_t step = STARTUP_STEP_PAGES * PAGE_SIZE;
+  for (;;) {
+    size_t count = strnlen(text + length, step);
+    length += count;
+    if (count < step) {
+      return length;
+    }
+    startup_yield();
+  }
+}
+
+static void copy_startup_bytes(void *destination, const void *source, size_t size)
+{
+  for (size_t offset = 0; offset < size;) {
+    size_t count = size - offset;
+    if (count > STARTUP_STEP_PAGES * PAGE_SIZE) {
+      count = STARTUP_STEP_PAGES * PAGE_SIZE;
+    }
+    memcpy((uint8_t *)destination + offset, (const uint8_t *)source + offset, count);
+    offset += count;
+    if (offset < size) {
+      startup_yield();
     }
   }
-  return length <= ENVIRONMENT_NAME_MAX;
 }
 
-static bool measure_startup(struct process *process,
-    const struct process_startup *source, struct startup_sizes *sizes)
+static enum call_status add_string_size(const char *text, size_t *size,
+    struct call_limit *detail)
 {
-  if (!source || source->entry_count > STARTUP_MAX_SIZE / sizeof(*source->entries) ||
-      (source->entry_count && !source->entries) ||
-      source->working_directory_count > STARTUP_MAX_SIZE / sizeof(handle_t) ||
+  if (!text) {
+    return CALL_BAD_REQUEST;
+  }
+  size_t length = startup_string_length(text);
+  if (length == SIZE_MAX || *size > SIZE_MAX - length - 1) {
+    return call_limit_encoding(detail);
+  }
+  *size += length + 1;
+  return CALL_OK;
+}
+
+enum call_status process_startup_measure(const struct process_startup *source,
+    struct process_startup_storage *sizes, struct call_limit *detail)
+{
+  *sizes = (struct process_startup_storage){0};
+  if (!source || (source->entry_count && !source->entries) ||
       (source->working_directory_count && !source->working_directories) ||
       (!source->working_directory_count && source->working_path) ||
-      source->argc >= STARTUP_MAX_SIZE / sizeof(uint64_t) ||
       (source->argc && !source->argv)) {
-    return false;
+    return CALL_BAD_REQUEST;
+  }
+  if (source->working_directory_count >
+      (SIZE_MAX - sizeof(struct startup_info)) / sizeof(handle_t) ||
+      source->argc >= SIZE_MAX / sizeof(uint64_t)) {
+    return call_limit_encoding(detail);
   }
   sizes->metadata = sizeof(struct startup_info) +
       source->working_directory_count * sizeof(handle_t);
   sizes->arguments = (source->argc + 1) * sizeof(uint64_t);
-  size_t environment = source->entry_count * sizeof(struct process_environment_entry);
+  size_t environment = 0;
   for (size_t i = 0; i < source->entry_count; ++i) {
     const struct process_environment_entry *entry = &source->entries[i];
-    if (!entry_name_valid(entry->name) || (entry->flags & ~ENVIRONMENT_EXPORTED) ||
-        !add_string_size(entry->name, &environment)) {
-      return false;
+    enum call_status status = environment_seed_measure(entry->name, entry->kind,
+        entry->flags, entry->length, &environment, detail);
+    if (status != CALL_OK) {
+      return status;
     }
     for (size_t j = 0; j < i; ++j) {
       if (strlen(entry->name) == strlen(source->entries[j].name) &&
           !memcmp(entry->name, source->entries[j].name, strlen(entry->name))) {
-        return false;
+        return CALL_BAD_REQUEST;
       }
     }
     if (entry->kind == ENVIRONMENT_TEXT) {
       const char *text = (const char *)(uintptr_t)entry->value;
-      if (entry->length >= STARTUP_MAX_SIZE || !text ||
-          strnlen(text, entry->length + 1) != entry->length ||
-          !add_string_size(text, &environment)) {
-        return false;
+      if (!text || strnlen(text, entry->length + 1) != entry->length) {
+        return CALL_BAD_REQUEST;
       }
-    } else if (entry->kind == ENVIRONMENT_CAP && !entry->length) {
-      struct capability_reference reference;
-      if (capability_acquire(&process->capabilities, entry->value, 0, 0,
-            &reference) != CAP_OK) {
-        return false;
-      }
-      capability_release(&reference);
-    } else {
-      return false;
     }
   }
+  enum call_status status = environment_seed_admit(source->entry_count, environment, detail);
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (source->working_path) {
+    status = add_string_size(source->working_path, &sizes->metadata, detail);
+    if (status != CALL_OK) {
+      return status;
+    }
+  }
+  for (size_t i = 0; i < source->argc; ++i) {
+    status = add_string_size(source->argv[i], &sizes->arguments, detail);
+    if (status != CALL_OK) {
+      return status;
+    }
+    if ((i + 1) % 64 == 0) {
+      startup_yield();
+    }
+  }
+  if (sizes->metadata > SIZE_MAX - PAGE_SIZE + 1 ||
+      sizes->arguments > SIZE_MAX - PAGE_SIZE + 1) {
+    return call_limit_encoding(detail);
+  }
+  sizes->metadata = (sizes->metadata + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  sizes->arguments = (sizes->arguments + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  if (sizes->metadata > SIZE_MAX - sizes->arguments) {
+    return call_limit_encoding(detail);
+  }
+  size_t total = sizes->metadata + sizes->arguments;
+  if (total > arch_user_vm_size()) {
+    return call_limit_set(detail, CALL_LIMIT_STARTUP_ADDRESS, total,
+        arch_user_vm_size(), CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
+  }
+  return CALL_OK;
+}
+
+static enum call_status capability_status(enum capability_result result,
+    struct call_limit *detail)
+{
+  switch (result) {
+  case CAP_OK: return CALL_OK;
+  case CAP_NO_MEMORY: return CALL_NO_MEMORY;
+  case CAP_LIMIT: return detail && detail->reason ? CALL_LIMIT : call_limit_reference(detail);
+  case CAP_FULL:
+    return call_limit_set(detail, CALL_LIMIT_HANDLE_ENCODING, 0, 0, 0);
+  case CAP_BAD_HANDLE: return CALL_BAD_HANDLE;
+  case CAP_DENIED: return CALL_DENIED;
+  default: return CALL_BAD_REQUEST;
+  }
+}
+
+static enum call_status validate_startup_grants(struct process *process,
+    const struct process_startup *source, struct call_limit *detail)
+{
   for (size_t i = 0; i < source->working_directory_count; ++i) {
     struct capability_reference reference;
-    if (capability_acquire(&process->capabilities, source->working_directories[i],
-          0, 0, &reference) != CAP_OK) {
-      return false;
+    enum capability_result result = capability_acquire_with_limit(&process->capabilities,
+        source->working_directories[i], 0, 0, &reference, detail);
+    if (result != CAP_OK) {
+      return capability_status(result, detail);
     }
     bool valid = object_effective_type(reference.object) == OBJECT_DIRECTORY;
     capability_release(&reference);
     if (!valid) {
-      return false;
+      return CALL_BAD_REQUEST;
     }
   }
-  if (source->working_path && !add_string_size(source->working_path, &sizes->metadata)) {
-    return false;
-  }
-  for (size_t i = 0; i < source->argc; ++i) {
-    if (!add_string_size(source->argv[i], &sizes->arguments)) {
-      return false;
-    }
-  }
-  if (environment > STARTUP_MAX_SIZE - sizes->metadata) {
-    return false;
-  }
-  size_t charged_metadata = (sizes->metadata + environment + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  sizes->metadata = (sizes->metadata + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  sizes->arguments = (sizes->arguments + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  return charged_metadata <= STARTUP_MAX_SIZE &&
-      sizes->arguments <= STARTUP_MAX_SIZE - charged_metadata;
+  return CALL_OK;
 }
 
-static enum mm_result seed_environment(struct process *process,
-    const struct process_startup *source)
+static enum call_status seed_environment(struct process *process,
+    const struct process_startup *source, struct call_limit *detail)
 {
   for (size_t i = 0; i < source->entry_count; ++i) {
     const struct process_environment_entry *entry = &source->entries[i];
@@ -136,47 +185,47 @@ static enum mm_result seed_environment(struct process *process,
     if (entry->kind == ENVIRONMENT_CAP) {
       struct capability_grant grant = {0};
       struct capability_reference reference;
-      enum capability_result captured = capability_acquire(&process->capabilities,
-          entry->value, 0, 0, &reference);
+      enum capability_result captured = capability_acquire_with_limit(&process->capabilities,
+          entry->value, 0, 0, &reference, detail);
       if (captured == CAP_OK) {
         if (!entry->flags && (reference.rights & WIFI_RIGHT_POLICY_ONCE) &&
             wifi_policy_owned(reference.object, process)) {
           captured = capability_grant_derive(reference.object, reference.rights,
               reference.transport, reference.restrictions, &grant);
         } else {
-          captured = capability_grant_acquire_same(&process->capabilities, entry->value, &grant);
+          captured = capability_grant_acquire_same_with_limit(&process->capabilities, entry->value, &grant, detail);
         }
         capability_release(&reference);
       }
       if (captured != CAP_OK) {
-        return captured == CAP_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
+        return capability_status(captured, detail);
       }
       status = environment_table_seed_owned(process->environment, entry->name,
-          entry->flags, &grant);
+          entry->flags, &grant, detail);
       capability_grant_release(&grant);
     } else {
       status = environment_table_seed_text(process->environment, entry->name,
-          entry->flags, (const char *)(uintptr_t)entry->value, entry->length);
+          entry->flags, (const char *)(uintptr_t)entry->value, entry->length, detail);
     }
     if (status != CALL_OK) {
-      return status == CALL_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
+      return status;
     }
   }
-  return MM_OK;
+  return CALL_OK;
 }
 
 static uint64_t copy_string(uint8_t *buffer, size_t *offset, uintptr_t address,
     const char *text)
 {
-  size_t length = strlen(text) + 1;
+  size_t length = startup_string_length(text) + 1;
   uint64_t result = address + *offset;
-  memcpy(buffer + *offset, text, length);
+  copy_startup_bytes(buffer + *offset, text, length);
   *offset += length;
   return result;
 }
 
 static void fill_startup(uint8_t *buffer, uintptr_t address,
-    const struct process_startup *source, const struct startup_sizes *sizes,
+    const struct process_startup *source, const struct process_startup_storage *sizes,
     handle_t environment, handle_t thread_fs, size_t usable_cpu_count)
 {
   struct startup_info *info = (struct startup_info *)buffer;
@@ -191,7 +240,7 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
   if (source->working_directory_count) {
     info->working_directories = address + offset;
     size_t bytes = source->working_directory_count * sizeof(handle_t);
-    memcpy(buffer + offset, source->working_directories, bytes);
+    copy_startup_bytes(buffer + offset, source->working_directories, bytes);
     offset += bytes;
   }
   if (source->working_path) {
@@ -201,6 +250,9 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
   offset = sizes->metadata + (source->argc + 1) * sizeof(*argv);
   for (size_t i = 0; i < source->argc; ++i) {
     argv[i] = copy_string(buffer, &offset, address, source->argv[i]);
+    if ((i + 1) % 64 == 0) {
+      startup_yield();
+    }
   }
 }
 
@@ -220,37 +272,67 @@ static enum mm_result copy_startup_pages(struct vm_space *space, uintptr_t addre
   return MM_OK;
 }
 
-enum mm_result process_prepare_startup(struct process *process,
-    const struct process_startup *source)
+enum call_status process_prepare_startup(struct process *process,
+    const struct process_startup *source, struct process_startup_storage *storage,
+    struct call_limit *detail)
 {
   process_prepare_require(process);
-  struct startup_sizes sizes;
-  if (!process || process->startup_address || !measure_startup(process, source, &sizes)) {
-    return MM_INVALID;
+  if (!process || process->startup_address) {
+    return CALL_BAD_REQUEST;
+  }
+  struct process_startup_storage measured;
+  enum call_status status = process_startup_measure(source, &measured, detail);
+  if (status != CALL_OK) {
+    return status;
+  }
+  status = validate_startup_grants(process, source, detail);
+  if (status != CALL_OK) {
+    return status;
   }
   size_t usable_cpu_count = task_space_usable_cpu_count(process->space);
   if (!usable_cpu_count) {
-    return MM_INVALID;
+    return CALL_BAD_REQUEST;
   }
-  enum mm_result result = seed_environment(process, source);
-  if (result != MM_OK) {
-    return result;
+  bool local = !storage;
+  if (local) {
+    storage = &measured;
+    storage->buffer = kmalloc(measured.metadata + measured.arguments);
+    if (!storage->buffer) {
+      return CALL_NO_MEMORY;
+    }
   }
+  KASSERT(storage->buffer && storage->metadata == measured.metadata &&
+      storage->arguments == measured.arguments);
+  struct process_startup_storage sizes = *storage;
   size_t total = sizes.metadata + sizes.arguments;
-  uint8_t *buffer = kmalloc(total);
-  if (!buffer) {
-    return MM_NO_MEMORY;
+  uint8_t *buffer = sizes.buffer;
+  status = seed_environment(process, source, detail);
+  if (status != CALL_OK) {
+    if (local) {
+      kfree(buffer);
+    }
+    return status;
   }
-  memset(buffer, 0, total);
+  for (size_t offset = 0; offset < total;) {
+    size_t count = total - offset;
+    if (count > STARTUP_STEP_PAGES * PAGE_SIZE) {
+      count = STARTUP_STEP_PAGES * PAGE_SIZE;
+    }
+    memset(buffer + offset, 0, count);
+    offset += count;
+    if (offset < total) {
+      startup_yield();
+    }
+  }
   struct kernel_object *threads = thread_service_create();
   struct kernel_object *environment = environment_create();
   handle_t thread_fs = HANDLE_INVALID, environment_handle = HANDLE_INVALID;
   enum capability_result installed = threads && environment ?
-      capability_install(&process->capabilities, threads, THREAD_RIGHT_SET_FS, 0,
-          &thread_fs) : CAP_NO_MEMORY;
+      capability_install_with_limit(&process->capabilities, threads, THREAD_RIGHT_SET_FS, 0,
+          &thread_fs, detail) : CAP_NO_MEMORY;
   if (installed == CAP_OK) {
-    installed = capability_install(&process->capabilities, environment,
-        ENVIRONMENT_RIGHTS, 0, &environment_handle);
+    installed = capability_install_with_limit(&process->capabilities, environment,
+        ENVIRONMENT_RIGHTS, 0, &environment_handle, detail);
   }
   if (threads) {
     object_release(threads);
@@ -262,11 +344,13 @@ enum mm_result process_prepare_startup(struct process *process,
     if (thread_fs) {
       KASSERT(capability_close(&process->capabilities, thread_fs) == CAP_OK);
     }
-    kfree(buffer);
-    return MM_NO_MEMORY;
+    if (local) {
+      kfree(buffer);
+    }
+    return capability_status(installed, detail);
   }
   uintptr_t address;
-  result = vm_reserve(process->address_space, total, PAGE_SIZE, &address);
+  enum mm_result result = vm_reserve(process->address_space, total, PAGE_SIZE, &address);
   if (result == MM_OK) {
     struct vm_backing backing;
     result = vm_back_begin(process->address_space, address, total, PAGE_USER, &backing);
@@ -307,11 +391,14 @@ enum mm_result process_prepare_startup(struct process *process,
       }
     }
   }
-  kfree(buffer);
+  if (local) {
+    kfree(buffer);
+  }
   if (result != MM_OK) {
     KASSERT(capability_close(&process->capabilities, environment_handle) == CAP_OK);
     KASSERT(capability_close(&process->capabilities, thread_fs) == CAP_OK);
-    return result;
+    return result == MM_BUSY ? CALL_BUSY :
+        result == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
   }
   /* ENV now owns each named logical grant. Retire its initial local source
    * handle exactly once; only the independently owned cwd handles survive. */
@@ -333,5 +420,5 @@ enum mm_result process_prepare_startup(struct process *process,
     }
   }
   process->startup_address = address;
-  return MM_OK;
+  return CALL_OK;
 }

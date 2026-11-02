@@ -7,7 +7,6 @@
 #include <kernel/task.h>
 #include <pxe/p1f.h>
 
-#define IMAGE_MAX_SPAN (UINT64_C(256) * 1024 * 1024)
 #define IMAGE_STEP_PAGES 64
 
 static void preparation_yield(void)
@@ -43,7 +42,6 @@ static bool validate_image(const uint8_t *bytes, size_t size,
   *payload = sizeof(*header) + header->segment_count * sizeof(struct p1f_segment);
   size_t remaining = size - *payload;
   uint64_t previous_end = P1F_PAGE_SIZE;
-  uint64_t image_base = read_segment(bytes, 0).virtual_address;
   bool executable_entry = false;
 
   for (size_t i = 0; i < header->segment_count; ++i) {
@@ -63,8 +61,7 @@ static bool validate_image(const uint8_t *bytes, size_t size,
 
     uint64_t end = segment.virtual_address + segment.memory_size;
     previous_end = (end + P1F_PAGE_SIZE - 1) & ~(P1F_PAGE_SIZE - 1);
-    if (previous_end - image_base > IMAGE_MAX_SPAN ||
-        (segment.virtual_address < reserved_end && previous_end > reserved_base)) {
+    if (segment.virtual_address < reserved_end && previous_end > reserved_base) {
       return false;
     }
     remaining -= segment.file_size;

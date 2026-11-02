@@ -10,15 +10,8 @@
 #define LAUNCHER_LAUNCH UINT64_C(1)
 #define LAUNCHER_LAUNCH_BATCH UINT64_C(2)
 #define LAUNCHER_CREATE_GROUP UINT64_C(3)
-#define LAUNCH_BATCH_MAX 8
 #define LAUNCH_NO_STAGE UINT64_MAX
-#define LAUNCH_CAPTURE_MAX_SIZE STARTUP_MAX_SIZE
-#define LAUNCH_INITIAL_STACK_MIN_SIZE (UINT64_C(1) * 1024 * 1024)
-#define LAUNCH_INITIAL_STACK_MAX_SIZE (UINT64_C(8) * 1024 * 1024)
-/* Per selected executable for HOST, native filesystem and RAM copies, not an
- * aggregate concurrent budget or mapped-span limit. Backing is released after
- * loading or failure. Boot archive bytes need no copy. */
-#define LAUNCH_CAPTURED_IMAGE_MAX_SIZE (UINT64_C(128) * 1024 * 1024)
+#define LAUNCH_INITIAL_STACK_DEFAULT_SIZE (UINT64_C(1) * 1024 * 1024)
 
 /* CREATE_GROUP requires LAUNCH. An unbound launcher creates a root in the
  * ungrouped caller's space; a bound launcher creates a subgroup of its binding.
@@ -51,9 +44,9 @@ struct launch_environment_entry {
   uint64_t length;
 };
 
-/* Every address is in the caller. Arrays, strings and alignment share a 64 KiB
- * capture budget, and child serialization separately obeys STARTUP_MAX_SIZE
- * including page padding and selected environment names/text. Cwd uses grant
+/* Every address is in the caller. Inputs must remain stable throughout
+ * synchronous capture; concurrent modification is not an atomic snapshot.
+ * Arrays and strings use checked request-sized owned storage. Cwd uses grant
  * indices, boundary first; working_path is only an optional description.
  * Standard streams are ordinary stdin/stdout/stderr entries. Child redirection
  * replaces these entries in staging, never in the parent's live environment. */
@@ -72,9 +65,10 @@ struct launch_request {
   uint64_t working_directories, working_directory_count;
   uint64_t working_path;
   uint64_t argv, argc;
-  /* Zero selects 1 MiB. Explicit sizes must be page-aligned, 1..8 MiB inclusive;
-   * invalid requests fail with BAD_REQUEST before image capture. Eager backing
-   * ends at the fixed high stack top, with one unmapped guard page directly
+  /* Zero selects 1 MiB. Explicit sizes are positive page multiples fitting the
+   * user address layout, including the lower guard. Alignment errors fail with
+   * BAD_REQUEST; address-capacity failures return LIMIT before image capture.
+   * Eager backing ends at the fixed high stack top, with one unmapped guard page directly
    * below the backing. */
   uint64_t initial_stack_bytes;
 };
@@ -86,10 +80,12 @@ struct launch_message {
 
 /* requests is a caller address of count launch_request records. All children
  * are prepared before any becomes runnable. On failure no child is runnable,
- * source handles survive, and children[] is entirely zero. File writes and
- * other external effects are not rolled back. A valid batch call
- * returns the fixed reply even on an operation error; failed_index names the
- * zero-based failing stage, or LAUNCH_NO_STAGE for a whole-batch error. */
+ * source handles survive, child_count is zero and every children[] slot is zero.
+ * File writes and other external effects are not rolled back. The reply has
+ * COUNT handle slots on success and operation failure. Insufficient reply
+ * capacity returns BUFFER_TOO_SMALL before effects. Malformed/overflowing counts
+ * may return only the header. failed_index names the failing zero-based stage,
+ * or LAUNCH_NO_STAGE for a whole-batch error. */
 struct launch_batch_request {
   uint64_t requests;
   uint64_t count;
@@ -102,7 +98,8 @@ struct launch_batch_message {
 
 struct launch_batch_reply {
   uint64_t failed_index;
-  handle_t children[LAUNCH_BATCH_MAX];
+  uint64_t child_count;
+  handle_t children[];
 };
 
 /* Reply is one WAIT-authorized process-control handle. Failure returns no
@@ -115,6 +112,6 @@ _Static_assert(sizeof(struct launch_request) == 88, "launch request layout");
 _Static_assert(sizeof(struct launch_message) == 104, "launch message layout");
 _Static_assert(sizeof(struct launch_batch_request) == 16, "launch batch request layout");
 _Static_assert(sizeof(struct launch_batch_message) == 32, "launch batch message layout");
-_Static_assert(sizeof(struct launch_batch_reply) == 72, "launch batch reply layout");
+_Static_assert(sizeof(struct launch_batch_reply) == 16, "launch batch reply layout");
 
 #endif

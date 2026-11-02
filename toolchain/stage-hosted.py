@@ -16,8 +16,6 @@ P1F_WRITE = 2
 P1F_READ = 4
 PAGE_SIZE = 4096
 USER_LIMIT = 1 << 47
-IMAGE_LIMIT = 128 * 1024 * 1024
-SPAN_LIMIT = 256 * 1024 * 1024
 STACK_BYTES = 8 * 1024 * 1024
 TOOL_COMMANDS = {
     "lld": ("lld", "ld.lld"),
@@ -104,8 +102,8 @@ def write_json(path, value):
 
 def image_sizes(path):
     size = path.stat().st_size
-    if size > IMAGE_LIMIT or size < 24:
-        raise ValueError(f"P1F serialized image outside loader limit: {path}")
+    if size < 24:
+        raise ValueError(f"Invalid P1F serialized image: {path}")
     with path.open("rb") as image:
         magic, entry, count = struct.unpack("<3Q", image.read(24))
         if magic != P1F_MAGIC or not count or count > (size - 24) // 32:
@@ -131,8 +129,8 @@ def image_sizes(path):
             previous_end = rounded
             payload += file_bytes
         span = previous_end - segments[0]["virtual_address"]
-        if payload != size or not executable_entry or span > SPAN_LIMIT:
-            raise ValueError(f"Invalid P1F payload, entry or mapped span: {path}")
+        if payload != size or not executable_entry:
+            raise ValueError(f"Invalid P1F payload or entry: {path}")
     return {"serialized_bytes": size, "mapped_span_bytes": span, "segments": segments,
             "image_backing_bytes": sum(s["backing_bytes"] for s in segments),
             "eager_stack_bytes": STACK_BYTES}
@@ -232,7 +230,6 @@ def stage(sdk, resource, source, work, output, compiler_provenance, toolchain):
         "host": subprocess.check_output(["uname", "-sm"], text=True).strip(),
         "producer_files": {name: sha256(toolchain / name)
                            for name in ("build-hosted.sh", "stage-hosted.py")},
-        "image_limit_bytes": IMAGE_LIMIT, "mapped_span_limit_bytes": SPAN_LIMIT,
         "runtime_profile": "Clang/LLD workers-off, clangd threads-on; real SDK libc++/libc++abi/libunwind",
         "publication": "manual immutable revision; Clang optional declared launcher; LLD and clangd leaves"})
     # Archive modes and timestamps do not depend on umask or source checkout dates.

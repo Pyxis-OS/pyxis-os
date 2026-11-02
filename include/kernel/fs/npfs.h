@@ -131,6 +131,7 @@ struct npfs_job {
   enum block_result backing_error;
   struct kernel_object *object, *control;
   struct image_capture captured;
+  struct call_limit limit;
   /* Internal queue/completion ownership. */
   struct npfs_job *next;
   struct npfs_request *user_request;

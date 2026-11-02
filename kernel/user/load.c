@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/paging.h>
 #include <abi/launcher.h>
+#include <kernel/limit.h>
 #include <arch/smp.h>
 #include <kernel/image.h>
 #include <kernel/mm/vm.h>
@@ -12,18 +13,23 @@
 #define INITIAL_STACK_TOP UINT64_C(0x7ffffffff000)
 #define LOAD_STEP_PAGES 64
 
-enum mm_result user_initial_stack_size(uint64_t requested, size_t *size)
+enum call_status user_initial_stack_size(uint64_t requested, size_t *size,
+    struct call_limit *detail)
 {
   *size = 0;
   if (!requested) {
-    requested = LAUNCH_INITIAL_STACK_MIN_SIZE;
+    requested = LAUNCH_INITIAL_STACK_DEFAULT_SIZE;
   }
-  if (requested < LAUNCH_INITIAL_STACK_MIN_SIZE ||
-      requested > LAUNCH_INITIAL_STACK_MAX_SIZE || requested % PAGE_SIZE) {
-    return MM_INVALID;
+  if (requested % PAGE_SIZE) {
+    return CALL_BAD_REQUEST;
+  }
+  uint64_t capacity = INITIAL_STACK_TOP - arch_user_vm_base() - PAGE_SIZE;
+  if (requested > capacity) {
+    return call_limit_set(detail, CALL_LIMIT_STACK_ADDRESS, requested, capacity,
+        CALL_LIMIT_HAS_REQUESTED | CALL_LIMIT_HAS_LIMIT);
   }
   *size = requested;
-  return MM_OK;
+  return CALL_OK;
 }
 
 enum mm_result user_process_load(struct space *space,
@@ -38,9 +44,9 @@ enum mm_result user_process_load(struct space *space,
   *entry = 0;
   *stack_top = 0;
   size_t stack_size;
-  enum mm_result result = user_initial_stack_size(initial_stack_bytes, &stack_size);
-  if (result != MM_OK) {
-    return result;
+  enum call_status admitted = user_initial_stack_size(initial_stack_bytes, &stack_size, NULL);
+  if (admitted != CALL_OK) {
+    return MM_INVALID;
   }
   uintptr_t stack_base = INITIAL_STACK_TOP - stack_size;
   uintptr_t guard_base = stack_base - PAGE_SIZE;
@@ -54,7 +60,7 @@ enum mm_result user_process_load(struct space *space,
   }
   /* Image validation excludes this interval before backing. Reserve the guard
    * so later allocations cannot fill it; stack and image belong to this VM. */
-  result = vm_reserve_at(address_space, guard_base, PAGE_SIZE);
+  enum mm_result result = vm_reserve_at(address_space, guard_base, PAGE_SIZE);
   if (result == MM_OK) {
     result = vm_reserve_at(address_space, stack_base, stack_size);
     if (result == MM_OK) {

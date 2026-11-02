@@ -33,14 +33,16 @@ struct readiness_set_request {
   struct readiness_set_info info_reply;
   struct readiness_set_event events[READINESS_SET_BATCH_MAX];
   enum call_status status;
+  struct call_limit limit;
   struct readiness_registration *prepared;
   bool copied;
 };
 
-struct syscall_result readiness_set_create_call(uintptr_t reply, uint64_t capacity);
+struct syscall_result readiness_set_create_call(uintptr_t reply, uint64_t capacity,
+    struct call_limit *detail);
 struct syscall_result readiness_set_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation, uintptr_t request, size_t size,
-    uintptr_t reply, size_t capacity);
+    uintptr_t reply, size_t capacity, struct call_limit *detail);
 
 enum call_status readiness_set_publish(struct readiness_set_request *request,
     const struct user_buffer_lease *lease, uintptr_t reply, size_t capacity);

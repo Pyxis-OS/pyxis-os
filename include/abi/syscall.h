@@ -2,6 +2,7 @@
 #define ABI_SYSCALL_H
 
 #include <stdint.h>
+#include <abi/limit.h>
 
 #define SYSCALL_LOG_PUTCHAR UINT64_C(1)
 #define SYSCALL_CALL UINT64_C(2)
@@ -64,7 +65,15 @@ enum call_status {
   CALL_STATUS_COUNT = 33, /* Validation bound, not a result. */
 };
 
-/* START_FAILED takes a packed process startup reason in RDI (process.h),
+/* Status-returning syscalls take an optional writable call_limit address in
+ * R9 (argument six), or zero to opt out. The range must be disjoint from the
+ * request and ordinary reply ranges. It is validated before dispatch and written
+ * only on CALL_LIMIT, then revalidated at copy-out. No diagnostic writes follow
+ * success. Other statuses leave it untouched; initialize it before each call.
+ * NONE identifies a producer not yet migrated to structured detail. Unknown
+ * call numbers, LOG_PUTCHAR, EXIT and START_FAILED do not use the pointer.
+ *
+ * START_FAILED takes a packed process startup reason in RDI (process.h),
  * completes the calling process through normal retirement and never returns.
  * Invalid reasons return BAD_REQUEST without stopping the process.
  * EXIT takes a signed 32-bit program status and never returns.
@@ -90,7 +99,7 @@ enum call_status {
  * owner-local receiver and fixed minimum reply are defined in process.h.
  * The C x86_64 ABI returns this two-word structure in those same registers.
  * LAUNCHER_LAUNCH_BATCH is a narrow exception: after reply-buffer validation it
- * returns its fixed reply on operation failure too, with status still in RAX.
+ * returns its sized reply on operation failure too, with status still in RAX.
  * ENVIRONMENT LOOKUP/ENUMERATE return their fixed metadata on BUFFER_TOO_SMALL
  * without publishing text bytes or a handle.
  * ENDPOINT_CALL similarly returns delivery metadata after output validation,
