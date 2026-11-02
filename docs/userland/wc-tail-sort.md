@@ -43,11 +43,17 @@ byte. A negative count is its magnitude, so `-n -2` is `-n 2`, and `-n 0` prints
 nothing. A final line without a newline is printed without one. Several operands
 are each preceded by a `==> name <==` header; `-` reads stdin.
 
-Tail does not follow files. `-f` and `-F` print `tail: -f is not supported: files
-cannot be followed` (with the letter given) and exit with status 1 before any
-output, even alongside other options and operands. Pyxis has no operation that
-waits for a file to grow, and a polling loop would not follow honestly. See
-[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1479).
+`-f` follows one file by polling (chronium, 2026-11-02): after printing the
+tail, it reads to the end, checks the size with `fstat` and sleeps one second,
+until interrupted. A file that shrinks is reported as `NAME: file truncated` and
+read again from its start, as upstream and GNU tail do. Only one operand may be
+followed, a FIFO or a regular file; stdin with no operand is not followed. `-F`
+also follows the name: when it refers to a different file (by `st_dev` and
+`st_ino`), tail prints what the old file still holds, reports `NAME: file
+replaced` and follows the new file from its start. A removed name is reported
+once and the open file is still read. Without valid identity on both sides a
+replacement cannot be proven and the open file is kept; a name missing at
+startup is an error. A native change notification can later replace the poll.
 
 Tail reads with `read` and keeps only the tail in a growing buffer, so memory
 follows the retained text, not the input size. Headers go through stdio, which is
@@ -93,13 +99,12 @@ kernel interface or compiler change was needed.
 
 ## Limits
 
-- Sort uses libc `qsort`, an unstable heapsort. Lines that differ in any byte keep
-  a fixed order because of the whole-line key, except under `-u`, where
-  `sort -fu` on `Banana` and `banana` kept `Banana` while a host using a
-  different `qsort` kept `banana`. Do not rely on which equal line `-u` keeps.
-- Sort holds the whole input in memory and `-m` does not merge in a stream.
-- `sort -o FILE` does not check the write to FILE or its close, as upstream; a
-  failure there is not reported.
+- Sort uses libc's stable `qsort`, so under `-u` the first of several equal lines
+  is kept, unless the merge buffer cannot be allocated and the unstable fallback
+  runs.
+- Sort holds the whole input in memory and `-m` does not merge in a stream, as
+  upstream.
+- `sort -o FILE` reports a failed write or close of FILE with status 2.
 - Wc, tail and sort read stdin to EOF. The framebuffer console has no EOF
   operation, so use a file, redirect or pipeline; remote sessions deliver EOF.
   See [console input completion](https://git.internal/PyxisOS/pyxis-os/issues/1362).
@@ -155,8 +160,15 @@ the guest's unbuffered stdio gives the in-order result.
 
 Guest-only checks:
 
-- `tail -f`, `-F`, `-f` with two operands and `-n 2 -f` each printed the refusal
-  and exited 1 without output.
+- Following (2026-11-02, QEMU, Remote): `tail -f tmp://t.txt &` printed a line
+  appended a moment later. A foreground `tail -F tmp://k.txt`, with a second
+  session changing the file, printed the appended line, `tmp://k.txt: file
+  replaced` and the new file's contents after an `mv` over the name, a further
+  appended line, and `tmp://k.txt: file removed` after `rm`. In one background
+  (`&`) run, `-F` did not switch to the replaced file; foreground use is the
+  checked case.
+- `sort -fu` on `banana`, `Banana`, `apple` printed `apple` and `banana`, the
+  first of the equal lines.
 - Scheme paths: `wc tmp://w.txt`, `sort -r tmp://w.txt`, `tail -n 3 tmp://sorted.txt`,
   `tail -n 1 host://in/ten.txt` and `wc -l home://s.txt` worked. `wc system://nothing`
   failed with `Not found` and status 1, since `system://` is not bound on a live
@@ -165,8 +177,8 @@ Guest-only checks:
   tmp://inplace.txt` replaced its own input with the sorted lines. `sort -o
   boot://s.txt` failed with `Permission denied`, status 1, and created nothing.
 - On a pty, the interactive remote client typed `cat big.txt | sort | uniq | wc -l`
-  and printed 4976, as the host does, and `sort -n pairs.csv | tail -n 2`,
-  `wc -l words.txt nums.txt` and `tail -f ten.txt` behaved as above.
+  and printed 4976, as the host does, and `sort -n pairs.csv | tail -n 2` and
+  `wc -l words.txt nums.txt` behaved as above.
 
 Not done: the local Development tab was not driven with a keyboard, and no
 native ThinkPad run was made.

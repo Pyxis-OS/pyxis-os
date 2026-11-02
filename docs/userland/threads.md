@@ -58,13 +58,15 @@ once collected; a burst of live threads still fails with `EAGAIN`. Detaching an
 unknown or stale identity returns `ESRCH`; the initial thread, a thread already
 detached or being joined, and the wrong entry kind return `EINVAL`.
 
-Join joinable workers before returning from main or invoking orderly process
-`exit`; finished detached workers are collected for you.
-Libc runs process exit handlers, `.fini_array` and stdio shutdown only from the
-initial thread after collection (a detached thread still running counts as live);
-otherwise exit forces process teardown without
-user callbacks or stdio flushing; a native exit-handler primitive is recorded as
-[technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1302). FS remains valid throughout orderly finalizers. Native forced
+Returning from main or calling `exit` from any thread runs the exiting thread's
+TLS destructors, process exit handlers, `.fini_array` and stdio shutdown on that
+thread while sibling threads keep running, as glibc and musl do (chronium,
+2026-11-02). Siblings' TLS destructors never run, and a second `exit` ends the
+process at once. Because callbacks run beside live threads, they can race or
+deadlock on locks those threads hold, and exit waits while a sibling holds a
+writable FILE inside a blocking write; join workers first when that matters.
+Stdio flushes only writable streams, so a sibling blocked reading stdin does not
+hold exit. FS remains valid throughout orderly finalizers. Native forced
 stop/fault never runs user destructors. Last native THREAD_EXIT without an earlier
 process result remains PROCESS_EXITED/status 0, as specified by the native ABI.
 
