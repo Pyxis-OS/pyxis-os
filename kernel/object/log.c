@@ -193,18 +193,31 @@ static struct syscall_result log_write_call(uint64_t rights, uintptr_t request_a
   if (request.level < LOG_LEVEL_ERROR || request.level > LOG_LEVEL_TRACE) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  size_t length = request.length < LOG_WRITE_MAX ? request.length : LOG_WRITE_MAX;
-  char text[LOG_WRITE_MAX];
-  if (!copy_from_user(text, request.address, length)) {
+  if (request.length > LOG_WRITE_CALL_MAX) {
+    return (struct syscall_result){CALL_LIMIT, 0};
+  }
+  size_t length = (size_t)request.length;
+  if (length && !user_buffer_check(request.address, length, USER_BUFFER_READ)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   if (!task_operation_start()) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  for (size_t i = 0; i < length; ++i) {
-    text[i] = sanitised((unsigned char)text[i]);
-  }
-  log_write_line(process_current()->space, (enum log_level)request.level, text, length);
+  /* Text longer than a line becomes consecutive lines, as a stream's does; an empty
+   * write is one empty line. */
+  size_t offset = 0;
+  do {
+    size_t chunk = length - offset < LOG_WRITE_MAX ? length - offset : LOG_WRITE_MAX;
+    char text[LOG_WRITE_MAX];
+    if (!copy_from_user(text, request.address + offset, chunk)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    for (size_t i = 0; i < chunk; ++i) {
+      text[i] = sanitised((unsigned char)text[i]);
+    }
+    log_write_line(process_current()->space, (enum log_level)request.level, text, chunk);
+    offset += chunk;
+  } while (offset < length);
   return (struct syscall_result){CALL_OK, 0};
 }
 
