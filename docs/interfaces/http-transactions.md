@@ -13,8 +13,11 @@ launch. Successful SLOT/controller pairs publish in one environment batch;
 the provider cannot choose additional names. Each slot has its own controller:
 replacing `http` leaves `json+http` unchanged. Optional TLS roots may be omitted
 on TLS setup failure while HTTP publishes. One root's retirement does not stop
-other roots/results. Failed multi-root publication drains the unpublished leaf.
-Ordinary named single-root service launch keeps its existing policy.
+other roots/results. Failed multi-root publication drains the unpublished leaf. Every service
+launch, single-root included, waits for the provider's report and the provider
+process together, with no deadline: a provider that exits first fails the start,
+Ctrl+C cancels it, and a failed start stops the unpublished provider (chronium,
+2026-11-02).
 
 OPEN_READ permits GET; OPEN_WRITE permits creating POST transactions. REMOVE
 is independently delegable and never implied by WRITE. Stock HTTP is writable;

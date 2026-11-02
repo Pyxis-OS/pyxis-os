@@ -260,8 +260,11 @@ as if `srand(1)` had been called. It suits games and simple sampling, not
 security. `strcat` appends to an existing NUL-terminated string; `strncat`
 appends at most a count of bytes, then a NUL.
 
-`qsort` is an in-place, unstable heapsort: O(n log n) comparisons, constant
-stack use, no allocation or recursion. Comparators receive pointers to array
+`qsort` is a stable bottom-up merge sort through a temporary buffer of
+`count * size` bytes: O(n log n) comparisons and no recursion. Each pass is
+copied back before the next, so comparators only see array elements. Without
+memory for the buffer it falls back to the in-place heapsort, which is not
+stable. Comparators receive pointers to array
 elements and return a negative, zero or positive result.
 
 `bsearch` is an iterative binary search over an array sorted by the same

@@ -181,8 +181,8 @@ Gate 7 adds 6 to 9% (about 0.11 ms) to native launch, which the owner accepted o
 2026-10-12; static TLS for the initial thread is a much-later launch-heavy
 follow-up. The SDL contracts are in [SDL2](../development/sdl2.md#threads-and-timers)
 and [SDL2 audio](../development/sdl2.md#audio). Returning from `main` or calling
-`exit` while threads are live skips libc finalizers
-([technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1302)).
+`exit` while threads are live runs libc finalizers on the exiting thread beside
+them ([threads](../userland/threads.md)).
 
 Remaining limits and consumers:
 

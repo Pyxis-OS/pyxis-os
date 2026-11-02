@@ -344,9 +344,9 @@ tail -n 20 host://log.txt
 cat host://words | sort | uniq -c | wc -l
 ```
 
-They are the upstream tools except that `tail -f` and `-F` are refused with an
-explicit message, since Pyxis cannot wait for a file to grow. Sort has no locale
-collation and uses libc's unstable `qsort`. Libc gained `bsearch` for them. See
+They are the upstream tools; `tail -f` polls once a second as upstream does,
+`tail -F` also follows a replaced name, and `sort -o` reports output errors.
+Sort has no locale collation and uses libc's stable `qsort`. Libc gained `bsearch` for them. See
 the [reference](../userland/wc-tail-sort.md) for behavior, limits and validation,
 and the [recipe notes](../../ports/sbase/README.md) for the adaptation.
 

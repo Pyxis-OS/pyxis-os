@@ -676,7 +676,8 @@ it cannot provide this translation. Libc uses this native syscall directly.
   and reports EOF with the release errno if close fails. Static standard FILE
   storage stays allocated but invalid.
 - Normal exit closes each remaining live descriptor once, including those
-  without FILE wrappers, then reclaims invalid FILE metadata. Cleanup errors
+  without FILE wrappers. FILE storage and the descriptor table stay until the
+  process ends, because sibling threads may still use them. Cleanup errors
   do not replace the process's requested exit status. There is no exit-time
   retry of descriptors already invalidated by close/fclose; the kernel's
   process teardown reclaims any residual native entries.

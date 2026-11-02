@@ -203,8 +203,8 @@ contract was accepted by the owner on 2026-10-13 ([threads task 9](../interfaces
   polling fallback. Without threads authority no other thread exists and waits
   block without a pipe.
 - **Exit.** Join threads and call `SDL_Quit` before returning from `main`.
-  A process exiting with live threads skips `atexit` handlers and stdio
-  flushing; see [technical debt](https://git.internal/PyxisOS/pyxis-os/issues/1302).
+  A process exiting with live threads still runs `atexit` handlers and stdio
+  flushing beside them ([threads](../userland/threads.md)).
 
 ## Audio
 
