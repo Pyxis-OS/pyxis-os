@@ -358,7 +358,8 @@ void usb_block_process(struct usb_block_pool *pool)
       }
       slot->state = USB_BLOCK_ACTIVE;
       cpu_restore_interrupts(flags);
-      uint64_t deadline = task_deadline_after_ms(USB_BOT_TIMEOUT_MS);
+      uint64_t deadline = task_deadline_after_ms(slot->operation == BLOCK_FLUSH ?
+          USB_BOT_FLUSH_TIMEOUT_MS : USB_BOT_TIMEOUT_MS);
       enum usb_bot_io_result outcome;
       if (slot->operation == BLOCK_READ) {
         outcome = usb_bot_read(device->bot, slot->first_block, slot->block_count,
@@ -378,7 +379,8 @@ void usb_block_process(struct usb_block_pool *pool)
         device->info.write_failed = true;
       }
       finish_slot(slot, result);
-      if (outcome == USB_BOT_IO_FAILED || outcome == USB_BOT_IO_TIMED_OUT || pool->failed) {
+      /* A failure that BOT recovery survived fails only this request. */
+      if (device->bot->state != USB_BOT_READY || pool->failed) {
         fail_device(device);
       }
       cpu_restore_interrupts(flags);

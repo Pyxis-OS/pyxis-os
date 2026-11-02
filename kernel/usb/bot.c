@@ -1,3 +1,4 @@
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/task.h>
 #include <limits.h>
@@ -247,9 +248,18 @@ static bool reset_recovery(struct usb_bot *bot)
          usb_host_bulk_clear(bot->host, bot->out.address, NULL, 0, NULL, deadline) == USB_OK;
 }
 
+/* At runtime a successful reset keeps the device, as Linux usb-storage does
+ * after usb_stor_Bulk_reset: only this command fails. A failed reset, or any
+ * failure while probing, retires it. */
 static enum bot_command_result broken(struct usb_bot *bot, const char *detail)
 {
-  fail(bot, reset_recovery(bot) ? detail : "BOT reset recovery failed; device abandoned");
+  bool recovered = reset_recovery(bot);
+  if (recovered && bot->state == USB_BOT_READY) {
+    kwarn("usb: %s; BOT reset recovery succeeded, device kept (recoveries=%u)\n",
+          detail, bot->recoveries);
+    return BOT_COMMAND_BROKEN;
+  }
+  fail(bot, recovered ? detail : "BOT reset recovery failed; device abandoned");
   return BOT_COMMAND_BROKEN;
 }
 
@@ -260,7 +270,8 @@ static enum bot_command_result command(struct usb_bot *bot, const uint8_t *cdb,
 {
   bot->timed_out = false;
   *relevant = 0;
-  uint64_t deadline = bounded_deadline(overall, USB_BOT_TIMEOUT_MS);
+  uint64_t deadline = bounded_deadline(overall, cdb[0] == SCSI_SYNCHRONIZE_CACHE_10 ?
+      USB_BOT_FLUSH_TIMEOUT_MS : USB_BOT_TIMEOUT_MS);
   if (task_deadline_expired(deadline)) {
     bot->timed_out = true;
     fail(bot, "BOT command deadline expired before admission");
@@ -344,9 +355,12 @@ static bool request_sense(struct usb_bot *bot, void *scratch, uint64_t overall)
   uint8_t cdb[6] = { SCSI_REQUEST_SENSE, 0, 0, 0, SCSI_SENSE_BYTES, 0 };
   size_t bytes;
   bot->sense_valid = false;
-  if (command(bot, cdb, sizeof(cdb), BOT_DATA_IN, scratch, SCSI_SENSE_BYTES,
-          &bytes, overall, NULL) != BOT_COMMAND_OK) {
-    if (bot->state != USB_BOT_FAILED) {
+  enum bot_command_result result = command(bot, cdb, sizeof(cdb), BOT_DATA_IN, scratch,
+      SCSI_SENSE_BYTES, &bytes, overall, NULL);
+  if (result != BOT_COMMAND_OK) {
+    /* A transport failure that runtime recovery survived keeps the device. */
+    if (bot->state != USB_BOT_FAILED &&
+        !(result == BOT_COMMAND_BROKEN && bot->state == USB_BOT_READY)) {
       fail(bot, "SCSI REQUEST SENSE failed");
     }
     return false;
