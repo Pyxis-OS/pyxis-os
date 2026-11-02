@@ -4,6 +4,7 @@
 #include <kernel/net/packet.h>
 #include <kernel/task.h>
 #include <lwip/netif.h>
+#include <lwip/priv/memp_priv.h>
 #include <lwip/priv/tcp_priv.h>
 #include <caelum_hooks.h>
 #include "connection.h"
@@ -18,6 +19,9 @@
 _Static_assert(TCP_OOSEQ_MAX_PBUFS * (NET_PACKET_MAX_BYTES + sizeof(struct pbuf) +
     sizeof(struct tcp_seg) + 4 * MEM_ALIGNMENT) <= NET_TCP_RECEIVE_BYTES);
 
+
+/* The PCB's memp allocation must be the storage allocation itself. */
+_Static_assert(MEMP_MEM_MALLOC && MEMP_SIZE == 0);
 
 static struct tcp_work_queue connections;
 static uint64_t next_generation;
@@ -95,6 +99,13 @@ err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
 {
   net_worker_assert_context();
   if (!tcp_identity_ready() || next_generation == UINT64_MAX) {
+    return ERR_MEM;
+  }
+  /* A passive open allocates its PCB while lwIP processes the SYN, so it is charged
+   * to the protocol credits that this stream's receive reservation backs. It lives
+   * until TIME_WAIT expires, after that reservation is released: charge it like an
+   * actively opened PCB. */
+  if (!net_storage_make_ordinary(pcb)) {
     return ERR_MEM;
   }
   struct tcp_connection *connection = net_storage_alloc(sizeof(*connection));
@@ -406,6 +417,9 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
     connection->setup_deadline = 0;
     connection->progress_deadline = 0;
     connection->orphan_deadline = 0;
+    /* lwIP purges the PCB's segments and out-of-order data before TIME_WAIT and
+     * accepts no stream data there, so no packet storage backs the reservation. */
+    tcp_connection_release_receive_reservation(connection);
     return;
   }
   if (!connection->owned && !connection->listener && !connection->orphan_deadline) {

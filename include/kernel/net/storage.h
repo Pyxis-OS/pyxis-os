@@ -35,5 +35,9 @@ void *net_storage_alloc(size_t bytes);
  * records, receive rings and new transmit payloads cannot consume these credits. */
 void *net_storage_protocol_alloc(size_t bytes);
 void net_storage_free(void *pointer);
+/* Moves a protocol allocation to ordinary storage, subject to the ordinary
+ * admission bound; an ordinary allocation is left as it is. For storage that
+ * outlives the receive credit that backed its allocation. A refusal changes nothing. */
+bool net_storage_make_ordinary(void *pointer);
 
 #endif
