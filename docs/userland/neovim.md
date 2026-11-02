@@ -143,7 +143,7 @@ enabling. `cmd` replaces the whole list, so repeat the flags:
 ```lua
 vim.lsp.config('clangd', {
   cmd = { 'home://tools/payload/clangd.pxb', '--resource-dir=clang_resources://',
-    '-j=4', '--background-index=false', '--pch-storage=memory' },
+    '--background-index=false', '--pch-storage=memory' },
 })
 vim.lsp.enable('clangd')
 ```
@@ -152,10 +152,12 @@ clangd starts for `c` and `cpp` buffers. Headers are `c` by default
 (`g:c_syntax_for_h`), and `vim.filetype.add({ extension = { h = 'cpp' } })` makes
 them `cpp`; either way a header attaches, and clangd itself parses `.h` as C. The project root is the nearest directory with
 `compile_commands.json`, `compile_flags.txt` or `.git`, otherwise the file's
-directory. The command passes `--resource-dir=clang_resources://`, `-j=4` (libc
-reports no CPU count, so clangd would otherwise run one worker),
+directory. The command passes `--resource-dir=clang_resources://`,
 `--background-index=false` (indexing would write `.cache/clangd` into the
-project) and `--pch-storage=memory`. If threads cause trouble, add `-sync`.
+project) and `--pch-storage=memory`. There is no `-j`: clangd's worker pool
+follows the CPU allowance libc reports (`sysconf(_SC_NPROCESSORS_ONLN)`, which
+libc++'s `hardware_concurrency` and LLVM's fallback use), so a 4-CPU guest runs
+four workers. If threads cause trouble, add `-sync`.
 
 Pyxis has no detached children, so a language server's `detached` setting
 defaults to off and the server stops with the editor.

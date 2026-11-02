@@ -65,7 +65,7 @@ are in [Neovim language servers](neovim.md#language-servers).
 Historical manual publication under `home://toolchain/clang/payload/`:
 vela (Core Ultra 7 356H), installed stick, Neovim with the shipped flags
 (`--resource-dir=clang_resources:// -j=4 --background-index=false
---pch-storage=memory`), payload `hosted-801c7d2f` (main `a29372f8`, fork
+--pch-storage=memory`; `-j=4` was dropped afterwards), payload `hosted-801c7d2f` (main `a29372f8`, fork
 `3d69e83`). Each value is the median of five samples (min–max) from the
 [timing script](#timing-script). The reference project is `pointer-min.c` with
 the cursor on `display_submit`, three runs; the owner's project is private.
@@ -104,7 +104,7 @@ image or this repository.
 
 - Every edit, completion and signature help request reparses the file and its
   headers, so latency grows with the includes ([clangd without a preamble](https://git.internal/PyxisOS/pyxis-os/issues/1382)).
-- clangd runs four workers because libc reports no processor count, has no user
+- clangd sizes its workers from the CPU allowance libc reports, has no user
   configuration or index cache, and has no background index
   ([clangd on Pyxis limits](https://git.internal/PyxisOS/pyxis-os/issues/1383)).
 - Server root views are an editor guard, not a read-only grant

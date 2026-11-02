@@ -243,8 +243,10 @@ XPC); Clang and LLD are built exactly as before. Libc's detached threads
 ([threads](../userland/threads.md#creation-and-collection)) back its workers.
 Flags, as the [Neovim setup](../userland/neovim.md) passes them:
 `--resource-dir=clang_resources:// --pch-storage=memory
---background-index=false -j=N`. clangd cannot count processors on Pyxis, so the
-default is one worker; the `-sync` mode is the fallback if threads misbehave.
+--background-index=false`. Without `-j`, clangd asks LLVM for the host's thread
+count, which falls back to libc++'s `hardware_concurrency`, that is
+`sysconf(_SC_NPROCESSORS_ONLN)`; `-j=N` still overrides it and the `-sync` mode
+is the fallback if threads misbehave.
 Paths must be native (`home://proj/main.c`); the LSP side maps them to
 `file:///home/proj/main.c` as decided for the milestone.
 
