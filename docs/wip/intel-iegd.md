@@ -82,7 +82,7 @@ layer or successful unsupported operations.
 | DMA/SG | Keep CPU VA, physical frame, GPU VA and device address distinct. Existing identity-DMA proof does not provide translated SG mappings or permission to change firmware IOMMU tables. Decide any required new mapper at that task. |
 | PCI/MMIO/MSI | Native claims, BAR mappings and single-vector MSI-X/MSI exist. Keep one device owner and the native BME/claim lifecycle; use the reference's access widths, ordering and posting. |
 | Delays/waits | Use native monotonic deadlines and task waits. Separate short hardware polling from sleepable waits; never replace a sleeping mutex with a spinlock held over PHY/AUX work. |
-| IRQ/deferred work | Native interrupt entry captures/acknowledges status and wakes the retained owner. Join actual work before releasing it. Linux IRQ-safe spinlocks cannot be cast to Pyxis's non-IRQ-entry spinlocks. |
+| IRQ/deferred work | A fixed BSP work queue and detached IRQ gate now provide coalescing, cancellation and joined retirement. Keep bounded completion bookkeeping in the top half and sleeping release in the worker. Linux IRQ-safe spinlocks cannot be cast to Pyxis's non-IRQ-entry spinlocks. |
 | Firmware/config | Borrow deliberately admitted immutable assets with truthful lifetime/errors. Firmware naming, licence, protocol and content pins are separate from the source pin. |
 
 Current `display_init` is pre-AP/pre-task; the reference probe is sleepable.
@@ -124,6 +124,39 @@ IOMMU reprogramming or hidden blocking reserve.
 Panic publication and exact hardware recovery are settled when task5 reaches
 those transitions, using the owned front and reference behavior; they are not
 silently inferred from the old GOP pointer or designed prematurely here.
+
+### Decision7: preserved-display PCI resource handoff — proposed
+
+The current PCI reservation preserves firmware command state. Completing it
+disables bus mastering; BAR sizing then requires I/O, memory decode and bus
+mastering off. BAR/MSI-X mapping is pre-AP, and the existing unsized bootstrap
+window reaches only 256 KiB. These contracts cannot simply be bypassed to map
+the new driver's registers while keeping inherited scanout alive.
+
+Linux's pinned `pci_read_bases()` temporarily disables I/O/memory decode for
+BAR sizing, preserves bus mastering, restores the BAR values and command, and
+performs no console writes while decode is disabled. It observes the applicable
+`mmio_always_on` quirk. Xe then enables the PCI device and bus mastering before
+its display probe. It does not require a reset or blanket bus-master shutdown
+as a prerequisite for display discovery.
+
+**Recommended default:** add a separate native preserved-display resource
+handoff. During bootstrap, the reserved display owner performs Linux-style
+short BAR sizing with CPU framebuffer/MMIO writers excluded, preserving firmware
+bus mastering and restoring the assigned BARs/decoding before presentation
+continues. Retain the sized resource claim and prepare its mappings before AP
+startup. The fixed runtime worker can then use those resources and prepare
+masked interrupt delivery without the ordinary reset-driver claim transition.
+Attach the software handler before delivery is enabled. Keep identity-DMA
+admission and actual scanout retirement separate; this authorizes no reset,
+IOMMU programming, GuC or rendering. Ordinary PCI/DMA claim and release rules
+stay unchanged. An uncertain restoration retains ownership/resources and must
+not be reported as valid GOP fallback.
+
+This needs explicit acceptance because it adds a native ownership path that
+preserves a live firmware consumer. The alternative is to stop inherited
+scanout before acquiring these resources, changing decision5's preparation
+handoff. No PCI/configuration effect for either choice is implemented yet.
 
 ## Ordered tasks
 
@@ -177,9 +210,41 @@ exhaustion. The diagnostic task and PTE readout are not product code. No device
 was given these buffers; device joining and the new API's timeout/quarantine
 path have not been exercised natively or by a missing-ACK control.
 
-Task2 remains open: bootstrap reservation, the asynchronous owner/OAL handoff,
-requester-specific DMA admission, IRQ/work joining and the first real driver
-consumer still follow this memory foundation. No eDP activation is claimed.
+Task2 remains open; the worker/IRQ software foundation below follows this memory
+slice. No eDP activation is claimed.
+
+### Task2: worker and IRQ software foundation
+
+`iegd_owner` provides one fixed BSP kernel worker with embedded, coalesced work,
+one deferred rerun while a callback is active, synchronous cancellation, and
+close/drain/join. Work storage cannot retire until its producers are closed and
+an active callback has returned. The queue uses BSP interrupt exclusion and
+the existing task wait records, with detach-before-wake ordering. It introduces
+no generic Linux workqueue, scheduling priority or new worker-placement policy.
+
+The statically assigned Intel display vector has a permanent detached gate.
+Detachment on the BSP outside its callback joins prior top-half access; late
+entries cannot borrow the removed context. This proves neither that an MSI has
+been retracted nor that hardware stopped fetching. The real owner still needs
+its device stop/retirement proof and a separate deferred-work join.
+
+Keep IEGD's bounded vblank completion bookkeeping and wakes in the BSP top half;
+only potentially sleeping release work belongs on the queue. Deferring all
+completion to that same worker would deadlock its own scanout-stop waits.
+The later display-only fork adaptation must replace the concrete Linux IRQ
+spinlock with BSP interrupt exclusion, not Pyxis's non-IRQ-entry spinlock.
+
+The kernel build passed at explicit `-j12`. Disposable 1/4-CPU KVM controls
+(`host,+invtsc`, 1 GiB) passed coalescing, active self-rerun, queued cancellation,
+joining a blocked active callback, refusal of refills during cancellation,
+close/drain/join and detached late entry through the real IDT. The temporary
+ring-zero software interrupt is not PCI/MSI or Intel register qualification;
+the diagnostic task is absent from product code. Native source review found
+no remaining queue/cancellation/record-lifetime defect.
+
+Normal boot starts no new worker and attaches no handler yet. Bootstrap PCI
+resource handoff (decision7), requester-specific DMA admission and the concrete
+fork OAL/display consumer remain. Task2 stays unchecked until that integration.
 
 ## Code retained and replaced
 
@@ -215,6 +280,7 @@ association. Firmware licences are separate from the MIT source licence.
 
 - [IEGD alpha.1 source](https://github.com/intel/intel-edge-graphics-driver/tree/db7b38582c955269a38928dac5e36dd1a3998372), [release notes](https://github.com/intel/intel-edge-graphics-driver/blob/db7b38582c955269a38928dac5e36dd1a3998372/docs/release-notes.md), [OAL](https://github.com/intel/intel-edge-graphics-driver/blob/db7b38582c955269a38928dac5e36dd1a3998372/oal/oal.h), [flip/retirement](https://github.com/intel/intel-edge-graphics-driver/blob/db7b38582c955269a38928dac5e36dd1a3998372/hal/display/fb.c).
 - Linux v7.1 `8cd9520d35a6c38db6567e97dd93b1f11f185dc6`: [eDP initialization](https://github.com/torvalds/linux/blob/8cd9520d35a6c38db6567e97dd93b1f11f185dc6/drivers/gpu/drm/i915/display/intel_dp.c), [BIOS/VBT/defaults](https://github.com/torvalds/linux/blob/8cd9520d35a6c38db6567e97dd93b1f11f185dc6/drivers/gpu/drm/i915/display/intel_bios.c), [PPS](https://github.com/torvalds/linux/blob/8cd9520d35a6c38db6567e97dd93b1f11f185dc6/drivers/gpu/drm/i915/display/intel_pps.c), [backlight](https://github.com/torvalds/linux/blob/8cd9520d35a6c38db6567e97dd93b1f11f185dc6/drivers/gpu/drm/i915/display/intel_backlight.c).
+- Same Linux pin: [PCI BAR discovery](https://github.com/torvalds/linux/blob/8cd9520d35a6c38db6567e97dd93b1f11f185dc6/drivers/pci/probe.c#L325), [PCI quirks](https://github.com/torvalds/linux/blob/8cd9520d35a6c38db6567e97dd93b1f11f185dc6/drivers/pci/quirks.c#L313), [Xe probe](https://github.com/torvalds/linux/blob/8cd9520d35a6c38db6567e97dd93b1f11f185dc6/drivers/gpu/drm/xe/xe_pci.c#L1084). IEGD [display IRQ/completion work](https://github.com/intel/intel-edge-graphics-driver/blob/db7b38582c955269a38928dac5e36dd1a3998372/hal/interrupt.c) and [scanout waits](https://github.com/intel/intel-edge-graphics-driver/blob/db7b38582c955269a38928dac5e36dd1a3998372/hal/display/fb.c).
 - [Native VM ownership](../kernel/vm-ownership.md), [PCI](../devices/pci.md), [display](../kernel/display.md).
 
 ## User-visible completion
