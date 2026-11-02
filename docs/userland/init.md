@@ -942,7 +942,7 @@ provider's declared `staging` request. The bootstrap keeps its ancestor through
 service initialization and consumes it before local/mux/remote client handoff.
 It never becomes a URI root, cwd or interactive selected source.
 
-A RAM upload is limited by free memory less an eighth of the total, and a fixed cap is configurable with trusted provider startup
+A RAM upload has no fixed limit (the memory decides) and a fixed cap is configurable with trusted provider startup
 `--staging-cap BYTES`. Large uploads opt into an explicitly provisioned NPFS
 volume through the same selected-source schema. Boot validation rejects any
 public/alternate alias of that backing, including equivalent NPFS volume tuples

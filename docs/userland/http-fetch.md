@@ -84,9 +84,8 @@ no provider; ordinary session invocation does not republish existing services.
 Trusted startup supplies an explicitly private RAM or npfs backing leaf, then
 consumes the backing source before entering the interactive shell. Without that
 backing, snapshot GET and POST are unavailable. `--staging-cap BYTES` configures
-a fixed RAM POST body cap. Without it a RAM upload is limited by free memory: a write is
-refused when it would leave less than an eighth of the total free (read from the
-`system_info` grant, which RAM staging then requires), and the log names the numbers. GET snapshots have no provider byte
+a fixed RAM POST body cap. Without it a RAM upload is bounded by the memory itself: a write
+that cannot be allocated fails with the native status (`NO_MEMORY`). GET snapshots have no provider byte
 quota: private RAM and npfs backing grow until actual capacity or file
 representability is exhausted. See [backing and limits](../interfaces/http-transactions.md#private-backing-and-limits).
 
