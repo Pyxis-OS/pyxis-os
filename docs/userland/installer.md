@@ -68,6 +68,11 @@ give no credit; proven unreferenced Pyxis attempts are swept only after confirme
 publication. The observation is
 revalidated before effects, not reserved against all later exhaustion.
 
+For a new Coexist pool, the size prompt defaults to the whole selected
+MiB-aligned gap. Enter a smaller size to reserve unallocated space for another
+use. Review shows the gap, chosen pool and remaining tail: the pool cannot
+currently be resized. Update always preserves its existing partition.
+
 Choose **Install**, **Classic**, then a consent path
 ([decision 76](../wip/pkg-upgrade.md#decided)):
 - **Blank or marked disks**, the default, admits a blank disk (no partition
@@ -107,9 +112,11 @@ exact word `wipe`. Cancellation before Apply makes no target writes. Consent is
 inspected again through fresh read-only inspection; the single-use erase grant
 also revalidates the exact reviewed GPT/geometry before write admission.
 
-Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
+Installation rebuilds the whole selected disk: a fresh GPT, a 1 GiB FAT32 ESP
 starting at 1 MiB, then an npfs pool extending to the aligned end before backup
-GPT metadata. The pool has a `system` volume with an empty regular root
+GPT metadata. This is a creation default: Update preserves the reviewed actual
+ESP and pool extents, including existing 512 MiB Classic ESPs. It does not grow
+or move either partition. The pool has a `system` volume with an empty regular root
 `SAFE_TO_WIPE` marker and a regular `.pyxis-classic` file containing exactly
 `PYXIS-CLASSIC 1` plus LF (16 ASCII bytes). Classic Install synchronizes that
 file and the system root; Coexist never creates it. The pool also has an empty

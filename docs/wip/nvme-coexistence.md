@@ -330,8 +330,10 @@ One frozen plan binds geometry, disk/ESP/pool GUIDs, GPT slots/extents, volume
 names, consumed target bytes and sources. Render/validate supported archive
 configuration with the actual pool entry, not text substitution of `partition = 2`;
 `bind_bin` already follows the system partition. Keep classic two-partition
-eligibility separate. The largest-gap/1 MiB alignment/64 GiB default remains
-installer policy, with an explicit size choice, never permission to resize.
+eligibility separate. Installer policy selects the largest MiB-aligned gap and
+defaults to its whole capacity (chronium, 2026-11-02), with an explicit smaller
+size choice. Review reports the selected gap, pool and unallocated tail and
+warns that the pool cannot currently be resized. Update preserves its extents.
 
 #### Task-3 decisions — accepted by the owner, 2026-10-15
 
