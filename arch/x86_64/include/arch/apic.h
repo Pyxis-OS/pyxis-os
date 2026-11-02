@@ -19,6 +19,7 @@
 #define APIC_HDA_VECTOR 45
 #define APIC_NVME_VECTOR 46
 #define APIC_WIFI_VECTOR 47
+#define APIC_INTEL_DISPLAY_VECTOR 48
 #define APIC_SPURIOUS_VECTOR 255
 
 struct apic_msi_message {
