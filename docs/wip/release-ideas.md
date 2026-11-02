@@ -438,3 +438,35 @@ to 2026-10-25).
 - **Rust and bulk file reads** (not in 0.0.9, chronium, 2026-10-25): the Rust
   work and the bounded bulk FILE reads through providers
   ([bulk file reads](../interfaces/file-providers.md)) merge after the 0.0.9 tag.
+
+## 12. `man`: a real manual-page system
+
+Status: **idea; no design yet (chronium, 2026-11-02).**
+Target: not set. Covered by: none yet. The owner wants it sometime between now and
+2030.
+
+Pyxis has reference documentation in `docs/` and a task-oriented
+[user manual](../manual/README.md), but nothing a user can read from inside the
+running system. The idea is a native `man` command, named `man`, written in Go with the
+[Go cross-toolchain](../development/go-toolchain.md). The shell's `help` stays for
+the shell's builtins.
+
+- **Rendering.** Pages are Markdown, rendered in the terminal with
+  [glamour](https://github.com/charmbracelet/glamour) (MIT; goldmark for Markdown and
+  Chroma for code highlighting), the library behind Glow, which is the reference pager
+  for the look and behavior.
+- **Pages for commands.** What each command does and takes, in the way `man` pages are
+  used on other systems.
+- **Pages for the library and SDK.** The libpyxis calls a program makes, with their
+  statuses.
+- **Pages for what errors mean.** The `CALL_*` outcomes and the limit reasons (see the
+  [diagnostic ABI](../interfaces/abi.md#limit-diagnostics) and
+  [limits](../interfaces/limits.md)), so that a status or a refusal message has a page to
+  look up.
+- **Pages for how to do things.** Task pages like the ones in the
+  [user manual](../manual/README.md).
+
+Nothing here is authorized. Questions for a design, if the owner assigns it: where the
+pages live and how a package ships its own, how `man` finds a page by name, section or
+topic, how large the Go binary and its dependencies are on the image, and whether the
+existing manual pages and these share one source.
