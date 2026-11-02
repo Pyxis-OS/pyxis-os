@@ -155,6 +155,7 @@ interface facets and DHCP broadcast factories stay in trusted setup handoffs.
 | `pipe` | `create` |
 | `net_registry` | `read` |
 | `udp`, `dns_udp` | `open` |
+| `dns_tcp` | `connect` |
 | `display` | `draw` |
 | `audio` | `create` (native playback authority) |
 | `screen_capture` | `capture` |
