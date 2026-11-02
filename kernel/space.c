@@ -825,24 +825,6 @@ static struct nav_layout draw_spaces_nav(void)
   return layout;
 }
 
-/* Block cursor: the cell's background becomes the cursor color and its glyph
- * the cursor text color. Fonts are two-color bitmaps with blank padding, so
- * the top-left pixel is the cell's background. */
-static void draw_block_cursor(struct framebuffer *row, size_t x,
-    const struct font *font, const struct color_scheme *scheme)
-{
-  uint32_t block = framebuffer_color(row, scheme->cursor);
-  uint32_t text = framebuffer_color(row, scheme->cursor_text);
-  uint32_t *origin = (uint32_t *)row->address + x;
-  uint32_t background = origin[0];
-  for (size_t line = 0; line < font->height; ++line) {
-    uint32_t *pixel = (uint32_t *)(row->address + line * row->pitch) + x;
-    for (size_t i = 0; i < font->width; ++i) {
-      pixel[i] = pixel[i] == background ? block : text;
-    }
-  }
-}
-
 /* Presenter-owned: set once the early console has handed over the screen. */
 static bool presenting;
 
@@ -1438,6 +1420,10 @@ void space_present()
           tty_selection_row(tty, row, &first, &last);
       bool caret = tty->cursor_visible && tty->y == row && tty->x < tty->width;
       size_t x = tty->x;
+      struct terminal_cell caret_cell;
+      if (caret) {
+        caret_cell = tty_row(tty, row)[x];
+      }
       if (selected) {
         memcpy(selection_row_cells + first, tty_row(tty, row) + first,
             (last - first + 1) * sizeof(*selection_row_cells));
@@ -1458,8 +1444,11 @@ void space_present()
               selection_row_cells[column].attributes);
         }
       }
+      /* Block cursor: the caret cell redrawn from the TTY's cell with the
+       * scheme's cursor colors, over any selection in that cell. */
       if (caret) {
-        draw_block_cursor(cursor_row_fb, x * font->width, font, scheme);
+        tty_plot_char_styled(cursor_row_fb, font, terminal_character_glyph(caret_cell.character),
+            x * font->width, 0, scheme->cursor_text, scheme->cursor, caret_cell.attributes);
       }
       volume_ui_present_copy(screen, pointer, dst_offset + row_start,
           (const void *)cursor_row_fb->address, row_bytes);

@@ -397,9 +397,10 @@ and permits writing the bottom-right cell before repositioning without scrolling
 Cursor state belongs to each TTY and defaults to visible. Presentation snapshots
 its position/visibility under the output lock before copying the frame. The
 cursor's text row is composed off-screen with the cursor already drawn, then
-copied, so the screen never shows that row without the cursor. The block uses
-the scheme's cursor color for the cell's background and its cursor-text color
-for the glyph, taking the cell's top-left pixel as its background. The cursor
+copied, so the screen never shows that row without the cursor. The block redraws
+the cursor cell from the TTY's cell grid: its character and attributes, with the
+scheme's cursor color as background and cursor-text color as foreground. It
+covers any selection in that cell. The cursor
 never modifies the space framebuffer, so moving, hiding or switching spaces
 leaves no saved-pixel restoration work. The framebuffer has no page flip or
 vertical sync, so presentation still permits tearing.
