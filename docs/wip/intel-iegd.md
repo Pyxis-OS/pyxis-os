@@ -157,6 +157,30 @@ native driver result. Two existing warnings remain in NPFS/lwIP; this task does
 not change those subsystems. No new hardware worker, mapping, frame, firmware
 load or source/object build rule is added by the pin.
 
+### Task2: runtime buffer foundation
+
+The first task2 slice adds `kernel/mm/device_pages`: runtime zero-filled,
+RW/NX WB or WC backing with a caller-owned descriptor and an immutable physical
+page vector. Its shared VM ownership survives scheduling between 64-page
+allocation, mapping, vacancy-check and release steps. It does not establish
+device addressing or DMA authority. Confirmed CPU/device retirement remains
+the concrete owner's prerequisite for release; uncertain remote invalidation
+retains the whole allocation until reboot. Heap metadata keeps its existing
+allocation and retained-pool limits.
+
+Disposable QEMU controls passed with KVM, `host,+invtsc`, 1 and 4 CPUs, 1 GiB
+RAM and the existing builder at explicit `-j12`. A never-merged kernel task
+exercised 1-, 65- and 513-page WB/WC allocations after scheduler startup,
+zeroing and readback, physical translations, RW/NX/supervisor and PAT flags,
+local and remote-confirmed release, and exact backing reclamation after PMM
+exhaustion. The diagnostic task and PTE readout are not product code. No device
+was given these buffers; device joining and the new API's timeout/quarantine
+path have not been exercised natively or by a missing-ACK control.
+
+Task2 remains open: bootstrap reservation, the asynchronous owner/OAL handoff,
+requester-specific DMA admission, IRQ/work joining and the first real driver
+consumer still follow this memory foundation. No eDP activation is claimed.
+
 ## Code retained and replaced
 
 Keep the common presenter, software composition, tab bar, frame/capture/grant
