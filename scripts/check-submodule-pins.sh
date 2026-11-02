@@ -14,7 +14,7 @@ set -eu
 [ "$#" -eq 2 ] || { echo "usage: $0 BASE_COMMIT HEAD_COMMIT" >&2; exit 2; }
 base=$1
 head=$2
-paths='userspace ports fs third_party/lwip'
+paths='userspace ports fs third_party/lwip third_party/iegd'
 
 fork=$(git merge-base "$base" "$head")
 origin=$(git remote get-url origin)

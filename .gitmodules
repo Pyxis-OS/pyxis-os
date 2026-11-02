@@ -10,3 +10,6 @@
 [submodule "fs"]
 	path = fs
 	url = ../pyxis-fs.git
+[submodule "third_party/iegd"]
+	path = third_party/iegd
+	url = ../pyxis-iegd.git

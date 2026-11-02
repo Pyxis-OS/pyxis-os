@@ -98,7 +98,7 @@ appropriate qualification; source, build, QEMU and native results stay distinct.
 
 | Task | Deliverable | Status |
 | --- | --- | --- |
-| 1. Source foundation | Verify the mirrored base/history/tag/notices; add the exact `third_party/iegd` pin, repository/provenance boundary and normal pin validation. Record the interim source baseline. No driver objects or hardware activation yet. | [ ] |
+| 1. Source foundation | Exact mirrored alpha.1 base/history/tag/notices verified; `third_party/iegd` pinned with the normal main-ancestry check and documented repository/build boundary. Interim source/kernel baseline recorded. No driver objects or hardware activation. | [x] |
 | 2. Native preparation and owner | Define the bootstrap-to-worker handoff and concrete OAL contracts, then implement required native MM/WC/DMA, timing, wait and IRQ/work lifetime support in focused PRs. No generic Linux emulation. | [ ] |
 | 3. Panel discovery | Reuse retained Fedora and boot evidence; collect missing VBT/OpRegion, EDID/DPCD, route/link, panel control and inherited firmware state through an orchestrator-scheduled read-only packet if needed. Implement Linux's real parsing/defaults. | [ ] |
 | 4. Display-only eDP port | Native device/context seam, deliberate display init/stop, exact timings and needed MIT eDP power/link/backlight behavior. Correct timed release and native IRQ/work integration. Keep GuC/engines/render UAPI out. | [ ] |
@@ -112,6 +112,16 @@ against zero-descriptor allocation as a contract, not native qualification of
 this driver or proof that every descriptor names a live consumer. Baseline
 measurements must identify the actual source/configuration and observer; no
 new timing result is implied by recording these facts.
+
+### Source-foundation validation
+
+The task1 baseline is source `ee47b765d1d702546e3e66fd10643a8ea4c663f4`
+(docs only over main `dda7c7e9b09932264f61b014fa9e572979c6ebd2`), normal kernel
+configuration, existing `pyxis-llvm23.1.3-b33ad74-r1` builder and explicit `-j12`.
+Kernel build passed. This is a correctness/source baseline, not a timing or
+native driver result. Two existing warnings remain in NPFS/lwIP; this task does
+not change those subsystems. No new hardware worker, mapping, frame, firmware
+load or source/object build rule is added by the pin.
 
 ## Code retained and replaced
 
