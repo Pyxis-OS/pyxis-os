@@ -26,6 +26,9 @@ Local and remote launchers read registry policy and supply a `dns_udp` factory:
 a reduced-rights copy of their held UDP scope for routed numeric DNS, or a derived
 single-interface factory for pinned DNS. The resulting transport
 and numeric `DNS_SERVER` text travel together to resolver-capable children.
+When the launcher also holds a TCP service, children receive a `dns_tcp` factory
+over the same scope with only the `connect` right, for the TCP fallback below;
+it is optional and simply absent otherwise.
 If the selected interface is outside that scope or no server is published,
 launch supplies no resolver path; it never widens the grant. A later link or
 address failure is reported by the actual query. Existing programs retain their startup
@@ -86,9 +89,12 @@ timeout, output and supported-size failures return a nonzero process status.
 Queries carry an EDNS(0) OPT record advertising a 1232-byte UDP payload (RFC 6891
 and the current avoid-fragmentation guideline), so replies up to 1232 bytes are
 accepted; a server that answers FORMERR or NOTIMP to the OPT record is asked
-again without it. A matching truncated response still reports that TCP fallback
-is unavailable; replies over 1232 bytes are also reported as unsupported. Neither exposes
-partial answers. Full supported UDP
+again without it. A matching truncated (TC) UDP response is asked again over one
+TCP connection to the same server (RFC 7766: a two-byte length before each
+message), through the `dns_tcp` factory; the reply may be up to 4096 bytes.
+Without `dns_tcp`, a truncated response reports that the fallback needs that
+grant. Replies over 1232 bytes on UDP (4096 on TCP) are reported as unsupported.
+Neither exposes partial answers. Full supported UDP
 datagrams are consumed so an oversized DNS response cannot block the receive
 queue. Random matching fields do not authenticate DNS or provide DNSSEC.
 

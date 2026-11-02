@@ -230,7 +230,7 @@ it comes early, and it names what overflowed.
 | GPT, queue depths, redirects | 256 partitions, small device queues, 10 redirects | Format and tuning bounds | installer, drivers, `libhttp` |
 | NPFS and FAT32 layout | 64 volumes per pool, 255-byte names, 4 GiB - 1 per FAT32 file | On-disk formats | `fs/` |
 | USTAR | 8 GiB - 1 per file, 250-byte paths | The package archive format | `pkg/metadata.h` |
-| Wire fields | UDP 1,472, DNS names 255 / labels 63 / messages 1,232, TLS record 16,384 | Protocol widths | `include/abi/udp.h`, `common/dns.h` |
+| Wire fields | UDP 1,472, DNS names 255 / labels 63 / messages 1,232 (UDP) / 4,096 (TCP), TLS record 16,384 | Protocol widths | `include/abi/udp.h`, `common/dns.h` |
 | Hardware cursor | 64 px | Device plane | `kernel/display/virtio_gpu.c` |
 | Ports | LuaLS channel budgets, font and file-list arrays, Quake strings, `less` lines | Upstream defaults and tuning inside a port | `ports/` |
 
