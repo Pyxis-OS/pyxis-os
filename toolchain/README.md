@@ -32,8 +32,9 @@ A build directory belongs to one compiler. `build/toolchain` records it, and a
 different compiler needs `make clean`.
 
 `ci/Containerfile` builds the compiler and native-library producer below.
-Chronium published `git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c`
-with target LLVM from the same fork pin. Its actual producer SDK source is
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8b77142` carries the fork
+pin that writes P2F, P1D and P2D and reads `.pxl` libraries, with target LLVM
+from the same pin. Its producer SDK source is
 `9c26aac9985bc8e1707f270748625f0b292376a9`, recorded beside the compiler
 provenance. Keep that historical input through consumer rebases; it is not the
 current consumer SDK revision. Both provenance files are publicly readable.
@@ -57,8 +58,8 @@ the prebuilt prefix through `x86_64-unknown-pyxis-llvm-config` and never build L
 
 ```sh
 podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8b77142 .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8b77142
 ```
 
 ## Rust core and alloc
@@ -83,7 +84,7 @@ JOBS=16 toolchain/build-hosted.sh /absolute/sdk /absolute/payloads /absolute/wor
 ```
 
 The script pins the hosted source independently, currently
-`c63fb8cd62afc90ddf9c2599c537219aad09496b`, and fetches only that commit from
+`8b771426f7c28567324121ac1d7358c274d2b24b`, and fetches only that commit from
 the internal mirror. `LLVM_SOURCE` may select a clean checkout of that same
 commit. Installed compiler provenance and builtins must still match the SDK.
 `CROSS_COMPILE` selects the installed compiler prefix;
@@ -136,7 +137,7 @@ outside this mount):
 podman run --rm --userns=keep-id --user 0 -e HOME=/tmp -e JOBS=16 \
   -e BUILD_UID="$(id -u)" -e BUILD_GID="$(id -g)" \
   -v "$PWD":/src:Z -v /absolute/hosted-build:/hosted:Z -w /src \
-  git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-c63fb8c \
+  git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8b77142 \
   sh -ec 'apt-get update -qq
     apt-get install -y --no-install-recommends build-essential ninja-build
     exec setpriv --reuid="$BUILD_UID" --regid="$BUILD_GID" --clear-groups \

@@ -294,7 +294,7 @@ added except the build split itself.
   Progress: the QEMU, CI and size rows are in the
   [baseline record](../development/experiments/dynamic-linking-baseline.md); the
   native vela rows wait for a scheduled run.
-- [ ] **1. Formats and toolchain.** Format headers beside `p1f.h`; in the fork,
+- [x] **1. Formats and toolchain.** Format headers beside `p1f.h`; in the fork,
   LLD writes P2F/P1D/P2D and reads `.pxl`; the driver allows `-shared`, `-fPIC`,
   GD/LD/IE, `-z now -z relro` by default and no copy relocations; LLD records
   `$ORIGIN` `-rpath` entries as declared library directories and refuses other
@@ -307,7 +307,9 @@ added except the build split itself.
   and rpath forms, the recorded directories, and stripped-P2F → P1F. **Owner
   action: build and publish the compiler container** (new `pyxis-llvm` pin and
   image tag). No further rebuild unless the format changes later.
-  Progress: the headers and pyxis-llvm #23 are in review, validated on the host.
+  Done: the headers (#1676), pyxis-llvm #23 (fork 8b771426f) and the pin to
+  image `pyxis-llvm23.1.3-8b77142`, with P2F acceptance in pyxis-userland #475
+  and the kernel flag.
 - [x] **2. Kernel map and seal.** The map operation, the one-way RELRO seal and
   the IMPORT directory right, carried by the package and app views, and set on
   the Development space's `home://` in the live and installed defaults.

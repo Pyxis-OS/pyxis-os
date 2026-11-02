@@ -217,8 +217,8 @@ def build(arguments):
             binary = bundle / "app/bin" / (name + ".pxe")
             binary.parent.mkdir(parents=True)
             compiled = target / "x86_64-unknown-pyxis/release" / name
-            if compiled.read_bytes()[:8] != b"PXE1FLAT":
-                raise ValueError(f"Compiler did not produce a P1F image: {name}")
+            if compiled.read_bytes()[:8] not in (b"PXE1FLAT", b"PXE2FLAT"):
+                raise ValueError(f"Compiler did not produce a P1F or P2F image: {name}")
             shutil.copyfile(compiled, binary)
             shutil.copyfile(SAMPLES / source / "manifest.json", bundle / "manifest.json")
             notices = bundle / "app/share/licenses"

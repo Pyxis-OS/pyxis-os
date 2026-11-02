@@ -121,9 +121,13 @@ CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
           -fno-pic -fno-pie -mno-red-zone -mgeneral-regs-only -mcmodel=kernel \
           -fno-omit-frame-pointer -Wall -Wextra -Wshadow -Wstrict-prototypes \
           -Wmissing-prototypes -MMD -MP
+# Pyxis user code reaches external data through the GOT by default, so that
+# libraries can provide it; the kernel is one static image and addresses
+# its data directly.
+CFLAGS += -fdirect-access-external-data
 LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
            -Wl,--build-id=none -Wl,-z,max-page-size=0x1000 -Wl,-Map,build/caelum.map
-# The Pyxis Clang driver links P1F executables; Limine loads the kernel as ELF.
+# The Pyxis Clang driver links Pyxis images; Limine loads the kernel as ELF.
 LDFLAGS += -Wl,--oformat=elf
 
 C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c arch/x86_64/amd/*.c arch/x86_64/intel/*.c arch/x86_64/ps2/*.c kernel/input/touchpad.c kernel/input/hid_i2c.c kernel/input/hid_layout.c kernel/input/hid_touchpad.c kernel/input/hid_clickpad.c kernel/input/hid_pointer.c kernel/input/hid_i2c_metrics.c kernel/i2c/*.c kernel/*.c kernel/debug/*.c kernel/random/*.c kernel/audio/*.c kernel/wifi/*.c kernel/bluetooth/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/ui/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
