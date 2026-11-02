@@ -151,7 +151,7 @@ uint64_t process_list_key_next(void);
 void process_list_sample(struct process *process, struct process_list_record *record);
 
 /* Caller CPU, IF=0, lifetime_lock held. Adds a sibling only while admission is open;
- * retained storage, including retiring threads, counts toward the tunable bound.
+ * retained storage, including retiring threads, must fit the process counters.
  * The caller retains the guard through runnable publication and separately
  * serializes group stopping. Group SEAL does not close internal admission.
  * Failure leaves the task and unused member with the caller. */
