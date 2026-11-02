@@ -1,5 +1,10 @@
 # Intel game plane and native-resolution UI
 
+**Further implementation parked (chronium, 2026-11-02).** The proper
+[Intel IEGD/eDP driver](intel-iegd.md) takes priority. Current main remains the
+interim; #1683 and #1623 stay drafts. Earlier decisions/evidence below do not
+authorize resuming these implementations.
+
 Status: decisions 1–3 accepted and implementation authorized (chronium,
 2026-10-29), starting from `474e2d7043b5` (0.0.10). Task 1 is assigned to alpha.
 The release freeze is lifted. Later task-local decisions remain explicit gates;
