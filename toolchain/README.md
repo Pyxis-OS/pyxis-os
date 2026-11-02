@@ -33,7 +33,7 @@ different compiler needs `make clean`.
 
 `ci/Containerfile` runs the compiler build and native-library producer below.
 The owner builds and publishes
-`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8bdf136` before merging
+`git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74` before merging
 consumers of that image; the tag names the release and the fork commit, and the
 image checks that commit. Normal workflows consume the image without rebuilding
 LLVM. The public image is pulled anonymously by CI; the Forgejo instance must
@@ -53,8 +53,8 @@ the prebuilt prefix through `x86_64-unknown-pyxis-llvm-config` and never build L
 
 ```sh
 podman build -f ci/Containerfile \
-  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8bdf136 .
-podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8bdf136
+  -t git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74 .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74
 ```
 
 ## Rust core and alloc
@@ -131,7 +131,7 @@ outside this mount):
 podman run --rm --userns=keep-id --user 0 -e HOME=/tmp -e JOBS=16 \
   -e BUILD_UID="$(id -u)" -e BUILD_GID="$(id -g)" \
   -v "$PWD":/src:Z -v /absolute/hosted-build:/hosted:Z -w /src \
-  git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-8bdf136 \
+  git.internal/pyxisos/pyxis-builder:pyxis-llvm23.1.3-b33ad74 \
   sh -ec 'apt-get update -qq
     apt-get install -y --no-install-recommends build-essential ninja-build
     exec setpriv --reuid="$BUILD_UID" --regid="$BUILD_GID" --clear-groups \
