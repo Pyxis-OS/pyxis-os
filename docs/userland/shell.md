@@ -1139,7 +1139,9 @@ Neovim's `'shell'` uses it for `:!`, `system()` and `:make`
 Under `shell.pxb`, console `input` and `output`, `jit`, `threads`, `random` and the
 `retention_account` are optional grants, so the command line runs with only
 what its caller holds. Without a retention account, `$(...)` captures are
-refused.
+refused. `pipe` is optional too: a background launch (`&`) withholds it, so a
+bundle-shell script runs in the background, and a pipeline in it fails when it
+needs to create a pipe.
 
 ## Mounting roots
 

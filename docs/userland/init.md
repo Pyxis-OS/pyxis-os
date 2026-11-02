@@ -219,6 +219,13 @@ return {
   local power unchanged. The unauthenticated live terminal lets any reachable
   LAN peer reboot or power off the machine, an owner-accepted sole-user home-LAN
   exposure. Ordinary programs and service providers inherit neither grant.
+- **Boot manager.** A space that sets `boot_manager = true` receives the kernel's
+  `uefi` resource with the boot-manager right: read and write of the firmware's
+  global boot variables (`Boot####`, `BootOrder`, `BootNext`, `Timeout`; `BootCurrent`
+  read-only) for [`bootmgr`](bootmgr.md). The session hands it to a local
+  interactive shell only, never to remote shells, and programs inherit it only by
+  declaring the `uefi` grant. Installed `pyxis` sets it; the live Development space
+  does not. The installer's own `uefi` grant is the separate boot-register right.
 - **Screen capture.** `screenshot` is an optional boolean, defaulting to `false`.
   With `screenshot = true`, boot init delegates the separate `screen_capture`
   resource with CAPTURE authority. It observes the whole shown local screen,

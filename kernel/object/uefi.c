@@ -1,5 +1,6 @@
 #include <abi/uefi.h>
 #include <arch/uefi.h>
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/uefi.h>
@@ -250,6 +251,223 @@ static enum call_status boot_register(const struct uefi_boot_register_request *r
   return CALL_OK;
 }
 
+/* Boot manager: raw reads and writes of the global-GUID boot variables. User
+ * copies happen before and after the firmware gate, never inside it. */
+static bool boot_variable_name(const struct uefi_boot_variable_name *request,
+    uint16_t name[16], bool *read_only)
+{
+  static const char *const fixed[] = {
+    [UEFI_VARIABLE_BOOT_ORDER] = "BootOrder",
+    [UEFI_VARIABLE_BOOT_NEXT] = "BootNext",
+    [UEFI_VARIABLE_BOOT_CURRENT] = "BootCurrent",
+    [UEFI_VARIABLE_TIMEOUT] = "Timeout",
+  };
+  *read_only = request->kind == UEFI_VARIABLE_BOOT_CURRENT;
+  if (request->kind == UEFI_VARIABLE_BOOT_ENTRY) {
+    if (request->number >= UEFI_BOOT_ENTRY_NUMBERS) return false;
+    boot_name(request->number, name);
+    return true;
+  }
+  if (request->kind < UEFI_VARIABLE_BOOT_ORDER || request->kind > UEFI_VARIABLE_TIMEOUT ||
+      request->number) {
+    return false;
+  }
+  const char *text = fixed[request->kind];
+  size_t i = 0;
+  for (; text[i]; ++i) name[i] = (uint8_t)text[i];
+  name[i] = 0;
+  return true;
+}
+
+/* 0 absent, 1 present, -1 firmware error. A zero-size probe reports presence
+ * through BUFFER_TOO_SMALL. */
+static int variable_present(const uint16_t *name)
+{
+  uint8_t spare;
+  size_t size = 0;
+  uint32_t attributes = 0;
+  uint64_t status = arch_uefi_get_variable(name, &global_guid, &attributes, &size, &spare);
+  if (status == EFI_STATUS_NOT_FOUND) return 0;
+  return status == EFI_STATUS_BUFFER_TOO_SMALL || !status ? 1 : -1;
+}
+
+static enum call_status boot_variable_get(const struct uefi_boot_variable_name *request,
+    uintptr_t reply_address, size_t reply_capacity, size_t *reply_size)
+{
+  uint16_t name[16];
+  bool read_only;
+  if (!boot_variable_name(request, name, &read_only)) return CALL_BAD_REQUEST;
+  uint8_t *reply = kmalloc(sizeof(struct uefi_boot_variable_reply) + UEFI_BOOT_VARIABLE_BYTES);
+  if (!reply) return CALL_NO_MEMORY;
+  struct uefi_boot_variable_reply *header = (struct uefi_boot_variable_reply *)reply;
+  size_t size = UEFI_BOOT_VARIABLE_BYTES;
+  uint32_t attributes = 0;
+  uint64_t interrupt_flags;
+  enum arch_uefi_gate_result gate = arch_uefi_begin(&interrupt_flags);
+  if (gate != ARCH_UEFI_READY) {
+    kfree(reply);
+    return gate == ARCH_UEFI_BUSY ? CALL_BUSY : CALL_UNAVAILABLE;
+  }
+  uint64_t status = arch_uefi_get_variable(name, &global_guid, &attributes, &size,
+      reply + sizeof(*header));
+  arch_uefi_end(interrupt_flags);
+  enum call_status result = CALL_OK;
+  if (status == EFI_STATUS_NOT_FOUND) {
+    result = CALL_NOT_FOUND;
+  } else if (status == EFI_STATUS_BUFFER_TOO_SMALL) {
+    result = CALL_LIMIT;
+  } else if (status) {
+    result = CALL_IO;
+  } else if (reply_capacity < sizeof(*header) + size) {
+    result = CALL_LIMIT;
+  } else {
+    header->attributes = attributes;
+    header->size = size;
+    if (!copy_to_user(reply_address, reply, sizeof(*header) + size)) {
+      result = CALL_BAD_BUFFER;
+    } else {
+      *reply_size = sizeof(*header) + size;
+    }
+  }
+  kfree(reply);
+  return result;
+}
+
+static enum call_status boot_variable_set(const struct uefi_boot_variable_set_request *request,
+    const uint8_t *value)
+{
+  uint16_t name[16];
+  bool read_only;
+  if (!boot_variable_name(&request->name, name, &read_only)) return CALL_BAD_REQUEST;
+  if (read_only) return CALL_DENIED;
+  uint8_t *readback = kmalloc(UEFI_BOOT_VARIABLE_BYTES);
+  if (!readback) return CALL_NO_MEMORY;
+  uint64_t interrupt_flags;
+  enum arch_uefi_gate_result gate = arch_uefi_begin(&interrupt_flags);
+  if (gate != ARCH_UEFI_READY) {
+    kfree(readback);
+    return gate == ARCH_UEFI_BUSY ? CALL_BUSY : CALL_UNAVAILABLE;
+  }
+  uint64_t status = arch_uefi_set_variable(name, &global_guid, EFI_VARIABLE_ATTRIBUTES,
+      request->size, value);
+  size_t size = UEFI_BOOT_VARIABLE_BYTES;
+  uint32_t attributes = 0;
+  uint64_t read_status = status ? status :
+      arch_uefi_get_variable(name, &global_guid, &attributes, &size, readback);
+  arch_uefi_end(interrupt_flags);
+  bool verified = !status && !read_status && attributes == EFI_VARIABLE_ATTRIBUTES &&
+      size == request->size && !memcmp(readback, value, size);
+  if (!verified) {
+    kwarn("UEFI: boot variable write unconfirmed: set status 0x%lx, readback status 0x%lx, "
+        "attributes 0x%x, %zu of %u bytes\n", status, read_status, attributes, size,
+        request->size);
+  }
+  kfree(readback);
+  return verified ? CALL_OK : CALL_OUTCOME_UNKNOWN;
+}
+
+static enum call_status boot_variable_delete(const struct uefi_boot_variable_name *request)
+{
+  uint16_t name[16];
+  bool read_only;
+  if (!boot_variable_name(request, name, &read_only)) return CALL_BAD_REQUEST;
+  if (read_only) return CALL_DENIED;
+  uint64_t interrupt_flags;
+  enum arch_uefi_gate_result gate = arch_uefi_begin(&interrupt_flags);
+  if (gate != ARCH_UEFI_READY) {
+    return gate == ARCH_UEFI_BUSY ? CALL_BUSY : CALL_UNAVAILABLE;
+  }
+  enum call_status result;
+  int present = variable_present(name);
+  if (present < 0) {
+    result = CALL_IO;
+  } else if (!present) {
+    result = CALL_NOT_FOUND;
+  } else {
+    uint8_t spare = 0;
+    uint64_t status = arch_uefi_set_variable(name, &global_guid, EFI_VARIABLE_ATTRIBUTES, 0, &spare);
+    result = !status && variable_present(name) == 0 ? CALL_OK : CALL_OUTCOME_UNKNOWN;
+  }
+  arch_uefi_end(interrupt_flags);
+  return result;
+}
+
+static enum call_status boot_entries(const struct uefi_boot_entries_request *request,
+    uintptr_t reply_address, size_t reply_capacity, size_t *reply_size)
+{
+  if (!request->count || request->count > UEFI_BOOT_ENTRY_WINDOW ||
+      request->first >= UEFI_BOOT_ENTRY_NUMBERS ||
+      request->count > UEFI_BOOT_ENTRY_NUMBERS - request->first) {
+    return CALL_BAD_REQUEST;
+  }
+  size_t bytes = (request->count + 7) / 8;
+  if (reply_capacity < bytes) return CALL_LIMIT;
+  uint8_t bitmap[UEFI_BOOT_ENTRY_WINDOW / 8] = {0};
+  uint64_t interrupt_flags;
+  enum arch_uefi_gate_result gate = arch_uefi_begin(&interrupt_flags);
+  if (gate != ARCH_UEFI_READY) {
+    return gate == ARCH_UEFI_BUSY ? CALL_BUSY : CALL_UNAVAILABLE;
+  }
+  enum call_status result = CALL_OK;
+  for (uint32_t i = 0; i < request->count && result == CALL_OK; ++i) {
+    uint16_t name[9];
+    boot_name(request->first + i, name);
+    int present = variable_present(name);
+    if (present < 0) {
+      result = CALL_IO;
+    } else if (present) {
+      bitmap[i / 8] |= 1u << (i % 8);
+    }
+  }
+  arch_uefi_end(interrupt_flags);
+  if (result != CALL_OK) return result;
+  if (!copy_to_user(reply_address, bitmap, bytes)) return CALL_BAD_BUFFER;
+  *reply_size = bytes;
+  return CALL_OK;
+}
+
+static struct syscall_result boot_manage(uint64_t operation, uintptr_t request_address,
+    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+{
+  size_t reply_size = 0;
+  enum call_status result;
+  if (operation == UEFI_BOOT_VARIABLE_SET) {
+    struct uefi_boot_variable_set_request header;
+    if (request_size < sizeof(header) ||
+        !copy_from_user(&header, request_address, sizeof(header))) {
+      return (struct syscall_result){request_size < sizeof(header) ? CALL_BAD_REQUEST : CALL_BAD_BUFFER, 0};
+    }
+    if (!header.size || header.size > UEFI_BOOT_VARIABLE_BYTES || header.reserved ||
+        request_size != sizeof(header) + header.size || reply_capacity) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    uint8_t *value = kmalloc(header.size);
+    if (!value) return (struct syscall_result){CALL_NO_MEMORY, 0};
+    result = copy_from_user(value, request_address + sizeof(header), header.size) ?
+        boot_variable_set(&header, value) : CALL_BAD_BUFFER;
+    kfree(value);
+    return (struct syscall_result){result, 0};
+  }
+  union {
+    struct uefi_boot_variable_name name;
+    struct uefi_boot_entries_request entries;
+  } request;
+  _Static_assert(sizeof(request.name) == sizeof(request.entries), "UEFI request sizes");
+  if (request_size != sizeof(request.name)) return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  if (!copy_from_user(&request, request_address, sizeof(request.name))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == UEFI_BOOT_VARIABLE_GET) {
+    result = boot_variable_get(&request.name, reply_address, reply_capacity, &reply_size);
+  } else if (operation == UEFI_BOOT_ENTRIES) {
+    result = boot_entries(&request.entries, reply_address, reply_capacity, &reply_size);
+  } else {
+    if (reply_capacity) return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    result = boot_variable_delete(&request.name);
+  }
+  return (struct syscall_result){result, reply_size};
+}
+
 static void destroy_uefi(struct kernel_object *object)
 {
   kfree(object);
@@ -263,8 +481,13 @@ struct kernel_object *uefi_create(void)
 }
 
 struct syscall_result uefi_call(uint64_t rights, uint64_t operation,
-    uintptr_t request_address, size_t request_size, size_t reply_capacity)
+    uintptr_t request_address, size_t request_size, uintptr_t reply_address,
+    size_t reply_capacity)
 {
+  if (operation >= UEFI_BOOT_VARIABLE_GET && operation <= UEFI_BOOT_ENTRIES) {
+    if (!(rights & UEFI_RIGHT_BOOT_MANAGE)) return (struct syscall_result){CALL_DENIED, 0};
+    return boot_manage(operation, request_address, request_size, reply_address, reply_capacity);
+  }
   if (operation != UEFI_BOOT_REGISTER) return (struct syscall_result){CALL_BAD_OPERATION, 0};
   if (!(rights & UEFI_RIGHT_BOOT_REGISTER)) return (struct syscall_result){CALL_DENIED, 0};
   if (request_size != sizeof(struct uefi_boot_register_request) || reply_capacity) {
